@@ -1,0 +1,16 @@
+{
+  "name": "@openvibe/contracts",
+  "version": "0.1.0",
+  "description": "Shared OpenVibe schemas, event topics, capability ids, and namespace registry.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./topics": "./topics.js",
+    "./events": "./events.js",
+    "./capabilities": "./capabilities.js",
+    "./namespaces": "./namespaces.js",
+    "./services": "./services.js",
+    "./envelope": "./envelope.js"
+  },
+  "license": "MIT"
+}

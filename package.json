@@ -1,0 +1,18 @@
+{
+  "name": "openvibe",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenVibe platform kernel monorepo (Phase 1 + Phase 2 extraction).",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "check": "node scripts/check-syntax.js",
+    "test": "node scripts/run-tests.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
