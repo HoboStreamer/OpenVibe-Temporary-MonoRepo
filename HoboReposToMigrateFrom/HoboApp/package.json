@@ -1,0 +1,7 @@
+{
+  "name": "hobo",
+  "version": "2.0.0",
+  "description": "Hobo monorepo — HoboStreamer, HoboTools, HoboQuest, HoboDocs, and shared packages",
+  "private": true,
+  "license": "MIT"
+}
