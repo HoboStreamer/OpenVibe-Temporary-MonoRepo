@@ -11,7 +11,7 @@ Numbering follows the later (corrected) numbering used in
 | 4 | openvibe.live + openre.stream split | ✅ implemented in this commit | `services/openvibe-live` (SSR), `services/openre-stream` (ingest/restream), `packages/openvibe-contracts/src/stream-events.js`, `packages/openvibe-sdk` (`StreamClient`), `/opt/hobostreamer/server/openvibe-bridge/stream.js` |
 | 5 | Chat / community / product migration | ✅ implemented in this commit | `services/openvibe-chat`, `services/openvibe-community`, `packages/openvibe-contracts/{chat-events,community-events}.js`, `packages/openvibe-sdk` (`ChatClient`, `CommunityClient`), `/opt/hobostreamer/server/openvibe-bridge/{chat,community}.js` |
 | 6 | Billing / credits / tips ledger | ✅ implemented in this commit | `services/openvibe-billing`, `packages/openvibe-contracts/billing-events.js`, `packages/openvibe-sdk` (`BillingClient`), `/opt/hobostreamer/server/openvibe-bridge/billing.js` |
-| 7 | AI backend orchestration | ⏳ deferred | future `openvibe-ai` |
+| 7 | AI / SEO / Sources / Search backbone | ✅ implemented in this commit | `services/openvibe-ai`, `packages/openvibe-contracts/ai-events.js`, `packages/openvibe-sdk` (`AiClient`), `/opt/hobostreamer/server/openvibe-bridge/ai.js` |
 | 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
 
 ## Phase 1 — Platform Kernel Foundations: acceptance
@@ -268,3 +268,91 @@ npm test            # in-repo module tests
 Manual local validation steps live in
 [services/openvibe-network/README.md](services/openvibe-network/README.md)
 and [services/openvibe-events/README.md](services/openvibe-events/README.md).
+
+## Phase 7 — AI / SEO / Sources / Search backbone: acceptance
+
+1. `services/openvibe-ai` boots on port `5100`. Canonical public host is
+   `ai.openvibe.network` (advertised through
+   [services/openvibe-network/server/api/url-registry.js](services/openvibe-network/server/api/url-registry.js)).
+   ✅
+2. Schema covers 16 tables: `ai_providers`, `ai_models`, `ai_routes`,
+   `ai_prompt_templates`, `ai_workflows`, `ai_runs` (UNIQUE
+   `idempotency_key`), `ai_requests`, `ai_sources`, `ai_cache`,
+   `ai_quotas`, `ai_audit`, `seo_content`, `content_sources`,
+   `content_ingestion_jobs`, `search_documents` (+
+   `database_schema_version`). ✅
+3. **No raw API keys ever stored.** `ai_providers.api_key_env` /
+   `content_sources.api_key_env` reference an environment-variable
+   name only. The `/api/v1/ai/providers` listing strips any field
+   named `api_key`, `apiKey`, or `token` defensively. ✅
+4. Stub provider works **offline with no external credentials** and is
+   the seeded default for `default.chat`, `default.json`,
+   `default.embedding`, and every product workflow route. ✅
+5. Idempotent runs: `runner.executeRun({ idempotency_key })` returns
+   `{ replayed: true }` on UNIQUE collision without re-executing.
+   Cache hits short-circuit and return `cached:true` and increment
+   quota by 1 request. Per-day quota enforcement throws
+   `EAIQUOTA` (HTTP 429) at the route layer. ✅
+6. Provider+route fallback recorded as `ai_requests.status='fallback_used'`
+   so degradation is observable. If both fail, the run row is marked
+   `failed` and `EAIPROVIDER` (HTTP 502) is returned. ✅
+7. Default routes seeded (13): `default.{chat,json,embedding}`,
+   `wiki.generate`, `blog.draft`, `news.summarize`,
+   `reviews.summarize`, `deals.enrich`, `coupons.extract`,
+   `trade.summarize`, `codes.generate_docs`, `games.generate_lore`,
+   `moderation.classify`. Default templates and workflows seeded for
+   every product namespace. ✅
+8. Default content-source registry seeded (23 entries) covering wiki,
+   blog, news, reviews, deals, coupons, trade, plus protocol primitives
+   (`rss`, `sitemap`, `json_ld`, `robots_txt`). Sources requiring an
+   API key default to `enabled=false` until an admin enables them. ✅
+9. SEO helpers in [seo.js](services/openvibe-ai/server/seo.js):
+   `normalizeSlug`, `canonicalize`, `duplicateHash`, `generateMetadata`,
+   `evaluateIndexability`, `generateStructuredData`,
+   `generateSitemap{,Index}`, `generateRssFeed`, `generateAtomFeed`,
+   `generateRobotsTxt`. Indexability gate is **deterministic**: thin
+   content, missing sources, stub-in-production, and duplicate-without-
+   canonical all force `noindex`. ✅
+10. JSON-LD generators **never fabricate** ratings, prices, currencies,
+    coupon expirations, or recipe ingredients. Sitemaps exclude
+    entries with `indexable: false`. ✅
+11. Trade workflow outputs always include
+    `not_financial_advice: true` and a disclaimer (enforced at the
+    route layer in
+    [routes.js](services/openvibe-ai/server/routes.js)). ✅
+12. Local SQLite-backed search index seam (`search_documents`,
+    provider id `local-sqlite`). `/api/v1/ai/search/{index,query,
+    delete,status}` mounted; visibility and `indexing_status` are
+    respected. Future Meilisearch / Typesense / OpenSearch adapters
+    can swap in without changing the SDK contract. ✅
+13. SDK `AiClient` exported from `@openvibe/sdk` with full method
+    surface (providers, models, routes, templates, workflows, runs,
+    direct tasks, product workflows, SEO helpers, source registry,
+    ingestion jobs, search seam). ✅
+14. `/opt/hobostreamer/server/openvibe-bridge/ai.js` is additive and
+    inert when `OPENVIBE_AI_URL` is unset. Methods:
+    `summarizeSafe`, `generateSafe`, `classifySafe`,
+    `extractCouponSafe`, `enrichDealSafe`,
+    `evaluateIndexabilitySafe`, `generateSeoMetadataSafe`. ✅
+15. Service smoke test
+    `services/openvibe-ai/test/ai-smoke.test.js` exercises seed,
+    direct runner, idempotency replay, cache hit, quota exceeded,
+    indexability gate (thin / sufficient / dupe / stub-in-production),
+    JSON-LD safety (no fabricated `Review.reviewRating`, no fabricated
+    `Offer`), sitemap exclusion of `indexable=false`, source registry,
+    ingestion job lifecycle, search index round-trip, provider HTTP
+    response excludes raw API key fields, and trade-workflow disclaimer
+    enforcement. `npm test` (project-wide): **11 files, 11 pass, 0
+    fail**. ✅
+16. Documentation: [docs/openvibe/phase-7-ai-backend.md](docs/openvibe/phase-7-ai-backend.md),
+    [ai-service.md](docs/openvibe/ai-service.md),
+    [ai-provider-routing.md](docs/openvibe/ai-provider-routing.md),
+    [ai-workflows.md](docs/openvibe/ai-workflows.md),
+    [ai-product-seams.md](docs/openvibe/ai-product-seams.md),
+    [legacy-ai-migration.md](docs/openvibe/legacy-ai-migration.md),
+    [seo-foundation.md](docs/openvibe/seo-foundation.md),
+    [content-source-registry.md](docs/openvibe/content-source-registry.md),
+    [ai-generated-content-indexing-policy.md](docs/openvibe/ai-generated-content-indexing-policy.md),
+    [product-seo-workflows.md](docs/openvibe/product-seo-workflows.md),
+    [search-index-seam.md](docs/openvibe/search-index-seam.md),
+    [source-adapter-research.md](docs/openvibe/source-adapter-research.md). ✅

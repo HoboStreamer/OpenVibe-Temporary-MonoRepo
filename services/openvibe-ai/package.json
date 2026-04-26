@@ -1,0 +1,23 @@
+{
+  "name": "@openvibe/ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenVibe shared AI orchestration platform for ai.openvibe.network — providers, routes, prompt templates, workflow runs, SEO helpers, source registry, ingestion jobs, and search-index seam.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/ai-smoke.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/contracts": "*",
+    "@openvibe/sdk": "*",
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0"
+  }
+}

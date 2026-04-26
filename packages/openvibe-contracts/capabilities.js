@@ -80,6 +80,71 @@ const CAPABILITIES = Object.freeze({
 
     // games
     GAMES_CREATE_WORLD:   'games.create_world',
+
+    // ── Phase 7: AI core ──
+    AI_PROVIDER_CREATE:    'ai.provider.create',
+    AI_PROVIDER_UPDATE:    'ai.provider.update',
+    AI_PROVIDER_DISABLE:   'ai.provider.disable',
+    AI_MODEL_CREATE:       'ai.model.create',
+    AI_ROUTE_CONFIGURE:    'ai.route.configure',
+    AI_TEMPLATE_CREATE:    'ai.template.create',
+    AI_WORKFLOW_CREATE:    'ai.workflow.create',
+    AI_RUN_CREATE:         'ai.run.create',
+    AI_RUN_CANCEL:         'ai.run.cancel',
+    AI_RUN_RETRY:          'ai.run.retry',
+
+    // AI tasks
+    AI_CHAT:               'ai.chat',
+    AI_GENERATE:           'ai.generate',
+    AI_SUMMARIZE:          'ai.summarize',
+    AI_CLASSIFY:           'ai.classify',
+    AI_EXTRACT:            'ai.extract',
+    AI_ENRICH:             'ai.enrich',
+    AI_EMBED:              'ai.embed',
+
+    // Product AI workflows
+    AI_WIKI_GENERATE_SPACE:        'ai.wiki.generate_space',
+    AI_WIKI_GENERATE_PAGE:         'ai.wiki.generate_page',
+    AI_BLOG_DRAFT_POST:            'ai.blog.draft_post',
+    AI_NEWS_SUMMARIZE_STORY:       'ai.news.summarize_story',
+    AI_NEWS_COMPARE_PERSPECTIVES:  'ai.news.compare_perspectives',
+    AI_REVIEWS_SUMMARIZE_ENTITY:   'ai.reviews.summarize_entity',
+    AI_DEALS_ENRICH_DEAL:          'ai.deals.enrich_deal',
+    AI_COUPONS_EXTRACT_COUPON:     'ai.coupons.extract_coupon',
+    AI_TRADE_SUMMARIZE_MARKET:     'ai.trade.summarize_market_context',
+    AI_CODES_GENERATE_DOCS:        'ai.codes.generate_docs',
+    AI_GAMES_GENERATE_LORE:        'ai.games.generate_lore',
+    AI_MODERATION_CLASSIFY:        'ai.moderation.classify',
+
+    // SEO
+    SEO_METADATA_GENERATE:         'seo.metadata.generate',
+    SEO_INDEXABILITY_EVALUATE:     'seo.indexability.evaluate',
+    SEO_STRUCTURED_DATA_GENERATE:  'seo.structured_data.generate',
+    SEO_SITEMAP_ENTRY_GENERATE:    'seo.sitemap.entry.generate',
+    SEO_SITEMAP_GENERATE:          'seo.sitemap.generate',
+    SEO_SITEMAP_INDEX_GENERATE:    'seo.sitemap_index.generate',
+    SEO_FEED_RSS_GENERATE:         'seo.feed.rss.generate',
+    SEO_FEED_ATOM_GENERATE:        'seo.feed.atom.generate',
+    SEO_ROBOTS_GENERATE:           'seo.robots.generate',
+    SEO_SLUG_NORMALIZE:            'seo.slug.normalize',
+    SEO_CANONICAL_GENERATE:        'seo.canonical.generate',
+    SEO_DUPLICATE_HASH_GENERATE:   'seo.duplicate_hash.generate',
+
+    // Sources / ingestion
+    CONTENT_SOURCE_REGISTER:       'content.source.register',
+    CONTENT_SOURCE_UPDATE:         'content.source.update',
+    CONTENT_SOURCE_TEST:           'content.source.test',
+    CONTENT_SOURCE_FETCH:          'content.source.fetch',
+    CONTENT_SOURCE_ROBOTS_CHECK:   'content.source.robots_check',
+    CONTENT_INGESTION_JOB_CREATE:  'content.ingestion.job.create',
+    CONTENT_INGESTION_JOB_RUN:     'content.ingestion.job.run',
+    CONTENT_INGESTION_JOB_CANCEL:  'content.ingestion.job.cancel',
+    CONTENT_QUALITY_EVALUATE:      'content.quality.evaluate',
+
+    // Search
+    SEARCH_DOCUMENT_INDEX:         'search.document.index',
+    SEARCH_QUERY:                  'search.query',
+    SEARCH_DOCUMENT_DELETE:        'search.document.delete',
 });
 
 const CAPABILITY_LIST = Object.freeze(Object.values(CAPABILITIES));

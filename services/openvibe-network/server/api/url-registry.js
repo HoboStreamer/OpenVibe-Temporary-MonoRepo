@@ -61,6 +61,15 @@ function buildRouter(deps) {
             OPENVIBE_LIVE_INTERNAL_URL:    config.live && config.live.internalUrl,
             OPENRE_STREAM_URL:             config.restream && config.restream.url,
             OPENRE_STREAM_INTERNAL_URL:    config.restream && config.restream.internalUrl,
+            OPENVIBE_CHAT_URL:             config.chat && config.chat.url,
+            OPENVIBE_CHAT_INTERNAL_URL:    config.chat && config.chat.internalUrl,
+            OPENVIBE_COMMUNITY_URL:        config.community && config.community.url,
+            OPENVIBE_COMMUNITY_INTERNAL_URL: config.community && config.community.internalUrl,
+            OPENVIBE_BILLING_URL:          config.billing && config.billing.url,
+            OPENVIBE_BILLING_INTERNAL_URL: config.billing && config.billing.internalUrl,
+            OPENVIBE_AI_URL:               config.ai && config.ai.url,
+            OPENVIBE_AI_INTERNAL_URL:      config.ai && config.ai.internalUrl,
+            AI_OPENVIBE_NETWORK_HOST:      config.ai && config.ai.canonicalHost,
         };
         for (const [k, v] of Object.entries(surfaceMap)) {
             if (v) merged[k] = { value: v, source: 'openvibe-config' };

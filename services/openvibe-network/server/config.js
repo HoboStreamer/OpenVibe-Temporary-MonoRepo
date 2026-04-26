@@ -40,6 +40,23 @@ module.exports = {
         url:         trim(process.env.OPENRE_STREAM_URL)          || 'http://127.0.0.1:4700',
         internalUrl: trim(process.env.OPENRE_STREAM_INTERNAL_URL) || trim(process.env.OPENRE_STREAM_URL) || 'http://127.0.0.1:4700',
     },
+    chat: {
+        url:         trim(process.env.OPENVIBE_CHAT_URL)          || 'http://127.0.0.1:4800',
+        internalUrl: trim(process.env.OPENVIBE_CHAT_INTERNAL_URL) || trim(process.env.OPENVIBE_CHAT_URL) || 'http://127.0.0.1:4800',
+    },
+    community: {
+        url:         trim(process.env.OPENVIBE_COMMUNITY_URL)          || 'http://127.0.0.1:4900',
+        internalUrl: trim(process.env.OPENVIBE_COMMUNITY_INTERNAL_URL) || trim(process.env.OPENVIBE_COMMUNITY_URL) || 'http://127.0.0.1:4900',
+    },
+    billing: {
+        url:         trim(process.env.OPENVIBE_BILLING_URL)          || 'http://127.0.0.1:5000',
+        internalUrl: trim(process.env.OPENVIBE_BILLING_INTERNAL_URL) || trim(process.env.OPENVIBE_BILLING_URL) || 'http://127.0.0.1:5000',
+    },
+    ai: {
+        url:         trim(process.env.OPENVIBE_AI_URL)          || 'http://127.0.0.1:5100',
+        internalUrl: trim(process.env.OPENVIBE_AI_INTERNAL_URL) || trim(process.env.OPENVIBE_AI_URL) || 'http://127.0.0.1:5100',
+        canonicalHost: trim(process.env.AI_OPENVIBE_NETWORK_HOST) || 'ai.openvibe.network',
+    },
 
     hoboTools: {
         publicUrl:   trim(process.env.HOBO_TOOLS_URL),
