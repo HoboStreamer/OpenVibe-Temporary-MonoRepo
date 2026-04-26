@@ -11,6 +11,7 @@ const mediaEvents = require('./media-events');
 const streamEvents = require('./stream-events');
 const chatEvents = require('./chat-events');
 const communityEvents = require('./community-events');
+const billingEvents = require('./billing-events');
 
 module.exports = {
     ...topics,
@@ -24,4 +25,5 @@ module.exports = {
     ...streamEvents,
     ...chatEvents,
     ...communityEvents,
+    ...billingEvents,
 };

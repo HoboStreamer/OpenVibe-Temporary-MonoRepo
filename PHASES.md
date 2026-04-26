@@ -10,7 +10,7 @@ Numbering follows the later (corrected) numbering used in
 | 3 | Media platform extraction | ✅ implemented in this commit | `services/openvibe-media`, `packages/openvibe-contracts/src/media-namespaces.js`, `packages/openvibe-sdk` (`MediaClient`), `compat/hobostreamer/` + `/opt/hobostreamer/server/openvibe-bridge/media.js` |
 | 4 | openvibe.live + openre.stream split | ✅ implemented in this commit | `services/openvibe-live` (SSR), `services/openre-stream` (ingest/restream), `packages/openvibe-contracts/src/stream-events.js`, `packages/openvibe-sdk` (`StreamClient`), `/opt/hobostreamer/server/openvibe-bridge/stream.js` |
 | 5 | Chat / community / product migration | ✅ implemented in this commit | `services/openvibe-chat`, `services/openvibe-community`, `packages/openvibe-contracts/{chat-events,community-events}.js`, `packages/openvibe-sdk` (`ChatClient`, `CommunityClient`), `/opt/hobostreamer/server/openvibe-bridge/{chat,community}.js` |
-| 6 | Billing / credits / tips ledger | ⏳ deferred | future `openvibe-billing` |
+| 6 | Billing / credits / tips ledger | ✅ implemented in this commit | `services/openvibe-billing`, `packages/openvibe-contracts/billing-events.js`, `packages/openvibe-sdk` (`BillingClient`), `/opt/hobostreamer/server/openvibe-bridge/billing.js` |
 | 7 | AI backend orchestration | ⏳ deferred | future `openvibe-ai` |
 | 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
 
@@ -185,6 +185,75 @@ Numbering follows the later (corrected) numbering used in
     [docs/openvibe/chat-service.md](docs/openvibe/chat-service.md),
     [docs/openvibe/community-service.md](docs/openvibe/community-service.md),
     [docs/openvibe/legacy-chat-pastes-migration.md](docs/openvibe/legacy-chat-pastes-migration.md).
+    ✅
+
+## Phase 6 — openvibe-billing: acceptance
+
+1. `services/openvibe-billing` boots on port `5000`. Schema covers
+   `billing_wallets`, `billing_ledger`, `billing_balance_snapshots`,
+   `billing_checkout_sessions`, `billing_webhook_receipts`, `billing_tips`,
+   `billing_subscription_plans`, `billing_subscriptions`,
+   `billing_creator_balances`, `billing_idempotency`, `billing_audit`,
+   `billing_economy_state`, `billing_legacy_map`. ✅
+2. Ledger guarantees: every multi-row post runs inside
+   `db.get().transaction(...)`; refunds are compensating entries
+   (`transaction_type='reversal'`) and the original rows are never mutated;
+   per-key idempotency is enforced via `billing_ledger.idempotency_key` and
+   `billing_tips.idempotency_key` so retries return the same group/tip
+   without double-posting. ✅
+3. Credits flow: checkout → provider URL → webhook (or explicit
+   `complete`) → `credit_purchase` row → snapshot updated. Stub provider
+   wired via `server/providers/stub.js`. Charging emits
+   `billing.credits.charged`; insufficient funds throws `EFUNDS` with
+   HTTP 402. ✅
+4. Tips / superchat / TTS / media-request: double-entry post
+   (sender debit → creator credit → optional `platform_fee` based on
+   `PLATFORM_FEE_BPS`) plus a `billing_tips` row; per-interaction events
+   `tips.tip.created`, `tips.superchat.created`, `tips.tts.created`,
+   `tips.media_request.created` are published on `tips.events`. Overlay
+   feed `GET /api/tips/overlay/:targetType/:targetId` filters
+   `public`/`anonymous` and strips sender id when `visibility=anonymous`.
+   ✅
+5. VIP / subscriptions: `/api/vip/plans` CRUD, `/api/vip/subscriptions`
+   create/cancel/renew. Subscription create charges the subscriber and
+   credits the plan owner inside a single `db.transaction(...)`, computes
+   `current_period_end` from `billing_interval`, and publishes
+   `vip.subscription.created` + `vip.subscription.activated` +
+   `vip.entitlement.granted`. Cancel publishes `vip.subscription.cancelled`
+   + `vip.entitlement.revoked`. Entitlement check via
+   `POST /api/billing/entitlements/check`. ✅
+6. Economy freeze: `POST /api/billing/admin/freeze` flips the single-row
+   `billing_economy_state` and `assertEconomyNotFrozen()` blocks new
+   spends/purchases/tips/subscriptions with `EFROZEN` (HTTP 423) while
+   reads and admin endpoints stay available; `unfreeze` publishes
+   `billing.economy.unfrozen`. ✅
+7. Policy seams: `decideWalletRead` / `decideAdjust` / `decideCharge` /
+   `decideCheckoutCreate` / `decideTip` / `decideRefund` /
+   `decidePlanManage` / `decideSubscriptionCreate` /
+   `decideSubscriptionCancel` / `decideEconomyFreeze` route through
+   `policy.assert`. Service callers identified via
+   `X-Internal-Key` + `X-OpenVibe-Service` (local
+   `serviceActorMiddleware`). ✅
+8. SDK client `BillingClient` exported from `@openvibe/sdk`; HoboStreamer
+   compat shim
+   [/opt/hobostreamer/server/openvibe-bridge/billing.js](/opt/hobostreamer/server/openvibe-bridge/billing.js)
+   is inert when `OPENVIBE_BILLING_URL` is unset. ✅
+9. Service smoke test
+   `services/openvibe-billing/test/billing-smoke.test.js` exercises wallet
+   ensure-idempotency, purchase / charge / refund, EFUNDS overdraft,
+   snapshot-vs-recompute parity, tip with platform fee, superchat variant,
+   plan + subscription + cancel, economy freeze, and policy decisions —
+   passes via `node services/openvibe-billing/test/billing-smoke.test.js`.
+   ✅
+10. Legacy migration: `billing_legacy_map(source, kind, legacy_id)` lets
+    HoboStreamer mirror only paid Hobo Bucks transactions
+    (Hobo Coins remain free in the legacy ledger and are NOT imported).
+    See
+    [docs/openvibe/phase-6-billing-tips-vip.md](docs/openvibe/phase-6-billing-tips-vip.md),
+    [docs/openvibe/billing-service.md](docs/openvibe/billing-service.md),
+    [docs/openvibe/tips-service.md](docs/openvibe/tips-service.md),
+    [docs/openvibe/vip-service.md](docs/openvibe/vip-service.md),
+    [docs/openvibe/legacy-billing-migration.md](docs/openvibe/legacy-billing-migration.md).
     ✅
 
 ## Validation

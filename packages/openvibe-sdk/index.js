@@ -9,6 +9,7 @@ const { MediaClient } = require('./media-client');
 const { StreamClient } = require('./stream-client');
 const { ChatClient } = require('./chat-client');
 const { CommunityClient } = require('./community-client');
+const { BillingClient } = require('./billing-client');
 
 module.exports = {
     OpenVibeAuthClient,
@@ -18,6 +19,7 @@ module.exports = {
     StreamClient,
     ChatClient,
     CommunityClient,
+    BillingClient,
     ...middleware,
     ...http,
 };

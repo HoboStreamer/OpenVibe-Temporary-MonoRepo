@@ -28,10 +28,34 @@ const CAPABILITIES = Object.freeze({
     CHAT_AUDIO_CLEAR:     'chat.audio.clear',
     CHAT_OVERLAY_RENDER:  'chat.overlay.render',
 
-    // tips / billing
-    TIPS_CREATE_ALERT:    'tips.create_alert',
-    BILLING_CHARGE_CREDITS:  'billing.charge_credits',
+    // tips / billing (Phase 6)
+    TIPS_CREATE_ALERT:           'tips.create_alert',
+    TIPS_CREATE:                 'tips.create',
+    TIPS_REFUND:                 'tips.refund',
+    TIPS_OVERLAY_FEED:           'tips.overlay.feed',
+    TIPS_SUPERCHAT_CREATE:       'tips.superchat.create',
+    TIPS_TTS_CREATE:             'tips.tts.create',
+    TIPS_MEDIA_REQUEST_CREATE:   'tips.media_request.create',
+
+    BILLING_WALLET_GET:          'billing.wallet.get',
+    BILLING_WALLET_ADJUST:       'billing.wallet.adjust',
+    BILLING_CREDITS_CHECKOUT:    'billing.credits.checkout',
+    BILLING_CREDITS_COMPLETE_CHECKOUT: 'billing.credits.complete_checkout',
+    BILLING_CHARGE_CREDITS:      'billing.charge_credits',
+    BILLING_CREDITS_CHARGE:      'billing.credits.charge',
+    BILLING_CREDITS_REFUND:      'billing.credits.refund',
+    BILLING_TRANSACTION_LOOKUP:  'billing.transaction.lookup',
+    BILLING_ENTITLEMENT_CHECK:   'billing.entitlement.check',
+    BILLING_ECONOMY_FREEZE:      'billing.economy.freeze',
+    BILLING_ECONOMY_UNFREEZE:    'billing.economy.unfreeze',
     BILLING_CREATE_SUBSCRIPTION: 'billing.create_subscription',
+
+    VIP_PLAN_CREATE:             'vip.plan.create',
+    VIP_PLAN_UPDATE:             'vip.plan.update',
+    VIP_SUBSCRIPTION_CREATE:     'vip.subscription.create',
+    VIP_SUBSCRIPTION_CANCEL:     'vip.subscription.cancel',
+    VIP_SUBSCRIPTION_RENEW:      'vip.subscription.renew',
+    VIP_ENTITLEMENT_CHECK:       'vip.entitlement.check',
 
     // media
     MEDIA_UPLOAD_INIT:    'media.upload_init',
