@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>OpenVibe Media</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="OpenVibe shared media platform — VODs, clips, thumbnails, attachments.">
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1d2330; }
+        code { background: #f3f4f8; padding: 0 .25rem; border-radius: 3px; }
+        h1 { margin-top: 0; }
+        ul { line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <h1>OpenVibe Media</h1>
+    <p>This service owns shared media object storage, processing, quotas, and the <code>media.events</code> bus topic for the OpenVibe network.</p>
+    <p>Routes:</p>
+    <ul>
+        <li><code>POST /api/v1/media/upload/init</code></li>
+        <li><code>PUT  /api/v1/media/:id/upload</code> (multipart <code>file</code>)</li>
+        <li><code>POST /api/v1/media/:id/upload/complete</code></li>
+        <li><code>GET  /api/v1/media/:id</code></li>
+        <li><code>GET  /api/v1/media?namespace=…&amp;owner_type=…&amp;owner_id=…</code></li>
+        <li><code>DELETE /api/v1/media/:id</code></li>
+        <li><code>GET  /api/v1/quota?namespace=…&amp;owner_type=…&amp;owner_id=…</code></li>
+        <li><code>GET  /api/v1/admin/jobs</code></li>
+        <li><code>GET  /files/:id</code> — visibility-checked file serve</li>
+    </ul>
+    <p>See <code>README.md</code> for full validation steps.</p>
+</body>
+</html>

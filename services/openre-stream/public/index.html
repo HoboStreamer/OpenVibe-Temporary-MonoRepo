@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>openre.stream</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="openre.stream — ingest, restream, and stream lifecycle for the OpenVibe network.">
+    <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#1d2330}code{background:#f3f4f8;padding:0 .25rem;border-radius:3px}</style>
+</head>
+<body>
+    <h1>openre.stream</h1>
+    <p>Ingest + restream service. Owns stream lifecycle events on the <code>stream.events</code> bus topic.</p>
+    <ul>
+        <li><code>POST /api/v1/channels</code></li>
+        <li><code>POST /api/v1/streams</code></li>
+        <li><code>POST /api/v1/streams/:id/start</code></li>
+        <li><code>POST /api/v1/streams/:id/end</code></li>
+        <li><code>POST /api/v1/ingest/connected</code> / <code>/api/v1/ingest/disconnected</code></li>
+        <li><code>POST /api/v1/destinations</code></li>
+    </ul>
+</body>
+</html>
