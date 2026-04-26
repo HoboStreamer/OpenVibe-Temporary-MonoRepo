@@ -55,6 +55,12 @@ function buildRouter(deps) {
             OPENVIBE_MY_URL:      config.surfaces.my,
             OPENVIBE_THEMES_URL:  config.surfaces.themes,
             OPENVIBE_EVENTS_URL:  config.events.url,
+            OPENVIBE_MEDIA_URL:            config.media && config.media.url,
+            OPENVIBE_MEDIA_INTERNAL_URL:   config.media && config.media.internalUrl,
+            OPENVIBE_LIVE_URL:             config.live && config.live.url,
+            OPENVIBE_LIVE_INTERNAL_URL:    config.live && config.live.internalUrl,
+            OPENRE_STREAM_URL:             config.restream && config.restream.url,
+            OPENRE_STREAM_INTERNAL_URL:    config.restream && config.restream.internalUrl,
         };
         for (const [k, v] of Object.entries(surfaceMap)) {
             if (v) merged[k] = { value: v, source: 'openvibe-config' };

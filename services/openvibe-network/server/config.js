@@ -27,6 +27,20 @@ module.exports = {
         url: trim(process.env.OPENVIBE_EVENTS_URL) || 'http://127.0.0.1:4400',
     },
 
+    // Phase 3 / Phase 4 service URLs (overlay registry seeds).
+    media: {
+        url:         trim(process.env.OPENVIBE_MEDIA_URL)          || 'http://127.0.0.1:4500',
+        internalUrl: trim(process.env.OPENVIBE_MEDIA_INTERNAL_URL) || trim(process.env.OPENVIBE_MEDIA_URL) || 'http://127.0.0.1:4500',
+    },
+    live: {
+        url:         trim(process.env.OPENVIBE_LIVE_URL)          || 'http://127.0.0.1:4600',
+        internalUrl: trim(process.env.OPENVIBE_LIVE_INTERNAL_URL) || trim(process.env.OPENVIBE_LIVE_URL) || 'http://127.0.0.1:4600',
+    },
+    restream: {
+        url:         trim(process.env.OPENRE_STREAM_URL)          || 'http://127.0.0.1:4700',
+        internalUrl: trim(process.env.OPENRE_STREAM_INTERNAL_URL) || trim(process.env.OPENRE_STREAM_URL) || 'http://127.0.0.1:4700',
+    },
+
     hoboTools: {
         publicUrl:   trim(process.env.HOBO_TOOLS_URL),
         internalUrl: trim(process.env.HOBO_TOOLS_INTERNAL_URL),

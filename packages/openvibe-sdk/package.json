@@ -9,7 +9,9 @@
     "./middleware": "./middleware.js",
     "./http": "./http.js",
     "./registry-client": "./registry-client.js",
-    "./events-client": "./events-client.js"
+    "./events-client": "./events-client.js",
+    "./media-client": "./media-client.js",
+    "./stream-client": "./stream-client.js"
   },
   "license": "MIT",
   "dependencies": {

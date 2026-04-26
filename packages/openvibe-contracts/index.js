@@ -6,6 +6,9 @@ const capabilities = require('./capabilities');
 const namespaces = require('./namespaces');
 const services = require('./services');
 const envelope = require('./envelope');
+const mediaNamespaces = require('./media-namespaces');
+const mediaEvents = require('./media-events');
+const streamEvents = require('./stream-events');
 
 module.exports = {
     ...topics,
@@ -14,4 +17,7 @@ module.exports = {
     ...namespaces,
     ...services,
     ...envelope,
+    ...mediaNamespaces,
+    ...mediaEvents,
+    ...streamEvents,
 };

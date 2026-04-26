@@ -10,7 +10,10 @@
     "./capabilities": "./capabilities.js",
     "./namespaces": "./namespaces.js",
     "./services": "./services.js",
-    "./envelope": "./envelope.js"
+    "./envelope": "./envelope.js",
+    "./media-namespaces": "./media-namespaces.js",
+    "./media-events": "./media-events.js",
+    "./stream-events": "./stream-events.js"
   },
   "license": "MIT"
 }

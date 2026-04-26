@@ -7,11 +7,12 @@ Numbering follows the later (corrected) numbering used in
 |---|---|---|---|
 | 1 | Platform Kernel Foundations | ✅ implemented in this commit | `services/openvibe-network`, `services/openvibe-events`, `packages/openvibe-contracts`, `packages/openvibe-sdk` |
 | 2 | Identity / Control Plane Extraction | ✅ implemented in this commit (federation mode) | `services/openvibe-network/server/identity.js` + host surfaces |
-| 3 | Media platform extraction | ⏳ deferred | `HoboStreamer.com/server/media`, `vod`, `thumbnails` will lift into `openvibe-media` |
-| 4 | Chat / community / product migration | ⏳ deferred | future `openvibe-chat`, `openvibe-community` |
-| 5 | Billing / credits / tips ledger | ⏳ deferred | future `openvibe-billing` |
-| 6 | AI backend orchestration | ⏳ deferred | future `openvibe-ai` |
-| 7 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
+| 3 | Media platform extraction | ✅ implemented in this commit | `services/openvibe-media`, `packages/openvibe-contracts/src/media-namespaces.js`, `packages/openvibe-sdk` (`MediaClient`), `compat/hobostreamer/` + `/opt/hobostreamer/server/openvibe-bridge/media.js` |
+| 4 | openvibe.live + openre.stream split | ✅ implemented in this commit | `services/openvibe-live` (SSR), `services/openre-stream` (ingest/restream), `packages/openvibe-contracts/src/stream-events.js`, `packages/openvibe-sdk` (`StreamClient`), `/opt/hobostreamer/server/openvibe-bridge/stream.js` |
+| 5 | Chat / community / product migration | ⏳ deferred | future `openvibe-chat`, `openvibe-community` |
+| 6 | Billing / credits / tips ledger | ⏳ deferred | future `openvibe-billing` |
+| 7 | AI backend orchestration | ⏳ deferred | future `openvibe-ai` |
+| 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
 
 ## Phase 1 — Platform Kernel Foundations: acceptance
 
@@ -57,6 +58,84 @@ Numbering follows the later (corrected) numbering used in
    (compat shim in [HoboStreamer.com/server/auth/openvibe-issuer.js](../HoboStreamer.com/server/auth/openvibe-issuer.js)).
    When the OpenVibe env vars are absent the existing Hobo flow is bit-for-bit
    unchanged. ✅
+
+## Phase 3 — Media platform extraction: acceptance
+
+1. `services/openvibe-media` boots on port `4500`, persists media in
+   `media_objects` + `media_derivatives` + `media_jobs` + `media_quotas` +
+   `media_usage` + `media_lifecycle_audit` + `media_legacy_map`. ✅
+2. Single namespace registry
+   ([packages/openvibe-contracts/src/media-namespaces.js](packages/openvibe-contracts/src/media-namespaces.js))
+   covers `live.vods`, `live.clips`, `live.thumbnails`,
+   `live.stream_snapshots`, `live.media_requests`, `community.pastes`,
+   `community.attachments`, `chat.attachments`, `chat.tts_audio`,
+   `user.profile_images`, `tools.images`, `games.assets`, `wiki.assets`,
+   `blog.assets`. Per-namespace defaults seeded in `config.defaultQuotas`. ✅
+3. Upload flow `POST /media/upload/init` → `PUT /media/:id/upload` →
+   `POST /media/:id/upload/complete` enqueues thumbnail / metadata jobs and
+   emits `media.upload.initialized`, `media.uploaded`,
+   `media.processing.started`, `media.derivative.created`,
+   `media.processing.completed`, `media.ready` on topic `media.events`. ✅
+4. Hot/warm/cold tiers managed via `archive` (`status=archived`,
+   `tier=cold`) and `restore` (`status=ready`, `tier=warm`); soft-delete via
+   `DELETE /media/:id`. ✅
+5. Storage seam: `LocalStorageProvider` (default) or `S3SeamProvider`
+   selected via `STORAGE_PROVIDER`; key path `<namespace>/<id>.<ext>`. ✅
+6. Read access: public/unlisted always allowed; private/restricted owner-or-
+   admin only — gated centrally by `policy.decideRead`. ✅
+7. Per-owner-namespace quotas (file size, storage cap, file count, mime
+   allow-list, type allow-list) enforced before write. ✅
+8. HoboStreamer compat shim `mirrorUploadSafe` lives at
+   [/opt/hobostreamer/server/openvibe-bridge/media.js](/opt/hobostreamer/server/openvibe-bridge/media.js);
+   inert when `OPENVIBE_MEDIA_URL` is unset. ✅
+9. Service test
+   `services/openvibe-media/test/model-policy-quota.test.js` passes. ✅
+10. End-to-end live curl flow validated in this session — see
+    [docs/openvibe/phase-3-media.md](docs/openvibe/phase-3-media.md). ✅
+
+## Phase 4 — openvibe.live (SSR product) + openre.stream (infra) split: acceptance
+
+1. `services/openre-stream` boots on port `4700` and is the authority for
+   stream lifecycle — schema covers `channels`, `streams`,
+   `ingest_sessions`, `restream_destinations`, `output_state`,
+   `mirror_state`, `legacy_id_map`. ✅
+2. Routes `POST /api/v1/channels`, `POST /api/v1/streams` (returns RTMP /
+   WHIP / JSMpeg ingest URLs), `POST /api/v1/streams/:id/{start,end,attach-vod}`,
+   `POST /api/v1/destinations`, `POST /api/v1/streams/:id/output`,
+   `POST /api/v1/ingest/{connected,disconnected}` all gated by
+   `policy.assert`. ✅
+3. Lifecycle events emitted on topic `stream.events`: `stream.created`,
+   `stream.started`, `stream.mirrored_to_live`, `stream.ended`,
+   `stream.vod.attached`. Wrapper merges channel context into the
+   `buildStreamEventPayload(stream, extra)` envelope. ✅
+4. `services/openvibe-live` boots on port `4600` and serves SSR pages at
+   `/`, `/c/:slug`, `/c/:slug/s/:streamId`. Every page emits `<title>`,
+   `<meta name=description>`, `<link rel=canonical>`, full og: + twitter:
+   card metadata. `og:type` flips to `video.other` when the channel is
+   live; offline channels render an SEO-clean shell with
+   `og:type=website`. ✅
+5. `services/openvibe-live` accepts stream events two ways: push from
+   `openvibe-events` to `POST /api/v1/events/stream` (single envelope or
+   `{events:[...]}`), and direct service-authenticated upserts. The read
+   model uses COALESCE-based upserts and never destroys data. ✅
+6. URL registry overlay
+   ([services/openvibe-network/server/api/url-registry.js](services/openvibe-network/server/api/url-registry.js))
+   now advertises `OPENVIBE_MEDIA_URL`, `OPENVIBE_LIVE_URL`,
+   `OPENRE_STREAM_URL` (and their `_INTERNAL_URL` variants). ✅
+7. HoboStreamer compat shim
+   [/opt/hobostreamer/server/openvibe-bridge/stream.js](/opt/hobostreamer/server/openvibe-bridge/stream.js)
+   exposes `upsertChannelSafe`, `createStreamSafe`, `startStreamSafe`,
+   `endStreamSafe`, `attachVodSafe` — inert when `OPENRE_STREAM_URL` is
+   unset. ✅
+8. Service tests `services/openre-stream/test/lifecycle.test.js` and
+   `services/openvibe-live/test/ssr.test.js` pass. ✅
+9. End-to-end live curl flow validated in this session: create →
+   start → end (with VOD attached) produces the expected event sequence in
+   `openvibe-events` and lights up the SSR page on `openvibe-live` with
+   the LIVE NOW badge — see
+   [docs/openvibe/phase-4-live-restream.md](docs/openvibe/phase-4-live-restream.md). ✅
+10. Migration map per legacy table → new namespace / table / event
+    documented in [docs/openvibe/migration-map.md](docs/openvibe/migration-map.md). ✅
 
 ## Validation
 

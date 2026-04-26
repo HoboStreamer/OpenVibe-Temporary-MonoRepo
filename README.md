@@ -1,4 +1,4 @@
-# OpenVibe MonoRepo - This is a mono repo for the early stages of development for OpenVibe - At some point the project will be split into many different repos but this is for ChatGPT to reference for phase prompt generation
+# OpenVibe
 
 OpenVibe is the platform kernel and the federated set of product surfaces being
 extracted from the existing **HoboStreamer.com** runtime and the **HoboApp** /
