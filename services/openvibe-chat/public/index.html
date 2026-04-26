@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>openvibe-chat — admin shell</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1d2330;background:#f7f8fb}
+header{display:flex;align-items:center;gap:1rem;border-bottom:1px solid #e3e6ee;padding-bottom:1rem;margin-bottom:1rem}
+h1{margin:0;font-size:1.4rem}
+.card{background:#fff;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+code,pre{background:#0d1117;color:#c9d1d9;border-radius:4px;padding:.1rem .3rem;font-size:.85rem}
+pre{padding:1rem;overflow:auto}
+ul{padding-left:1.2rem}
+</style>
+</head>
+<body>
+<header><h1>openvibe-chat</h1><span>OpenVibe Phase 5 — chat / DMs / calls / TTS / audio</span></header>
+<div class="card">
+<p>This is the admin landing page for the chat service. The canonical
+realtime UI lives in <code>openvibe-live</code> (stream chat + overlays) and
+HoboStreamer compat surfaces. This service exposes a REST + future
+WebSocket API at <code>/api/chat/*</code>.</p>
+</div>
+<div class="card">
+<h2>API quick-reference</h2>
+<ul>
+<li><code>GET /api/chat/rooms</code> · <code>POST /api/chat/rooms</code></li>
+<li><code>GET/POST /api/chat/rooms/:id/messages</code></li>
+<li><code>GET/POST /api/chat/global/{history,send}</code></li>
+<li><code>GET/POST /api/chat/stream/:streamId/{history,send}</code></li>
+<li><code>GET/POST /api/chat/dms</code> · <code>GET/POST /api/chat/dms/:roomId/messages</code></li>
+<li><code>POST /api/chat/calls</code>, <code>/calls/:id/{accept,decline,end,signal}</code></li>
+<li><code>GET/PUT /api/chat/tts/settings</code> · <code>POST /api/chat/tts/queue</code></li>
+<li><code>POST /api/chat/audio/queue</code> · <code>POST /api/chat/audio/resolve-external</code></li>
+</ul>
+</div>
+<div class="card">
+<h2>Health</h2>
+<pre>curl http://127.0.0.1:4800/health</pre>
+</div>
+</body>
+</html>

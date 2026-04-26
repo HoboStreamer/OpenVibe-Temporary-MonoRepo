@@ -1,0 +1,23 @@
+{
+  "name": "@openvibe/community",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenVibe shared community platform — spaces, forums, threads, posts, pastes, Discord relay.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/community-smoke.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/contracts": "*",
+    "@openvibe/sdk": "*",
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0"
+  }
+}

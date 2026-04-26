@@ -9,9 +9,24 @@
 
 const CAPABILITIES = Object.freeze({
     // chat
-    CHAT_SEND_MESSAGE:    'chat.send_message',
-    CHAT_START_CALL:      'chat.start_call',
-    CHAT_ENQUEUE_TTS:     'chat.enqueue_tts',
+    CHAT_ROOM_CREATE:     'chat.room.create',
+    CHAT_ROOM_JOIN:       'chat.room.join',
+    CHAT_ROOM_LEAVE:      'chat.room.leave',
+    CHAT_SEND_MESSAGE:    'chat.message.send',
+    CHAT_EDIT_MESSAGE:    'chat.message.edit',
+    CHAT_DELETE_MESSAGE:  'chat.message.delete',
+    CHAT_DM_OPEN:         'chat.dm.open',
+    CHAT_START_CALL:      'chat.call.start',
+    CHAT_CALL_SIGNAL:     'chat.call.signal',
+    CHAT_END_CALL:        'chat.call.end',
+    CHAT_TTS_SETTINGS_UPDATE: 'chat.tts.settings.update',
+    CHAT_ENQUEUE_TTS:     'chat.tts.enqueue',
+    CHAT_TTS_SKIP:        'chat.tts.skip',
+    CHAT_TTS_CLEAR:       'chat.tts.clear',
+    CHAT_AUDIO_ENQUEUE:   'chat.audio.enqueue',
+    CHAT_AUDIO_SKIP:      'chat.audio.skip',
+    CHAT_AUDIO_CLEAR:     'chat.audio.clear',
+    CHAT_OVERLAY_RENDER:  'chat.overlay.render',
 
     // tips / billing
     TIPS_CREATE_ALERT:    'tips.create_alert',
@@ -23,8 +38,17 @@ const CAPABILITIES = Object.freeze({
     MEDIA_ATTACH_TO_ENTITY: 'media.attach_to_entity',
 
     // community
-    COMMUNITY_CREATE_POST:  'community.create_post',
-    COMMUNITY_CREATE_PASTE: 'community.create_paste',
+    COMMUNITY_SPACE_CREATE:    'community.space.create',
+    COMMUNITY_CATEGORY_CREATE: 'community.category.create',
+    COMMUNITY_THREAD_CREATE:   'community.thread.create',
+    COMMUNITY_THREAD_LOCK:     'community.thread.lock',
+    COMMUNITY_CREATE_POST:     'community.post.create',
+    COMMUNITY_DELETE_POST:     'community.post.delete',
+    COMMUNITY_COMMENT_ATTACH:  'community.comment.attach',
+    COMMUNITY_CREATE_PASTE:    'community.paste.create',
+    COMMUNITY_UPDATE_PASTE:    'community.paste.update',
+    COMMUNITY_DISCORD_RELAY_CONFIGURE: 'community.discord.relay.configure',
+    COMMUNITY_DISCORD_MESSAGE_IMPORT:  'community.discord.message.import',
 
     // ai-driven content
     WIKI_GENERATE_SPACE:  'wiki.generate_space',

@@ -1,0 +1,165 @@
+'use strict';
+
+const path = require('path');
+const fs = require('fs');
+const Database = require('better-sqlite3');
+
+let dbInstance = null;
+
+function init(dbPath) {
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS community_spaces (
+            id              TEXT PRIMARY KEY,
+            slug            TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL,
+            description     TEXT,
+            visibility      TEXT NOT NULL DEFAULT 'public',
+            owner_type      TEXT,
+            owner_id        TEXT,
+            created_by_actor_type TEXT,
+            created_by_actor_id   TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            archived_at     DATETIME,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS community_categories (
+            id              TEXT PRIMARY KEY,
+            community_id    TEXT NOT NULL,
+            slug            TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            description     TEXT,
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (community_id) REFERENCES community_spaces(id) ON DELETE CASCADE,
+            UNIQUE (community_id, slug)
+        );
+
+        CREATE TABLE IF NOT EXISTS community_threads (
+            id              TEXT PRIMARY KEY,
+            community_id    TEXT,
+            category_id     TEXT,
+            slug            TEXT,
+            title           TEXT NOT NULL,
+            thread_type     TEXT NOT NULL DEFAULT 'discussion',
+            status          TEXT NOT NULL DEFAULT 'open',
+            visibility      TEXT NOT NULL DEFAULT 'public',
+            ref_type        TEXT,
+            ref_id          TEXT,
+            created_by_actor_type TEXT,
+            created_by_actor_id   TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_threads_community ON community_threads(community_id);
+        CREATE INDEX IF NOT EXISTS idx_community_threads_category  ON community_threads(category_id);
+        CREATE INDEX IF NOT EXISTS idx_community_threads_ref        ON community_threads(ref_type, ref_id);
+        CREATE INDEX IF NOT EXISTS idx_community_threads_status     ON community_threads(status);
+
+        CREATE TABLE IF NOT EXISTS community_posts (
+            id              TEXT PRIMARY KEY,
+            thread_id       TEXT NOT NULL,
+            parent_post_id  TEXT,
+            author_type     TEXT,
+            author_id       TEXT,
+            body            TEXT NOT NULL,
+            body_format     TEXT NOT NULL DEFAULT 'markdown',
+            source_type     TEXT NOT NULL DEFAULT 'openvibe',
+            source_id       TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            edited_at       DATETIME,
+            deleted_at      DATETIME,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (thread_id) REFERENCES community_threads(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_posts_thread ON community_posts(thread_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_community_posts_source ON community_posts(source_type, source_id);
+
+        CREATE TABLE IF NOT EXISTS community_pastes (
+            id              TEXT PRIMARY KEY,
+            slug            TEXT NOT NULL UNIQUE,
+            title           TEXT,
+            body            TEXT NOT NULL,
+            language        TEXT,
+            visibility      TEXT NOT NULL DEFAULT 'public',
+            expires_at      DATETIME,
+            created_by_actor_type TEXT,
+            created_by_actor_id   TEXT,
+            view_count      INTEGER NOT NULL DEFAULT 0,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            deleted_at      DATETIME,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS community_attachments (
+            id              TEXT PRIMARY KEY,
+            attached_to_type TEXT NOT NULL,
+            attached_to_id   TEXT NOT NULL,
+            media_id         TEXT NOT NULL,
+            attachment_type  TEXT,
+            sort_order       INTEGER NOT NULL DEFAULT 0,
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_attachments_target ON community_attachments(attached_to_type, attached_to_id);
+        CREATE INDEX IF NOT EXISTS idx_community_attachments_media  ON community_attachments(media_id);
+
+        CREATE TABLE IF NOT EXISTS community_discord_relays (
+            id                  TEXT PRIMARY KEY,
+            community_id        TEXT,
+            discord_guild_id    TEXT,
+            discord_channel_id  TEXT NOT NULL,
+            openvibe_category_id TEXT,
+            openvibe_thread_id   TEXT,
+            relay_direction      TEXT NOT NULL DEFAULT 'discord_to_openvibe',
+            enabled              INTEGER NOT NULL DEFAULT 1,
+            last_synced_at       DATETIME,
+            metadata_json        TEXT NOT NULL DEFAULT '{}',
+            created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_relays_channel ON community_discord_relays(discord_channel_id);
+
+        CREATE TABLE IF NOT EXISTS community_discord_messages (
+            discord_message_id   TEXT PRIMARY KEY,
+            discord_channel_id   TEXT,
+            openvibe_post_id     TEXT,
+            openvibe_thread_id   TEXT,
+            relay_direction      TEXT NOT NULL DEFAULT 'discord_to_openvibe',
+            metadata_json        TEXT NOT NULL DEFAULT '{}',
+            created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_discord_msgs_post ON community_discord_messages(openvibe_post_id);
+
+        CREATE TABLE IF NOT EXISTS community_legacy_map (
+            source     TEXT NOT NULL,
+            kind       TEXT NOT NULL,
+            legacy_id  TEXT NOT NULL,
+            new_id     TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (source, kind, legacy_id)
+        );
+    `);
+
+    dbInstance = db;
+    return db;
+}
+
+function get() {
+    if (!dbInstance) throw new Error('community db not initialized — call db.init(path) first');
+    return dbInstance;
+}
+
+module.exports = { init, get };

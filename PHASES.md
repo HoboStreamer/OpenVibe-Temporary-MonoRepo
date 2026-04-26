@@ -9,7 +9,7 @@ Numbering follows the later (corrected) numbering used in
 | 2 | Identity / Control Plane Extraction | ✅ implemented in this commit (federation mode) | `services/openvibe-network/server/identity.js` + host surfaces |
 | 3 | Media platform extraction | ✅ implemented in this commit | `services/openvibe-media`, `packages/openvibe-contracts/src/media-namespaces.js`, `packages/openvibe-sdk` (`MediaClient`), `compat/hobostreamer/` + `/opt/hobostreamer/server/openvibe-bridge/media.js` |
 | 4 | openvibe.live + openre.stream split | ✅ implemented in this commit | `services/openvibe-live` (SSR), `services/openre-stream` (ingest/restream), `packages/openvibe-contracts/src/stream-events.js`, `packages/openvibe-sdk` (`StreamClient`), `/opt/hobostreamer/server/openvibe-bridge/stream.js` |
-| 5 | Chat / community / product migration | ⏳ deferred | future `openvibe-chat`, `openvibe-community` |
+| 5 | Chat / community / product migration | ✅ implemented in this commit | `services/openvibe-chat`, `services/openvibe-community`, `packages/openvibe-contracts/{chat-events,community-events}.js`, `packages/openvibe-sdk` (`ChatClient`, `CommunityClient`), `/opt/hobostreamer/server/openvibe-bridge/{chat,community}.js` |
 | 6 | Billing / credits / tips ledger | ⏳ deferred | future `openvibe-billing` |
 | 7 | AI backend orchestration | ⏳ deferred | future `openvibe-ai` |
 | 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
@@ -136,6 +136,56 @@ Numbering follows the later (corrected) numbering used in
    [docs/openvibe/phase-4-live-restream.md](docs/openvibe/phase-4-live-restream.md). ✅
 10. Migration map per legacy table → new namespace / table / event
     documented in [docs/openvibe/migration-map.md](docs/openvibe/migration-map.md). ✅
+
+## Phase 5 — openvibe-chat + openvibe-community: acceptance
+
+1. `services/openvibe-chat` boots on port `4800`. Schema covers
+   `chat_rooms`, `chat_participants`, `chat_messages`, `chat_call_sessions`,
+   `chat_call_signals`, `chat_tts_settings`, `chat_audio_queue`,
+   `chat_legacy_map`. ✅
+2. `services/openvibe-community` boots on port `4900`. Schema covers
+   `community_spaces`, `community_categories`, `community_threads`,
+   `community_posts`, `community_pastes`, `community_attachments`,
+   `community_discord_relays`, `community_discord_messages`,
+   `community_legacy_map`. ✅
+3. Chat REST surface: rooms, messages, edit/delete, DMs, call signaling
+   envelopes, TTS settings + queue, soundboard / external-audio queue.
+   Compatibility wrappers `/api/chat/{global,stream/:id,channel/:id}/*`
+   keep HoboStreamer URLs stable via `ensureRoomForExternal()`. ✅
+4. Community REST surface: spaces, categories, threads, posts, reusable
+   comments via `(ref_type, ref_id)`, pastes (with legacy `/api/pastes/*`
+   compatibility mount), Discord relay management + inbound webhook with
+   `community_discord_messages.discord_message_id` loop prevention. ✅
+5. Events emitted on `chat.events` and `community.events` topics use the
+   canonical envelope and pass `is{Chat,Community}EventType` validation. ✅
+6. Policy seams: `decideRead` / `decideSend` / `decideEdit` /
+   `decideDelete` / `decideTtsOwnership` / `decideCallParticipant` for chat;
+   `decideRead` / `decidePost` / `decideEdit` / `decideDelete` /
+   `decidePasteOwnership` / `decideRelayManage` for community. All
+   mutations route through `policy.assert`. ✅
+7. Attachments in `community_attachments` reference `media_id` only — the
+   community DB never holds raw paths or external URLs (those belong to
+   `openvibe-media`). ✅
+8. SDK clients `ChatClient` and `CommunityClient` exported from
+   `@openvibe/sdk` and re-used internally by both services for cross-
+   service calls. ✅
+9. HoboStreamer compatibility shims
+   [/opt/hobostreamer/server/openvibe-bridge/chat.js](/opt/hobostreamer/server/openvibe-bridge/chat.js)
+   and
+   [/opt/hobostreamer/server/openvibe-bridge/community.js](/opt/hobostreamer/server/openvibe-bridge/community.js)
+   are inert when `OPENVIBE_CHAT_URL` / `OPENVIBE_COMMUNITY_URL` are unset.
+   ✅
+10. Service smoke tests `services/openvibe-chat/test/chat-smoke.test.js` and
+    `services/openvibe-community/test/community-smoke.test.js` exercise
+    model + policy in-process and pass. End-to-end curl flow validated:
+    `POST /api/chat/rooms`, `POST /api/community/spaces`, `POST
+    /api/community/threads`, and legacy `POST /api/pastes` all return
+    `201` with the canonical resource shape. See
+    [docs/openvibe/phase-5-chat-community.md](docs/openvibe/phase-5-chat-community.md),
+    [docs/openvibe/chat-service.md](docs/openvibe/chat-service.md),
+    [docs/openvibe/community-service.md](docs/openvibe/community-service.md),
+    [docs/openvibe/legacy-chat-pastes-migration.md](docs/openvibe/legacy-chat-pastes-migration.md).
+    ✅
 
 ## Validation
 

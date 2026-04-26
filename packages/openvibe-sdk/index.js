@@ -7,6 +7,8 @@ const { RegistryClient } = require('./registry-client');
 const { EventsClient } = require('./events-client');
 const { MediaClient } = require('./media-client');
 const { StreamClient } = require('./stream-client');
+const { ChatClient } = require('./chat-client');
+const { CommunityClient } = require('./community-client');
 
 module.exports = {
     OpenVibeAuthClient,
@@ -14,6 +16,8 @@ module.exports = {
     EventsClient,
     MediaClient,
     StreamClient,
+    ChatClient,
+    CommunityClient,
     ...middleware,
     ...http,
 };

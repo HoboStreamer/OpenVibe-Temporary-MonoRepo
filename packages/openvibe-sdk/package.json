@@ -11,7 +11,9 @@
     "./registry-client": "./registry-client.js",
     "./events-client": "./events-client.js",
     "./media-client": "./media-client.js",
-    "./stream-client": "./stream-client.js"
+    "./stream-client": "./stream-client.js",
+    "./chat-client": "./chat-client.js",
+    "./community-client": "./community-client.js"
   },
   "license": "MIT",
   "dependencies": {

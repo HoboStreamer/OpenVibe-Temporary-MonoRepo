@@ -9,6 +9,8 @@ const envelope = require('./envelope');
 const mediaNamespaces = require('./media-namespaces');
 const mediaEvents = require('./media-events');
 const streamEvents = require('./stream-events');
+const chatEvents = require('./chat-events');
+const communityEvents = require('./community-events');
 
 module.exports = {
     ...topics,
@@ -20,4 +22,6 @@ module.exports = {
     ...mediaNamespaces,
     ...mediaEvents,
     ...streamEvents,
+    ...chatEvents,
+    ...communityEvents,
 };
