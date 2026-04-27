@@ -296,12 +296,16 @@ and [services/openvibe-events/README.md](services/openvibe-events/README.md).
 6. Provider+route fallback recorded as `ai_requests.status='fallback_used'`
    so degradation is observable. If both fail, the run row is marked
    `failed` and `EAIPROVIDER` (HTTP 502) is returned. ✅
-7. Default routes seeded (13): `default.{chat,json,embedding}`,
+7. Default routes seeded (14): `default.{chat,json,embedding}`,
    `wiki.generate`, `blog.draft`, `news.summarize`,
    `reviews.summarize`, `deals.enrich`, `coupons.extract`,
-   `trade.summarize`, `codes.generate_docs`, `games.generate_lore`,
-   `moderation.classify`. Default templates and workflows seeded for
-   every product namespace. ✅
+   `trade.summarize`, `codes.generate_docs`, `tools.describe`,
+   `games.generate_lore`, `moderation.classify`. Default templates and
+   workflows are seeded for every product namespace, with product-facing
+   output packaging metadata for `openvibe.wiki`, `openvibe.blog`,
+   `openvibe.news`, `openvibe.reviews`, `openvibe.deals`,
+   `openvibe.coupons`, `openvibe.trade`, `openvibe.codes`,
+   `openvibe.tools`, and `openvibe.games`. ✅
 8. Default content-source registry seeded (23 entries) covering wiki,
    blog, news, reviews, deals, coupons, trade, plus protocol primitives
    (`rss`, `sitemap`, `json_ld`, `robots_txt`). Sources requiring an
@@ -326,24 +330,26 @@ and [services/openvibe-events/README.md](services/openvibe-events/README.md).
     respected. Future Meilisearch / Typesense / OpenSearch adapters
     can swap in without changing the SDK contract. ✅
 13. SDK `AiClient` exported from `@openvibe/sdk` with full method
-    surface (providers, models, routes, templates, workflows, runs,
-    direct tasks, product workflows, SEO helpers, source registry,
-    ingestion jobs, search seam). ✅
+   surface (providers, models, routes, templates, workflows, runs,
+   direct tasks, product workflows including `describeTool()` /
+   `generateToolPage()`, SEO helpers, source registry, ingestion jobs,
+   search seam). ✅
 14. `/opt/hobostreamer/server/openvibe-bridge/ai.js` is additive and
     inert when `OPENVIBE_AI_URL` is unset. Methods:
     `summarizeSafe`, `generateSafe`, `classifySafe`,
     `extractCouponSafe`, `enrichDealSafe`,
     `evaluateIndexabilitySafe`, `generateSeoMetadataSafe`. ✅
 15. Service smoke test
-    `services/openvibe-ai/test/ai-smoke.test.js` exercises seed,
-    direct runner, idempotency replay, cache hit, quota exceeded,
-    indexability gate (thin / sufficient / dupe / stub-in-production),
-    JSON-LD safety (no fabricated `Review.reviewRating`, no fabricated
-    `Offer`), sitemap exclusion of `indexable=false`, source registry,
-    ingestion job lifecycle, search index round-trip, provider HTTP
-    response excludes raw API key fields, and trade-workflow disclaimer
-    enforcement. `npm test` (project-wide): **11 files, 11 pass, 0
-    fail**. ✅
+   `services/openvibe-ai/test/ai-smoke.test.js` exercises seed,
+   direct runner, idempotency replay, cache hit, quota exceeded,
+   indexability gate (thin / sufficient / dupe / stub-in-production),
+   JSON-LD safety (no fabricated `Review.reviewRating`, no fabricated
+   `Offer`), sitemap exclusion of `indexable=false`, source registry,
+   ingestion job lifecycle, search index round-trip, provider HTTP
+   response excludes raw API key fields, product-output packages for
+   every product seam (including `openvibe.tools`), and trade-workflow
+   disclaimer enforcement. `npm test` (project-wide): **11 files, 11
+   pass, 0 fail**. ✅
 16. Documentation: [docs/openvibe/phase-7-ai-backend.md](docs/openvibe/phase-7-ai-backend.md),
     [ai-service.md](docs/openvibe/ai-service.md),
     [ai-provider-routing.md](docs/openvibe/ai-provider-routing.md),

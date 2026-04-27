@@ -312,6 +312,8 @@ function buildRouter({ config, eventBus }) {
     r.post('/coupons/extract-coupon',        _workflow('coupons.extract_coupon', 'extract'));
     r.post('/trade/summarize-market-context',_workflow('trade.summarize_market_context', 'summarize'));
     r.post('/codes/generate-docs',           _workflow('codes.generate_docs',    'generate'));
+    r.post('/tools/describe-tool',           _workflow('tools.describe',         'generate'));
+    r.post('/tools/generate-page',           _workflow('tools.describe',         'generate'));
     r.post('/games/generate-lore',           _workflow('games.generate_lore',    'generate'));
 
     // ── SEO helpers ──────────────────────────────────────────────

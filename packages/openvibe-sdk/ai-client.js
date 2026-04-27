@@ -97,6 +97,8 @@ class AiClient {
     extractCoupon(body)             { return this._post('/api/v1/ai/coupons/extract-coupon', body); }
     summarizeTradeContext(body)     { return this._post('/api/v1/ai/trade/summarize-market-context', body); }
     generateCodesDocs(body)         { return this._post('/api/v1/ai/codes/generate-docs', body); }
+    describeTool(body)              { return this._post('/api/v1/ai/tools/describe-tool', body); }
+    generateToolPage(body)          { return this._post('/api/v1/ai/tools/generate-page', body); }
     generateGameLore(body)          { return this._post('/api/v1/ai/games/generate-lore', body); }
 
     // ── SEO helpers ──

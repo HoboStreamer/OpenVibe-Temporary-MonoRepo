@@ -113,6 +113,7 @@ const CAPABILITIES = Object.freeze({
     AI_COUPONS_EXTRACT_COUPON:     'ai.coupons.extract_coupon',
     AI_TRADE_SUMMARIZE_MARKET:     'ai.trade.summarize_market_context',
     AI_CODES_GENERATE_DOCS:        'ai.codes.generate_docs',
+    AI_TOOLS_DESCRIBE_TOOL:        'ai.tools.describe_tool',
     AI_GAMES_GENERATE_LORE:        'ai.games.generate_lore',
     AI_MODERATION_CLASSIFY:        'ai.moderation.classify',
 

@@ -56,10 +56,13 @@ async function main() {
     db.init(config.db.path);
     const counts = seeds.seedAll();
     assert.ok(counts.providers >= 1, 'providers seeded');
-    assert.ok(counts.routes >= 5, 'routes seeded');
+    assert.ok(counts.routes >= 14, 'routes seeded');
     assert.ok(counts.workflows >= 10, 'workflows seeded');
     assert.ok(counts.sources >= 5, 'sources seeded');
     console.log('[ai-smoke] seeds:', counts);
+    assert.ok(model.getRoute('tools.describe'), 'tools route present');
+    assert.ok(model.getWorkflow('tools.describe'), 'tools workflow present');
+    assert.ok(model.getTemplate('tools.page'), 'tools template present');
 
     // Direct runner: deterministic stub run + idempotency replay
     const idem = 'idem-test-1';
@@ -199,6 +202,85 @@ async function main() {
         });
         assert.strictEqual(trade.status, 200);
         assert.strictEqual(trade.body.output.not_financial_advice, true, 'trade output marked not financial advice');
+
+        const longText = 'OpenVibe provides a structured editorial workflow that emphasizes source transparency, search-readiness, and product-specific output packaging for publishing surfaces. '.repeat(8);
+        const productCases = [
+            {
+                path: '/api/v1/ai/wiki/generate-space',
+                body: { input: { topic: 'OpenVibe Knowledge Base', description: longText }, sources: [{ url: 'https://example.com/wiki-1', title: 'Wiki source 1' }, { url: 'https://example.com/wiki-2', title: 'Wiki source 2' }], idempotency_key: 'wiki-space-' + Date.now() },
+                expectedProduct: 'openvibe.wiki', expectedSchema: 'Article', expectedHost: 'openvibe.wiki', expectedIndex: 'wiki', expectedDocType: 'wiki_space',
+            },
+            {
+                path: '/api/v1/ai/wiki/generate-page',
+                body: { input: { topic: 'OpenVibe AI Service', description: longText }, sources: [{ url: 'https://example.com/wiki-page-1', title: 'Wiki page source 1' }, { url: 'https://example.com/wiki-page-2', title: 'Wiki page source 2' }], idempotency_key: 'wiki-page-' + Date.now() },
+                expectedProduct: 'openvibe.wiki', expectedSchema: 'Article', expectedHost: 'openvibe.wiki', expectedIndex: 'wiki', expectedDocType: 'wiki_page',
+            },
+            {
+                path: '/api/v1/ai/blog/draft-post',
+                body: { input: { topic: 'Why source-aware AI drafts matter', angle: 'editorial workflow', description: longText }, sources: [{ url: 'https://example.com/blog-1', title: 'Blog source 1' }], idempotency_key: 'blog-' + Date.now() },
+                expectedProduct: 'openvibe.blog', expectedSchema: 'BlogPosting', expectedHost: 'openvibe.blog', expectedIndex: 'blog', expectedDocType: 'blog_post',
+            },
+            {
+                path: '/api/v1/ai/news/summarize-story',
+                body: { input: { topic: 'OpenVibe launches product-specific AI seams', description: longText }, sources: [{ url: 'https://example.com/news-1', title: 'News source 1' }, { url: 'https://example.com/news-2', title: 'News source 2' }], idempotency_key: 'news-story-' + Date.now() },
+                expectedProduct: 'openvibe.news', expectedSchema: 'NewsArticle', expectedHost: 'openvibe.news', expectedIndex: 'news', expectedDocType: 'news_story',
+            },
+            {
+                path: '/api/v1/ai/news/compare-perspectives',
+                body: { input: { topic: 'OpenVibe AI coverage comparison', description: longText }, sources: [{ url: 'https://example.com/news-compare-1', title: 'Perspective source 1' }, { url: 'https://example.com/news-compare-2', title: 'Perspective source 2' }], idempotency_key: 'news-compare-' + Date.now() },
+                expectedProduct: 'openvibe.news', expectedSchema: 'NewsArticle', expectedHost: 'openvibe.news', expectedIndex: 'news', expectedDocType: 'news_perspectives',
+            },
+            {
+                path: '/api/v1/ai/reviews/summarize-entity',
+                body: { input: { entity: 'OpenVibe Studio', description: longText }, sources: [{ url: 'https://example.com/review-1', title: 'Review source 1' }, { url: 'https://example.com/review-2', title: 'Review source 2' }], idempotency_key: 'reviews-' + Date.now() },
+                expectedProduct: 'openvibe.reviews', expectedSchema: 'Review', expectedHost: 'openvibe.reviews', expectedIndex: 'reviews', expectedDocType: 'review_page',
+            },
+            {
+                path: '/api/v1/ai/deals/enrich-deal',
+                body: { input: { product_name: 'OpenVibe Capture Card', merchant: 'OpenVibe Shop', price: '199.99', priceCurrency: 'USD', brand: 'OpenVibe', description: longText }, sources: [{ url: 'https://example.com/deal-1', title: 'Deal source 1' }], idempotency_key: 'deals-' + Date.now() },
+                expectedProduct: 'openvibe.deals', expectedSchema: 'Product', expectedHost: 'openvibe.deals', expectedIndex: 'deals', expectedDocType: 'deal_page',
+            },
+            {
+                path: '/api/v1/ai/coupons/extract-coupon',
+                body: { input: { merchant: 'OpenVibe Shop', input: `${longText} Use coupon SAVE10 for 10 percent off selected items.` }, sources: [{ url: 'https://example.com/coupon-1', title: 'Coupon source 1' }], idempotency_key: 'coupons-' + Date.now() },
+                expectedProduct: 'openvibe.coupons', expectedSchema: 'Article', expectedHost: 'openvibe.coupons', expectedIndex: 'coupons', expectedDocType: 'coupon_page',
+            },
+            {
+                path: '/api/v1/ai/trade/summarize-market-context',
+                body: { input: { asset: 'BTC', description: longText }, sources: [{ url: 'https://example.com/trade-1', title: 'Trade source 1' }, { url: 'https://example.com/trade-2', title: 'Trade source 2' }], idempotency_key: 'trade-seam-' + Date.now() },
+                expectedProduct: 'openvibe.trade', expectedSchema: 'Article', expectedHost: 'openvibe.trade', expectedIndex: 'trade', expectedDocType: 'trade_page',
+            },
+            {
+                path: '/api/v1/ai/codes/generate-docs',
+                body: { input: { name: 'openvibe-sdk', audience: 'developers', applicationCategory: 'DeveloperApplication', operatingSystem: 'Linux', description: longText }, sources: [{ url: 'https://example.com/codes-1', title: 'Codes source 1' }], idempotency_key: 'codes-' + Date.now() },
+                expectedProduct: 'openvibe.codes', expectedSchema: 'SoftwareApplication', expectedHost: 'openvibe.codes', expectedIndex: 'codes', expectedDocType: 'codes_doc',
+            },
+            {
+                path: '/api/v1/ai/tools/describe-tool',
+                body: { input: { tool_name: 'OpenVibe Studio', use_case: 'multi-surface content ops', applicationCategory: 'DeveloperApplication', operatingSystem: 'Linux', description: longText }, sources: [{ url: 'https://example.com/tools-1', title: 'Tool source 1' }], idempotency_key: 'tools-' + Date.now() },
+                expectedProduct: 'openvibe.tools', expectedSchema: 'SoftwareApplication', expectedHost: 'openvibe.tools', expectedIndex: 'tools', expectedDocType: 'tool_page',
+            },
+            {
+                path: '/api/v1/ai/games/generate-lore',
+                body: { input: { game_name: 'OpenVibe Quest', faction: 'The Signal Keepers', description: longText }, sources: [{ url: 'https://example.com/games-1', title: 'Games source 1' }], idempotency_key: 'games-' + Date.now() },
+                expectedProduct: 'openvibe.games', expectedSchema: 'Article', expectedHost: 'openvibe.games', expectedIndex: 'games', expectedDocType: 'game_lore',
+            },
+        ];
+
+        for (const tc of productCases) {
+            const res = await _req(server, 'POST', tc.path, tc.body);
+            assert.strictEqual(res.status, 200, `product seam ${tc.path} returns 200`);
+            assert.strictEqual(res.body.output.product.key, tc.expectedProduct, `${tc.path} product key`);
+            assert.strictEqual(res.body.output.product.canonical_host, tc.expectedHost, `${tc.path} canonical host`);
+            assert.strictEqual(res.body.output.seo.structured_data_type, tc.expectedSchema, `${tc.path} schema type`);
+            assert.strictEqual(res.body.output.search_document.index_key, tc.expectedIndex, `${tc.path} search index key`);
+            assert.strictEqual(res.body.output.search_document.document_type, tc.expectedDocType, `${tc.path} search document type`);
+            assert.ok(res.body.output.seo.metadata.canonical_url.includes(tc.expectedHost), `${tc.path} canonical url`);
+            assert.ok(Array.isArray(res.body.output.sources.recommended_source_keys), `${tc.path} source recommendations`);
+            assert.ok(Array.isArray(res.body.output.draft.sections), `${tc.path} draft sections`);
+            assert.ok(res.body.output.quality.word_count > 0, `${tc.path} has word count`);
+            assert.ok(res.body.output.search_document.title, `${tc.path} search payload has title`);
+        }
     } finally {
         server.close();
     }

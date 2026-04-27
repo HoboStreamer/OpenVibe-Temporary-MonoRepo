@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const model = require('./model');
 const providers = require('./providers');
-const seo = require('./seo');
+const { shapeWorkflowOutput } = require('./product-output');
 
 const TASK_FEATURES = ['chat', 'generate', 'summarize', 'classify', 'extract', 'enrich', 'embed'];
 
@@ -167,12 +167,32 @@ async function executeRun(input) {
     }
 
     // 5) attach sources
+    const attachedSources = [];
     if (Array.isArray(input.sources)) {
         for (const s of input.sources) {
-            try { model.attachSource(Object.assign({}, s, { run_id: runId })); }
+            try {
+                const attached = model.attachSource(Object.assign({}, s, { run_id: runId }));
+                if (attached) attachedSources.push(attached);
+            }
             catch (e) { /* tolerate bad source rows */ }
         }
     }
+
+    output = shapeWorkflowOutput({
+        workflowKey,
+        workflow,
+        route,
+        input: input.input || {},
+        output,
+        sourceRecords: attachedSources,
+        suppliedSources: input.sources || [],
+        providerKey: usedAttemptIndex >= 0 && attempts[usedAttemptIndex] && attempts[usedAttemptIndex].provider
+            ? attempts[usedAttemptIndex].provider.provider_key
+            : null,
+        config: cfg,
+        targetType: input.target_type || null,
+        targetId: input.target_id || null,
+    });
 
     // 6) cache + quota + finalize
     model.cachePut(cacheKey, route.route_key, promptHash, _hash(input.input || {}), output, cfg.ai.cacheTtlSeconds, { task, namespace });
