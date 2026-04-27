@@ -1,3 +1,7 @@
+Analyze #file:PLAN.md to gain an in depth detailed understanding of the architecture and plans to continue migrating/editing/merging the `HoboStreamer.com` folder and the `HoboApp` monorepo folder based on the planning/memories for "OpenVibe" ( these plans were generated from a conversation with ChatGPT which can be seen in #file:PLANNING_CONVERSATION.md )
+
+Analyze the #codebase then confirm the exact scope from the current OpenVibe migration plan before editing anything. You have already finished integrating/implementing Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 ( #file:PHASE_1_AND_2.md #file:PHASE_3_AND_4.md #file:PHASE_5.md #PHASE_6.md ) within the `openvibe` folder in this workspace.
+
 Analyze the #codebase then complete OpenVibe Phase 7 end-to-end inside the current workspace.
 
 Do not fetch external repository URLs. Do not mention or depend on any temporary repository URL. Treat the current VS Code workspace as the active OpenVibe migration workspace. The legacy Hobo source trees under `HoboReposToMigrateFrom/` are migration/reference sources only; new canonical OpenVibe implementation should live in the OpenVibe service/package structure already established in this workspace.
@@ -1582,4 +1586,1349 @@ When finished, provide:
 10. Deferred work for later phases.
 11. Explicit statement of how the implementation satisfies Phase 7.
 
-Implement the code. Do not output only a plan.
+---
+
+# Phase 7 SEO / Search / AI content platform addendum — upgraded with current web grounding
+
+Before implementing the final Phase 7 code, perform a dedicated SEO/content-ingestion/search architecture pass. Use Copilot Chat’s #web tool for current source/API research before editing code. Treat this section as a required extension of Phase 7, not a vague future note.
+
+The goal is to make `ai.openvibe.network` the shared AI + SEO + source-ingestion + content-quality foundation for future OpenVibe content products:
+
+- `openvibe.wiki`
+- `openvibe.blog`
+- `openvibe.news`
+- `openvibe.reviews`
+- `openvibe.deals`
+- `openvibe.coupons`
+- `openvibe.trade`
+- `openvibe.codes`
+- `openvibe.tools`
+
+Do not fully implement those product sites in Phase 7. Implement the reusable APIs, contracts, source registry, SEO helpers, ingestion seams, AI workflow definitions, SDK methods, docs, tests, and quality gates those future services need.
+
+This addendum upgrades Phase 7 from “AI orchestration only” into “AI orchestration + SEO-ready content intelligence foundation.”
+
+---
+
+# A. Required live #web research before implementation
+
+Use #web to research current public docs, examples, APIs, limits, terms, and best practices. Summarize the findings in your confirmatory analysis before editing code.
+
+Do not just search one thing. Research across all categories below.
+
+## A.1 Google / search engine SEO grounding
+
+Research current official docs for:
+
+- Google Search Central AI-generated content guidance
+- Google JavaScript SEO basics
+- canonical URL handling
+- duplicate content/canonicalization
+- structured data general guidelines
+- sitemap generation/submission
+- sitemap index limits
+- robots.txt behavior
+- noindex/meta robots/X-Robots-Tag behavior
+- Google rich result eligibility
+- Google product/merchant/review structured data limitations
+
+Important implementation implications:
+
+- Important pages must return useful HTML on first response.
+- JS hydration may enhance pages but must not be the only source of indexable content.
+- `<title>`, meta description, canonical URL, Open Graph, Twitter card metadata, and JSON-LD must be available in the initial HTML for future product pages.
+- Robots.txt controls crawling, not guaranteed deindexing. Use noindex/meta/header policies for index control.
+- Sitemaps must use canonical absolute URLs and be split into sitemap indexes when large.
+- AI-generated content should be accurate, useful, source-transparent, and quality-gated.
+- Structured data must not describe hidden, fake, misleading, or unavailable data.
+
+## A.2 Structured data/schema grounding
+
+Research official Google + Schema.org docs for:
+
+- `Article`
+- `NewsArticle`
+- `BlogPosting`
+- `Review`
+- `AggregateRating`
+- `Product`
+- `Offer`
+- `FAQPage`
+- `HowTo`
+- `Recipe`
+- `SoftwareApplication`
+- `Dataset`
+- `VideoObject`
+- `BreadcrumbList`
+- `WebSite`
+- `Organization`
+- `LocalBusiness`
+
+Implementation rules:
+
+- Generate JSON-LD only from fields actually present in the page/content.
+- Do not fabricate authors, dates, prices, ratings, review counts, coupon expiration dates, merchant availability, or citations.
+- Do not add review/rating markup by aggregating ratings copied from third-party sites unless the guidelines and source permissions allow it.
+- For deals/coupons/product pages, distinguish between:
+  - editorial product/deal snippets
+  - merchant-owned sellable product pages
+  - affiliate/outbound deal pages
+- Do not use merchant listing markup unless OpenVibe itself is actually the merchant/seller for that product.
+
+## A.3 News/headline/content source research
+
+Research current docs/APIs/safe source patterns for:
+
+- GDELT DOC / Context APIs
+- NewsAPI
+- RSS/Atom feeds
+- Google News RSS patterns only if allowed/appropriate
+- WordPress REST API posts/pages
+- sitemap.xml discovery
+- JSON-LD extraction from public pages
+- YouTube Data API search/list endpoints
+- Reddit API/listing endpoints
+- public official APIs for government/regulatory datasets where useful
+- Wikipedia/Wikidata APIs for wiki context enrichment
+
+For each source, capture:
+
+- source/API name
+- source type
+- base docs/API
+- auth mode
+- token/env var needed
+- rate limits or quota notes
+- output fields
+- freshness behavior
+- terms/robots caveats
+- whether Phase 7 should implement:
+  - real adapter now
+  - mock/stub adapter now
+  - config-only record now
+  - defer completely
+
+## A.4 Blog/niche site ingestion research
+
+Research source patterns for blog/content ingestion, not just news:
+
+- WordPress REST API
+- RSS/Atom feeds
+- sitemaps
+- JSON-LD `Article` / `BlogPosting`
+- recipe structured data
+- tech blogs
+- cooking/recipe sites
+- gaming blogs
+- finance blogs
+- automotive blogs
+- firearms/gun blogs as informational/niche blogs only
+
+Important constraints:
+
+- Do not build scraping that bypasses paywalls, login walls, bot protection, robots.txt, or site terms.
+- Gun/firearms content must be treated as informational/editorial only; do not design product sale/merchant/transaction flows for regulated weapons.
+- Make source groups configurable so admins can add/disable categories without code changes.
+- Implement source policy flags for regulated/sensitive niches:
+  - `sensitive_category`
+  - `requires_manual_review`
+  - `default_noindex`
+  - `ads_disabled`
+  - `commerce_disabled`
+
+## A.5 Reviews aggregation research
+
+Research current APIs/source patterns for:
+
+- Yelp Places/Fusion/AI APIs
+- Google review/public display limitations if relevant
+- BBB-style public business profile sources
+- Glassdoor/Indeed employer review constraints
+- Reddit/forum review mining patterns
+- WebHostingTalk-style forum content
+- product review structured data
+- employer/company review entity resolution
+
+Implementation constraints:
+
+- Store source snippets and source references, not stolen full third-party reviews.
+- Do not fabricate aggregate ratings.
+- Do not emit Review/AggregateRating structured data unless the review data is valid, visible, and allowed.
+- Create entity-resolution seams:
+  - `entity_name`
+  - `entity_type`
+  - `canonical_entity_id`
+  - `source_entity_id`
+  - `source_confidence`
+  - `aliases`
+  - `domains`
+  - `locations`
+  - `metadata_json`
+
+## A.6 Deals and price-watch research
+
+Research current source/API/patterns for:
+
+- Slickdeals community deal behavior
+- Slickdeals deal alert/community voting/editor validation concepts
+- DealNews RSS feeds and restrictions
+- eBay Browse API search/details/filtering
+- Amazon Product Advertising API / Creators API current status/constraints
+- Keepa/CamelCamelCamel-style price history concepts and API availability
+- retailer APIs where available
+- RSS feeds from deal sites
+- community-submitted deals
+
+Implement architecture for a future `openvibe.deals` that supports:
+
+- deal source registry
+- community deal submissions
+- deal votes
+- deal comments via `openvibe-community`
+- price history seam
+- keyword watches
+- merchant watches
+- product normalization
+- comparable item detection
+- deal quality scoring
+- YMMV/targeted-coupon flags
+- expired/dead deal flags
+- inventory/availability uncertainty
+- AI “search unshittifier” workflow:
+  - strip sponsored garbage
+  - normalize product titles/specs
+  - deduplicate identical products
+  - compare price + shipping + condition + merchant trust
+  - explain caveats
+
+Do not fully build the deals product in Phase 7. Build the AI/source/SEO contracts and route seams.
+
+## A.7 Coupons / browser-extension research
+
+Research current source/API/patterns for:
+
+- PayPal Honey extension behavior
+- RetailMeNot behavior
+- Rakuten Coupon Feed API
+- coupon affiliate feeds
+- coupon/deal APIs
+- browser extension host permission patterns
+- coupon validation and expiration workflows
+- merchant/domain matching
+- community-reported coupon validity
+
+Future `openvibe.coupons` design goals:
+
+- transparent, not-for-profit-focused coupon listing
+- no deceptive affiliate hijacking behavior
+- clearly label affiliate/partner links if ever used
+- coupon code source transparency
+- validation confidence
+- expiration tracking
+- community reporting
+- browser-extension seam later
+- merchant page canonicalization
+- coupon structured data only when valid and not misleading
+
+Phase 7 should implement:
+
+- source registry categories for coupon feeds
+- coupon extraction workflow
+- coupon validation workflow seam
+- merchant normalization workflow
+- coupon SEO metadata schema
+- browser-extension helper contract placeholders
+
+## A.8 Trade / stocks / crypto research
+
+Research current APIs/patterns for:
+
+- Alpha Vantage
+- Finnhub
+- Polygon.io
+- SEC EDGAR
+- CoinGecko
+- CoinMarketCap
+- exchange/news/RSS sources
+- crypto trending APIs
+- stock/crypto watchlists
+- market alert workflows
+
+Future `openvibe.trade` design goals:
+
+- informational market/context platform
+- stock/crypto watchlists
+- meme stock/coin context summaries
+- market/news source aggregation
+- price alerts
+- catalyst summaries
+- risk/caveat extraction
+- “not financial advice” metadata
+- no custody/brokerage/trade execution in Phase 7
+- no user investment recommendations as personalized financial advice
+
+Phase 7 should implement:
+
+- market source registry types
+- trade summary workflow templates
+- asset watchlist alert explanation workflow
+- crypto context workflow
+- stock context workflow
+- not-financial-advice metadata in outputs
+- noindex/default review gate for generated market pages until source/quality threshold is met
+
+## A.9 Search/indexing tooling research
+
+Research self-hostable/internal search options:
+
+- SQLite FTS5
+- Meilisearch
+- Typesense
+- OpenSearch
+- Elasticsearch if relevant
+- vector/embedding search seam
+- hybrid keyword + semantic search patterns
+
+Phase 7 should implement a reusable search-index seam, not a forced heavy dependency.
+
+Requirements:
+
+- Define a `search_provider` abstraction.
+- Default local/dev provider can be SQLite FTS or in-memory/stub.
+- Add future adapters for Meilisearch/Typesense/OpenSearch.
+- Add search index contracts:
+  - `index_key`
+  - `document_type`
+  - `document_id`
+  - `title`
+  - `summary`
+  - `body_text`
+  - `canonical_url`
+  - `tags`
+  - `source_ids`
+  - `freshness_score`
+  - `quality_score`
+  - `visibility`
+  - `indexing_status`
+  - `embedding_ref`
+  - `metadata_json`
+
+## A.10 Extraction/parser tooling research
+
+Research safe extraction tooling:
+
+- RSS parsers
+- robots.txt parsers
+- sitemap parsers
+- Mozilla Readability or similar article extraction
+- JSON-LD extraction
+- HTML sanitization libraries
+- DOM parsing without running scripts
+- URL canonicalization libraries
+
+Implementation rules:
+
+- Do not execute remote scripts while extracting content.
+- Sanitize HTML before storing/rendering.
+- Store original source URL, retrieval time, content hash, and extraction method.
+- Respect robots.txt and source terms flags.
+
+---
+
+# B. SEO architecture requirements for Phase 7
+
+Phase 7 must add reusable SEO/content primitives.
+
+Implement or scaffold these in `services/openvibe-ai`, shared packages, or the cleanest existing OpenVibe service/package layer.
+
+## B.1 SEO content metadata model
+
+Add reusable metadata schemas/contracts for AI-generated and source-ingested content.
+
+Support fields equivalent to:
+
+- `id`
+- `content_type`
+  - `wiki_page`
+  - `blog_post`
+  - `news_story`
+  - `review_page`
+  - `deal_page`
+  - `coupon_page`
+  - `trade_page`
+  - `codes_doc`
+  - `tool_page`
+  - `recipe_page`
+  - `generic_article`
+- `target_product`
+- `target_id`
+- `seo_title`
+- `seo_description`
+- `slug`
+- `canonical_url`
+- `canonical_domain`
+- `robots_directive`
+  - `index,follow`
+  - `noindex,follow`
+  - `noindex,nofollow`
+- `og_title`
+- `og_description`
+- `og_image_media_id`
+- `twitter_card`
+- `structured_data_json`
+- `breadcrumbs_json`
+- `source_count`
+- `citation_count`
+- `freshness_score`
+- `quality_score`
+- `duplicate_group_id`
+- `canonical_content_hash`
+- `generated_by`
+  - `human`
+  - `ai`
+  - `hybrid`
+  - `imported`
+- `ai_disclosure`
+- `sensitive_category`
+- `requires_manual_review`
+- `review_required`
+- `indexing_status`
+  - `draft`
+  - `ready`
+  - `published`
+  - `noindex`
+  - `stale`
+  - `blocked`
+- `published_at`
+- `generated_at`
+- `updated_at`
+- `expires_at`
+- `metadata_json`
+
+Default generated content to `draft` or `noindex` unless it passes the content quality/indexability gate.
+
+## B.2 Source/citation transparency model
+
+Expand or create source/citation records.
+
+Support fields equivalent to:
+
+- `id`
+- `source_type`
+  - `official_api`
+  - `api`
+  - `rss`
+  - `atom`
+  - `sitemap`
+  - `web_page`
+  - `structured_data`
+  - `json_ld`
+  - `reddit`
+  - `youtube`
+  - `wordpress`
+  - `gdelt`
+  - `newsapi`
+  - `yelp`
+  - `ebay`
+  - `market_api`
+  - `coupon_feed`
+  - `community`
+  - `manual`
+  - `media`
+- `source_name`
+- `source_url`
+- `api_provider`
+- `publisher`
+- `author`
+- `title`
+- `published_at`
+- `retrieved_at`
+- `license`
+- `robots_allowed`
+- `terms_notes`
+- `snippet`
+- `content_hash`
+- `trust_score`
+- `bias_or_perspective_label`
+- `sensitive_category`
+- `metadata_json`
+
+Do not store entire third-party copyrighted articles/reviews unless the source license explicitly allows it. Prefer snippets, summaries, hashes, citations, metadata, and user-added notes.
+
+## B.3 Content quality/indexability gate
+
+Implement deterministic quality gate helpers.
+
+Inputs:
+
+- content type
+- word count
+- source count
+- citation count
+- duplicate hash
+- generated_by
+- AI provider type
+- freshness
+- sensitive category
+- manual review flag
+- canonical URL
+- structured data validity flag
+- source trust score
+- user visibility
+
+Outputs:
+
+- `indexing_status`
+- `robots_directive`
+- `quality_score`
+- `freshness_score`
+- `reasons[]`
+- `required_fixes[]`
+
+Rules:
+
+- `noindex` if content is thin.
+- `noindex` if generated only by stub provider in production mode.
+- `noindex` if source count is below product-specific threshold.
+- `noindex` if duplicate content hash already exists and no canonical URL is set.
+- `noindex` for infinite search/filter/tag result pages by default.
+- `noindex` for generated pages with low trust or missing citations.
+- `noindex` for sensitive/regulated categories until manual review if configured.
+- `index,follow` only when quality/source/canonical checks pass.
+
+Do not overengineer this as ML. Implement deterministic server-side policy now.
+
+## B.4 Sitemap / robots / feed foundation
+
+Implement reusable helpers/contracts for:
+
+- sitemap XML generation
+- sitemap index generation
+- RSS feed generation
+- Atom feed generation
+- robots.txt generation
+- canonical URL generation
+- slug normalization
+- duplicate/canonical hash generation
+- `lastmod` calculation
+- feed item metadata
+
+Constraints:
+
+- split large sitemaps at safe limits
+- absolute canonical URLs only
+- sitemap should include canonical URLs only
+- generated/draft/noindex URLs should not appear in public sitemaps
+- robots.txt should link to relevant sitemap(s)
+- robots disallow should not be used as the only deindexing mechanism
+
+## B.5 Structured data helper foundation
+
+Add reusable JSON-LD helper functions/templates for:
+
+- Article
+- NewsArticle
+- BlogPosting
+- Review
+- Product
+- Offer
+- FAQPage
+- HowTo
+- Recipe
+- SoftwareApplication
+- Dataset
+- VideoObject
+- BreadcrumbList
+- WebSite
+- Organization
+- LocalBusiness
+
+Rules:
+
+- omit unknown fields
+- never fabricate ratings, prices, dates, authors, merchants, coupon expirations, or reviews
+- Review/AggregateRating markup only when valid and visible on page
+- Product/Offer markup only when real product/price/availability data exists
+- Merchant listing semantics only when OpenVibe is actually the merchant/seller
+- include AI disclosure metadata where appropriate in visible HTML and/or metadata model
+
+---
+
+# C. Content source registry requirements
+
+Phase 7 should add a configurable source registry and adapter seam.
+
+## C.1 Source registry data model
+
+Support fields equivalent to:
+
+- `id`
+- `source_key`
+- `source_name`
+- `source_type`
+  - `official_api`
+  - `api`
+  - `rss`
+  - `atom`
+  - `sitemap`
+  - `web_page`
+  - `structured_data`
+  - `json_ld`
+  - `wordpress`
+  - `gdelt`
+  - `newsapi`
+  - `reddit`
+  - `youtube`
+  - `yelp`
+  - `ebay`
+  - `amazon_paapi`
+  - `market_api`
+  - `coupon_feed`
+  - `deal_site`
+  - `review_site`
+  - `manual`
+- `category`
+  - `wiki`
+  - `blog`
+  - `news`
+  - `reviews`
+  - `deals`
+  - `coupons`
+  - `trade`
+  - `codes`
+  - `tools`
+  - `games`
+- `base_url`
+- `api_base_url`
+- `auth_mode`
+  - `none`
+  - `api_key_env`
+  - `oauth`
+  - `bearer_env`
+  - `custom`
+- `api_key_env`
+- `rss_url`
+- `sitemap_url`
+- `robots_txt_url`
+- `rate_limit_per_minute`
+- `enabled`
+- `respect_robots`
+- `requires_review`
+- `terms_notes`
+- `sensitive_category`
+- `default_indexing_status`
+- `metadata_json`
+
+Never store raw API tokens directly in SQLite/plaintext. Store env var names.
+
+## C.2 Seed default source adapter definitions
+
+Seed config/adapters for source types, not production credentials.
+
+Add source adapter definitions for:
+
+News:
+- `gdelt_doc`
+- `newsapi_everything`
+- `newsapi_top_headlines`
+- `rss_news`
+- `youtube_news_search`
+- `reddit_topic_search`
+
+Blog/wiki:
+- `wordpress_posts`
+- `wordpress_pages`
+- `rss_blog`
+- `sitemap_blog`
+- `json_ld_article`
+- `readability_article`
+
+Reviews:
+- `yelp_places`
+- `review_structured_data`
+- `reddit_review_threads`
+- `forum_review_threads`
+- `bbb_profile_manual_or_seam`
+- `employer_review_manual_or_seam`
+
+Deals:
+- `ebay_browse_search`
+- `dealnews_rss`
+- `slickdeals_conceptual_or_manual`
+- `merchant_rss_or_sitemap`
+- `product_json_ld`
+- `price_history_provider_seam`
+
+Coupons:
+- `rakuten_coupon_feed`
+- `coupon_api_feed`
+- `coupon_rss_or_manual`
+- `merchant_coupon_page_seam`
+
+Trade:
+- `alpha_vantage`
+- `coingecko`
+- `polygon`
+- `finnhub`
+- `sec_edgar_seam`
+- `crypto_news_rss`
+
+Search/extraction:
+- `robots_txt`
+- `sitemap_xml`
+- `json_ld_extract`
+- `readability_extract`
+- `rss_atom_parse`
+
+Implement actual network calls only where safe/simple and local-development friendly. Otherwise implement adapter interfaces + mock/stub adapters + docs.
+
+## C.3 API token env var registry
+
+Document and add config support for env var names such as:
+
+- `OPENVIBE_AI_OPENAI_API_KEY`
+- `OPENVIBE_AI_ANTHROPIC_API_KEY`
+- `OPENVIBE_AI_GEMINI_API_KEY`
+- `OPENVIBE_AI_OPENROUTER_API_KEY`
+- `OPENVIBE_AI_LOCAL_HTTP_URL`
+- `OPENVIBE_NEWSAPI_KEY`
+- `OPENVIBE_REDDIT_CLIENT_ID`
+- `OPENVIBE_REDDIT_CLIENT_SECRET`
+- `OPENVIBE_YOUTUBE_API_KEY`
+- `OPENVIBE_YELP_API_KEY`
+- `OPENVIBE_EBAY_CLIENT_ID`
+- `OPENVIBE_EBAY_CLIENT_SECRET`
+- `OPENVIBE_AMAZON_PAAPI_KEY`
+- `OPENVIBE_ALPHA_VANTAGE_API_KEY`
+- `OPENVIBE_FINNHUB_API_KEY`
+- `OPENVIBE_POLYGON_API_KEY`
+- `OPENVIBE_COINGECKO_API_KEY`
+- `OPENVIBE_COINMARKETCAP_API_KEY`
+- `OPENVIBE_RAKUTEN_COUPON_API_TOKEN`
+- `OPENVIBE_COUPON_FEED_API_TOKEN`
+- `OPENVIBE_MEILISEARCH_URL`
+- `OPENVIBE_MEILISEARCH_API_KEY`
+- `OPENVIBE_TYPESENSE_URL`
+- `OPENVIBE_TYPESENSE_API_KEY`
+- `OPENVIBE_OPENSEARCH_URL`
+- `OPENVIBE_OPENSEARCH_API_KEY`
+
+Only document/use env var names. Do not print, persist, or expose secret values.
+
+## C.4 Ingestion job model
+
+Add or scaffold ingestion jobs.
+
+Support fields equivalent to:
+
+- `id`
+- `source_id`
+- `job_type`
+  - `fetch`
+  - `refresh`
+  - `parse`
+  - `summarize`
+  - `dedupe`
+  - `classify`
+  - `extract`
+  - `index`
+  - `quality_check`
+- `target_product`
+- `status`
+  - `queued`
+  - `running`
+  - `succeeded`
+  - `failed`
+  - `skipped`
+  - `blocked`
+- `input_json`
+- `output_json`
+- `error`
+- `trace_id`
+- `created_at`
+- `started_at`
+- `completed_at`
+- `metadata_json`
+
+The job system should integrate with existing OpenVibe events where practical and emit source/ingestion/quality events.
+
+---
+
+# D. Product-specific SEO/workflow upgrades
+
+Enhance the Phase 7 AI product workflow templates so they include SEO, source, citation, and indexability metadata.
+
+## D.1 `openvibe.wiki`
+
+Add/upgrade workflows:
+
+- `wiki.generate_space`
+- `wiki.generate_page`
+- `wiki.refresh_page`
+- `wiki.source_research_plan`
+- `wiki.generate_internal_links`
+- `wiki.generate_infobox`
+
+Output must include:
+
+- page tree
+- canonical page slugs
+- canonical URLs
+- page summaries
+- markdown
+- citations
+- source table
+- related pages
+- infobox fields
+- Article/Dataset JSON-LD where appropriate
+- `indexing_status`
+- `robots_directive`
+- manual-review flag when sources are weak
+
+## D.2 `openvibe.blog`
+
+Add/upgrade workflows:
+
+- `blog.draft_post`
+- `blog.generate_series_plan`
+- `blog.refresh_post`
+- `blog.generate_internal_links`
+- `blog.generate_rss_metadata`
+- `blog.generate_recipe_post`
+
+Output must include:
+
+- title
+- slug
+- excerpt
+- markdown
+- tags/categories
+- citations
+- BlogPosting JSON-LD
+- Recipe JSON-LD only when recipe fields are real
+- RSS feed metadata
+- canonical URL
+- indexability gate result
+
+## D.3 `openvibe.news`
+
+Add/upgrade workflows:
+
+- `news.summarize_story`
+- `news.compare_perspectives`
+- `news.generate_headline`
+- `news.timeline`
+- `news.refresh_story`
+- `news.source_cluster`
+
+Output must include:
+
+- neutral factual summary
+- headline variants
+- source table
+- all-sides/perspective comparison
+- timeline
+- claims/caveats
+- NewsArticle JSON-LD
+- canonical URL
+- freshness/expiration timestamp
+- source transparency block
+- indexability gate result
+
+## D.4 `openvibe.reviews`
+
+Add/upgrade workflows:
+
+- `reviews.summarize_entity`
+- `reviews.extract_review_signals`
+- `reviews.compare_sources`
+- `reviews.entity_resolution`
+- `reviews.generate_review_page`
+
+Output must include:
+
+- entity key
+- aliases
+- source review list/snippets
+- pros/cons
+- common complaints/praise
+- credibility/source breakdown
+- Review/Product/Organization JSON-LD only when valid
+- no fake ratings
+- canonical URL
+- indexability gate result
+
+## D.5 `openvibe.deals`
+
+Add/upgrade workflows:
+
+- `deals.enrich_deal`
+- `deals.normalize_product`
+- `deals.watch_keyword`
+- `deals.compare_prices`
+- `deals.search_unshittifier`
+- `deals.detect_duplicate_deal`
+- `deals.quality_score`
+
+Output must include:
+
+- normalized product name
+- merchant
+- price
+- original price if known
+- discount estimate
+- condition
+- shipping caveats
+- seller/merchant trust fields
+- comparable items
+- deal quality label
+- targeted/YMMV flag
+- expiration/staleness
+- Product/Offer JSON-LD only when valid
+- canonical URL
+- noindex if source/price is unverified
+
+## D.6 `openvibe.coupons`
+
+Add/upgrade workflows:
+
+- `coupons.extract_coupon`
+- `coupons.validate_coupon`
+- `coupons.normalize_merchant`
+- `coupons.browser_extension_hint`
+- `coupons.detect_expiration`
+- `coupons.score_confidence`
+
+Output must include:
+
+- merchant
+- merchant domain
+- code
+- discount type/value
+- restrictions
+- expiration
+- confidence
+- validation status
+- source
+- Offer JSON-LD only when valid
+- canonical URL
+- noindex if coupon is expired/unverified/thin
+
+## D.7 `openvibe.trade`
+
+Add/upgrade workflows:
+
+- `trade.summarize_market_context`
+- `trade.watchlist_alert`
+- `trade.crypto_context`
+- `trade.stock_context`
+- `trade.meme_asset_context`
+- `trade.sec_filing_summary`
+- `trade.news_catalyst_summary`
+
+Output must include:
+
+- symbol/topic
+- asset type
+- source table
+- neutral informational summary
+- recent catalysts
+- risk factors
+- watchlist alert explanation
+- price data source metadata
+- no financial advice caveat
+- canonical URL
+- noindex if source count is too low
+
+## D.8 `openvibe.codes`
+
+Add/upgrade workflows:
+
+- `codes.generate_docs`
+- `codes.generate_tutorial`
+- `codes.explain_contract`
+- `codes.generate_copilot_prompt`
+- `codes.generate_sdk_example`
+- `codes.generate_rfc_summary`
+
+Output must include:
+
+- title
+- slug
+- markdown
+- code examples
+- contract/capability references
+- warnings
+- SoftwareApplication/TechArticle-style metadata where appropriate
+- internal links
+- canonical URL
+
+## D.9 `openvibe.tools`
+
+Add/upgrade workflows:
+
+- `tools.generate_tool_page`
+- `tools.generate_howto`
+- `tools.generate_faq`
+- `tools.generate_examples`
+- `tools.generate_schema`
+
+Output must include:
+
+- tool page metadata
+- how-to content
+- examples
+- FAQ
+- SoftwareApplication/HowTo/FAQPage JSON-LD where valid
+- canonical URL
+- sitemap entry metadata
+
+---
+
+# E. SEO/source/crawl API additions under `ai.openvibe.network`
+
+Add canonical routes under `/api/v1/ai/seo/*`, `/api/v1/ai/sources/*`, `/api/v1/ai/ingestion/*`, and `/api/v1/ai/search/*`.
+
+Minimum routes:
+
+## SEO
+
+- `POST /api/v1/ai/seo/metadata`
+- `POST /api/v1/ai/seo/indexability`
+- `POST /api/v1/ai/seo/structured-data`
+- `POST /api/v1/ai/seo/sitemap-entry`
+- `POST /api/v1/ai/seo/sitemap`
+- `POST /api/v1/ai/seo/sitemap-index`
+- `POST /api/v1/ai/seo/rss`
+- `POST /api/v1/ai/seo/atom`
+- `POST /api/v1/ai/seo/robots`
+- `POST /api/v1/ai/seo/slug`
+- `POST /api/v1/ai/seo/canonical`
+- `POST /api/v1/ai/seo/duplicate-hash`
+
+## Sources
+
+- `GET /api/v1/ai/sources`
+- `POST /api/v1/ai/sources`
+- `GET /api/v1/ai/sources/:sourceId`
+- `PUT /api/v1/ai/sources/:sourceId`
+- `POST /api/v1/ai/sources/:sourceId/test`
+- `POST /api/v1/ai/sources/:sourceId/fetch`
+- `POST /api/v1/ai/sources/:sourceId/robots-check`
+
+## Ingestion
+
+- `POST /api/v1/ai/ingestion/jobs`
+- `GET /api/v1/ai/ingestion/jobs`
+- `GET /api/v1/ai/ingestion/jobs/:jobId`
+- `POST /api/v1/ai/ingestion/jobs/:jobId/run`
+- `POST /api/v1/ai/ingestion/jobs/:jobId/cancel`
+- `POST /api/v1/ai/content/quality`
+
+## Search/index seam
+
+- `POST /api/v1/ai/search/index`
+- `POST /api/v1/ai/search/query`
+- `POST /api/v1/ai/search/delete`
+- `GET /api/v1/ai/search/status`
+
+Implement compatibility aliases under `/api/ai/*` only if existing service conventions already include compatibility aliases.
+
+---
+
+# F. Capability / event / SDK additions
+
+Add or scaffold these capabilities/contracts in Phase 7.
+
+## Capabilities
+
+SEO:
+
+- `seo.metadata.generate`
+- `seo.indexability.evaluate`
+- `seo.structured_data.generate`
+- `seo.sitemap.entry.generate`
+- `seo.sitemap.generate`
+- `seo.sitemap_index.generate`
+- `seo.feed.rss.generate`
+- `seo.feed.atom.generate`
+- `seo.robots.generate`
+- `seo.slug.normalize`
+- `seo.canonical.generate`
+- `seo.duplicate_hash.generate`
+
+Sources/ingestion:
+
+- `content.source.register`
+- `content.source.update`
+- `content.source.test`
+- `content.source.fetch`
+- `content.source.robots_check`
+- `content.ingestion.job.create`
+- `content.ingestion.job.run`
+- `content.ingestion.job.cancel`
+- `content.quality.evaluate`
+
+Search:
+
+- `search.document.index`
+- `search.query`
+- `search.document.delete`
+
+## Events
+
+SEO:
+
+- `seo.metadata.generated`
+- `seo.indexability.evaluated`
+- `seo.structured_data.generated`
+- `seo.sitemap.entry.generated`
+- `seo.sitemap.generated`
+- `seo.feed.generated`
+- `seo.robots.generated`
+
+Sources/ingestion:
+
+- `content.source.registered`
+- `content.source.updated`
+- `content.source.tested`
+- `content.source.fetch.started`
+- `content.source.fetch.succeeded`
+- `content.source.fetch.failed`
+- `content.source.robots.blocked`
+- `content.ingestion.job.created`
+- `content.ingestion.job.started`
+- `content.ingestion.job.succeeded`
+- `content.ingestion.job.failed`
+- `content.quality.evaluated`
+
+Search:
+
+- `search.document.indexed`
+- `search.document.deleted`
+- `search.query.executed`
+
+## SDK
+
+Add `SeoClient` and `SourceClient`, or integrate equivalent methods into `AiClient` if that is cleaner.
+
+Required SDK helpers:
+
+- `generateSeoMetadata`
+- `evaluateIndexability`
+- `generateStructuredData`
+- `generateSitemapEntry`
+- `generateSitemap`
+- `generateSitemapIndex`
+- `generateRssFeed`
+- `generateAtomFeed`
+- `generateRobotsTxt`
+- `normalizeSlug`
+- `canonicalizeUrl`
+- `generateDuplicateHash`
+- `registerContentSource`
+- `updateContentSource`
+- `testContentSource`
+- `fetchContentSource`
+- `createIngestionJob`
+- `runIngestionJob`
+- `evaluateContentQuality`
+- `indexSearchDocument`
+- `querySearchIndex`
+
+Export new clients/helpers from the SDK root.
+
+---
+
+# G. Admin and developer UX
+
+Add lightweight admin/developer surfaces if the current project pattern supports it.
+
+## G.1 Admin SEO/source console
+
+Add diagnostics for:
+
+- source registry
+- enabled/disabled sources
+- API key env names present/missing without exposing values
+- robots/terms flags
+- ingestion jobs
+- failed fetches
+- quality gate failures
+- noindex reasons
+- sitemap/feed generation previews
+- structured data preview
+- duplicate content groups
+- search index status
+
+## G.2 Developer console
+
+Add a local dev/test page or JSON-friendly routes for:
+
+- generate SEO metadata
+- evaluate indexability
+- generate JSON-LD
+- register/test mock RSS source
+- run mock source fetch
+- run wiki/blog/news/deals/coupons/trade workflow with SEO metadata
+- inspect citations/source transparency
+
+---
+
+# H. Documentation upgrades required
+
+In addition to the existing Phase 7 docs from the base prompt, add/update docs for SEO/content ingestion.
+
+Required docs:
+
+- `docs/openvibe/phase-7-ai-seo-content.md`
+- `docs/openvibe/seo-foundation.md`
+- `docs/openvibe/content-source-registry.md`
+- `docs/openvibe/ai-generated-content-indexing-policy.md`
+- `docs/openvibe/product-seo-workflows.md`
+- `docs/openvibe/search-index-seam.md`
+- `docs/openvibe/source-adapter-research.md`
+
+Docs must cover:
+
+- web research summary and chosen sources/APIs
+- `ai.openvibe.network` as the shared AI/SEO/source API
+- why important pages must be SSR/static, not JS-only shells
+- canonical URL strategy across many domains
+- sitemap/robots/noindex strategy
+- structured data strategy per product type
+- source/citation transparency
+- AI-generated content disclosure
+- content quality/indexability gate
+- duplicate/thin-content prevention
+- no fake ratings/prices/coupons/authors/citations rule
+- robots.txt / ToS / compliant ingestion rules
+- source registry and API-token env var pattern
+- search-provider seam
+- how future products should call `ai.openvibe.network`
+- manual validation with curl
+- what was implemented vs deferred
+
+Update `PHASES.md` Phase 7 acceptance criteria to include:
+
+- `ai.openvibe.network` canonical service
+- AI orchestration
+- SEO metadata helpers
+- source registry
+- source adapters/mock adapters
+- product SEO workflows
+- content quality/indexability gate
+- sitemap/feed/robots helpers
+- structured-data helper seams
+- search index seam
+
+---
+
+# I. Tests/checks for SEO/content addendum
+
+Add practical test coverage.
+
+At minimum:
+
+## SEO tests
+
+- normalize slug
+- generate canonical URL
+- generate duplicate hash
+- generate metadata from content input
+- evaluate noindex for thin content
+- evaluate noindex for stub-generated content in production mode
+- evaluate noindex for insufficient sources
+- evaluate noindex for duplicate without canonical
+- evaluate indexable for enough content + sources
+- generate Article JSON-LD
+- generate NewsArticle JSON-LD
+- generate BlogPosting JSON-LD
+- generate Review JSON-LD without fake rating fields
+- generate Product/Offer JSON-LD only when price/offer data exists
+- generate FAQPage JSON-LD
+- generate HowTo JSON-LD
+- generate Recipe JSON-LD only when recipe fields are real
+- generate SoftwareApplication JSON-LD
+- generate Dataset JSON-LD
+- generate sitemap entry
+- generate sitemap index
+- generate RSS feed
+- generate robots.txt
+
+## Source registry tests
+
+- register RSS source
+- register API source with env-var key reference
+- raw API key is not returned
+- source test works with local/mock adapter
+- disabled source cannot run ingestion
+- robots/terms metadata is persisted
+- source fetch produces source/citation record
+- ingestion job records status transitions
+
+## Product workflow SEO tests
+
+- wiki workflow returns page tree + SEO metadata + citations
+- blog workflow returns markdown + BlogPosting metadata
+- news workflow returns source table + freshness metadata
+- reviews workflow returns pros/cons + source breakdown
+- deals workflow returns deal quality + Offer metadata when valid
+- coupons workflow returns restrictions/expiration/confidence
+- trade workflow includes informational-only caveat
+- codes/tools workflow returns structured docs metadata
+
+## Search seam tests
+
+- index document
+- query document
+- delete document
+- visibility/indexing_status respected
+- noindex documents are not exported to public sitemap
+
+Do not claim tests were run unless they actually run.
+
+---
+
+# J. Extra migration safety rules for SEO/content ingestion
+
+- Do not implement broad uncontrolled web scraping.
+- Do not ignore robots.txt/ToS.
+- Do not bypass paywalls, logins, anti-bot systems, or API limitations.
+- Do not store raw third-party API keys in the database.
+- Do not index AI-generated thin content by default.
+- Do not index stub-provider generated pages in production mode.
+- Do not generate fake review ratings, fake prices, fake coupon expirations, fake authors, fake citations, fake publication dates, or fake merchant availability.
+- Do not create infinite indexable tag/search/filter pages.
+- Do not duplicate generated content across domains without canonical URLs.
+- Do not expose private prompts/source data in cached public outputs.
+- Do not fully build the product sites in this phase; build the reusable AI/SEO/source foundations.
+- Do not create commerce/product structured data for regulated/prohibited goods.
+- Do not design transactional firearm/weapon commerce flows.
+- Do not provide personalized financial advice in `openvibe.trade`; outputs must be informational/contextual with caveats.
+- Do not scrape or store full third-party review/article bodies unless licensing allows it.
+
+---
+
+# K. Final response additions
+
+In the final response, include an extra section:
+
+12. SEO/content-ingestion additions:
+   - #web research summary
+   - SEO helpers implemented
+   - source registry implemented
+   - source adapter interfaces implemented
+   - source/API categories implemented vs deferred
+   - product workflow SEO metadata implemented
+   - indexability/quality rules implemented
+   - structured data helpers implemented
+   - sitemap/feed/robots helpers implemented
+   - search-index seam implemented
+   - compliance/robots/ToS safeguards
+   - API-token/env-var handling
+   - how future OpenVibe product services should use these Phase 7 SEO primitives
+
+Implement the code. Do not output only a plan. Continue working until Phase 7 ( #file:PHASE_7.md ) has been entirely completed end-to-end. Create the structure, components, and connected OpenVibe related services, context, and projects contained within the `openvibe` folder in the workspace. Create and init the individual/modular/split git repository folders that we will push/deploy to newly created GitHub repositories, after all OpenVibe phases have been 100% completed and tested in our local environment. Utilize intuitive modular structures that will allow us to easily grow, expand, and iterate upon during the completion of phases ( as described in the original plan: #file:PLAN.md ) and update #file:PHASES.md after following all instructions for Phase 7.
+
+Treat the current workspace as the active OpenVibe migration workspace. Do not fetch external repository URLs. Do not assume old Hobo repos are authoritative long-term destinations. The legacy Hobo repos are migration/reference sources under `HoboReposToMigrateFrom/`; new OpenVibe code should be created or evolved in the current workspace’s OpenVibe structure, making sure you are following, expanding, and building upon whatever Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 already established.
