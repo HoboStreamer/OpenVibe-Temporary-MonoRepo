@@ -16,6 +16,7 @@ const SURFACE_HOSTS = {
     admin:  ['admin.openvibe.network'],
     my:     ['my.openvibe.network'],
     themes: ['themes.openvibe.network'],
+    tools:  ['openvibe.tools', 'tools.openvibe.network'],
 };
 
 // Localhost convenience suffix support: any subdomain of *.localhost or
@@ -96,6 +97,7 @@ function attachHostRouter({ app, config, hoboToolsProxy, identity }) {
     app.use(serveSurface('admin',  'admin.html'));
     app.use(serveSurface('my',     'my.html'));
     app.use(serveSurface('themes', 'themes.html'));
+    app.use(serveSurface('tools',  'tools.html'));
 
     // auth surface: serve a small landing page on GET / when not handled above
     app.get('/', (req, res, next) => {

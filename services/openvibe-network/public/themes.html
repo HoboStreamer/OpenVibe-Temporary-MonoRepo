@@ -1,8 +1,72 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/><title>OpenVibe Themes</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:720px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head><body>
-<h1>themes.openvibe.network</h1>
-<p>OpenVibe theme catalog. The Phase 2 implementation transparently proxies the existing <code>hobo.tools</code> theme system; the catalog will lift natively in Phase 3.</p>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>themes.openvibe.network — themes catalog</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+<style>
+.ov-theme-card { display:flex; flex-direction:column; gap:.5rem; }
+.ov-theme-preview { height:80px; border-radius:8px; }
+</style>
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
+        <h1>Themes</h1>
+        <p>Network-wide themes. Apply one and every OpenVibe service updates instantly.</p>
+    </section>
+    <div class="ov-grid" id="theme-grid"></div>
+    <section class="ov-section">
+        <h2>How themes work</h2>
+        <p class="ov-section-sub">Themes are stored in <code>themes_catalog</code> and applied per user via <code>themes_user_preferences</code>. The Phase 8 bundle migrates the legacy hobo-tools theme catalog and per-user overrides.</p>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('themes');
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+
+    // Built-in OpenVibe theme catalog (mirrors the dark/dim defaults shipped today).
+    const themes = [
+        { id: 'openvibe-dark', name: 'OpenVibe Dark', accent: '#7c5cff', bg: '#0b0d12' },
+        { id: 'openvibe-dim',  name: 'OpenVibe Dim',  accent: '#2dd4bf', bg: '#161b25' },
+        { id: 'openvibe-light',name: 'OpenVibe Light',accent: '#5b3df0', bg: '#f6f7fb' },
+        { id: 'sunset',        name: 'Sunset',        accent: '#f97316', bg: '#1a1118' },
+        { id: 'forest',        name: 'Forest',        accent: '#22c55e', bg: '#0d1410' },
+        { id: 'cyberpunk',     name: 'Cyberpunk',     accent: '#22d3ee', bg: '#0c0a18' },
+    ];
+
+    const grid = document.getElementById('theme-grid');
+    for (const t of themes) {
+        const card = document.createElement('div');
+        card.className = 'ov-card ov-theme-card';
+        card.innerHTML = `
+            <div class="ov-theme-preview" style="background:${t.bg};border:1px solid ${t.accent}"></div>
+            <div class="title">${OpenVibe.escapeHtml(t.name)}</div>
+            <div class="meta"><span class="ov-tag" style="color:${t.accent};border-color:${t.accent}">accent</span><span class="ov-tag">${t.id}</span></div>
+            <button class="ov-btn ov-btn-primary" data-theme="${t.id}">Apply</button>`;
+        grid.appendChild(card);
+    }
+    grid.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-theme]');
+        if (!btn) return;
+        const id = btn.dataset.theme;
+        try {
+            await OpenVibe.api('/user-modules/me/openvibe.theme', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: { theme_id: id } }),
+            });
+            btn.textContent = 'Applied ✓';
+        } catch (err) {
+            btn.textContent = 'Sign in to apply';
+        }
+    });
+})();
+</script>
+</body>
+</html>

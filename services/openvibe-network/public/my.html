@@ -1,11 +1,68 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/><title>OpenVibe Account</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:720px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head><body>
-<h1>my.openvibe.network</h1>
-<p>OpenVibe account hub. During the migration this surface transparently proxies
-the legacy <code>my.hobo.tools</code> UI for paths it doesn't yet implement
-natively, so existing flows keep working.</p>
-<p><a href="/api/v1/me">who am I?</a></p>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>my.openvibe.network — your account</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="text-align:left;padding-bottom:1rem">
+        <h1 style="background:none;-webkit-text-fill-color:initial;color:var(--ov-text)">My OpenVibe</h1>
+        <p>Your account hub for identity, themes, linked services, and notifications.</p>
+    </section>
+    <div class="ov-tabs">
+        <div class="ov-tab active" data-tab="profile">Profile</div>
+        <div class="ov-tab" data-tab="linked">Linked accounts</div>
+        <div class="ov-tab" data-tab="theme">Theme</div>
+        <div class="ov-tab" data-tab="notifications">Notifications</div>
+        <div class="ov-tab" data-tab="security">Security</div>
+    </div>
+    <div id="tab-profile"></div>
+    <div id="tab-linked" hidden></div>
+    <div id="tab-theme" hidden></div>
+    <div id="tab-notifications" hidden></div>
+    <div id="tab-security" hidden></div>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('my');
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    document.querySelectorAll('.ov-tab').forEach(t => t.addEventListener('click', () => {
+        document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.querySelectorAll('main > div[id^=tab-]').forEach(x => x.hidden = true);
+        document.getElementById('tab-' + t.dataset.tab).hidden = false;
+    }));
+    let me = null;
+    try { me = await OpenVibe.api('/me'); } catch { me = null; }
+    const user = me && me.user ? me.user : null;
+    document.getElementById('tab-profile').innerHTML = user
+        ? `<div class="ov-card"><div class="title">${OpenVibe.escapeHtml(user.username || user.id || 'You')}</div>
+           <div class="desc">role=${OpenVibe.escapeHtml(user.role || 'user')} · id=${OpenVibe.escapeHtml(user.id || '')}</div></div>`
+        : `<div class="ov-banner warn">You are not signed in. <a class="ov-btn ov-btn-primary" href="/oauth/authorize">Sign in</a></div>`;
+    document.getElementById('tab-linked').innerHTML = `
+        <h2>Linked accounts</h2>
+        <p class="ov-section-sub">Migrated linked accounts come from the Phase 8 canonical bundle (<code>identity/linked-accounts.ndjson</code>).</p>
+        <p>Once signed in, this view will list your providers (HoboTools, Discord, Twitch, etc.).</p>`;
+    document.getElementById('tab-theme').innerHTML = `
+        <h2>Theme</h2>
+        <p>Visit <a href="https://themes.openvibe.network">themes.openvibe.network</a> to apply a network-wide theme.</p>`;
+    document.getElementById('tab-notifications').innerHTML = `
+        <h2>Notifications</h2>
+        <p>Notification preferences are stored in <code>control_notification_preferences</code> and travel with your account.</p>`;
+    document.getElementById('tab-security').innerHTML = `
+        <h2>Security</h2>
+        <ul>
+            <li>Sessions are issued by <code>auth.openvibe.network</code> as RS256 JWTs.</li>
+            <li>OAuth client secrets are <strong>never</strong> migrated from legacy systems and must be re-issued.</li>
+            <li>Set <code>OPENVIBE_LEGACY_COMPAT_MODE=true</code> only if you intentionally federate to <code>hobo.tools</code>.</li>
+        </ul>`;
+})();
+</script>
+</body>
+</html>

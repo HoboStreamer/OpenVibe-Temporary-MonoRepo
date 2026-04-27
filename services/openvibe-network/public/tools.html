@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OpenVibe Tools — Search every service</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
+        <h1>OpenVibe Tools</h1>
+        <p>Searchable directory of every OpenVibe service. Press <code>Ctrl/⌘ K</code> for the global launcher, or filter inline.</p>
+    </section>
+    <input class="ov-input" id="search" placeholder="Search tools and services…" />
+    <div class="ov-tabs" id="cats" style="margin-top:1rem"></div>
+    <div class="ov-grid" id="grid"></div>
+
+    <section class="ov-section">
+        <h2>Featured</h2>
+        <div class="ov-grid" id="featured"></div>
+    </section>
+
+    <section class="ov-section">
+        <h2>Community values</h2>
+        <div class="ov-grid">
+            <div class="ov-card"><div class="title">No ads</div><div class="desc">Tools you can rely on without surveillance ads.</div></div>
+            <div class="ov-card"><div class="title">Open source</div><div class="desc">Every service ships its own deployable code.</div></div>
+            <div class="ov-card"><div class="title">Federated identity</div><div class="desc">One account works across the entire network.</div></div>
+        </div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('tools');
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    const remote = await OpenVibe.loadServices();
+    const items = OpenVibe.mergedServices(remote);
+
+    const cats = ['all', ...new Set(items.map(i => i.category || 'service'))];
+    const tabs = document.getElementById('cats');
+    let activeCat = 'all';
+    function renderTabs() {
+        tabs.innerHTML = '';
+        for (const c of cats) {
+            const t = document.createElement('div');
+            t.className = 'ov-tab' + (c === activeCat ? ' active' : '');
+            t.textContent = c === 'all' ? `all (${items.length})` : `${c} (${items.filter(i => (i.category||'service')===c).length})`;
+            t.onclick = () => { activeCat = c; renderTabs(); applyFilter(); };
+            tabs.appendChild(t);
+        }
+    }
+    function applyFilter() {
+        const q = document.getElementById('search').value.toLowerCase();
+        const out = items.filter(i => {
+            const hay = `${i.display_name||''} ${i.description||''} ${i.category||''} ${(i.tags||[]).join(' ')}`.toLowerCase();
+            const matchCat = activeCat === 'all' || (i.category || 'service') === activeCat;
+            return matchCat && (!q || hay.includes(q));
+        });
+        OpenVibe.renderServiceCards(document.getElementById('grid'), out);
+    }
+    renderTabs();
+    applyFilter();
+    document.getElementById('search').addEventListener('input', applyFilter);
+
+    OpenVibe.renderServiceCards(document.getElementById('featured'), items.filter(i => ['openvibe-live','openvibe-chat','openvibe-community','openvibe-media'].includes(i.service_id)));
+    OpenVibe.attachLauncher(() => items);
+})();
+</script>
+</body>
+</html>

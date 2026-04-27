@@ -1,14 +1,40 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/><title>OpenVibe Auth</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:560px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head><body>
-<h1>auth.openvibe.network</h1>
-<p>OpenID Connect surface for the OpenVibe network.</p>
-<ul>
- <li><a href="/.well-known/openid-configuration">openid-configuration</a></li>
- <li><a href="/.well-known/jwks.json">jwks.json</a></li>
- <li><code>GET /oauth/authorize</code> &mdash; redirects upstream when federated with hobo.tools</li>
- <li><code>POST /oauth/token</code> &mdash; proxied upstream when federated with hobo.tools</li>
-</ul>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>auth.openvibe.network</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero">
+        <h1>OpenVibe Identity</h1>
+        <p>Single sign-on for the OpenVibe network. RS256 JWTs, OIDC discovery, and JWKS published from this surface.</p>
+        <div class="ov-cta-row">
+            <a class="ov-btn ov-btn-primary" href="/oauth/authorize">Sign in</a>
+            <a class="ov-btn" href="/.well-known/openid-configuration">OIDC discovery</a>
+            <a class="ov-btn" href="/.well-known/jwks.json">JWKS</a>
+        </div>
+    </section>
+    <section class="ov-section">
+        <h2>Trusted issuers</h2>
+        <p class="ov-section-sub">When <code>OPENVIBE_LEGACY_COMPAT_MODE=true</code> and <code>HOBO_TOOLS_URL</code> is set, hobo.tools tokens are also accepted.</p>
+        <pre id="issuers">loading…</pre>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    try {
+        const j = await fetch('/health').then(r => r.json());
+        document.getElementById('issuers').textContent = JSON.stringify(j, null, 2);
+    } catch { document.getElementById('issuers').textContent = '(offline)'; }
+})();
+</script>
+</body>
+</html>

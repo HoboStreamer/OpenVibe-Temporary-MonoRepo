@@ -1,12 +1,80 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8"><title>openvibe.live</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="openvibe.live — live channel directory.">
+<meta charset="utf-8" />
+<title>OpenVibe Live — open streaming</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
-    <h1>openvibe.live</h1>
-    <p>SSR product surface is served from the root route. This static fallback is rarely hit.</p>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero">
+        <h1>OpenVibe Live</h1>
+        <p>Native, open, ad-free live streaming. Channels, streams, and analytics from the OpenVibe canonical model.</p>
+        <div class="ov-cta-row">
+            <a class="ov-btn ov-btn-primary" href="https://my.openvibe.network">Create channel</a>
+            <a class="ov-btn" href="https://openvibe.tools">All services</a>
+        </div>
+    </section>
+
+    <section class="ov-section">
+        <h2>Live now</h2>
+        <p class="ov-section-sub">Streams currently marked <code>live</code>.</p>
+        <div class="ov-grid" id="live-grid"><div class="ov-card"><div class="desc">loading…</div></div></div>
+    </section>
+
+    <section class="ov-section">
+        <h2>All channels</h2>
+        <input class="ov-input" id="channel-filter" placeholder="Filter channels by name or slug" style="margin-bottom:1rem" />
+        <div class="ov-grid" id="channels-grid"></div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+
+    function channelCard(c) {
+        return `<a class="ov-card" href="/c/${encodeURIComponent(c.slug)}">
+            <div class="title">${OpenVibe.escapeHtml(c.title || c.slug)}</div>
+            <div class="desc">${OpenVibe.escapeHtml(c.description || c.slug)}</div>
+            <div class="meta"><span class="ov-tag">${OpenVibe.escapeHtml(c.category || 'general')}</span></div>
+        </a>`;
+    }
+    function streamCard(s) {
+        return `<a class="ov-card" href="/c/${encodeURIComponent(s.channel_slug)}/s/${encodeURIComponent(s.id || s.stream_id)}">
+            <div class="title">${OpenVibe.escapeHtml(s.title || s.channel_slug)}</div>
+            <div class="desc">${OpenVibe.escapeHtml(s.channel_slug)}</div>
+            <div class="meta"><span class="ov-tag ok">live</span><span class="ov-tag">${OpenVibe.escapeHtml(s.viewer_count || 0)} viewers</span></div>
+        </a>`;
+    }
+
+    let channels = [];
+    try {
+        const data = await fetch('/api/v1/channels').then(r => r.json());
+        channels = data.items || [];
+    } catch { channels = []; }
+    const channelsGrid = document.getElementById('channels-grid');
+    function renderChannels(q) {
+        const filtered = channels.filter(c => !q || `${c.title||''} ${c.slug||''}`.toLowerCase().includes(q.toLowerCase()));
+        channelsGrid.innerHTML = filtered.length
+            ? filtered.map(channelCard).join('')
+            : '<div class="ov-banner">No channels yet. <a href="https://my.openvibe.network">Create the first one →</a></div>';
+    }
+    renderChannels('');
+    document.getElementById('channel-filter').addEventListener('input', e => renderChannels(e.target.value));
+
+    let live = [];
+    try {
+        const data = await fetch('/api/v1/streams?status=live').then(r => r.json());
+        live = data.items || [];
+    } catch { live = []; }
+    const liveGrid = document.getElementById('live-grid');
+    liveGrid.innerHTML = live.length ? live.map(streamCard).join('') : '<div class="ov-banner">Nothing live right now.</div>';
+})();
+</script>
 </body>
 </html>

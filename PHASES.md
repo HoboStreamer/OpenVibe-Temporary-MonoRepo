@@ -372,3 +372,66 @@ and [services/openvibe-events/README.md](services/openvibe-events/README.md).
     [product-seo-workflows.md](docs/openvibe/product-seo-workflows.md),
     [search-index-seam.md](docs/openvibe/search-index-seam.md),
     [source-adapter-research.md](docs/openvibe/source-adapter-research.md). ✅
+
+## Phase 8 — OpenVibe runtime independence + Hobo migration ✅
+
+Implemented in this commit. See [docs/openvibe/phase-8.md](docs/openvibe/phase-8.md)
+for the per-WP index.
+
+1. **Hobo reference audit** — [scripts/audit-hobo-references.js](scripts/audit-hobo-references.js)
+   classifies every `hobo*` mention as migration-source, legacy-compat,
+   runtime-default-dependency, documentation, test-fixture, archive, or
+   needs-remediation; writes `data/migrations/audit/hobo-ref-list.json` +
+   `hobo-ref-summary.md`. Tested by
+   [scripts/migrate-hobo/test/hobo-reference-audit.test.js](scripts/migrate-hobo/test/hobo-reference-audit.test.js). ✅
+2. **Native runtime stance** — `OPENVIBE_LEGACY_COMPAT_MODE=false` by
+   default; documented in [docs/openvibe/runtime-independence.md](docs/openvibe/runtime-independence.md). ✅
+3. **Production export over SSH** — `scripts/migrate-hobo/fetch-production-hobo.js`
+   pulls read-only mirrors; documented in [docs/openvibe/production-ssh-export.md](docs/openvibe/production-ssh-export.md). ✅
+4. **Postgres canonical loader** — schemas in
+   [scripts/migrate-hobo/postgres/schema/](scripts/migrate-hobo/postgres/schema/),
+   loader/validator/CLIs at
+   [migrate-postgres.js](scripts/migrate-hobo/migrate-postgres.js),
+   [load-postgres.js](scripts/migrate-hobo/load-postgres.js),
+   [validate-postgres.js](scripts/migrate-hobo/validate-postgres.js); test
+   [scripts/migrate-hobo/test/postgres-loader.test.js](scripts/migrate-hobo/test/postgres-loader.test.js). ✅
+5. **Staging environment + cold media** — gated by
+   `OPENVIBE_ALLOW_STAGING_LOAD` + `OPENVIBE_STAGING_CONFIRM`; documented in
+   [staging-environment.md](docs/openvibe/staging-environment.md) +
+   [media-storage-strategy.md](docs/openvibe/media-storage-strategy.md). ✅
+6. **Persistence-mode seam** — [packages/openvibe-sdk/persistence-mode.js](packages/openvibe-sdk/persistence-mode.js)
+   wired into [services/openvibe-network/server/db.js](services/openvibe-network/server/db.js);
+   tested by [packages/openvibe-sdk/test/persistence-mode.test.js](packages/openvibe-sdk/test/persistence-mode.test.js). ✅
+7. **Media backfill** — [docs/openvibe/media-backfill.md](docs/openvibe/media-backfill.md). ✅
+8. **Semantic validation** — [docs/openvibe/semantic-validation.md](docs/openvibe/semantic-validation.md). ✅
+9. **Cutover rehearsal** — [scripts/cutover/run-cutover-rehearsal.js](scripts/cutover/run-cutover-rehearsal.js)
+   + [scripts/cutover/verify-cutover.js](scripts/cutover/verify-cutover.js);
+   produces `data/migrations/cutover-report.json` with red/yellow/green
+   gates. Documented in [docs/openvibe/cutover-runbook.md](docs/openvibe/cutover-runbook.md);
+   tested by [scripts/cutover/test/cutover-rehearsal.test.js](scripts/cutover/test/cutover-rehearsal.test.js). ✅
+10. **Hobo Bucks / Coins / Nickels** — Hobo Bucks excluded from spendable
+    canonical balances and archived to `legacy_finance_archive(spendable=false)`;
+    Coins/Nickels imported as non-cash loyalty progression. Loader sets
+    `hobo_bucks_excluded=true` + `loyalty_imported_as_progression=true`;
+    documented in [docs/openvibe/hobo-coins-loyalty-migration.md](docs/openvibe/hobo-coins-loyalty-migration.md). ✅
+11. **Centralized staff/admin model** — [services/openvibe-network/server/api/staff.js](services/openvibe-network/server/api/staff.js)
+    mounted under `/api/v1`; capabilities, audit log, ban/broadcast hooks.
+    Tested by [services/openvibe-network/test/staff.test.js](services/openvibe-network/test/staff.test.js).
+    Documented in [docs/openvibe/admin-staff-model.md](docs/openvibe/admin-staff-model.md). ✅
+12. **Native openvibe.network hub** — [services/openvibe-network/public/index.html](services/openvibe-network/public/index.html). ✅
+13. **Native openvibe.tools portal** — [services/openvibe-network/public/tools.html](services/openvibe-network/public/tools.html)
+    served via the new `tools` surface in [host-router.js](services/openvibe-network/server/host-router.js). ✅
+14. **Admin UI** — [services/openvibe-network/public/admin.html](services/openvibe-network/public/admin.html)
+    (overview, users/staff, registry, audit, migration, compatibility tabs). ✅
+15. **My account UI** — [services/openvibe-network/public/my.html](services/openvibe-network/public/my.html). ✅
+16. **Themes UI** — [services/openvibe-network/public/themes.html](services/openvibe-network/public/themes.html). ✅
+17. **OpenVibe Live UI** — [services/openvibe-live/public/index.html](services/openvibe-live/public/index.html). ✅
+18. **OpenVibe Chat UI** — [services/openvibe-chat/public/index.html](services/openvibe-chat/public/index.html). ✅
+19. **OpenVibe Community UI** — [services/openvibe-community/public/index.html](services/openvibe-community/public/index.html). ✅
+20. **OpenVibe Media UI** — [services/openvibe-media/public/index.html](services/openvibe-media/public/index.html). ✅
+21. **Compatibility-mode flag** — `OPENVIBE_LEGACY_COMPAT_MODE` is the single
+    switch. Default `false` keeps the network OpenVibe-native. ✅
+22. **Phase 8 docs** — full set under [docs/openvibe/](docs/openvibe/) (see
+    [phase-8.md](docs/openvibe/phase-8.md) for the index). ✅
+23. **Cutover report** — `data/migrations/cutover-report.json` produced by the
+    orchestrator; current local gate: **green** (audit-only). ✅

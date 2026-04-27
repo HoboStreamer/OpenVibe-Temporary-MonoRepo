@@ -1,32 +1,97 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>OpenVibe Media</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="OpenVibe shared media platform — VODs, clips, thumbnails, attachments.">
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1d2330; }
-        code { background: #f3f4f8; padding: 0 .25rem; border-radius: 3px; }
-        h1 { margin-top: 0; }
-        ul { line-height: 1.6; }
-    </style>
+<meta charset="utf-8" />
+<title>OpenVibe Media</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
-    <h1>OpenVibe Media</h1>
-    <p>This service owns shared media object storage, processing, quotas, and the <code>media.events</code> bus topic for the OpenVibe network.</p>
-    <p>Routes:</p>
-    <ul>
-        <li><code>POST /api/v1/media/upload/init</code></li>
-        <li><code>PUT  /api/v1/media/:id/upload</code> (multipart <code>file</code>)</li>
-        <li><code>POST /api/v1/media/:id/upload/complete</code></li>
-        <li><code>GET  /api/v1/media/:id</code></li>
-        <li><code>GET  /api/v1/media?namespace=…&amp;owner_type=…&amp;owner_id=…</code></li>
-        <li><code>DELETE /api/v1/media/:id</code></li>
-        <li><code>GET  /api/v1/quota?namespace=…&amp;owner_type=…&amp;owner_id=…</code></li>
-        <li><code>GET  /api/v1/admin/jobs</code></li>
-        <li><code>GET  /files/:id</code> — visibility-checked file serve</li>
-    </ul>
-    <p>See <code>README.md</code> for full validation steps.</p>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
+        <h1>OpenVibe Media</h1>
+        <p>Shared media object store for every OpenVibe service. Hot SQLite + cold S3-compatible tier.</p>
+    </section>
+
+    <section class="ov-section">
+        <h2>Upload</h2>
+        <form id="upload-form" class="ov-card" style="gap:.5rem">
+            <input class="ov-input" type="file" name="file" required />
+            <input class="ov-input" name="kind" placeholder="kind (e.g. avatar, clip, paste-image)" value="generic" />
+            <button class="ov-btn ov-btn-primary" type="submit">Upload</button>
+            <div class="desc" id="up-status"></div>
+        </form>
+    </section>
+
+    <section class="ov-section">
+        <h2>Recent objects</h2>
+        <table class="ov-table">
+            <thead><tr><th>id</th><th>kind</th><th>size</th><th>tier</th><th>created</th></tr></thead>
+            <tbody id="objects"><tr><td colspan="5" class="desc">loading…</td></tr></tbody>
+        </table>
+    </section>
+
+    <section class="ov-section">
+        <h2>Quotas</h2>
+        <pre id="quota">loading…</pre>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+
+    function formatBytes(n) {
+        if (!n) return '0';
+        const u = ['B','KB','MB','GB','TB'];
+        let i = 0; let v = Number(n);
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return v.toFixed(v < 10 ? 1 : 0) + ' ' + u[i];
+    }
+
+    async function refresh() {
+        try {
+            const d = await fetch('/api/v1/media').then(r => r.json());
+            const items = d.items || [];
+            const tbody = document.getElementById('objects');
+            tbody.innerHTML = items.length
+                ? items.map(o => `<tr><td><code>${OpenVibe.escapeHtml(o.id)}</code></td><td>${OpenVibe.escapeHtml(o.kind || '')}</td><td>${formatBytes(o.size_bytes)}</td><td>${OpenVibe.escapeHtml(o.tier || 'hot')}</td><td>${OpenVibe.escapeHtml(o.created_at || '')}</td></tr>`).join('')
+                : '<tr><td colspan="5" class="desc">no media yet</td></tr>';
+        } catch (e) {
+            document.getElementById('objects').innerHTML = `<tr><td colspan="5">listing requires auth (status ${e.status||'?'})</td></tr>`;
+        }
+        try {
+            const q = await fetch('/api/v1/quota').then(r => r.json());
+            document.getElementById('quota').textContent = JSON.stringify(q, null, 2);
+        } catch { document.getElementById('quota').textContent = '(sign in to view your quota)'; }
+    }
+    refresh();
+
+    document.getElementById('upload-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const file = fd.get('file');
+        const kind = fd.get('kind');
+        const status = document.getElementById('up-status');
+        try {
+            const init = await fetch('/api/v1/media/upload/init', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind, filename: file.name, content_type: file.type, size_bytes: file.size }),
+            }).then(async r => { if (!r.ok) throw new Error(`init ${r.status}`); return r.json(); });
+            const upFd = new FormData(); upFd.append('file', file);
+            const up = await fetch(`/api/v1/media/${encodeURIComponent(init.id)}/upload`, { method: 'PUT', body: upFd });
+            if (!up.ok) throw new Error(`upload ${up.status}`);
+            await fetch(`/api/v1/media/${encodeURIComponent(init.id)}/upload/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            status.textContent = `uploaded as ${init.id}`;
+            refresh();
+        } catch (err) {
+            status.textContent = `failed: ${err.message} (sign in required)`;
+        }
+    });
+})();
+</script>
 </body>
 </html>

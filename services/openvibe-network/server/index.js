@@ -21,6 +21,7 @@ const serviceRegistry = require('./api/service-registry');
 const capabilityRegistry = require('./api/capability-registry');
 const contractRegistry = require('./api/contract-registry');
 const urlRegistry = require('./api/url-registry');
+const staff = require('./api/staff');
 
 function buildApp() {
     db.init(config.db.path);
@@ -67,6 +68,7 @@ function buildApp() {
     apiRouter.use(capabilityRegistry.buildRouter({ events }));
     apiRouter.use(contractRegistry.buildRouter({ events }));
     apiRouter.use(urlRegistry.buildRouter({ config }));
+    apiRouter.use(staff.buildRouter());
 
     apiRouter.get('/me', requireOpenVibeAuth(authClient), (req, res) => res.json({ user: req.user }));
     apiRouter.get('/audit', (req, res) => {

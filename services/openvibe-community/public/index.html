@@ -1,40 +1,96 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>openvibe-community — admin shell</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-body{font-family:system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1d2330;background:#f7f8fb}
-header{display:flex;align-items:center;gap:1rem;border-bottom:1px solid #e3e6ee;padding-bottom:1rem;margin-bottom:1rem}
-h1{margin:0;font-size:1.4rem}
-.card{background:#fff;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-code,pre{background:#0d1117;color:#c9d1d9;border-radius:4px;padding:.1rem .3rem;font-size:.85rem}
-pre{padding:1rem;overflow:auto}
-ul{padding-left:1.2rem}
-</style>
+<meta charset="utf-8" />
+<title>OpenVibe Community</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
-<header><h1>openvibe-community</h1><span>OpenVibe Phase 5 — spaces, threads, posts, pastes, Discord relay</span></header>
-<div class="card">
-<p>This service owns shared discussion infrastructure: communities/spaces,
-categories, threads, posts, reusable comments (vods, clips, blog),
-pastes, and Discord channel relays.</p>
-</div>
-<div class="card">
-<h2>API quick-reference</h2>
-<ul>
-<li><code>GET/POST /api/community/spaces</code></li>
-<li><code>GET/POST /api/community/spaces/:id/categories</code></li>
-<li><code>GET/POST /api/community/threads</code> · <code>/threads/:id/posts</code></li>
-<li><code>GET/POST /api/community/comments?ref_type=&amp;ref_id=</code></li>
-<li><code>GET/POST /api/community/pastes</code> (legacy <code>/api/pastes/*</code>)</li>
-<li><code>POST /api/community/discord/webhook</code></li>
-</ul>
-</div>
-<div class="card">
-<h2>Health</h2>
-<pre>curl http://127.0.0.1:4900/health</pre>
-</div>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
+        <h1>OpenVibe Community</h1>
+        <p>Spaces, threads, pastes, and comments — long-form home of the OpenVibe network.</p>
+        <div class="ov-cta-row">
+            <a class="ov-btn ov-btn-primary" href="#new-paste">New paste</a>
+            <a class="ov-btn" href="#threads">Browse threads</a>
+        </div>
+    </section>
+
+    <div class="ov-tabs">
+        <div class="ov-tab active" data-tab="threads">Threads</div>
+        <div class="ov-tab" data-tab="pastes">Pastes</div>
+        <div class="ov-tab" data-tab="spaces">Spaces</div>
+    </div>
+
+    <section id="tab-threads">
+        <div class="ov-grid" id="threads-grid"></div>
+    </section>
+    <section id="tab-pastes" hidden>
+        <div class="ov-grid" id="pastes-grid"></div>
+        <h3 id="new-paste" style="margin-top:2rem">Create a paste</h3>
+        <form id="paste-form" class="ov-card" style="gap:.5rem">
+            <input class="ov-input" name="title" placeholder="Title" />
+            <textarea class="ov-input" name="body" rows="6" placeholder="Paste body…"></textarea>
+            <button class="ov-btn ov-btn-primary" type="submit">Create paste</button>
+            <div class="desc" id="paste-status"></div>
+        </form>
+    </section>
+    <section id="tab-spaces" hidden>
+        <div class="ov-grid" id="spaces-grid"></div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    document.querySelectorAll('.ov-tab').forEach(t => t.addEventListener('click', () => {
+        document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        ['threads','pastes','spaces'].forEach(k => document.getElementById('tab-' + k).hidden = k !== t.dataset.tab);
+    }));
+
+    async function load(path) {
+        try { const d = await fetch(path).then(r => r.json()); return d.items || []; }
+        catch { return []; }
+    }
+    function emptyMsg(what) { return `<div class="ov-banner">No ${what} yet. Sign in to create the first.</div>`; }
+
+    const threads = await load('/api/community/threads');
+    document.getElementById('threads-grid').innerHTML = threads.length
+        ? threads.map(t => `<a class="ov-card" href="/t/${OpenVibe.escapeHtml(t.slug || t.id)}"><div class="title">${OpenVibe.escapeHtml(t.title || t.slug || t.id)}</div><div class="desc">${OpenVibe.escapeHtml(t.excerpt || '')}</div><div class="meta"><span class="ov-tag">${OpenVibe.escapeHtml(t.space_slug || 'general')}</span></div></a>`).join('')
+        : emptyMsg('threads');
+
+    const pastes = await load('/api/community/pastes');
+    document.getElementById('pastes-grid').innerHTML = pastes.length
+        ? pastes.map(p => `<a class="ov-card" href="/p/${OpenVibe.escapeHtml(p.slug)}"><div class="title">${OpenVibe.escapeHtml(p.title || p.slug)}</div><div class="desc">${OpenVibe.escapeHtml((p.body||'').slice(0,140))}</div><div class="meta"><span class="ov-tag">${OpenVibe.escapeHtml(p.language || 'text')}</span></div></a>`).join('')
+        : emptyMsg('pastes');
+
+    const spaces = await load('/api/community/spaces');
+    document.getElementById('spaces-grid').innerHTML = spaces.length
+        ? spaces.map(s => `<a class="ov-card" href="/s/${OpenVibe.escapeHtml(s.slug)}"><div class="title">${OpenVibe.escapeHtml(s.name || s.slug)}</div><div class="desc">${OpenVibe.escapeHtml(s.description || '')}</div></a>`).join('')
+        : emptyMsg('spaces');
+
+    document.getElementById('paste-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const status = document.getElementById('paste-status');
+        try {
+            const res = await fetch('/api/community/pastes', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: fd.get('title'), body: fd.get('body') }),
+            });
+            if (!res.ok) throw new Error(`status ${res.status}`);
+            status.textContent = 'created!';
+            setTimeout(() => location.reload(), 600);
+        } catch (err) {
+            status.textContent = `failed: ${err.message} (sign in required)`;
+        }
+    });
+})();
+</script>
 </body>
 </html>

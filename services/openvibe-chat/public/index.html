@@ -1,43 +1,107 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>openvibe-chat — admin shell</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<title>OpenVibe Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
 <style>
-body{font-family:system-ui,-apple-system,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1d2330;background:#f7f8fb}
-header{display:flex;align-items:center;gap:1rem;border-bottom:1px solid #e3e6ee;padding-bottom:1rem;margin-bottom:1rem}
-h1{margin:0;font-size:1.4rem}
-.card{background:#fff;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-code,pre{background:#0d1117;color:#c9d1d9;border-radius:4px;padding:.1rem .3rem;font-size:.85rem}
-pre{padding:1rem;overflow:auto}
-ul{padding-left:1.2rem}
+.chat-layout { display:grid; grid-template-columns: 280px 1fr; gap:1rem; min-height:60vh; }
+@media (max-width:720px){ .chat-layout{grid-template-columns:1fr} }
+.chat-rooms { background:var(--ov-bg-elev); border:1px solid var(--ov-border); border-radius:var(--ov-radius); padding:.5rem; max-height:70vh; overflow-y:auto; }
+.chat-rooms .room { padding:.5rem .65rem; border-radius:var(--ov-radius-sm); cursor:pointer; }
+.chat-rooms .room.active, .chat-rooms .room:hover { background:var(--ov-bg-elev-2); }
+.chat-main { display:flex; flex-direction:column; background:var(--ov-bg-elev); border:1px solid var(--ov-border); border-radius:var(--ov-radius); }
+.chat-feed { flex:1; padding:1rem; overflow-y:auto; max-height:60vh; }
+.chat-msg { padding:.4rem 0; border-bottom:1px solid var(--ov-border); }
+.chat-msg .who { color:var(--ov-accent); font-weight:600; }
+.chat-form { display:flex; gap:.5rem; padding:.5rem; border-top:1px solid var(--ov-border); }
 </style>
 </head>
 <body>
-<header><h1>openvibe-chat</h1><span>OpenVibe Phase 5 — chat / DMs / calls / TTS / audio</span></header>
-<div class="card">
-<p>This is the admin landing page for the chat service. The canonical
-realtime UI lives in <code>openvibe-live</code> (stream chat + overlays) and
-HoboStreamer compat surfaces. This service exposes a REST + future
-WebSocket API at <code>/api/chat/*</code>.</p>
-</div>
-<div class="card">
-<h2>API quick-reference</h2>
-<ul>
-<li><code>GET /api/chat/rooms</code> · <code>POST /api/chat/rooms</code></li>
-<li><code>GET/POST /api/chat/rooms/:id/messages</code></li>
-<li><code>GET/POST /api/chat/global/{history,send}</code></li>
-<li><code>GET/POST /api/chat/stream/:streamId/{history,send}</code></li>
-<li><code>GET/POST /api/chat/dms</code> · <code>GET/POST /api/chat/dms/:roomId/messages</code></li>
-<li><code>POST /api/chat/calls</code>, <code>/calls/:id/{accept,decline,end,signal}</code></li>
-<li><code>GET/PUT /api/chat/tts/settings</code> · <code>POST /api/chat/tts/queue</code></li>
-<li><code>POST /api/chat/audio/queue</code> · <code>POST /api/chat/audio/resolve-external</code></li>
-</ul>
-</div>
-<div class="card">
-<h2>Health</h2>
-<pre>curl http://127.0.0.1:4800/health</pre>
-</div>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
+        <h1>OpenVibe Chat</h1>
+        <p>Rooms, DMs, voice rooms, and TTS — federated across the OpenVibe network.</p>
+    </section>
+    <div class="chat-layout">
+        <aside class="chat-rooms" id="rooms"><div class="desc">loading rooms…</div></aside>
+        <section class="chat-main">
+            <div class="chat-feed" id="feed"><div class="desc">Pick a room to start chatting.</div></div>
+            <form class="chat-form" id="send-form">
+                <input class="ov-input" id="msg" placeholder="Say something…" autocomplete="off" />
+                <button class="ov-btn ov-btn-primary" type="submit">Send</button>
+            </form>
+        </section>
+    </div>
+    <section class="ov-section">
+        <h2>Public surfaces</h2>
+        <div class="ov-grid">
+            <a class="ov-card" href="/api/chat/rooms"><div class="title">REST API</div><div class="desc">/api/chat/rooms, /messages, /dms, /calls, /tts</div></a>
+            <a class="ov-card" href="https://openvibe.community"><div class="title">Community</div><div class="desc">Long-form discussions live in OpenVibe Community.</div></a>
+            <a class="ov-card" href="https://openvibe.live"><div class="title">Live chat</div><div class="desc">Channel and stream chat embed automatically into OpenVibe Live.</div></a>
+        </div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    const roomsEl = document.getElementById('rooms');
+    const feed = document.getElementById('feed');
+    let activeRoom = null;
+    async function loadRooms() {
+        try {
+            const data = await fetch('/api/chat/rooms').then(r => r.json());
+            const items = data.items || [];
+            roomsEl.innerHTML = items.length
+                ? items.map(r => `<div class="room" data-id="${OpenVibe.escapeHtml(r.id)}">${OpenVibe.escapeHtml(r.name || r.id)}</div>`).join('')
+                : '<div class="desc">No rooms yet. The global feed is always available.</div>';
+            roomsEl.insertAdjacentHTML('afterbegin', `<div class="room" data-id="__global__">#global</div>`);
+        } catch {
+            roomsEl.innerHTML = '<div class="room active" data-id="__global__">#global (offline)</div>';
+        }
+        roomsEl.querySelectorAll('.room').forEach(el => el.onclick = () => selectRoom(el.dataset.id));
+        selectRoom('__global__');
+    }
+    async function selectRoom(id) {
+        activeRoom = id;
+        roomsEl.querySelectorAll('.room').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+        await loadHistory();
+    }
+    async function loadHistory() {
+        feed.innerHTML = '<div class="desc">loading…</div>';
+        try {
+            const url = activeRoom === '__global__' ? '/api/chat/global/history' : `/api/chat/rooms/${encodeURIComponent(activeRoom)}/messages`;
+            const data = await fetch(url).then(r => r.json());
+            const items = data.items || [];
+            feed.innerHTML = items.length
+                ? items.map(m => `<div class="chat-msg"><span class="who">${OpenVibe.escapeHtml(m.username || m.user_id || 'anon')}</span> ${OpenVibe.escapeHtml(m.body || m.text || '')}</div>`).join('')
+                : '<div class="desc">No messages yet — be the first.</div>';
+            feed.scrollTop = feed.scrollHeight;
+        } catch (e) {
+            feed.innerHTML = `<div class="ov-banner warn">history unavailable (${e.status||'offline'})</div>`;
+        }
+    }
+    document.getElementById('send-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('msg');
+        const body = input.value.trim();
+        if (!body || !activeRoom) return;
+        const url = activeRoom === '__global__' ? '/api/chat/global/send' : `/api/chat/rooms/${encodeURIComponent(activeRoom)}/messages`;
+        try {
+            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) });
+            input.value = '';
+            await loadHistory();
+        } catch {
+            alert('Sign in to send messages.');
+        }
+    });
+    loadRooms();
+})();
+</script>
 </body>
 </html>

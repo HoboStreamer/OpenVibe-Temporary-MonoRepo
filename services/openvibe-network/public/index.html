@@ -2,32 +2,75 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>OpenVibe Network</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
- body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; color: #1c1c20; }
- h1 { font-size: 1.5rem; margin-bottom: .25rem; }
- small { color: #777; }
- ul { padding-left: 1.2rem; }
- code { background: #f3f3f7; padding: 0 .25rem; border-radius: .25rem; }
-</style>
+<title>OpenVibe Network — One account. Every OpenVibe service.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="OpenVibe is an open, community-run, ad-free platform with a shared identity, themes, media, and event bus across every service." />
+<link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
-<h1>OpenVibe Network</h1>
-<small>control plane &mdash; Phase 1 + 2 (kernel foundations)</small>
-<p>This service hosts the OpenVibe identity, registry, and policy surfaces.
-It runs alongside (and federates with) the legacy <code>hobo.tools</code> install during the migration.</p>
-<ul>
-  <li><a href="/.well-known/openid-configuration">OIDC discovery</a></li>
-  <li><a href="/.well-known/jwks.json">JWKS</a></li>
-  <li><a href="/api/v1/services">/api/v1/services</a></li>
-  <li><a href="/api/v1/capabilities">/api/v1/capabilities</a></li>
-  <li><a href="/api/v1/contracts">/api/v1/contracts</a></li>
-  <li><a href="/api/v1/url-registry/resolved">/api/v1/url-registry/resolved</a></li>
-  <li><a href="/api/v1/topics">/api/v1/topics</a></li>
-  <li><a href="/api/v1/namespaces">/api/v1/namespaces</a></li>
-  <li><a href="/health">/health</a></li>
-</ul>
-<p><a href="https://github.com/openvibe">github</a> &middot; <a href="../README.md">repo readme</a></p>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero">
+        <h1>One account. Every OpenVibe service.</h1>
+        <p>OpenVibe is the open, community-run, ad-free network where streaming, chat, community, media, and tools share one identity, one theme, and one event bus.</p>
+        <div class="ov-cta-row">
+            <a class="ov-btn ov-btn-primary" href="https://my.openvibe.network">Create free account</a>
+            <a class="ov-btn" href="https://my.openvibe.network">Sign in</a>
+            <a class="ov-btn" href="https://openvibe.tools">Browse services</a>
+        </div>
+    </section>
+
+    <section class="ov-stat-strip" id="stat-strip">
+        <div class="ov-stat"><div class="n" id="stat-services">—</div><div class="l">registered services</div></div>
+        <div class="ov-stat"><div class="n" id="stat-capabilities">—</div><div class="l">declared capabilities</div></div>
+        <div class="ov-stat"><div class="n" id="stat-contracts">—</div><div class="l">contracts</div></div>
+        <div class="ov-stat"><div class="n" id="stat-themes">—</div><div class="l">themes</div></div>
+    </section>
+
+    <section class="ov-section">
+        <h2>Service directory</h2>
+        <p class="ov-section-sub">Press <code>Ctrl/⌘ K</code> any time to launch the search.</p>
+        <input class="ov-input" id="filter" placeholder="Filter services by name, category, or tag" style="margin-bottom:1rem" />
+        <div class="ov-grid" id="services-grid"></div>
+    </section>
+
+    <section class="ov-section">
+        <h2>Why OpenVibe</h2>
+        <div class="ov-grid">
+            <div class="ov-card"><div class="title">Open source</div><div class="desc">Every service runs from public repositories under permissive licenses. Self-host or join the community network.</div></div>
+            <div class="ov-card"><div class="title">No tracking, no ads</div><div class="desc">No third-party trackers, no behavioral advertising, no surveillance economy. Anonymous browsing where it makes sense.</div></div>
+            <div class="ov-card"><div class="title">Shared identity</div><div class="desc">Sign in once via <code>auth.openvibe.network</code>. Your themes, preferences, and modules follow you everywhere.</div></div>
+            <div class="ov-card"><div class="title">Modular</div><div class="desc">Each service owns its data and contracts. Capabilities and registries are first-class so federated apps can plug in.</div></div>
+        </div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('home');
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    const remote = await OpenVibe.loadServices();
+    const items = OpenVibe.mergedServices(remote);
+    const grid = document.getElementById('services-grid');
+    OpenVibe.renderServiceCards(grid, items);
+    document.getElementById('stat-services').textContent = items.length;
+    OpenVibe.attachLauncher(() => items);
+    document.getElementById('filter').addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        const filtered = items.filter(i => `${i.display_name||''} ${i.description||''} ${i.category||''}`.toLowerCase().includes(q));
+        OpenVibe.renderServiceCards(grid, filtered);
+    });
+    try {
+        const caps = await OpenVibe.api('/capabilities');
+        document.getElementById('stat-capabilities').textContent = (caps && caps.items || []).length;
+    } catch { document.getElementById('stat-capabilities').textContent = '0'; }
+    try {
+        const ctx = await OpenVibe.api('/contracts');
+        document.getElementById('stat-contracts').textContent = (ctx && ctx.items || []).length;
+    } catch { document.getElementById('stat-contracts').textContent = '0'; }
+    document.getElementById('stat-themes').textContent = '—';
+})();
+</script>
 </body>
 </html>

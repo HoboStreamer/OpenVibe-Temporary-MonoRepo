@@ -1,14 +1,127 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/><title>OpenVibe Admin</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:720px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head><body>
-<h1>admin.openvibe.network</h1>
-<p>OpenVibe operator surface. Native pages live here; legacy admin paths are proxied to <code>hobo.tools</code> when federated.</p>
-<ul>
- <li><a href="/api/v1/services">services</a></li>
- <li><a href="/api/v1/capabilities">capabilities</a></li>
- <li><a href="/api/v1/contracts">contracts</a></li>
- <li><a href="/api/v1/audit">audit log</a> (admin only)</li>
-</ul>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>admin.openvibe.network — operator console</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem;text-align:left">
+        <h1 style="background:none;-webkit-text-fill-color:initial;color:var(--ov-text)">Admin Console</h1>
+        <p>Native operator surface for OpenVibe staff. All write actions go through the capability map and are audited.</p>
+        <div class="ov-banner">
+            <strong>Capability:</strong> <span id="cap-status">checking…</span>
+        </div>
+    </section>
+    <div class="ov-tabs">
+        <div class="ov-tab active" data-tab="overview">Overview</div>
+        <div class="ov-tab" data-tab="users">Users / Staff</div>
+        <div class="ov-tab" data-tab="registry">Registry</div>
+        <div class="ov-tab" data-tab="audit">Audit</div>
+        <div class="ov-tab" data-tab="migration">Migration / Readiness</div>
+        <div class="ov-tab" data-tab="compat">Compatibility</div>
+    </div>
+    <div id="tab-overview"></div>
+    <div id="tab-users" hidden></div>
+    <div id="tab-registry" hidden></div>
+    <div id="tab-audit" hidden></div>
+    <div id="tab-migration" hidden></div>
+    <div id="tab-compat" hidden></div>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('admin');
+    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    document.querySelectorAll('.ov-tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            document.querySelectorAll('main > div[id^=tab-]').forEach(x => x.hidden = true);
+            document.getElementById('tab-' + t.dataset.tab).hidden = false;
+        });
+    });
+
+    let cap = { capabilities: [], role: 'anonymous' };
+    try { cap = await OpenVibe.api('/staff/capabilities'); }
+    catch { /* anonymous */ }
+    document.getElementById('cap-status').textContent = `role=${cap.role || 'user'} capabilities=${(cap.capabilities||[]).join(', ') || 'none'}`;
+
+    // Overview
+    const overview = document.getElementById('tab-overview');
+    const services = OpenVibe.mergedServices(await OpenVibe.loadServices());
+    overview.innerHTML = `
+        <div class="ov-stat-strip">
+            <div class="ov-stat"><div class="n">${services.length}</div><div class="l">services</div></div>
+            <div class="ov-stat"><div class="n">${(cap.capabilities||[]).length}</div><div class="l">your capabilities</div></div>
+            <div class="ov-stat"><div class="n" id="ov-health">…</div><div class="l">network health</div></div>
+        </div>
+        <div class="ov-grid" id="ov-services"></div>`;
+    OpenVibe.renderServiceCards(document.getElementById('ov-services'), services);
+    fetch('/health').then(r => r.json()).then(j => { document.getElementById('ov-health').textContent = j.ok ? 'OK' : 'DEGRADED'; }).catch(() => { document.getElementById('ov-health').textContent = 'OFFLINE'; });
+
+    // Users / Staff
+    const users = document.getElementById('tab-users');
+    users.innerHTML = `<h2>Staff roles</h2><table class="ov-table"><thead><tr><th>User</th><th>Role</th><th>Granted</th></tr></thead><tbody id="staff-rows"><tr><td colspan="3">loading…</td></tr></tbody></table>`;
+    try {
+        const data = await OpenVibe.api('/admin/users');
+        const tbody = document.getElementById('staff-rows');
+        tbody.innerHTML = '';
+        for (const row of data.items || []) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${OpenVibe.escapeHtml(row.user_id)}</td><td>${OpenVibe.escapeHtml(row.role)}</td><td>${OpenVibe.escapeHtml(row.granted_at || '')}</td>`;
+            tbody.appendChild(tr);
+        }
+        if (!(data.items || []).length) tbody.innerHTML = '<tr><td colspan="3">no staff records yet — promote your first admin via PUT /api/v1/staff/roles/:id</td></tr>';
+    } catch (e) {
+        document.getElementById('staff-rows').innerHTML = `<tr><td colspan="3">requires capability <code>manage_users</code> (status ${e.status||'?'})</td></tr>`;
+    }
+
+    // Registry
+    document.getElementById('tab-registry').innerHTML = `<h2>Service registry</h2><table class="ov-table"><thead><tr><th>id</th><th>display_name</th><th>public_url</th></tr></thead><tbody>${services.map(s => `<tr><td><code>${OpenVibe.escapeHtml(s.service_id)}</code></td><td>${OpenVibe.escapeHtml(s.display_name||'')}</td><td>${s.public_url ? `<a href="${s.public_url}">${OpenVibe.escapeHtml(s.public_url)}</a>` : ''}</td></tr>`).join('')}</tbody></table>`;
+
+    // Audit
+    const auditEl = document.getElementById('tab-audit');
+    auditEl.innerHTML = `<h2>Recent audit</h2><pre id="audit-pre">loading…</pre>`;
+    try {
+        const data = await OpenVibe.api('/admin/audit');
+        document.getElementById('audit-pre').textContent = JSON.stringify(data.items || [], null, 2);
+    } catch (e) {
+        document.getElementById('audit-pre').textContent = `requires capability view_all_logs (status ${e.status||'?'})`;
+    }
+
+    // Migration
+    document.getElementById('tab-migration').innerHTML = `
+        <h2>Phase 8 migration & readiness</h2>
+        <p class="ov-section-sub">Reports are produced by <code>scripts/migrate-hobo/staging-cutover-rehearsal.js</code> and <code>scripts/cutover/run-cutover-rehearsal.js</code>.</p>
+        <ul>
+            <li><code>data/migrations/audit/hobo-ref-list.json</code></li>
+            <li><code>data/migrations/audit/hobo-ref-summary.md</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/import-report.json</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/validation-summary.json</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/staging-load-report.json</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/postgres-load-report.json</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/media-backfill-report.json</code></li>
+            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/readiness-report.json</code></li>
+            <li><code>data/migrations/readiness-phase8.json</code></li>
+            <li><code>data/migrations/cutover-report.json</code></li>
+        </ul>`;
+
+    // Compat
+    document.getElementById('tab-compat').innerHTML = `
+        <h2>Compatibility mode</h2>
+        <p>OpenVibe is OpenVibe-native by default. Hobo federation requires <code>OPENVIBE_LEGACY_COMPAT_MODE=true</code> and configured <code>HOBO_TOOLS_*</code> env vars.</p>
+        <p>Default Phase 8 stance: <span class="ov-tag ok">OpenVibe-native</span>. Compat: <span class="ov-tag" id="compat-state">checking…</span></p>`;
+    fetch('/health').then(r => r.json()).then(j => {
+        const compat = j.federation && j.federation.hobo_tools ? 'on' : 'off';
+        const el = document.getElementById('compat-state');
+        if (el) { el.textContent = compat; el.className = 'ov-tag ' + (compat === 'on' ? 'warn' : 'ok'); }
+    }).catch(() => {});
+})();
+</script>
+</body>
+</html>
