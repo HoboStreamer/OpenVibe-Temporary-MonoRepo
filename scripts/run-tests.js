@@ -2,15 +2,15 @@
 'use strict';
 
 // OpenVibe — minimal test runner. Discovers every *.test.js under
-// packages/*/test and services/*/test, runs each in its own subprocess,
-// summarises, and exits non-zero on failure.
+// packages/, services/, and selected script/test folders, runs each in its own
+// subprocess, summarises, and exits non-zero on failure.
 
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const ROOTS = ['packages', 'services'];
+const ROOTS = ['packages', 'services', path.join('scripts', 'migrate-hobo')];
 
 function* walk(dir) {
     let entries;

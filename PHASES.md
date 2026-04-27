@@ -14,6 +14,12 @@ Numbering follows the later (corrected) numbering used in
 | 7 | AI / SEO / Sources / Search backbone | ✅ implemented in this commit | `services/openvibe-ai`, `packages/openvibe-contracts/ai-events.js`, `packages/openvibe-sdk` (`AiClient`), `/opt/hobostreamer/server/openvibe-bridge/ai.js` |
 | 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
 
+> Note: the checked-in SQLite services and additive compatibility bridges remain
+> transitional scaffolding for local bring-up and staged migration work. The
+> authoritative production target is now documented in
+> `docs/openvibe/persistence-cutover-plan.md`, with the canonical legacy
+> mapping in `docs/openvibe/hobo-to-openvibe-data-map.md`.
+
 ## Phase 1 — Platform Kernel Foundations: acceptance
 
 1. `services/openvibe-events` boots, persists events with full envelope
@@ -245,16 +251,20 @@ Numbering follows the later (corrected) numbering used in
    plan + subscription + cancel, economy freeze, and policy decisions —
    passes via `node services/openvibe-billing/test/billing-smoke.test.js`.
    ✅
-10. Legacy migration: `billing_legacy_map(source, kind, legacy_id)` lets
-    HoboStreamer mirror only paid Hobo Bucks transactions
-    (Hobo Coins remain free in the legacy ledger and are NOT imported).
-    See
-    [docs/openvibe/phase-6-billing-tips-vip.md](docs/openvibe/phase-6-billing-tips-vip.md),
-    [docs/openvibe/billing-service.md](docs/openvibe/billing-service.md),
-    [docs/openvibe/tips-service.md](docs/openvibe/tips-service.md),
-    [docs/openvibe/vip-service.md](docs/openvibe/vip-service.md),
-    [docs/openvibe/legacy-billing-migration.md](docs/openvibe/legacy-billing-migration.md).
-    ✅
+10. `billing_legacy_map(source, kind, legacy_id)` remains useful as a
+   dedupe/reconciliation seam for legacy finance references, but the current
+   authoritative hard-cutover policy is to **exclude Hobo Bucks balances from
+   canonical OpenVibe import**. Historical Hobo Bucks rows stay
+   archive/reconciliation-only; no mutable legacy balance is carried into
+   OpenVibe. See
+   [docs/openvibe/persistence-cutover-plan.md](docs/openvibe/persistence-cutover-plan.md),
+   [docs/openvibe/hobo-to-openvibe-data-map.md](docs/openvibe/hobo-to-openvibe-data-map.md),
+   [docs/openvibe/legacy-billing-migration.md](docs/openvibe/legacy-billing-migration.md),
+   [docs/openvibe/phase-6-billing-tips-vip.md](docs/openvibe/phase-6-billing-tips-vip.md),
+   [docs/openvibe/billing-service.md](docs/openvibe/billing-service.md),
+   [docs/openvibe/tips-service.md](docs/openvibe/tips-service.md),
+   [docs/openvibe/vip-service.md](docs/openvibe/vip-service.md).
+   ✅
 
 ## Validation
 

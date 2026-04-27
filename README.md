@@ -13,6 +13,11 @@ See [context/PLAN.md](context/PLAN.md) for the long-form architecture plan and
 [ARCHITECTURE.md](ARCHITECTURE.md) for the rules every OpenVibe service must
 follow. Phase status lives in [PHASES.md](PHASES.md).
 
+The authoritative production persistence + hard-cutover plan lives in
+[docs/openvibe/persistence-cutover-plan.md](docs/openvibe/persistence-cutover-plan.md).
+The canonical Hobo → OpenVibe mapping lives in
+[docs/openvibe/hobo-to-openvibe-data-map.md](docs/openvibe/hobo-to-openvibe-data-map.md).
+
 ---
 
 ## Layout
@@ -31,9 +36,13 @@ openvibe/
 ```
 
 Both services are independent Node/Express apps with their own `package.json`.
-Both use `better-sqlite3` for persistence — same pattern as `hobo-tools` and
-HoboStreamer — so a developer with the existing toolchain can run them without
-new infra.
+The currently checked-in implementations still use `better-sqlite3` for local
+bootstrap — same pattern as `hobo-tools` and HoboStreamer — so a developer can
+run them without new infra. That SQLite pattern, plus the existing
+federation/compat bridges, should be treated as **transitional scaffolding
+only**: the production cutover target is PostgreSQL + Redis + object storage +
+async workers, and the end-state is a hard cutover rather than indefinite
+dual-runtime compatibility.
 
 ---
 
@@ -71,6 +80,9 @@ new infra.
     issued by **either** `hobo.tools` or `auth.openvibe.network`
   * No public API renames, no schema changes, fully backwards compatible
     when the OpenVibe vars are absent
+  * Compatibility bridges remain transitional. After migration validation, the
+    intended end state is redirecting the legacy Hobo domains to the
+    corresponding OpenVibe surfaces
 
 ---
 

@@ -1168,6 +1168,25 @@ Services can still keep local domain-specific data, but:
 ### Example
 `openvibe.live` can keep stream-session local tables, but shared creator balance, theme prefs, or cross-service notification state should not be local-only.
 
+## 11.3 Production persistence target
+
+The current OpenVibe repo still contains service-local SQLite scaffolding so
+contributors can boot services without provisioning extra infrastructure.
+That is a developer convenience, not the intended production end state.
+
+### Canonical production target
+- PostgreSQL for durable relational truth
+- Redis for queues, fanout coordination, cache, leases, and other short-lived
+	coordination state
+- object storage for media bytes and derivatives
+- async workers for replay-safe migration, media processing, reconciliation,
+	and notification/billing jobs
+
+### Migration implication
+All new migration planning should target the canonical Postgres/Redis/object
+storage model. The checked-in SQLite files should be treated as a transitional
+bootstrap seam, not the architecture to optimize for long-term cutover.
+
 ---
 
 ## 12. Current-to-target migration mapping
@@ -1194,6 +1213,9 @@ Services can still keep local domain-specific data, but:
 
 ### Reinterpret, don’t blindly migrate
 - Hobo Coins / rewards -> either platform-wide free loyalty modules or product-local progression models depending on desired future
+- Hobo Bucks balances -> **NOT imported** into OpenVibe credits. Historical
+	Hobo Bucks rows may be archived for reconciliation, but they do not become
+	canonical ledger truth in OpenVibe
 - vibe-coding sessions/events -> become seeds for `openvibe.codes` + live devstream tooling
 - robotstreamer integrations -> inform `openre.stream` and capability design
 
@@ -1416,10 +1438,15 @@ Monetization stops being scattered inside HoboStreamer.
 ## Phase 9 — final cutover
 
 ### Actions
-- dual-write retired
+- final export/import/reconciliation completed against the canonical OpenVibe
+	persistence target
+- compatibility bridges retired or left inert
 - old routes redirected
 - legacy identity paths retired
+- Hobo repos become read-only migration sources / archives, not runtime
+	dependencies
 - Hobo domains become redirects or archives where appropriate
+- no long-term dual-write / dual-read dependency remains
 - migration audit complete
 
 ---
