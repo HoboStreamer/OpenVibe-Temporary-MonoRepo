@@ -4,7 +4,9 @@ This document records the canonical ownership and migration target for durable
 data moving out of `HoboStreamer.com` and `HoboApp/hobo-tools`.
 
 The target of this map is the **OpenVibe canonical bundle / future Postgres
-loader**, not the current service-local SQLite files.
+loader**, with the current staging rehearsal hydrating the service-local
+SQLite stores (or service-specific holding tables where runtime models are not
+finished yet).
 
 ## Identity and control plane
 
@@ -81,12 +83,20 @@ loader**, not the current service-local SQLite files.
 | HoboStreamer | `users.hobo_bucks_balance` | archive only | **excluded** | Explicitly dropped from canonical import. |
 | HoboStreamer | `donation_goals` | archive / later rebuild | **excluded** | Current amount is derived from the legacy Hobo Bucks model. |
 
+## Loyalty / progression records
+
+| Legacy source | Entity / table | OpenVibe owner | Canonical target dataset | Notes |
+|---|---|---|---|---|
+| HoboStreamer | `coin_transactions` | future loyalty service / staging via `openvibe-billing` holding tables | `loyalty/coin-transactions` | Imported as non-billing progression history, not wallet balance truth. |
+| HoboStreamer | `coin_rewards` | future loyalty service / staging via `openvibe-billing` holding tables | `loyalty/coin-rewards` | Reward catalog and award history preserved for later remap. |
+| HoboStreamer | `coin_redemptions` | future loyalty service / staging via `openvibe-billing` holding tables | `loyalty/coin-redemptions` | Redemption history preserved separately from Hobo Bucks. |
+| HoboStreamer | `watch_time` | future loyalty service / staging via `openvibe-billing` holding tables | `loyalty/watch-time` | Watch-time progression history preserved for later product-specific use. |
+
 ## Export-only / deferred for later slices
 
 These entities are preserved in exports or manifests for later product-specific
 migration work but are not fully normalized in this foundation slice:
 
-- Hobo Coins loyalty tables: `coin_transactions`, `coin_rewards`, `coin_redemptions`, `watch_time`
 - secret-bearing or operational tables such as `api_keys`, `api_tokens`, `site_settings`, OAuth runtime tables, audit/IP logs
 - device/runtime registrations such as push subscriptions and active sessions
 

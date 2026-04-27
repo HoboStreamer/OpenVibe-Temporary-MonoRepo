@@ -26,7 +26,11 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({ ok: true, service: config.serviceId }));
+    app.get('/health', (_req, res) => res.json({
+        ok: true,
+        service: config.serviceId,
+        storage: storage.describePlan ? storage.describePlan() : { write_provider: storage.name() },
+    }));
 
     // Static admin shell (read-only landing page).
     app.use(express.static(path.join(__dirname, '..', 'public')));

@@ -1,15 +1,19 @@
 # Hobo → OpenVibe migration scaffold
 
 This folder contains the **cutover foundation** for moving durable data out of
-`HoboStreamer.com` and `HoboApp/hobo-tools` into the canonical OpenVibe model.
+`HoboStreamer.com` and `HoboApp/hobo-tools` into the canonical OpenVibe model,
+then hydrating the current SQLite-backed OpenVibe staging services for a
+repeatable hard-cutover rehearsal.
 
 It is intentionally **non-destructive**:
 - legacy Hobo databases are opened read-only
 - exports are chunked and idempotent
 - imports write a canonical OpenVibe **bundle** (NDJSON + manifests + audit)
-  instead of mutating the current SQLite service databases directly
+  before a separate staging loader hydrates the current SQLite service stores
 - validation produces reconciliation artifacts without deleting or rewriting
   legacy data
+- production fetches use SSH plus read-only SQLite snapshots under isolated
+  `/tmp/openvibe-migration-*` paths on the remote host
 
 ## Why the importer writes a bundle instead of the current service DBs
 
@@ -24,8 +28,11 @@ transitional developer scaffolding. The production target for cutover is:
 
 Because the canonical Postgres schema is not fully wired into every service
 yet, `import-openvibe.js` materializes a deterministic `openvibe-target/`
-bundle. That bundle is the stable seam for the later Postgres loader / worker
-phase and keeps this slice honest about the end-state architecture.
+bundle. For staging rehearsal, `load-staging-openvibe.js` then loads that
+bundle into the current SQLite service stores (or service-specific holding
+tables when a runtime model is not finished yet). That keeps the migration
+slice honest about the end-state architecture while still making the current
+staging surfaces testable with real migrated data.
 
 ## Included exports
 
@@ -36,6 +43,7 @@ Durable data is exported from tables including:
 - `chat_messages`, `comments`, `pastes`, `paste_likes`, `paste_comments`
 - `vods`, `clips`, `themes`, `user_themes`, `emotes`
 - `subscriptions`, `media_requests`, `media_request_settings`
+- `coin_transactions`, `coin_rewards`, `coin_redemptions`, `watch_time`
 - `restream_destinations`, `robotstreamer_integrations`, moderation/channel
   config tables, and analytics tables
 
@@ -80,7 +88,23 @@ Reads the `hobostreamer/` and `hobotools/` export folders and writes
 `openvibe-target/` with domain-organized NDJSON datasets plus
 `audit/import-report.json`.
 
-### 4. Validate / reconcile
+### 4. Load the current staging OpenVibe SQLite stores
+
+`load-staging-openvibe.js` reads `openvibe-target/**/*.ndjson` and upserts the
+current staging service databases:
+
+- direct runtime tables where the service already has a compatible model
+- `staging_import_records` holding tables when the runtime model is not ready
+
+The loader is idempotent and writes `openvibe-target/audit/staging-load-report.json`.
+
+### 5. Backfill hot media storage
+
+`backfill-media.js` copies media bytes from the fetched local Hobo artifact root
+into the configured hot-storage root and updates `media_objects` metadata. Files
+missing from the local staging artifact mirror are diagnostics, not fatal errors.
+
+### 6. Validate / reconcile
 
 Reads the canonical bundle and writes `audit/validation-summary.json`.
 Validation currently checks:
@@ -89,10 +113,64 @@ Validation currently checks:
 - presence of the required Hobo Bucks exclusions
 - import-report structural consistency
 
+### 7. Rehearse the full staging cutover
+
+`staging-cutover-rehearsal.js` coordinates:
+
+1. production fetch (optional)
+2. Hobo NDJSON export
+3. canonical bundle generation
+4. bundle validation
+5. staging SQLite hydration
+6. media hot-storage backfill
+7. readiness checks + final report
+
+The readiness runner writes `openvibe-target/audit/readiness-report.json`.
+
+## Staging rehearsal commands
+
+Run from the monorepo root.
+
+### Dry-run remote discovery
+
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --dry-run`
+
+### Fetch production artifacts to the staging workspace
+
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+
+If your SSH key is passphrase-protected, you can specify `--ssh-key` or let the script discover the key from your `~/.ssh/config`:
+
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --ssh-key ~/.ssh/id_ed25519 --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+
+or simply:
+
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+
+The script will automatically start `ssh-agent` if needed, load the configured key, and prompt for the passphrase once.
+
+### Full staging rehearsal
+
+`node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging`
+
+### Load an already-built canonical bundle into the current staging DBs
+
+`node scripts/migrate-hobo/load-staging-openvibe.js --bundle ./data/migrations/hobo-production-staging/openvibe-target`
+
+### Backfill hot media storage only
+
+`node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --hot-root ./services/openvibe-media/data/storage/hot`
+
 ## Output layout
 
 ```text
 <data-dir>/
+├── production-fetch-report.json
+├── production-source/
+│   ├── hobostreamer/
+│   │   └── data/
+│   └── hobotools/
+│       └── data/
 ├── hobostreamer/
 │   ├── manifest.json
 │   ├── tables/*.ndjson
@@ -110,9 +188,13 @@ Validation currently checks:
     ├── community/*.ndjson
     ├── media/*.ndjson
     ├── billing/*.ndjson
+    ├── loyalty/*.ndjson
     └── audit/
         ├── import-report.json
         └── validation-summary.json
+      ├── staging-load-report.json
+      ├── media-backfill-report.json
+      └── readiness-report.json
 ```
 
 ## Safety notes
@@ -120,7 +202,12 @@ Validation currently checks:
 - Export artifacts may contain **password hashes** from legacy account tables.
   Treat the output directory as sensitive infrastructure data.
 - The scripts never print hashes, tokens, or secrets to stdout.
+- Production fetch skips deployed `.env` files and other secret-bearing config
+  by default; manifests record their presence without copying secrets into the
+  staging workspace.
 - Fields such as RobotStreamer tokens, restream keys, camera credentials, and
   OAuth client secrets are redacted from the exported bundle.
 - Missing media files are reported to diagnostics instead of causing deletes or
   destructive rewrites.
+- `data/migrations/` is gitignored at the repo root so production-derived
+  staging artifacts are not committed accidentally.

@@ -4,8 +4,16 @@ require('dotenv').config();
 
 const path = require('path');
 
+const port = parseInt(process.env.PORT, 10) || 4500;
+const hotRoot = process.env.OPENVIBE_MEDIA_HOT_ROOT
+    || process.env.STORAGE_ROOT
+    || path.resolve(process.cwd(), 'data/storage/hot');
+const publicBaseUrl = process.env.OPENVIBE_MEDIA_PUBLIC_BASE_URL
+    || process.env.PUBLIC_BASE_URL
+    || `http://127.0.0.1:${port}`;
+
 module.exports = {
-    port:    parseInt(process.env.PORT, 10) || 4500,
+    port,
     host:    process.env.HOST || '0.0.0.0',
     nodeEnv: process.env.NODE_ENV || 'development',
     serviceId: 'openvibe-media',
@@ -18,12 +26,20 @@ module.exports = {
 
     storage: {
         provider: process.env.STORAGE_PROVIDER || 'local',
-        root:     process.env.STORAGE_ROOT || path.resolve(process.cwd(), 'data/storage'),
-        publicBaseUrl: process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${parseInt(process.env.PORT, 10) || 4500}`,
+        root: hotRoot,
+        hotRoot,
+        publicBaseUrl,
+        coldProvider: (process.env.OPENVIBE_MEDIA_COLD_PROVIDER || 'none').toLowerCase(),
         s3: {
             bucket:        process.env.S3_BUCKET || null,
             region:        process.env.S3_REGION || null,
             publicBaseUrl: process.env.S3_PUBLIC_BASE_URL || null,
+        },
+        cold: {
+            bucket: process.env.OPENVIBE_MEDIA_COLD_S3_BUCKET || process.env.S3_BUCKET || null,
+            region: process.env.OPENVIBE_MEDIA_COLD_S3_REGION || process.env.S3_REGION || null,
+            endpoint: process.env.OPENVIBE_MEDIA_COLD_S3_ENDPOINT || null,
+            publicBaseUrl: process.env.OPENVIBE_MEDIA_COLD_S3_PUBLIC_BASE_URL || process.env.S3_PUBLIC_BASE_URL || null,
         },
     },
 

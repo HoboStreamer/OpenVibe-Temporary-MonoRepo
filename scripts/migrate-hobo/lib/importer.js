@@ -951,6 +951,32 @@ async function writeBillingDatasets(context) {
     });
 }
 
+async function writeLoyaltyDatasets(context) {
+    const tables = [
+        ['coin_transactions', 'loyalty/coin-transactions'],
+        ['coin_rewards', 'loyalty/coin-rewards'],
+        ['coin_redemptions', 'loyalty/coin-redemptions'],
+        ['watch_time', 'loyalty/watch-time'],
+    ];
+
+    for (const [tableName, datasetName] of tables) {
+        await forEachNdjson(tableFile(context.sourceRoots.hobostreamer, tableName), async (row) => {
+            const syntheticId = row.id != null
+                ? row.id
+                : `${row.user_id || 'user'}:${row.reward_id || row.redemption_id || row.created_at || JSON.stringify(row)}`;
+            context.writers.get(datasetName).write({
+                id: buildEntityId(tableName, 'hobostreamer', syntheticId),
+                source: 'hobostreamer',
+                user_id: row.user_id != null ? canonicalUserIdFor(context, 'hobostreamer', row.user_id) : null,
+                payload: row,
+                legacy_ref: makeLegacyRef('hobostreamer', tableName, syntheticId),
+            });
+            context.stats.bump(datasetName, 'source_records');
+            context.stats.bump(datasetName, 'written_records');
+        });
+    }
+}
+
 async function importCanonicalBundle(options) {
     const { sourceDir, outDir, logger } = options;
     const context = createImportContext(sourceDir, outDir, logger);
@@ -968,6 +994,7 @@ async function importCanonicalBundle(options) {
     await writeChatAndCommunityDatasets(context);
     await writeMediaDatasets(context);
     await writeBillingDatasets(context);
+    await writeLoyaltyDatasets(context);
 
     const files = await context.writers.closeAll();
     const report = {

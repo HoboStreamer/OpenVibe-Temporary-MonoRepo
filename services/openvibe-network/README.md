@@ -84,3 +84,21 @@ curl -s -X PUT http://localhost:4100/api/v1/user-modules/42/live.profile \
 # read it back as anyone
 curl -s http://localhost:4100/api/v1/user-modules/42/live.profile
 ```
+
+## Staging migration rehearsal
+
+The current Phase 8 cutover rehearsal does **not** pretend standalone OpenVibe
+auth is finished. Instead, the staging loader writes migrated identity,
+linked-account, theme, notification, and control-plane rows into
+`staging_import_records` (plus `url_registry_overlay` for resolved URL keys)
+inside the network SQLite database. This makes migrated accounts and control
+plane data auditable in staging while the public auth flow can still run in
+federation mode to `hobo-tools`.
+
+Use the readiness report at
+`openvibe-target/audit/readiness-report.json` to distinguish:
+
+- green: route/surface is live and migrated data is present
+- yellow: migrated data is staged but standalone auth/runtime modeling is not
+  complete yet
+- red: a required route or dataset is missing entirely

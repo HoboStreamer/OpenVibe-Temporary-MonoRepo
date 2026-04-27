@@ -195,10 +195,47 @@ function resolveLegacyPath(legacyRoot, rawValue) {
     return null;
 }
 
+function legacyPathFallbacks(legacyRoot, rawValue) {
+    const value = String(rawValue || '').trim();
+    if (!value || !path.isAbsolute(value)) return [];
+
+    const candidates = [];
+    const normalizedLegacyRoot = path.resolve(legacyRoot);
+    const markers = ['/data/', '/public/', '/uploads/'];
+
+    for (const marker of markers) {
+        const index = value.indexOf(marker);
+        if (index !== -1) {
+            candidates.push(path.join(normalizedLegacyRoot, value.slice(index + 1)));
+        }
+    }
+
+    const legacyRootName = path.basename(normalizedLegacyRoot);
+    const rootMarker = `/${legacyRootName}/`;
+    const rootIndex = value.toLowerCase().lastIndexOf(rootMarker.toLowerCase());
+    if (rootIndex !== -1) {
+        candidates.push(path.join(normalizedLegacyRoot, value.slice(rootIndex + rootMarker.length)));
+    }
+
+    return [...new Set(candidates.map((candidate) => path.normalize(candidate)))];
+}
+
 function findExistingPath(legacyRoot, rawValue) {
     const resolved = resolveLegacyPath(legacyRoot, rawValue);
-    if (!resolved) return { resolvedPath: null, exists: false };
-    return { resolvedPath: resolved, exists: fs.existsSync(resolved) };
+    if (resolved && fs.existsSync(resolved)) {
+        return { resolvedPath: resolved, exists: true };
+    }
+
+    for (const fallback of legacyPathFallbacks(legacyRoot, rawValue)) {
+        if (fs.existsSync(fallback)) {
+            return { resolvedPath: fallback, exists: true };
+        }
+    }
+
+    return {
+        resolvedPath: resolved || legacyPathFallbacks(legacyRoot, rawValue)[0] || null,
+        exists: false,
+    };
 }
 
 function readManifest(sourceRoot) {

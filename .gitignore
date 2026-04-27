@@ -1,0 +1,45 @@
+# Root-generated migration output
+data/migrations/
+
+# Prevent nested service runtime state and secrets from being tracked.
+**/.env
+**/.env.*
+!**/.env.example
+**/data/
+**/node_modules/
+**/tmp/
+**/temp/
+**/.cache/
+
+# Runtime database artifacts
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
+
+# Logs and temporary files
+**/*.log
+**/*.pid
+**/*.seed
+
+# Secrets and keys
+**/*.local
+**/*.secret
+**/*.secrets
+**/*.pem
+**/*.key
+**/*.crt
+**/*.cer
+**/*.p12
+**/*.pfx
+
+# Editor / environment
+**/.vscode/
+**/.idea/
+**/.DS_Store
+**/Thumbs.db
+**/*~
+**/*.swp
+**/*.swo

@@ -126,6 +126,26 @@ Build a deterministic OpenVibe bundle organized by domain:
 
 This bundle is the stable seam for the later Postgres loader / worker phase.
 
+### 2.5 Staging/development hard-cutover rehearsal
+
+Before the final production cutover, the current repo now supports a full
+staging rehearsal against the **current SQLite-backed OpenVibe services**:
+
+- `scripts/migrate-hobo/fetch-production-hobo.js` discovers and copies
+   read-only production artifacts from `hobo.tools`
+- `scripts/migrate-hobo/import-openvibe.js` writes the canonical bundle
+- `scripts/migrate-hobo/load-staging-openvibe.js` hydrates the current
+   OpenVibe service-local SQLite stores (or clearly named holding tables when a
+   runtime model is still incomplete)
+- `scripts/migrate-hobo/backfill-media.js` copies local hot-media bytes into
+   the staging media root
+- `scripts/migrate-hobo/staging-cutover-rehearsal.js` coordinates the full
+   fetch → export → import → validate → load → backfill → readiness flow
+
+This is a staging/testability bridge, not the final production persistence
+target. The final target remains PostgreSQL + Redis + object storage + async
+workers.
+
 ### 3. Reconciliation
 
 Validate at minimum:
@@ -192,7 +212,11 @@ The target architecture is:
 
 - `docs/openvibe/hobo-to-openvibe-data-map.md`
 - `scripts/migrate-hobo/README.md`
+- `scripts/migrate-hobo/fetch-production-hobo.js`
 - `scripts/migrate-hobo/export-hobostreamer.js`
 - `scripts/migrate-hobo/export-hobotools.js`
 - `scripts/migrate-hobo/import-openvibe.js`
 - `scripts/migrate-hobo/validate-migration.js`
+- `scripts/migrate-hobo/load-staging-openvibe.js`
+- `scripts/migrate-hobo/backfill-media.js`
+- `scripts/migrate-hobo/staging-cutover-rehearsal.js`

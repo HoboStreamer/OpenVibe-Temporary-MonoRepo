@@ -54,6 +54,10 @@ const HOBOSTREAMER_EXPORTS = [
     { table: 'chat_messages', orderBy: 'id' },
     { table: 'follows', orderBy: 'follower_id, streamer_id' },
     { table: 'subscriptions', orderBy: 'id' },
+    { table: 'coin_transactions', orderBy: 'id' },
+    { table: 'coin_rewards', orderBy: 'id' },
+    { table: 'coin_redemptions', orderBy: 'id' },
+    { table: 'watch_time', orderBy: 'id' },
     { table: 'vods', orderBy: 'id' },
     { table: 'clips', orderBy: 'id' },
     { table: 'comments', orderBy: 'id' },
@@ -100,22 +104,6 @@ const HOBOSTREAMER_EXCLUSIONS = [
     {
         entity: 'donation_goals',
         reason: 'Donation-goal current amounts depend on the legacy Hobo Bucks balance model and must be recalculated or rebuilt later.',
-    },
-    {
-        entity: 'coin_transactions',
-        reason: 'Hobo Coins remain product-local loyalty state and are out of scope for this cutover foundation.',
-    },
-    {
-        entity: 'coin_rewards',
-        reason: 'Hobo Coins reward definitions are product-local and remain deferred.',
-    },
-    {
-        entity: 'coin_redemptions',
-        reason: 'Hobo Coins redemption history is not part of the canonical cutover slice.',
-    },
-    {
-        entity: 'watch_time',
-        reason: 'Watch-time loyalty accumulation remains deferred with the Hobo Coins model.',
     },
     {
         entity: 'api_keys',

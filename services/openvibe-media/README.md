@@ -62,14 +62,31 @@ curl -sS "http://127.0.0.1:4500/api/v1/admin/jobs" \
 
 ## Storage providers
 
-`STORAGE_PROVIDER=local` (default) writes under `STORAGE_ROOT` (default
-`./data/storage`) and serves bytes via `/files/:id` with visibility checks.
+`STORAGE_PROVIDER=local` (default) writes under the hot-storage root
+`OPENVIBE_MEDIA_HOT_ROOT` / `STORAGE_ROOT` (default `./data/storage/hot`) and
+serves bytes via `/files/:id` with visibility checks.
 
 `STORAGE_PROVIDER=s3` is a configuration-only seam today: it records
 `storage_provider='s3'` and resolves URLs through `S3_PUBLIC_BASE_URL` when
 present, but actual byte transfer still uses the local filesystem. This lets
 the migration plan call into the right surface without forcing an S3 SDK
 dependency on developer machines.
+
+For staging rehearsal, cold storage is optional and configuration-only:
+
+- `OPENVIBE_MEDIA_COLD_PROVIDER=none` keeps staging fully local
+- `OPENVIBE_MEDIA_COLD_PROVIDER=s3|b2` documents the intended later archive
+  target without changing the current hot-write behavior
+- `/health` reports the active hot/cold storage plan so migration readiness can
+  verify the storage posture honestly
+
+## Staging migration rehearsal
+
+The Phase 8 staging loader writes migrated media metadata into
+`media_objects`/`media_legacy_map`, then `scripts/migrate-hobo/backfill-media.js`
+copies any fetched legacy media bytes into the configured hot-storage root.
+Missing local media files are recorded in
+`openvibe-target/audit/media-backfill-report.json` as diagnostics.
 
 ## Compatibility with HoboStreamer
 

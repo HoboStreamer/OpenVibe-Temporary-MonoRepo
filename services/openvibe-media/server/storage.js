@@ -1,10 +1,10 @@
 'use strict';
 
-// openvibe-media — local filesystem storage provider.
+// openvibe-media — hot/cold storage seam.
 //
-// Default for development. Files land under STORAGE_ROOT/<namespace>/<media_id>.<ext>.
-// Public URLs are served back through openvibe-media's /files/:mediaId endpoint
-// so that visibility/permission checks happen on every read.
+// Default for development and staging rehearsal: files land under the local
+// hot-storage root. Cold storage remains optional and configuration-only until
+// a real object-store client is wired.
 
 const path = require('path');
 const fs = require('fs');
@@ -78,6 +78,15 @@ class LocalStorageProvider {
             return true;
         } catch { return false; }
     }
+
+    describePlan() {
+        return {
+            write_provider: 'local',
+            hot_root: this.root,
+            public_base_url: this.publicBaseUrl || null,
+            cold_provider: 'none',
+        };
+    }
 }
 
 class S3SeamProvider {
@@ -102,12 +111,64 @@ class S3SeamProvider {
     readStream(k)           { return this.local.readStream(k); }
     stat(k)                 { return this.local.stat(k); }
     softDelete(k)           { return this.local.softDelete(k); }
+
+    describePlan() {
+        return {
+            write_provider: 's3-seam',
+            hot_root: this.local.root,
+            public_base_url: this.local.publicBaseUrl || null,
+            cold_provider: 's3',
+            cold_bucket: this.bucket || null,
+            cold_region: this.region || null,
+            cold_public_base_url: this.cdnBase || null,
+        };
+    }
+}
+
+class HotColdStorageProvider {
+    constructor(opts) {
+        this.hot = new LocalStorageProvider({
+            root: opts.hotRoot || opts.root,
+            publicBaseUrl: opts.publicBaseUrl,
+        });
+        this.coldProvider = (opts.coldProvider || 'none').toLowerCase();
+        this.cold = this.coldProvider === 's3' || this.coldProvider === 'b2'
+            ? new S3SeamProvider({
+                root: opts.hotRoot || opts.root,
+                publicBaseUrl: opts.publicBaseUrl,
+                s3: opts.cold || {},
+            })
+            : null;
+    }
+
+    name()                  { return this.hot.name(); }
+    keyFor(ns, id, hint)    { return this.hot.keyFor(ns, id, hint); }
+    pathFor(k)              { return this.hot.pathFor(k); }
+    publicUrlFor(mediaId)   { return this.hot.publicUrlFor(mediaId); }
+    writeBuffer(...args)    { return this.hot.writeBuffer(...args); }
+    moveTempFile(...args)   { return this.hot.moveTempFile(...args); }
+    readStream(k)           { return this.hot.readStream(k); }
+    stat(k)                 { return this.hot.stat(k); }
+    softDelete(k)           { return this.hot.softDelete(k); }
+
+    describePlan() {
+        return {
+            write_provider: this.hot.name(),
+            hot_root: this.hot.root,
+            public_base_url: this.hot.publicBaseUrl || null,
+            cold_provider: this.coldProvider,
+            cold: this.cold && this.cold.describePlan ? this.cold.describePlan() : null,
+        };
+    }
 }
 
 function buildStorage(cfg) {
     const provider = (cfg.provider || 'local').toLowerCase();
     if (provider === 's3') return new S3SeamProvider(cfg);
+    if (cfg.coldProvider && cfg.coldProvider !== 'none') {
+        return new HotColdStorageProvider(cfg);
+    }
     return new LocalStorageProvider({ root: cfg.root, publicBaseUrl: cfg.publicBaseUrl });
 }
 
-module.exports = { LocalStorageProvider, S3SeamProvider, buildStorage };
+module.exports = { LocalStorageProvider, S3SeamProvider, HotColdStorageProvider, buildStorage };

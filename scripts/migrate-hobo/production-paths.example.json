@@ -1,0 +1,10 @@
+{
+  "host": "hobo.tools",
+  "user": "deploy",
+  "remoteHobostreamerRoot": "/opt/hobostreamer",
+  "remoteHobotoolsRoot": "/opt/hobo/hobo-tools",
+  "remoteHobostreamerDb": "/opt/hobostreamer/data/hobostreamer.db",
+  "remoteHobotoolsDb": "/opt/hobo/hobo-tools/data/hobo-tools.db",
+  "mediaMode": "metadata-only",
+  "sshOptions": "-o StrictHostKeyChecking=accept-new"
+}

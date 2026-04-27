@@ -124,6 +124,9 @@ async function main() {
     writeNdjson(path.join(sourceDir, 'hobostreamer', 'tables', 'subscriptions.ndjson'), [
         { id: 81, subscriber_id: 42, streamer_id: 42, tier: 1, is_active: 1 },
     ]);
+    writeNdjson(path.join(sourceDir, 'hobostreamer', 'tables', 'coin_transactions.ndjson'), [
+        { id: 91, user_id: 42, amount: 25, reason: 'watch', created_at: '2026-01-03T01:00:00Z' },
+    ]);
 
     writeJson(path.join(sourceDir, 'hobostreamer', 'manifest.json'), {
         source: 'hobostreamer',
@@ -136,6 +139,7 @@ async function main() {
     const report = await importCanonicalBundle({ sourceDir, outDir, logger: { info() {}, warn() {}, error() {} } });
     assert.strictEqual(report.user_merge.canonical_users, 1, 'expected HoboStreamer user to merge into hobo-tools canonical user');
     assert.strictEqual(report.datasets['identity/users'].written_records, 1, 'expected one canonical user');
+    assert.strictEqual(report.datasets['loyalty/coin-transactions'].written_records, 1, 'expected one loyalty transaction');
     assert.ok(report.exclusions.some((entry) => entry.entity === 'users.hobo_bucks_balance'));
     assert.ok(fs.existsSync(path.join(report.bundle_dir, 'audit', 'import-report.json')));
 

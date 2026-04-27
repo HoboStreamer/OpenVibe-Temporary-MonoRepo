@@ -1,4 +1,8 @@
 node_modules/
-data/
-.env
 *.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store

@@ -38,3 +38,10 @@ curl -s http://127.0.0.1:4600/c/alice | head -n 30
    `POST /api/v1/events/stream` callback (the URL set in subscription config).
 3. `openvibe-live` upserts the corresponding `live_streams` row and the SSR
    page reflects the new state on the next request.
+
+## Staging migration rehearsal
+
+`scripts/migrate-hobo/load-staging-openvibe.js` now hydrates the current
+`live_channels` and `live_streams` SQLite tables from the canonical Hobo →
+OpenVibe bundle so `/`, `/c/:slug`, and `/api/v1/channels` can be exercised on
+real migrated data during the staging/development hard-cutover rehearsal.

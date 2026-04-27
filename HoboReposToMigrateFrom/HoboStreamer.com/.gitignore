@@ -1,17 +1,11 @@
 node_modules/
-data/
+# Keep generated build artifacts and runtime logs out of git.
 .env
 .env.*
 !.env.example
 *.local
 *.secret
 *.secrets
-*.db
-*.db-shm
-*.db-wal
-*.db-journal
-*.sqlite
-*.sqlite3
 *.log
 *.pid
 *.seed
@@ -21,6 +15,13 @@ data/
 *.cer
 *.p12
 *.pfx
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
 dist/
 build/
 coverage/
@@ -30,8 +31,6 @@ temp/
 .eslintcache
 # Synced from hobo-shared at server startup — not tracked in git
 public/shared/
-data/vods/
-data/clips/
 __pycache__/
 *.pyc
 .vscode/
