@@ -5,10 +5,13 @@
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { warnIfUnsupported } = require('@openvibe/sdk');
 
 let dbInstance = null;
+let persistenceDescriptor = null;
 
 function init(dbPath) {
+    persistenceDescriptor = warnIfUnsupported('openvibe-chat', dbPath);
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -44,6 +47,7 @@ function init(dbPath) {
             role                TEXT NOT NULL DEFAULT 'participant',
             joined_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_seen_at        DATETIME,
+            last_read_at        DATETIME,
             muted_until         DATETIME,
             metadata_json       TEXT NOT NULL DEFAULT '{}',
             PRIMARY KEY (room_id, actor_type, actor_id),
@@ -158,6 +162,12 @@ function init(dbPath) {
         );
     `);
 
+    try {
+        db.exec(`ALTER TABLE chat_participants ADD COLUMN last_read_at DATETIME`);
+    } catch {
+        // already present
+    }
+
     dbInstance = db;
     return db;
 }
@@ -167,4 +177,8 @@ function get() {
     return dbInstance;
 }
 
-module.exports = { init, get };
+function describePersistence() {
+    return persistenceDescriptor || { service: 'openvibe-chat', mode: 'sqlite', database_url_configured: false };
+}
+
+module.exports = { init, get, describePersistence };

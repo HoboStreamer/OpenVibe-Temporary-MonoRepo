@@ -4,7 +4,7 @@ Native UI: `services/openvibe-live/public/index.html`. Driven by:
 
 * `GET /api/v1/channels` — channel directory.
 * `GET /api/v1/streams?status=live` — live tile grid.
-* `GET /c/:slug` and `/c/:slug/s/:streamId` — server-rendered detail pages
+* `GET /@:slug` and `/@:slug/s/:streamId` — canonical server-rendered detail pages
   (`server/ssr.js`).
 
 Phase 8 readiness criteria:

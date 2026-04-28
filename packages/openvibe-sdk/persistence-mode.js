@@ -1,10 +1,10 @@
 'use strict';
 
 // OpenVibe persistence-mode helper. Centralizes the env contract used by
-// every service `db.js`. Phase 8 default remains `sqlite` so local
-// bring-up stays trivial; `postgres` and `staging` are advertised modes
-// but require explicit opt-in via env. Compat mode is also exposed so
-// readiness/audit can reason about it consistently.
+// every service `db.js`. SQLite remains a local-dev bootstrap mode, while
+// staging/prod are expected to point at the canonical Postgres store.
+// Compat mode is exposed so readiness/audit can reason about legacy bridges
+// consistently during migration work.
 
 function readMode(envKey) {
     const raw = process.env[envKey] || process.env.OPENVIBE_PERSISTENCE_MODE || 'sqlite';
@@ -19,6 +19,12 @@ function isLegacyCompatEnabled() {
     if (raw == null || raw === '') return false;
     const v = String(raw).trim().toLowerCase();
     return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+function isLocalLikeEnv() {
+    const raw = process.env.OPENVIBE_ENV || process.env.NODE_ENV || 'local';
+    const value = String(raw).trim().toLowerCase();
+    return value === 'local' || value === 'development' || value === 'dev' || value === 'test';
 }
 
 function describePersistence(serviceName, dbPath) {
@@ -40,12 +46,17 @@ function describePersistence(serviceName, dbPath) {
 function warnIfUnsupported(serviceName, dbPath) {
     const desc = describePersistence(serviceName, dbPath);
     if (desc.mode !== 'sqlite' && !desc.database_url_configured) {
+        throw new Error(
+            `[${serviceName}] persistence mode '${desc.mode}' requires OPENVIBE_DATABASE_URL or OPENVIBE_STAGING_DATABASE_URL.`,
+        );
+    }
+    if (!isLocalLikeEnv() && desc.mode === 'sqlite') {
         console.warn(
-            `[${serviceName}] persistence mode '${desc.mode}' requested but no DATABASE_URL configured — falling back to SQLite (${dbPath}).`,
+            `[${serviceName}] sqlite mode is intended for local/dev bootstrap only; staging/prod should use OPENVIBE_PERSISTENCE_MODE=postgres.`,
         );
     } else if (desc.mode === 'postgres' || desc.mode === 'staging') {
         console.warn(
-            `[${serviceName}] persistence mode '${desc.mode}' is advertised by Phase 8 but the runtime adapter is the SQLite adapter — set up the canonical Postgres staging via scripts/migrate-hobo/load-postgres.js separately.`,
+            `[${serviceName}] persistence mode '${desc.mode}' selected. Ensure the canonical Postgres staging loaders have hydrated the target before serving traffic.`,
         );
     }
     return desc;
@@ -54,6 +65,7 @@ function warnIfUnsupported(serviceName, dbPath) {
 module.exports = {
     describePersistence,
     isLegacyCompatEnabled,
+    isLocalLikeEnv,
     readMode,
     warnIfUnsupported,
 };

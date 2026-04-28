@@ -9,8 +9,12 @@
 // expanded to cover the OpenVibe registry / settings / migration surfaces.
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const db = require('../db');
 const audit = require('../audit');
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
 const ROLE_RANK = { user: 0, streamer: 1, global_mod: 2, admin: 3 };
 
@@ -106,6 +110,102 @@ function recentAudit({ limit = 100 } = {}) {
     ).all(Math.min(Number(limit) || 100, 500));
 }
 
+function readJsonIfExists(filePath) {
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+        return null;
+    }
+}
+
+function summarizeChecks(checks) {
+    const summary = { green: 0, yellow: 0, red: 0 };
+    for (const check of checks || []) {
+        if (check && summary[check.status] != null) {
+            summary[check.status] += 1;
+        }
+    }
+    return summary;
+}
+
+function artifactInfo(rootDir, relativePath) {
+    const fullPath = path.join(rootDir, relativePath);
+    if (!fs.existsSync(fullPath)) {
+        return { path: relativePath, exists: false, size_bytes: 0, updated_at: null };
+    }
+    const stat = fs.statSync(fullPath);
+    return {
+        path: relativePath,
+        exists: true,
+        size_bytes: stat.size,
+        updated_at: stat.mtime.toISOString(),
+    };
+}
+
+function buildMigrationStatus(rootDir = REPO_ROOT) {
+    const importPath = path.join('data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit', 'import-report.json');
+    const validationPath = path.join('data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit', 'validation-summary.json');
+    const stagingPath = path.join('data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit', 'staging-load-report.json');
+    const mediaPath = path.join('data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit', 'media-backfill-report.json');
+    const readinessPath = path.join('data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit', 'readiness-report.json');
+    const cutoverPath = path.join('data', 'migrations', 'cutover-report.json');
+
+    const importReport = readJsonIfExists(path.join(rootDir, importPath));
+    const validationReport = readJsonIfExists(path.join(rootDir, validationPath));
+    const stagingReport = readJsonIfExists(path.join(rootDir, stagingPath));
+    const mediaReport = readJsonIfExists(path.join(rootDir, mediaPath));
+    const readinessReport = readJsonIfExists(path.join(rootDir, readinessPath));
+    const cutoverReport = readJsonIfExists(path.join(rootDir, cutoverPath));
+
+    const artifacts = [
+        artifactInfo(rootDir, importPath),
+        artifactInfo(rootDir, validationPath),
+        artifactInfo(rootDir, stagingPath),
+        artifactInfo(rootDir, mediaPath),
+        artifactInfo(rootDir, readinessPath),
+        artifactInfo(rootDir, cutoverPath),
+    ];
+
+    return {
+        generated_at: new Date().toISOString(),
+        artifacts,
+        import: importReport ? {
+            dataset_count: Object.keys(importReport.datasets || {}).length,
+            exclusion_count: (importReport.exclusions || []).length,
+            warning_count: (importReport.warnings || []).length,
+        } : null,
+        validation: validationReport ? {
+            summary: validationReport.summary || summarizeChecks(validationReport.checks),
+            dataset_count: Object.keys(validationReport.datasets || {}).length,
+        } : null,
+        staging: stagingReport ? {
+            run_id: stagingReport.run_id || null,
+            dry_run: !!stagingReport.dry_run,
+            load_scope: stagingReport.load_scope || null,
+            dataset_count: Object.keys(stagingReport.datasets || {}).length,
+            manual_action_count: (stagingReport.manual_actions || []).length,
+            selected_services: stagingReport.selected_services || [],
+            selected_datasets: stagingReport.selected_datasets || [],
+        } : null,
+        media: mediaReport ? {
+            copied_records: mediaReport.copied_records || 0,
+            copied_bytes: mediaReport.copied_bytes || 0,
+            missing_files: (mediaReport.missing_files || []).length,
+            strict_mode: !!mediaReport.strict_mode,
+        } : null,
+        readiness: readinessReport ? {
+            summary: readinessReport.summary || summarizeChecks(readinessReport.checks),
+            manual_action_count: (readinessReport.manual_actions || []).length,
+        } : null,
+        cutover: cutoverReport ? {
+            gate: cutoverReport.gate || null,
+            summary: cutoverReport.summary || summarizeChecks(cutoverReport.checks),
+            check_count: (cutoverReport.checks || []).length,
+        } : null,
+        manual_actions_preview: (stagingReport && stagingReport.manual_actions || []).slice(0, 10),
+    };
+}
+
 function actorOfReq(req) {
     const u = req.user || {};
     const role = u.role || (u.id ? getRole(u.id) : 'user');
@@ -171,6 +271,10 @@ function buildRouter() {
         res.json({ items: recentAudit({ limit: req.query.limit }) });
     });
 
+    r.get('/admin/migration-status', (_req, res) => {
+        res.json(buildMigrationStatus());
+    });
+
     r.post('/admin/broadcast', express.json(), requireCapability('broadcast_notifications'), (req, res) => {
         recordAudit({ actor: req.staffActor, action: 'admin.broadcast', target: null, detail: req.body || {} });
         res.json({ ok: true, queued: true });
@@ -190,6 +294,7 @@ module.exports = {
     rankOf,
     recentAudit,
     recordAudit,
+    buildMigrationStatus,
     requireCapability,
     setRole,
 };

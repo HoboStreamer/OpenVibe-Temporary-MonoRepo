@@ -20,6 +20,12 @@ function buildRouter(deps) {
     const r = express.Router();
     const { events } = deps;
 
+    function resolveUserId(req, rawUserId) {
+        if (String(rawUserId) !== 'me') return String(rawUserId);
+        if (!req.user) return null;
+        return String(req.user.sub || req.user.id || '');
+    }
+
     function actorMeta(req) {
         const a = policy.actorOfReq(req);
         return { actorType: a.type, actorId: a.id };
@@ -27,7 +33,9 @@ function buildRouter(deps) {
 
     // GET single
     r.get('/user-modules/:userId/:namespace', (req, res) => {
-        const { userId, namespace } = req.params;
+        const namespace = req.params.namespace;
+        const userId = resolveUserId(req, req.params.userId);
+        if (!userId) return res.status(401).json({ error: 'authentication required for /me alias' });
         try {
             policy.assert(policy.decideUserModuleRead({ req, userId, namespace }),
                 { ...actorMeta(req), action: 'read', resource: `user_module:${userId}:${namespace}` });
@@ -44,7 +52,9 @@ function buildRouter(deps) {
 
     // PUT (upsert full)
     r.put('/user-modules/:userId/:namespace', express.json(), async (req, res) => {
-        const { userId, namespace } = req.params;
+        const namespace = req.params.namespace;
+        const userId = resolveUserId(req, req.params.userId);
+        if (!userId) return res.status(401).json({ error: 'authentication required for /me alias' });
         const body = req.body || {};
         const def = namespaces.getNamespaceDef(namespace);
         if (!def && !namespaces.isModNamespace(namespace)) {
@@ -104,7 +114,8 @@ function buildRouter(deps) {
 
     // List all namespaces for a user (filtered to ones the caller may read)
     r.get('/user-modules/:userId', (req, res) => {
-        const { userId } = req.params;
+        const userId = resolveUserId(req, req.params.userId);
+        if (!userId) return res.status(401).json({ error: 'authentication required for /me alias' });
         const rows = db.get().prepare(
             `SELECT user_id, namespace, owner, schema_version, data_json, updated_at
              FROM user_modules WHERE user_id = ? ORDER BY namespace`
@@ -117,7 +128,9 @@ function buildRouter(deps) {
 
     // History (admin-or-owner-service only)
     r.get('/user-modules/:userId/:namespace/history', (req, res) => {
-        const { userId, namespace } = req.params;
+        const namespace = req.params.namespace;
+        const userId = resolveUserId(req, req.params.userId);
+        if (!userId) return res.status(401).json({ error: 'authentication required for /me alias' });
         const def = namespaces.getNamespaceDef(namespace);
         const owner = def ? def.owner : (namespaces.parseModNamespace(namespace) || {}).modId || null;
         const isOwnerService = req.serviceActor && req.serviceActor === owner;

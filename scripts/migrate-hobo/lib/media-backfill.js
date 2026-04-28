@@ -101,6 +101,10 @@ async function backfillMedia(options) {
         publicBaseUrl,
         dryRun,
         logger,
+        // strict=true means missing legacy media files cause the run to throw.
+        // Default is non-fatal: missing files are recorded in the report and
+        // the operator decides whether to re-fetch and rerun.
+        strict = false,
     } = options;
 
     const resolvedBundleDir = path.resolve(bundleDir);
@@ -181,8 +185,14 @@ async function backfillMedia(options) {
 
         if (!dryRun && report.missing_files.length > 0) {
             const missingCount = report.missing_files.length;
-            throw new Error(`Media backfill incomplete: ${missingCount} missing files detected. Re-fetch legacy media artifacts and ensure the source artifact bundle contains the full media store.`);
+            const message = `Media backfill incomplete: ${missingCount} missing files detected. Re-fetch legacy media artifacts and ensure the source artifact bundle contains the full media store.`;
+            if (strict) {
+                throw new Error(message);
+            } else if (logger) {
+                logger.warn(`[media-backfill] ${message} (continuing because --strict was not set)`);
+            }
         }
+        report.strict_mode = !!strict;
 
         const reportPath = path.join(resolvedBundleDir, 'audit', 'media-backfill-report.json');
         writeJson(reportPath, report);

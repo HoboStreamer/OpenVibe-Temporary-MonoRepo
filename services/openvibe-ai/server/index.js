@@ -28,6 +28,7 @@ function buildApp() {
     app.get('/health', (_req, res) => res.json({
         ok: true, service: config.serviceId,
         canonical_host: config.canonicalHost,
+        persistence: db.describePersistence(),
         seeded,
     }));
 

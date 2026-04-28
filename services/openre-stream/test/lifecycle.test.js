@@ -37,7 +37,7 @@ const dst = model.createDestination({ owner_user_id: '42', kind: 'twitch', targe
 assert.ok(dst.id.startsWith('dst_'));
 model.setOutputState({ stream_id: s.id, destination_id: dst.id, state: 'started' });
 
-model.recordMirror({ stream_id: s.id, live_url: 'http://live/c/alice', channel_slug: 'alice' });
+model.recordMirror({ stream_id: s.id, live_url: 'http://live/@alice', channel_slug: 'alice' });
 assert.ok(model.getMirrorState(s.id).live_url.includes('alice'));
 
 console.log('openre-stream lifecycle tests OK');

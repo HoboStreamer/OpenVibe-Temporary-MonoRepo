@@ -6,10 +6,13 @@
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { warnIfUnsupported } = require('@openvibe/sdk');
 
 let dbInstance = null;
+let persistenceDescriptor = null;
 
 function init(dbPath) {
+    persistenceDescriptor = warnIfUnsupported('openvibe-live', dbPath);
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -76,4 +79,8 @@ function get() {
     return dbInstance;
 }
 
-module.exports = { init, get };
+function describePersistence() {
+    return persistenceDescriptor || { service: 'openvibe-live', mode: 'sqlite', database_url_configured: false };
+}
+
+module.exports = { init, get, describePersistence };

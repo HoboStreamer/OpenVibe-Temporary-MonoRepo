@@ -2,11 +2,10 @@
 
 // openvibe-network — URL registry surface.
 //
-// We do NOT replace the hobo-tools URL registry. Instead this endpoint
-// returns the federated view:
-//   1. fetch the legacy hobo-tools resolved registry (when configured)
-//   2. overlay any OpenVibe-specific keys stored in url_registry_overlay
-//   3. return the merged map plus the OpenVibe surface URLs
+// This endpoint returns the runtime-resolved OpenVibe URL registry.
+// Legacy hobo-tools values may still be imported best-effort when explicitly
+// configured for migration diagnostics, but the OpenVibe runtime view is
+// authoritative.
 //
 // Consumers (HoboStreamer, future OpenVibe services) get a single endpoint
 // that always works, even when hobo-tools is offline (fallback to env+overlay).
@@ -69,6 +68,8 @@ function buildRouter(deps) {
             OPENVIBE_BILLING_INTERNAL_URL: config.billing && config.billing.internalUrl,
             OPENVIBE_AI_URL:               config.ai && config.ai.url,
             OPENVIBE_AI_INTERNAL_URL:      config.ai && config.ai.internalUrl,
+            OPENVIBE_GAMES_URL:            config.games && config.games.url,
+            OPENVIBE_GAMES_INTERNAL_URL:   config.games && config.games.internalUrl,
             AI_OPENVIBE_NETWORK_HOST:      config.ai && config.ai.canonicalHost,
         };
         for (const [k, v] of Object.entries(surfaceMap)) {

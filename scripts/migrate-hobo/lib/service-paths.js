@@ -13,6 +13,7 @@ const DEFAULT_SERVICE_DB_PATHS = {
     live: path.join(ROOT, 'services', 'openvibe-live', 'data', 'openvibe-live.db'),
     chat: path.join(ROOT, 'services', 'openvibe-chat', 'data', 'openvibe-chat.db'),
     community: path.join(ROOT, 'services', 'openvibe-community', 'data', 'openvibe-community.db'),
+    games: path.join(ROOT, 'services', 'openvibe-games', 'data', 'openvibe-games.db'),
     ai: path.join(ROOT, 'services', 'openvibe-ai', 'data', 'openvibe-ai.db'),
 };
 

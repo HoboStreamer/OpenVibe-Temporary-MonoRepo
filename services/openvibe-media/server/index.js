@@ -29,6 +29,7 @@ function buildApp() {
     app.get('/health', (_req, res) => res.json({
         ok: true,
         service: config.serviceId,
+        persistence: db.describePersistence(),
         storage: storage.describePlan ? storage.describePlan() : { write_provider: storage.name() },
     }));
 

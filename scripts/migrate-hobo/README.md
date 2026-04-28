@@ -1,7 +1,7 @@
 # Hobo → OpenVibe migration scaffold
 
 This folder contains the **cutover foundation** for moving durable data out of
-`HoboStreamer.com` and `HoboApp/hobo-tools` into the canonical OpenVibe model,
+`HoboStreamer.com`, `HoboApp/hobo-tools`, and `HoboApp/hobo-quest` into the canonical OpenVibe model,
 then hydrating the current SQLite-backed OpenVibe staging services for a
 repeatable hard-cutover rehearsal.
 
@@ -55,6 +55,18 @@ Durable data is exported from tables including:
 - `anon_users`, `user_effects`, `follows`, `verification_keys`
 - sanitized `oauth_clients` metadata (client secret redacted)
 
+### HoboQuest
+
+Durable data is exported from tables including:
+- `game_world_state`, `game_players`, `game_inventory`, `game_bank`
+- `game_structures`, `game_farm_plots`, `game_recipes`, `game_effects`
+- `game_battle_stats`, `game_dungeon_runs`, `game_leaderboard`
+- `game_fish_collection`, `game_daily_quest_progress`, `game_daily_quest_claims`
+- `game_achievements`, `user_cosmetics`, `user_equipped`, `user_tags`,
+  `user_equipped_tag`, `tag_guardian_defeats`
+- `canvas_settings`, `canvas_tiles`, `canvas_actions`, `canvas_snapshots`,
+  `canvas_region_locks`, `canvas_bans`, `canvas_user_overrides`
+
 ## Exclusions
 
 Explicit canonical import exclusions include:
@@ -82,29 +94,41 @@ Optional flags:
 
 Same flags as above.
 
-### 3. Build the canonical OpenVibe bundle
+### 3. Export HoboQuest
 
-Reads the `hobostreamer/` and `hobotools/` export folders and writes
+Same flags as above. The default legacy root resolves to
+`HoboReposToMigrateFrom/HoboApp/hobo-quest` and the default SQLite file is
+`data/hobo-quest.db`.
+
+### 4. Build the canonical OpenVibe bundle
+
+Reads the `hobostreamer/`, `hobotools/`, and optional `hoboquest/` export
+folders and writes
 `openvibe-target/` with domain-organized NDJSON datasets plus
 `audit/import-report.json`.
 
-### 4. Load the current staging OpenVibe SQLite stores
+The importer also reads `hoboquest/` when present and emits canonical
+`games/*` datasets covering native game progression, cosmetics, tags, and the
+pixel canvas archive.
+
+### 5. Load the current staging OpenVibe SQLite stores
 
 `load-staging-openvibe.js` reads `openvibe-target/**/*.ndjson` and upserts the
 current staging service databases:
 
 - direct runtime tables where the service already has a compatible model
+- native games/canvas tables inside `openvibe-games`
 - `staging_import_records` holding tables when the runtime model is not ready
 
 The loader is idempotent and writes `openvibe-target/audit/staging-load-report.json`.
 
-### 5. Backfill hot media storage
+### 6. Backfill hot media storage
 
 `backfill-media.js` copies media bytes from the fetched local Hobo artifact root
 into the configured hot-storage root and updates `media_objects` metadata. Files
 missing from the local staging artifact mirror are diagnostics, not fatal errors.
 
-### 6. Validate / reconcile
+### 7. Validate / reconcile
 
 Reads the canonical bundle and writes `audit/validation-summary.json`.
 Validation currently checks:
@@ -113,13 +137,13 @@ Validation currently checks:
 - presence of the required Hobo Bucks exclusions
 - import-report structural consistency
 
-### 7. Rehearse the full staging cutover
+### 8. Rehearse the full staging cutover
 
 `staging-cutover-rehearsal.js` coordinates:
 
 1. production fetch (optional)
 2. Hobo NDJSON export
-3. canonical bundle generation
+3. canonical bundle generation (including `games/*` when HoboQuest artifacts are available)
 4. bundle validation
 5. staging SQLite hydration
 6. media hot-storage backfill
@@ -149,6 +173,10 @@ or simply:
 
 The script will automatically start `ssh-agent` if needed, load the configured key, and prompt for the passphrase once.
 
+When HoboQuest is deployed outside the default paths, pass
+`--remote-hoboquest-root` and `--remote-hoboquest-db` so the fetch stage can
+copy the quest/canvas snapshot deterministically.
+
 ### Full staging rehearsal
 
 `node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging`
@@ -169,13 +197,18 @@ The script will automatically start `ssh-agent` if needed, load the configured k
 ├── production-source/
 │   ├── hobostreamer/
 │   │   └── data/
-│   └── hobotools/
+│   ├── hobotools/
+│       └── data/
+│   └── hoboquest/
 │       └── data/
 ├── hobostreamer/
 │   ├── manifest.json
 │   ├── tables/*.ndjson
 │   └── diagnostics/missing-media.ndjson
 ├── hobotools/
+│   ├── manifest.json
+│   └── tables/*.ndjson
+├── hoboquest/
 │   ├── manifest.json
 │   └── tables/*.ndjson
 └── openvibe-target/
@@ -187,14 +220,15 @@ The script will automatically start `ssh-agent` if needed, load the configured k
     ├── chat/*.ndjson
     ├── community/*.ndjson
     ├── media/*.ndjson
+    ├── games/*.ndjson
     ├── billing/*.ndjson
     ├── loyalty/*.ndjson
     └── audit/
         ├── import-report.json
-        └── validation-summary.json
-      ├── staging-load-report.json
-      ├── media-backfill-report.json
-      └── readiness-report.json
+        ├── validation-summary.json
+        ├── staging-load-report.json
+        ├── media-backfill-report.json
+        └── readiness-report.json
 ```
 
 ## Safety notes

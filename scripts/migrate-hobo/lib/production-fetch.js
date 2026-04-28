@@ -21,6 +21,13 @@ const DEFAULT_DISCOVERY = {
         '~/hobo-tools',
         '~/HoboApp/hobo-tools',
     ],
+    hoboquestRoots: [
+        '/opt/hobo/hobo-quest',
+        '/opt/hobo-quest',
+        '/srv/hobo-quest',
+        '~/hobo-quest',
+        '~/HoboApp/hobo-quest',
+    ],
     hobostreamerDbCandidates: [
         '/opt/hobostreamer/data/hobostreamer.db',
         '/srv/hobostreamer/data/hobostreamer.db',
@@ -33,6 +40,13 @@ const DEFAULT_DISCOVERY = {
         '/srv/hobo-tools/data/hobo-tools.db',
         '~/hobo-tools/data/hobo-tools.db',
         '~/HoboApp/hobo-tools/data/hobo-tools.db',
+    ],
+    hoboquestDbCandidates: [
+        '/opt/hobo/hobo-quest/data/hobo-quest.db',
+        '/opt/hobo-quest/data/hobo-quest.db',
+        '/srv/hobo-quest/data/hobo-quest.db',
+        '~/hobo-quest/data/hobo-quest.db',
+        '~/HoboApp/hobo-quest/data/hobo-quest.db',
     ],
     hobostreamerMediaDirs: [
         'data/vods',
@@ -420,10 +434,13 @@ function buildCopyPlan(options) {
         sourceRoot,
         hobostreamerLocalRoot: path.join(sourceRoot, 'hobostreamer'),
         hobotoolsLocalRoot: path.join(sourceRoot, 'hobotools'),
+        hoboquestLocalRoot: path.join(sourceRoot, 'hoboquest'),
         hobostreamerLocalDb: path.join(sourceRoot, 'hobostreamer', 'data', 'hobostreamer.db'),
         hobotoolsLocalDb: path.join(sourceRoot, 'hobotools', 'data', 'hobo-tools.db'),
+        hoboquestLocalDb: path.join(sourceRoot, 'hoboquest', 'data', 'hobo-quest.db'),
         hobostreamerManifestPath: path.join(outDir, 'hobostreamer', 'manifest.json'),
         hobotoolsManifestPath: path.join(outDir, 'hobotools', 'manifest.json'),
+        hoboquestManifestPath: path.join(outDir, 'hoboquest', 'manifest.json'),
         reportPath: path.join(outDir, 'production-fetch-report.json'),
     };
 }
@@ -454,8 +471,10 @@ function fetchProductionArtifacts(options) {
         outDir,
         remoteHobostreamerRoot,
         remoteHobotoolsRoot,
+        remoteHoboquestRoot,
         remoteHobostreamerDb,
         remoteHobotoolsDb,
+        remoteHoboquestDb,
         dryRun,
         skipMedia,
         mediaMode,
@@ -474,6 +493,7 @@ function fetchProductionArtifacts(options) {
     ensureDir(copyPlan.outDir);
     ensureDir(path.dirname(copyPlan.hobostreamerManifestPath));
     ensureDir(path.dirname(copyPlan.hobotoolsManifestPath));
+    ensureDir(path.dirname(copyPlan.hoboquestManifestPath));
 
     const hobostreamerRootDiscovery = discoverExisting(
         executor,
@@ -491,9 +511,18 @@ function fetchProductionArtifacts(options) {
             ...DEFAULT_DISCOVERY.hobotoolsRoots,
         ]
     );
+    const hoboquestRootDiscovery = discoverExisting(
+        executor,
+        connection,
+        [
+            remoteHoboquestRoot,
+            ...DEFAULT_DISCOVERY.hoboquestRoots,
+        ]
+    );
 
     const hobostreamerRoot = remoteHobostreamerRoot || hobostreamerRootDiscovery.selected;
     const hobotoolsRoot = remoteHobotoolsRoot || hobotoolsRootDiscovery.selected;
+    const hoboquestRoot = remoteHoboquestRoot || hoboquestRootDiscovery.selected;
 
     const hobostreamerDbDiscovery = discoverExisting(
         executor,
@@ -513,9 +542,19 @@ function fetchProductionArtifacts(options) {
             ...DEFAULT_DISCOVERY.hobotoolsDbCandidates,
         ]
     );
+    const hoboquestDbDiscovery = discoverExisting(
+        executor,
+        connection,
+        [
+            remoteHoboquestDb,
+            hoboquestRoot ? remotePathJoin(hoboquestRoot, 'data/hobo-quest.db') : null,
+            ...DEFAULT_DISCOVERY.hoboquestDbCandidates,
+        ]
+    );
 
     const resolvedHobostreamerDb = remoteHobostreamerDb || hobostreamerDbDiscovery.selected;
     const resolvedHobotoolsDb = remoteHobotoolsDb || hobotoolsDbDiscovery.selected;
+    const resolvedHoboquestDb = remoteHoboquestDb || hoboquestDbDiscovery.selected;
 
     const mediaInventories = [];
     if (!skipMedia && hobostreamerRoot) {
@@ -528,6 +567,7 @@ function fetchProductionArtifacts(options) {
     const remoteTempRoot = createRemoteTempRoot();
     let hobostreamerSnapshot = null;
     let hobotoolsSnapshot = null;
+    let hoboquestSnapshot = null;
 
     if (!dryRun && resolvedHobostreamerDb) {
         hobostreamerSnapshot = createRemoteSqliteSnapshot(executor, connection, resolvedHobostreamerDb, 'hobostreamer', remoteTempRoot);
@@ -537,6 +577,11 @@ function fetchProductionArtifacts(options) {
     if (!dryRun && resolvedHobotoolsDb) {
         hobotoolsSnapshot = createRemoteSqliteSnapshot(executor, connection, resolvedHobotoolsDb, 'hobo-tools', remoteTempRoot);
         scpFile(executor, connection, hobotoolsSnapshot, copyPlan.hobotoolsLocalDb);
+    }
+
+    if (!dryRun && resolvedHoboquestDb) {
+        hoboquestSnapshot = createRemoteSqliteSnapshot(executor, connection, resolvedHoboquestDb, 'hobo-quest', remoteTempRoot);
+        scpFile(executor, connection, hoboquestSnapshot, copyPlan.hoboquestLocalDb);
     }
 
     if (!dryRun && !skipMedia && mediaMode === 'copy-hot') {
@@ -610,6 +655,27 @@ function fetchProductionArtifacts(options) {
         config_artifacts: hobotoolsRoot ? safeConfigEntries(hobotoolsRoot) : [],
     };
 
+    const hoboquestManifest = {
+        service: 'hoboquest',
+        generated_at: new Date().toISOString(),
+        dry_run: !!dryRun,
+        remote_root: hoboquestRoot || null,
+        remote_db: resolvedHoboquestDb || null,
+        remote_snapshot: hoboquestSnapshot,
+        local_root: copyPlan.hoboquestLocalRoot,
+        local_db: copyPlan.hoboquestLocalDb,
+        discovery: {
+            roots: hoboquestRootDiscovery,
+            db: hoboquestDbDiscovery,
+        },
+        media: {
+            skipped: true,
+            mode: 'none',
+            inventories: [],
+        },
+        config_artifacts: hoboquestRoot ? safeConfigEntries(hoboquestRoot) : [],
+    };
+
     const manualActions = [];
     if (!remoteHobostreamerRoot) {
         manualActions.push('Explicit --remote-hobostreamer-root was not provided; explicit remote roots improve fetch determinism.');
@@ -622,6 +688,18 @@ function fetchProductionArtifacts(options) {
     }
     if (!hobotoolsRoot) {
         manualActions.push('Could not automatically discover the remote hobo-tools root. Pass --remote-hobotools-root to avoid guesswork.');
+    }
+    if (!remoteHoboquestRoot) {
+        manualActions.push('Explicit --remote-hoboquest-root was not provided; explicit remote roots improve fetch determinism for HoboQuest game/canvas exports.');
+    }
+    if (!remoteHoboquestDb) {
+        manualActions.push('Explicit --remote-hoboquest-db was not provided; explicit remote DB paths improve fetch determinism for HoboQuest game/canvas exports.');
+    }
+    if (!hoboquestRoot) {
+        manualActions.push('Could not automatically discover the remote HoboQuest root. Pass --remote-hoboquest-root if game/canvas data lives outside the default paths.');
+    }
+    if (!resolvedHoboquestDb) {
+        manualActions.push('Could not automatically discover the remote HoboQuest SQLite database. Pass --remote-hoboquest-db if game/canvas data is deployed separately.');
     }
     if (!resolvedHobostreamerDb) {
         manualActions.push('Could not automatically discover the remote HoboStreamer SQLite database. Pass --remote-hobostreamer-db.');
@@ -659,11 +737,13 @@ function fetchProductionArtifacts(options) {
         skip_media: !!skipMedia,
         hobostreamer: hobostreamerManifest,
         hobotools: hobotoolsManifest,
+        hoboquest: hoboquestManifest,
         manual_actions: manualActions,
     };
 
     writeJson(copyPlan.hobostreamerManifestPath, hobostreamerManifest);
     writeJson(copyPlan.hobotoolsManifestPath, hobotoolsManifest);
+    writeJson(copyPlan.hoboquestManifestPath, hoboquestManifest);
     writeJson(copyPlan.reportPath, report);
 
     if (logger) {

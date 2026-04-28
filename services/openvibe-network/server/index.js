@@ -10,6 +10,7 @@ const config = require('./config');
 const db = require('./db');
 const audit = require('./audit');
 const { buildIdentity } = require('./identity');
+const { buildNativeAuth } = require('./native-auth');
 const { buildHoboToolsProxy } = require('./proxy');
 const { attachHostRouter } = require('./host-router');
 const { serviceActorMiddleware } = require('./middleware/service-actor');
@@ -27,6 +28,7 @@ function buildApp() {
     db.init(config.db.path);
 
     const identity = buildIdentity(config);
+    const nativeAuth = buildNativeAuth({ config, identity });
 
     // Multi-issuer auth client built from the same trusted issuers we publish
     // in the JWKS, so verifying tokens stays consistent with the identity surface.
@@ -53,6 +55,7 @@ function buildApp() {
     app.get('/health', (_req, res) => res.json({
         ok: true,
         service: 'openvibe-network',
+        persistence: db.describePersistence(),
         federation: config.hoboTools.publicUrl ? { hobo_tools: config.hoboTools.publicUrl } : { mode: 'native' },
         trusted_issuers: identity.trustedIssuers.map(i => ({ issuer: i.issuer, label: i.label })),
     }));
@@ -69,7 +72,9 @@ function buildApp() {
     apiRouter.use(contractRegistry.buildRouter({ events }));
     apiRouter.use(urlRegistry.buildRouter({ config }));
     apiRouter.use(staff.buildRouter());
+    apiRouter.use(nativeAuth.buildAccountRouter());
 
+    apiRouter.get('/session', (req, res) => res.json({ authenticated: !!req.user, user: req.user || null }));
     apiRouter.get('/me', requireOpenVibeAuth(authClient), (req, res) => res.json({ user: req.user }));
     apiRouter.get('/audit', (req, res) => {
         // Read-only diagnostic — limited to admins.
@@ -86,7 +91,7 @@ function buildApp() {
     app.use('/api/v1', apiRouter);
 
     // ── host-aware surfaces (Phase 2) ────────────────────────
-    attachHostRouter({ app, config, hoboToolsProxy, identity });
+    attachHostRouter({ app, config, hoboToolsProxy, identity, nativeAuth });
 
     // Static shells fallback (the host router already serves these per surface,
     // but expose the bundle so a developer can hit /admin.html directly during

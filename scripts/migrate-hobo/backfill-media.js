@@ -22,6 +22,7 @@ async function main() {
         hotRoot: path.resolve(args.hotRoot || process.env.OPENVIBE_MEDIA_HOT_ROOT || path.join(ROOT, 'services', 'openvibe-media', 'data', 'storage', 'hot')),
         publicBaseUrl: args.publicBaseUrl || process.env.OPENVIBE_MEDIA_PUBLIC_BASE_URL || 'http://127.0.0.1:4500',
         dryRun: !!args.dryRun,
+        strict: !!args.strict,
         logger,
     });
 

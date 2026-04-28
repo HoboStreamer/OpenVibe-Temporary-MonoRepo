@@ -19,6 +19,7 @@ const CHAT_EVENT_TYPES = Object.freeze({
     MESSAGE_DELETED:        'chat.message.deleted',
     MESSAGE_MODERATED:      'chat.message.moderated',
     DM_CREATED:             'chat.dm.created',
+    DM_READ:                'chat.dm.read',
     CALL_STARTED:           'chat.call.started',
     CALL_RINGING:           'chat.call.ringing',
     CALL_ACCEPTED:          'chat.call.accepted',

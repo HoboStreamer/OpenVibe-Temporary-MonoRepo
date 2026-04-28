@@ -6,7 +6,7 @@ Numbering follows the later (corrected) numbering used in
 | # | Name | Status | Where |
 |---|---|---|---|
 | 1 | Platform Kernel Foundations | ✅ implemented in this commit | `services/openvibe-network`, `services/openvibe-events`, `packages/openvibe-contracts`, `packages/openvibe-sdk` |
-| 2 | Identity / Control Plane Extraction | ✅ implemented in this commit (federation mode) | `services/openvibe-network/server/identity.js` + host surfaces |
+| 2 | Identity / Control Plane Extraction | 🚧 native cutover in progress | `services/openvibe-network/server/identity.js` + host surfaces |
 | 3 | Media platform extraction | ✅ implemented in this commit | `services/openvibe-media`, `packages/openvibe-contracts/src/media-namespaces.js`, `packages/openvibe-sdk` (`MediaClient`), `compat/hobostreamer/` + `/opt/hobostreamer/server/openvibe-bridge/media.js` |
 | 4 | openvibe.live + openre.stream split | ✅ implemented in this commit | `services/openvibe-live` (SSR), `services/openre-stream` (ingest/restream), `packages/openvibe-contracts/src/stream-events.js`, `packages/openvibe-sdk` (`StreamClient`), `/opt/hobostreamer/server/openvibe-bridge/stream.js` |
 | 5 | Chat / community / product migration | ✅ implemented in this commit | `services/openvibe-chat`, `services/openvibe-community`, `packages/openvibe-contracts/{chat-events,community-events}.js`, `packages/openvibe-sdk` (`ChatClient`, `CommunityClient`), `/opt/hobostreamer/server/openvibe-bridge/{chat,community}.js` |
@@ -14,11 +14,9 @@ Numbering follows the later (corrected) numbering used in
 | 7 | AI / SEO / Sources / Search backbone | ✅ implemented in this commit | `services/openvibe-ai`, `packages/openvibe-contracts/ai-events.js`, `packages/openvibe-sdk` (`AiClient`), `/opt/hobostreamer/server/openvibe-bridge/ai.js` |
 | 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
 
-> Note: the checked-in SQLite services and additive compatibility bridges remain
-> transitional scaffolding for local bring-up and staged migration work. The
-> authoritative production target is now documented in
-> `docs/openvibe/persistence-cutover-plan.md`, with the canonical legacy
-> mapping in `docs/openvibe/hobo-to-openvibe-data-map.md`.
+> Note: the checked-in SQLite services remain useful for local bring-up, but
+> the requested hard-cut target is PostgreSQL-backed native OpenVibe runtime
+> with legacy Hobo folders used only for export/migration/reference.
 
 ## Phase 1 — Platform Kernel Foundations: acceptance
 
@@ -115,7 +113,8 @@ Numbering follows the later (corrected) numbering used in
    `stream.vod.attached`. Wrapper merges channel context into the
    `buildStreamEventPayload(stream, extra)` envelope. ✅
 4. `services/openvibe-live` boots on port `4600` and serves SSR pages at
-   `/`, `/c/:slug`, `/c/:slug/s/:streamId`. Every page emits `<title>`,
+   `/`, `/@:slug`, `/@:slug/s/:streamId` (with legacy `/c/:slug*`
+   compatibility redirects). Every page emits `<title>`,
    `<meta name=description>`, `<link rel=canonical>`, full og: + twitter:
    card metadata. `og:type` flips to `video.other` when the channel is
    live; offline channels render an SEO-clean shell with
@@ -373,10 +372,15 @@ and [services/openvibe-events/README.md](services/openvibe-events/README.md).
     [search-index-seam.md](docs/openvibe/search-index-seam.md),
     [source-adapter-research.md](docs/openvibe/source-adapter-research.md). ✅
 
-## Phase 8 — OpenVibe runtime independence + Hobo migration ✅
+## Phase 8 — OpenVibe runtime independence + Hobo migration 🚧
 
-Implemented in this commit. See [docs/openvibe/phase-8.md](docs/openvibe/phase-8.md)
-for the per-WP index.
+The migration toolchain, native surfaces, and readiness artifacts exist, but
+the hard-cut runtime conversion is still in progress. See
+[docs/openvibe/phase-8.md](docs/openvibe/phase-8.md) for the per-WP index.
+
+Current hard-cut additions include the new `services/openvibe-games/` runtime
+for migrated player progression, inventory/bank state, cosmetics, daily quests,
+and collaborative canvas APIs/UI.
 
 1. **Hobo reference audit** — [scripts/audit-hobo-references.js](scripts/audit-hobo-references.js)
    classifies every `hobo*` mention as migration-source, legacy-compat,

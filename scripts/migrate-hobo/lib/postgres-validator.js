@@ -14,6 +14,8 @@ const REQUIRED_TABLES = [
     'chat_messages',
     'community_pastes',
     'media_objects',
+    'game_players',
+    'canvas_tiles',
     'loyalty_accounts',
     'legacy_finance_archive',
 ];

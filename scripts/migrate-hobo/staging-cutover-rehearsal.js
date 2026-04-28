@@ -29,8 +29,10 @@ function artifactSummary(sourceDir) {
     return {
         hobostreamer_db: productionSourceDb(sourceDir, 'hobostreamer', 'hobostreamer.db'),
         hobotools_db: productionSourceDb(sourceDir, 'hobotools', 'hobo-tools.db'),
+        hoboquest_db: productionSourceDb(sourceDir, 'hoboquest', 'hobo-quest.db'),
         hobostreamer_root: productionSourceRoot(sourceDir, 'hobostreamer'),
         hobotools_root: productionSourceRoot(sourceDir, 'hobotools'),
+        hoboquest_root: productionSourceRoot(sourceDir, 'hoboquest'),
     };
 }
 
@@ -60,6 +62,7 @@ async function main() {
         live: args.liveDb,
         chat: args.chatDb,
         community: args.communityDb,
+        games: args.gamesDb,
     });
 
     if (args.host || args.fetchProduction) {
@@ -68,8 +71,10 @@ async function main() {
             user: args.user || null,
             remoteHobostreamerRoot: args.remoteHobostreamerRoot || null,
             remoteHobotoolsRoot: args.remoteHobotoolsRoot || null,
+            remoteHoboquestRoot: args.remoteHoboquestRoot || null,
             remoteHobostreamerDb: args.remoteHobostreamerDb || null,
             remoteHobotoolsDb: args.remoteHobotoolsDb || null,
+            remoteHoboquestDb: args.remoteHoboquestDb || null,
             outDir: sourceDir,
             dryRun: !!args.dryRun,
             skipMedia: !!args.skipMedia,
@@ -106,6 +111,21 @@ async function main() {
         dryRun: false,
         logger,
     });
+
+    if (fs.existsSync(artifacts.hoboquest_db)) {
+        logger.info('Exporting read-only HoboQuest snapshot into NDJSON tables');
+        await exportSource({
+            sourceName: 'hoboquest',
+            dbPath: artifacts.hoboquest_db,
+            outDir,
+            batchSize: Number.parseInt(args.batchSize, 10) || 500,
+            legacyRoot: artifacts.hoboquest_root,
+            dryRun: false,
+            logger,
+        });
+    } else {
+        logger.warn(`HoboQuest SQLite snapshot not found at ${artifacts.hoboquest_db}; continuing without quest/canvas export.`);
+    }
 
     logger.info('Building canonical OpenVibe bundle');
     await importCanonicalBundle({

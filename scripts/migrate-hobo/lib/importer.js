@@ -65,6 +65,114 @@ function makeLegacyRef(source, table, legacyId) {
     };
 }
 
+const GAME_SOURCE_PRIORITY = Object.freeze(['hoboquest', 'hobostreamer']);
+
+const DAILY_QUEST_DEFINITIONS = Object.freeze({
+    'canvas-placements': {
+        title: 'Canvas Explorer',
+        description: 'Place 5 pixels on the shared community canvas.',
+        goal: 5,
+        reward: { coins: 25, loyalty_points: 10 },
+    },
+    'stockpile-items': {
+        title: 'Pack Rat',
+        description: 'Add 10 items to your adventure inventory.',
+        goal: 10,
+        reward: { coins: 40, loyalty_points: 20 },
+    },
+    'bank-trip': {
+        title: 'Safe Storage',
+        description: 'Make 1 deposit into the bank vault.',
+        goal: 1,
+        reward: { coins: 20, loyalty_points: 5 },
+    },
+});
+
+const DAILY_QUEST_TIER_FALLBACK = Object.freeze({
+    1: 'canvas-placements',
+    2: 'stockpile-items',
+    3: 'bank-trip',
+});
+
+function toNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function earliestTimestamp(left, right) {
+    if (!left) return right || null;
+    if (!right) return left;
+    return left <= right ? left : right;
+}
+
+function latestTimestamp(left, right) {
+    if (!left) return right || null;
+    if (!right) return left;
+    return left >= right ? left : right;
+}
+
+function ensureRowMetadata(row) {
+    if (!row.metadata || typeof row.metadata !== 'object') {
+        row.metadata = {};
+    }
+    if (!Array.isArray(row.metadata.sources)) {
+        row.metadata.sources = row.source ? [row.source] : [];
+    }
+    if (!Array.isArray(row.metadata.legacy_refs)) {
+        row.metadata.legacy_refs = row.legacy_ref ? [row.legacy_ref] : [];
+    }
+    return row.metadata;
+}
+
+function appendSourceMetadata(row, source, legacyRef) {
+    const metadata = ensureRowMetadata(row);
+    if (source && !metadata.sources.includes(source)) {
+        metadata.sources.push(source);
+    }
+    if (legacyRef) {
+        const key = `${legacyRef.source}:${legacyRef.table}:${legacyRef.legacy_id}`;
+        const existing = new Set(metadata.legacy_refs.map((ref) => `${ref.source}:${ref.table}:${ref.legacy_id}`));
+        if (!existing.has(key)) {
+            metadata.legacy_refs.push(legacyRef);
+        }
+    }
+}
+
+function queueImportWarning(context, message) {
+    if (!context.warnings.includes(message)) {
+        context.warnings.push(message);
+    }
+}
+
+function resolveRequiredCanonicalUserId(context, dataset, sourceName, legacyUserId) {
+    const canonicalId = canonicalUserIdFor(context, sourceName, legacyUserId);
+    if (!canonicalId) {
+        context.stats.bump(dataset, 'skipped_records');
+        queueImportWarning(context, `Skipped ${dataset} row from ${sourceName} because legacy user ${legacyUserId} could not be mapped to a canonical identity.`);
+        return null;
+    }
+    return canonicalId;
+}
+
+function resolveOptionalCanonicalUserId(context, sourceName, legacyUserId) {
+    return canonicalUserIdFor(context, sourceName, legacyUserId);
+}
+
+function defaultDailyQuestDefinition(questId) {
+    if (DAILY_QUEST_DEFINITIONS[questId]) {
+        return DAILY_QUEST_DEFINITIONS[questId];
+    }
+    const label = String(questId || 'legacy-quest')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    return {
+        title: label,
+        description: 'Migrated legacy daily quest progress.',
+        goal: 1,
+        reward: {},
+    };
+}
+
 function createImportContext(sourceDir, outDir, logger) {
     const root = path.join(outDir, 'openvibe-target');
     ensureDir(root);
@@ -75,10 +183,12 @@ function createImportContext(sourceDir, outDir, logger) {
         sourceRoots: {
             hobostreamer: path.join(sourceDir, 'hobostreamer'),
             hobotools: path.join(sourceDir, 'hobotools'),
+            hoboquest: path.join(sourceDir, 'hoboquest'),
         },
         manifests: {
             hobostreamer: readManifest(path.join(sourceDir, 'hobostreamer')),
             hobotools: readManifest(path.join(sourceDir, 'hobotools')),
+            hoboquest: readManifest(path.join(sourceDir, 'hoboquest')),
         },
         writers: createLazyWriters(root),
         stats: createStatsTracker(),
@@ -266,10 +376,906 @@ function canonicalUserIdFor(context, sourceName, legacyUserId) {
     if (sourceName === 'hobotools') {
         return context.userContext.hoboToolsUsersByLegacyId.get(String(legacyUserId)) || null;
     }
+    if (sourceName === 'hoboquest') {
+        return context.userContext.hoboToolsUsersByLegacyId.get(String(legacyUserId)) || null;
+    }
     if (sourceName === 'hobostreamer') {
         return context.userContext.hoboStreamerUsersByLegacyId.get(String(legacyUserId)) || null;
     }
     return null;
+}
+
+async function writeGamesDatasets(context) {
+    const writers = {
+        worldState: context.writers.get('games/world-state'),
+        players: context.writers.get('games/players'),
+        inventory: context.writers.get('games/inventory'),
+        bank: context.writers.get('games/bank'),
+        structures: context.writers.get('games/structures'),
+        farmPlots: context.writers.get('games/farm-plots'),
+        recipes: context.writers.get('games/recipes'),
+        effects: context.writers.get('games/effects'),
+        battleStats: context.writers.get('games/battle-stats'),
+        dungeonRuns: context.writers.get('games/dungeon-runs'),
+        leaderboards: context.writers.get('games/leaderboards'),
+        fishCollection: context.writers.get('games/fish-collection'),
+        dailyQuests: context.writers.get('games/daily-quests'),
+        achievements: context.writers.get('games/achievements'),
+        cosmetics: context.writers.get('games/cosmetics'),
+        tags: context.writers.get('games/tags'),
+        equippedTags: context.writers.get('games/equipped-tags'),
+        tagGuardianDefeats: context.writers.get('games/tag-guardian-defeats'),
+        canvasSettings: context.writers.get('games/canvas-settings'),
+        canvasTiles: context.writers.get('games/canvas-tiles'),
+        canvasActions: context.writers.get('games/canvas-actions'),
+        canvasSnapshots: context.writers.get('games/canvas-snapshots'),
+        canvasRegionLocks: context.writers.get('games/canvas-region-locks'),
+        canvasBans: context.writers.get('games/canvas-bans'),
+        canvasUserOverrides: context.writers.get('games/canvas-user-overrides'),
+    };
+
+    const worldStateMap = new Map();
+    const playerMap = new Map();
+    const inventoryMap = new Map();
+    const bankMap = new Map();
+    const farmPlotMap = new Map();
+    const recipeMap = new Map();
+    const battleStatsMap = new Map();
+    const fishCollectionMap = new Map();
+    const dailyQuestMap = new Map();
+    const achievementMap = new Map();
+    const cosmeticMap = new Map();
+    const tagMap = new Map();
+    const equippedTagMap = new Map();
+    const tagGuardianMap = new Map();
+    const canvasSettingsMap = new Map();
+    const canvasUserOverridesMap = new Map();
+    const equippedCosmeticsBySource = new Map();
+
+    for (const sourceName of GAME_SOURCE_PRIORITY) {
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_world_state'), async (row) => {
+            context.stats.bump('games/world-state', 'source_records');
+            if (worldStateMap.has(String(row.key))) {
+                context.stats.bump('games/world-state', 'merged_records');
+                return;
+            }
+            worldStateMap.set(String(row.key), {
+                id: buildEntityId('game-world-state', sourceName, row.key),
+                key: String(row.key),
+                value: row.value == null ? '' : String(row.value),
+                type: safeJsonParse(row.value, null) != null ? 'json' : 'string',
+                source: sourceName,
+                metadata: {},
+                legacy_ref: makeLegacyRef(sourceName, 'game_world_state', row.key),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_players'), async (row) => {
+            context.stats.bump('games/players', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/players', sourceName, row.user_id);
+            if (!userId) return;
+
+            const incoming = {
+                id: buildEntityId('game-player', sourceName, row.user_id),
+                user_id: userId,
+                display_name: row.display_name || null,
+                avatar_url: row.avatar_url || null,
+                class_name: row.class_name || 'wanderer',
+                world_id: row.world_id || 'main',
+                zone: row.zone || 'outpost',
+                x: toNumber(row.x, 4096),
+                y: toNumber(row.y, 4096),
+                coins: toNumber(row.coins, 0),
+                loyalty_points: toNumber(row.loyalty_points, 0),
+                mining_xp: toNumber(row.mining_xp, 0),
+                fishing_xp: toNumber(row.fishing_xp, 0),
+                woodcut_xp: toNumber(row.woodcut_xp, 0),
+                farming_xp: toNumber(row.farming_xp, 0),
+                combat_xp: toNumber(row.combat_xp, 0),
+                crafting_xp: toNumber(row.crafting_xp, 0),
+                smithing_xp: toNumber(row.smithing_xp, 0),
+                agility_xp: toNumber(row.agility_xp, 0),
+                hp: toNumber(row.hp, 100),
+                max_hp: toNumber(row.max_hp, 100),
+                stamina: toNumber(row.stamina, 100),
+                max_stamina: toNumber(row.max_stamina, 100),
+                equip_pickaxe: row.equip_pickaxe || null,
+                equip_rod: row.equip_rod || null,
+                equip_axe: row.equip_axe || null,
+                equip_hat: row.equip_hat || '',
+                equip_weapon: row.equip_weapon || '',
+                equip_armor: row.equip_armor || '',
+                source: sourceName,
+                metadata: {
+                    attack: toNumber(row.attack, 0),
+                    defense: toNumber(row.defense, 0),
+                    last_stamina_tick: row.last_stamina_tick || null,
+                    sleeping_bag_x: row.sleeping_bag_x == null ? null : toNumber(row.sleeping_bag_x, null),
+                    sleeping_bag_y: row.sleeping_bag_y == null ? null : toNumber(row.sleeping_bag_y, null),
+                    sprite_skin: toNumber(row.sprite_skin, 0),
+                    name_effect: row.name_effect || '',
+                    particle_effect: row.particle_effect || '',
+                    chat_color: row.chat_color || null,
+                    total_coins_earned: toNumber(row.total_coins_earned, 0),
+                    total_items_crafted: toNumber(row.total_items_crafted, 0),
+                    total_monsters_killed: toNumber(row.total_monsters_killed, 0),
+                    total_deaths: toNumber(row.total_deaths, 0),
+                    battle_wins: toNumber(row.battle_wins, 0),
+                    battle_losses: toNumber(row.battle_losses, 0),
+                    structures_built: toNumber(row.structures_built, 0),
+                    resources_gathered: toNumber(row.resources_gathered, 0),
+                    total_chests_opened: toNumber(row.total_chests_opened, 0),
+                    total_tiles_traveled: toNumber(row.total_tiles_traveled, 0),
+                    total_dungeon_wins: toNumber(row.total_dungeon_wins, 0),
+                    legacy_user_id: String(row.user_id),
+                },
+                created_at: row.created_at || null,
+                updated_at: row.last_action || row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_players', row.user_id),
+            };
+
+            if (!playerMap.has(userId)) {
+                playerMap.set(userId, incoming);
+                return;
+            }
+
+            const existing = playerMap.get(userId);
+            const maxFields = [
+                'coins', 'loyalty_points', 'mining_xp', 'fishing_xp', 'woodcut_xp', 'farming_xp',
+                'combat_xp', 'crafting_xp', 'smithing_xp', 'agility_xp', 'hp', 'max_hp', 'stamina', 'max_stamina',
+            ];
+            for (const field of maxFields) {
+                existing[field] = Math.max(toNumber(existing[field], 0), toNumber(incoming[field], 0));
+            }
+            existing.display_name = existing.display_name || incoming.display_name;
+            existing.avatar_url = existing.avatar_url || incoming.avatar_url;
+            existing.class_name = existing.class_name || incoming.class_name;
+            existing.world_id = existing.world_id || incoming.world_id;
+            existing.zone = existing.zone || incoming.zone;
+            existing.x = incoming.x != null ? incoming.x : existing.x;
+            existing.y = incoming.y != null ? incoming.y : existing.y;
+            for (const field of ['equip_pickaxe', 'equip_rod', 'equip_axe', 'equip_hat', 'equip_weapon', 'equip_armor']) {
+                existing[field] = existing[field] || incoming[field];
+            }
+            const existingMeta = ensureRowMetadata(existing);
+            for (const [key, value] of Object.entries(incoming.metadata || {})) {
+                if (typeof value === 'number') {
+                    existingMeta[key] = Math.max(toNumber(existingMeta[key], 0), value);
+                } else if (existingMeta[key] == null || existingMeta[key] === '' || existingMeta[key] === 0) {
+                    existingMeta[key] = value;
+                }
+            }
+            existing.created_at = earliestTimestamp(existing.created_at, incoming.created_at);
+            existing.updated_at = latestTimestamp(existing.updated_at, incoming.updated_at);
+            appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+            context.stats.bump('games/players', 'merged_records');
+        });
+
+        for (const [tableName, datasetName, destination] of [
+            ['game_inventory', 'games/inventory', inventoryMap],
+            ['game_bank', 'games/bank', bankMap],
+        ]) {
+            await forEachNdjson(tableFile(context.sourceRoots[sourceName], tableName), async (row) => {
+                context.stats.bump(datasetName, 'source_records');
+                const userId = resolveRequiredCanonicalUserId(context, datasetName, sourceName, row.user_id);
+                if (!userId) return;
+                const itemId = String(row.item_id);
+                const key = `${userId}:${itemId}`;
+                const incoming = {
+                    id: buildEntityId(tableName, sourceName, `${row.user_id}:${itemId}`),
+                    user_id: userId,
+                    item_id: itemId,
+                    quantity: toNumber(row.quantity, 0),
+                    source: sourceName,
+                    metadata: {
+                        legacy_user_id: String(row.user_id),
+                    },
+                    updated_at: row.updated_at || row.created_at || null,
+                    legacy_ref: makeLegacyRef(sourceName, tableName, row.id != null ? row.id : `${row.user_id}:${itemId}`),
+                };
+                if (!destination.has(key)) {
+                    destination.set(key, incoming);
+                    return;
+                }
+                const existing = destination.get(key);
+                existing.quantity = Math.max(toNumber(existing.quantity, 0), incoming.quantity);
+                existing.updated_at = latestTimestamp(existing.updated_at, incoming.updated_at);
+                appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+                context.stats.bump(datasetName, 'merged_records');
+            });
+        }
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_structures'), async (row) => {
+            context.stats.bump('games/structures', 'source_records');
+            const ownerUserId = resolveOptionalCanonicalUserId(context, sourceName, row.owner_id);
+            writers.structures.write({
+                id: buildEntityId('game-structure', sourceName, row.id),
+                type: row.type,
+                world_id: row.world_id || 'main',
+                x: row.x != null ? toNumber(row.x, 0) : toNumber(row.tile_x, 0),
+                y: row.y != null ? toNumber(row.y, 0) : toNumber(row.tile_y, 0),
+                owner_user_id: ownerUserId,
+                source: sourceName,
+                data: safeJsonParse(row.data, safeJsonParse(row.data_json, {})),
+                metadata: {
+                    hp: toNumber(row.hp, 0),
+                    max_hp: toNumber(row.max_hp, 0),
+                    legacy_owner_id: row.owner_id != null ? String(row.owner_id) : null,
+                },
+                created_at: row.placed_at || row.built_at || null,
+                updated_at: row.updated_at || row.placed_at || row.built_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_structures', row.id),
+            });
+            context.stats.bump('games/structures', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_farm_plots'), async (row) => {
+            context.stats.bump('games/farm-plots', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/farm-plots', sourceName, row.user_id);
+            if (!userId) return;
+            const key = `${userId}:${toNumber(row.plot_index, 0)}`;
+            const incoming = {
+                id: buildEntityId('farm-plot', sourceName, row.id != null ? row.id : `${row.user_id}:${row.plot_index}`),
+                user_id: userId,
+                plot_index: toNumber(row.plot_index, 0),
+                seed_id: row.seed_id || row.crop_id || null,
+                stage: row.stage || 'empty',
+                source: sourceName,
+                planted_at: row.planted_at || null,
+                watered_at: row.watered_at || null,
+                ready_at: row.ready_at || null,
+                metadata: {
+                    fertilized: !!row.fertilized,
+                    legacy_user_id: String(row.user_id),
+                },
+                updated_at: row.updated_at || row.watered_at || row.planted_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_farm_plots', row.id != null ? row.id : `${row.user_id}:${row.plot_index}`),
+            };
+            if (!farmPlotMap.has(key)) {
+                farmPlotMap.set(key, incoming);
+                return;
+            }
+            const existing = farmPlotMap.get(key);
+            existing.seed_id = existing.seed_id || incoming.seed_id;
+            existing.stage = existing.stage === 'empty' ? incoming.stage : existing.stage;
+            existing.planted_at = earliestTimestamp(existing.planted_at, incoming.planted_at);
+            existing.watered_at = latestTimestamp(existing.watered_at, incoming.watered_at);
+            existing.ready_at = latestTimestamp(existing.ready_at, incoming.ready_at);
+            if (incoming.metadata.fertilized) {
+                ensureRowMetadata(existing).fertilized = true;
+            }
+            existing.updated_at = latestTimestamp(existing.updated_at, incoming.updated_at);
+            appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+            context.stats.bump('games/farm-plots', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_recipes'), async (row) => {
+            context.stats.bump('games/recipes', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/recipes', sourceName, row.user_id);
+            if (!userId) return;
+            const recipeId = String(row.recipe_id);
+            const key = `${userId}:${recipeId}`;
+            if (recipeMap.has(key)) {
+                const existing = recipeMap.get(key);
+                existing.unlocked_at = earliestTimestamp(existing.unlocked_at, row.unlocked_at || null);
+                appendSourceMetadata(existing, sourceName, makeLegacyRef(sourceName, 'game_recipes', row.id != null ? row.id : `${row.user_id}:${recipeId}`));
+                context.stats.bump('games/recipes', 'merged_records');
+                return;
+            }
+            recipeMap.set(key, {
+                id: buildEntityId('recipe', sourceName, row.id != null ? row.id : `${row.user_id}:${recipeId}`),
+                user_id: userId,
+                recipe_id: recipeId,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                unlocked_at: row.unlocked_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_recipes', row.id != null ? row.id : `${row.user_id}:${recipeId}`),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_effects'), async (row) => {
+            context.stats.bump('games/effects', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/effects', sourceName, row.user_id || row.leader_id);
+            if (!userId) return;
+            writers.effects.write({
+                id: buildEntityId('game-effect', sourceName, row.id != null ? row.id : `${row.user_id || row.leader_id}:${row.effect_type}:${row.effect_id || row.expires_at || 'effect'}`),
+                user_id: userId,
+                effect_type: row.effect_type || 'legacy-effect',
+                effect_id: row.effect_id || null,
+                expires_at: row.expires_at || null,
+                charges: row.charges == null ? null : toNumber(row.charges, 0),
+                source: sourceName,
+                data: safeJsonParse(row.data, {}),
+                created_at: row.created_at || null,
+                updated_at: row.updated_at || row.created_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_effects', row.id != null ? row.id : `${row.user_id || row.leader_id}:${row.effect_type}`),
+            });
+            context.stats.bump('games/effects', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_battle_stats'), async (row) => {
+            context.stats.bump('games/battle-stats', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/battle-stats', sourceName, row.user_id);
+            if (!userId) return;
+            const incoming = {
+                id: buildEntityId('battle-stats', sourceName, row.user_id),
+                user_id: userId,
+                battles_won: toNumber(row.battles_won, 0),
+                battles_lost: toNumber(row.battles_lost, 0),
+                total_stolen: toNumber(row.total_stolen, 0),
+                total_lost: toNumber(row.total_lost, 0),
+                kill_streak: toNumber(row.kill_streak, 0),
+                best_streak: toNumber(row.best_streak, 0),
+                fatalities: toNumber(row.fatalities, 0),
+                kills: toNumber(row.kills, 0),
+                deaths: toNumber(row.deaths, 0),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                updated_at: row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_battle_stats', row.user_id),
+            };
+            if (!battleStatsMap.has(userId)) {
+                battleStatsMap.set(userId, incoming);
+                return;
+            }
+            const existing = battleStatsMap.get(userId);
+            for (const field of ['battles_won', 'battles_lost', 'total_stolen', 'total_lost', 'kill_streak', 'best_streak', 'fatalities', 'kills', 'deaths']) {
+                existing[field] = Math.max(toNumber(existing[field], 0), toNumber(incoming[field], 0));
+            }
+            existing.updated_at = latestTimestamp(existing.updated_at, incoming.updated_at);
+            appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+            context.stats.bump('games/battle-stats', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_dungeon_runs'), async (row) => {
+            context.stats.bump('games/dungeon-runs', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/dungeon-runs', sourceName, row.user_id != null ? row.user_id : row.leader_id);
+            if (!userId) return;
+            writers.dungeonRuns.write({
+                id: buildEntityId('dungeon-run', sourceName, row.id),
+                user_id: userId,
+                dungeon_id: row.dungeon_id || 'legacy-dungeon',
+                floor_reached: toNumber(row.floor_reached, 1),
+                status: row.status || 'active',
+                source: sourceName,
+                party: safeJsonParse(row.party, safeJsonParse(row.party_data, [])),
+                metadata: {
+                    legacy_leader_id: row.leader_id != null ? String(row.leader_id) : null,
+                },
+                started_at: row.started_at || null,
+                ended_at: row.ended_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_dungeon_runs', row.id),
+            });
+            context.stats.bump('games/dungeon-runs', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_leaderboard'), async (row) => {
+            context.stats.bump('games/leaderboards', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/leaderboards', sourceName, row.user_id);
+            if (!userId) return;
+            const board = row.board || row.board_type || 'legacy';
+            writers.leaderboards.write({
+                id: buildEntityId('leaderboard-entry', sourceName, row.id != null ? row.id : `${board}:${row.user_id}:${row.rank || 0}`),
+                board,
+                rank: toNumber(row.rank, 0),
+                user_id: userId,
+                username: row.username || null,
+                value: toNumber(row.value != null ? row.value : row.score, 0),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                updated_at: row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_leaderboard', row.id != null ? row.id : `${board}:${row.user_id}:${row.rank || 0}`),
+            });
+            context.stats.bump('games/leaderboards', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_fish_collection'), async (row) => {
+            context.stats.bump('games/fish-collection', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/fish-collection', sourceName, row.user_id);
+            if (!userId) return;
+            const fishId = String(row.fish_id);
+            const key = `${userId}:${fishId}`;
+            const incoming = {
+                id: buildEntityId('fish-collection', sourceName, `${row.user_id}:${fishId}`),
+                user_id: userId,
+                fish_id: fishId,
+                count: toNumber(row.count != null ? row.count : row.times_caught, 0),
+                best_weight: toNumber(row.best_weight != null ? row.best_weight : row.max_weight, 0),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                first_caught: row.first_caught || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_fish_collection', `${row.user_id}:${fishId}`),
+            };
+            if (!fishCollectionMap.has(key)) {
+                fishCollectionMap.set(key, incoming);
+                return;
+            }
+            const existing = fishCollectionMap.get(key);
+            existing.count = Math.max(toNumber(existing.count, 0), incoming.count);
+            existing.best_weight = Math.max(toNumber(existing.best_weight, 0), incoming.best_weight);
+            existing.first_caught = earliestTimestamp(existing.first_caught, incoming.first_caught);
+            appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+            context.stats.bump('games/fish-collection', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_daily_quest_progress'), async (row) => {
+            context.stats.bump('games/daily-quests', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/daily-quests', sourceName, row.user_id);
+            if (!userId) return;
+            const questId = String(row.quest_id || row.stat_key || 'legacy-quest');
+            const questDate = String(row.quest_date);
+            const definition = defaultDailyQuestDefinition(questId);
+            const key = `${userId}:${questDate}:${questId}`;
+            const incomingRef = makeLegacyRef(sourceName, 'game_daily_quest_progress', `${row.user_id}:${questDate}:${questId}`);
+            if (!dailyQuestMap.has(key)) {
+                dailyQuestMap.set(key, {
+                    id: buildEntityId('daily-quest', sourceName, `${row.user_id}:${questDate}:${questId}`),
+                    user_id: userId,
+                    quest_date: questDate,
+                    quest_id: questId,
+                    title: definition.title,
+                    description: definition.description,
+                    progress: toNumber(row.value, 0),
+                    goal: toNumber(row.goal, definition.goal),
+                    reward: definition.reward,
+                    claimed_at: null,
+                    source: sourceName,
+                    metadata: {
+                        stat_key: row.stat_key || questId,
+                        legacy_user_id: String(row.user_id),
+                    },
+                    updated_at: row.updated_at || null,
+                    legacy_ref: incomingRef,
+                });
+                return;
+            }
+            const existing = dailyQuestMap.get(key);
+            existing.progress = Math.max(toNumber(existing.progress, 0), toNumber(row.value, 0));
+            existing.goal = Math.max(toNumber(existing.goal, 1), toNumber(row.goal, 0) || definition.goal);
+            existing.updated_at = latestTimestamp(existing.updated_at, row.updated_at || null);
+            appendSourceMetadata(existing, sourceName, incomingRef);
+            context.stats.bump('games/daily-quests', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_daily_quest_claims'), async (row) => {
+            context.stats.bump('games/daily-quests', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/daily-quests', sourceName, row.user_id);
+            if (!userId) return;
+            const questId = String(row.quest_id || DAILY_QUEST_TIER_FALLBACK[toNumber(row.tier, 0)] || `legacy-tier-${row.tier}`);
+            const questDate = String(row.quest_date);
+            const definition = defaultDailyQuestDefinition(questId);
+            const key = `${userId}:${questDate}:${questId}`;
+            const incomingRef = makeLegacyRef(sourceName, 'game_daily_quest_claims', `${row.user_id}:${questDate}:${questId}`);
+            if (!dailyQuestMap.has(key)) {
+                dailyQuestMap.set(key, {
+                    id: buildEntityId('daily-quest', sourceName, `${row.user_id}:${questDate}:${questId}`),
+                    user_id: userId,
+                    quest_date: questDate,
+                    quest_id: questId,
+                    title: definition.title,
+                    description: definition.description,
+                    progress: 0,
+                    goal: definition.goal,
+                    reward: definition.reward,
+                    claimed_at: row.claimed_at || null,
+                    source: sourceName,
+                    metadata: {
+                        legacy_user_id: String(row.user_id),
+                        tier: row.tier == null ? null : toNumber(row.tier, 0),
+                    },
+                    updated_at: row.claimed_at || null,
+                    legacy_ref: incomingRef,
+                });
+                return;
+            }
+            const existing = dailyQuestMap.get(key);
+            existing.claimed_at = earliestTimestamp(existing.claimed_at, row.claimed_at || null);
+            existing.updated_at = latestTimestamp(existing.updated_at, row.claimed_at || null);
+            appendSourceMetadata(existing, sourceName, incomingRef);
+            context.stats.bump('games/daily-quests', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_achievements'), async (row) => {
+            context.stats.bump('games/achievements', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/achievements', sourceName, row.user_id);
+            if (!userId) return;
+            const achievementId = String(row.achievement_id);
+            const key = `${userId}:${achievementId}`;
+            if (achievementMap.has(key)) {
+                const existing = achievementMap.get(key);
+                existing.unlocked_at = earliestTimestamp(existing.unlocked_at, row.unlocked_at || row.completed_at || null);
+                appendSourceMetadata(existing, sourceName, makeLegacyRef(sourceName, 'game_achievements', `${row.user_id}:${achievementId}`));
+                context.stats.bump('games/achievements', 'merged_records');
+                return;
+            }
+            achievementMap.set(key, {
+                id: buildEntityId('achievement', sourceName, `${row.user_id}:${achievementId}`),
+                user_id: userId,
+                achievement_id: achievementId,
+                title: row.title || null,
+                description: row.description || null,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                unlocked_at: row.unlocked_at || row.completed_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'game_achievements', `${row.user_id}:${achievementId}`),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'user_equipped'), async (row) => {
+            context.stats.bump('games/cosmetics', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/cosmetics', sourceName, row.user_id);
+            if (!userId) return;
+            equippedCosmeticsBySource.set(`${sourceName}:${userId}:${String(row.slot)}`, String(row.item_id));
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'user_cosmetics'), async (row) => {
+            context.stats.bump('games/cosmetics', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/cosmetics', sourceName, row.user_id);
+            if (!userId) return;
+            const slot = String(row.slot || row.type || row.category || 'cosmetic');
+            const itemId = String(row.item_id);
+            const key = `${userId}:${slot}:${itemId}`;
+            const incoming = {
+                id: buildEntityId('cosmetic', sourceName, `${row.user_id}:${slot}:${itemId}`),
+                user_id: userId,
+                slot,
+                item_id: itemId,
+                equipped: equippedCosmeticsBySource.get(`${sourceName}:${userId}:${slot}`) === itemId,
+                source: row.source || sourceName,
+                metadata: {
+                    category: row.category || row.type || slot,
+                    legacy_user_id: String(row.user_id),
+                },
+                acquired_at: row.acquired_at || row.unlocked_at || null,
+                updated_at: row.updated_at || row.acquired_at || row.unlocked_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'user_cosmetics', `${row.user_id}:${slot}:${itemId}`),
+            };
+            if (!cosmeticMap.has(key)) {
+                cosmeticMap.set(key, incoming);
+                return;
+            }
+            const existing = cosmeticMap.get(key);
+            existing.equipped = existing.equipped || incoming.equipped;
+            existing.acquired_at = earliestTimestamp(existing.acquired_at, incoming.acquired_at);
+            existing.updated_at = latestTimestamp(existing.updated_at, incoming.updated_at);
+            appendSourceMetadata(existing, sourceName, incoming.legacy_ref);
+            context.stats.bump('games/cosmetics', 'merged_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'user_tags'), async (row) => {
+            context.stats.bump('games/tags', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/tags', sourceName, row.user_id);
+            if (!userId) return;
+            const tagId = String(row.tag_id);
+            const key = `${userId}:${tagId}`;
+            if (tagMap.has(key)) {
+                const existing = tagMap.get(key);
+                existing.granted_at = earliestTimestamp(existing.granted_at, row.granted_at || null);
+                appendSourceMetadata(existing, sourceName, makeLegacyRef(sourceName, 'user_tags', row.id != null ? row.id : `${row.user_id}:${tagId}`));
+                context.stats.bump('games/tags', 'merged_records');
+                return;
+            }
+            tagMap.set(key, {
+                id: buildEntityId('tag', sourceName, row.id != null ? row.id : `${row.user_id}:${tagId}`),
+                user_id: userId,
+                tag_id: tagId,
+                source: row.source || sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                granted_at: row.granted_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'user_tags', row.id != null ? row.id : `${row.user_id}:${tagId}`),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'user_equipped_tag'), async (row) => {
+            context.stats.bump('games/equipped-tags', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/equipped-tags', sourceName, row.user_id);
+            if (!userId) return;
+            if (equippedTagMap.has(userId)) {
+                appendSourceMetadata(equippedTagMap.get(userId), sourceName, makeLegacyRef(sourceName, 'user_equipped_tag', `${row.user_id}:${row.tag_id}`));
+                context.stats.bump('games/equipped-tags', 'merged_records');
+                return;
+            }
+            equippedTagMap.set(userId, {
+                id: buildEntityId('equipped-tag', sourceName, row.user_id),
+                user_id: userId,
+                tag_id: String(row.tag_id),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                updated_at: row.updated_at || row.granted_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'user_equipped_tag', `${row.user_id}:${row.tag_id}`),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'tag_guardian_defeats'), async (row) => {
+            context.stats.bump('games/tag-guardian-defeats', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/tag-guardian-defeats', sourceName, row.user_id);
+            if (!userId) return;
+            if (tagGuardianMap.has(userId)) {
+                const existing = tagGuardianMap.get(userId);
+                existing.defeated_at = earliestTimestamp(existing.defeated_at, row.defeated_at || null);
+                appendSourceMetadata(existing, sourceName, makeLegacyRef(sourceName, 'tag_guardian_defeats', row.user_id));
+                context.stats.bump('games/tag-guardian-defeats', 'merged_records');
+                return;
+            }
+            tagGuardianMap.set(userId, {
+                id: buildEntityId('tag-guardian-defeat', sourceName, row.user_id),
+                user_id: userId,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                defeated_at: row.defeated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'tag_guardian_defeats', row.user_id),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_settings'), async (row) => {
+            context.stats.bump('games/canvas-settings', 'source_records');
+            const key = String(row.key);
+            if (canvasSettingsMap.has(key)) {
+                context.stats.bump('games/canvas-settings', 'merged_records');
+                return;
+            }
+            canvasSettingsMap.set(key, {
+                id: buildEntityId('canvas-setting', sourceName, key),
+                key,
+                value: row.value == null ? '' : String(row.value),
+                type: safeJsonParse(row.value, null) != null ? 'json' : 'string',
+                source: sourceName,
+                metadata: {},
+                updated_at: row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_settings', key),
+            });
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_tiles'), async (row) => {
+            context.stats.bump('games/canvas-tiles', 'source_records');
+            const userId = resolveOptionalCanonicalUserId(context, sourceName, row.user_id);
+            writers.canvasTiles.write({
+                id: buildEntityId('canvas-tile', sourceName, `${row.x}:${row.y}`),
+                x: toNumber(row.x, 0),
+                y: toNumber(row.y, 0),
+                color_index: toNumber(row.color_index, 0),
+                user_id: userId,
+                username: row.username || null,
+                ip_address: row.ip_address || null,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: row.user_id != null ? String(row.user_id) : null,
+                },
+                updated_at: row.placed_at || row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_tiles', `${row.x}:${row.y}`),
+            });
+            context.stats.bump('games/canvas-tiles', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_actions'), async (row) => {
+            context.stats.bump('games/canvas-actions', 'source_records');
+            const userId = resolveOptionalCanonicalUserId(context, sourceName, row.user_id);
+            writers.canvasActions.write({
+                id: toNumber(row.id, 0),
+                action_type: row.action_type || 'place',
+                x: toNumber(row.x, 0),
+                y: toNumber(row.y, 0),
+                prev_color_index: row.prev_color_index == null ? toNumber(row.prev_color, null) : toNumber(row.prev_color_index, null),
+                color_index: row.color_index == null ? toNumber(row.new_color, 0) : toNumber(row.color_index, 0),
+                user_id: userId,
+                username: row.username || null,
+                ip_address: row.ip || row.ip_address || null,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: row.user_id != null ? String(row.user_id) : null,
+                },
+                created_at: row.created_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_actions', row.id),
+            });
+            context.stats.bump('games/canvas-actions', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_snapshots'), async (row) => {
+            context.stats.bump('games/canvas-snapshots', 'source_records');
+            writers.canvasSnapshots.write({
+                id: buildEntityId('canvas-snapshot', sourceName, row.id),
+                name: row.name || 'snapshot',
+                board_data: safeJsonParse(row.board_data, row.board_data || null),
+                created_by_user_id: resolveOptionalCanonicalUserId(context, sourceName, row.created_by),
+                source: sourceName,
+                metadata: {
+                    legacy_created_by: row.created_by != null ? String(row.created_by) : null,
+                },
+                created_at: row.created_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_snapshots', row.id),
+            });
+            context.stats.bump('games/canvas-snapshots', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_region_locks'), async (row) => {
+            context.stats.bump('games/canvas-region-locks', 'source_records');
+            writers.canvasRegionLocks.write({
+                id: toNumber(row.id, 0),
+                label: row.label || '',
+                mode: row.mode || 'locked',
+                x1: toNumber(row.x1, 0),
+                y1: toNumber(row.y1, 0),
+                x2: toNumber(row.x2, 0),
+                y2: toNumber(row.y2, 0),
+                reason: row.reason || '',
+                created_by_user_id: resolveOptionalCanonicalUserId(context, sourceName, row.locked_by || row.created_by),
+                source: sourceName,
+                metadata: {
+                    legacy_created_by: row.locked_by != null ? String(row.locked_by) : (row.created_by != null ? String(row.created_by) : null),
+                },
+                created_at: row.created_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_region_locks', row.id),
+            });
+            context.stats.bump('games/canvas-region-locks', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_bans'), async (row) => {
+            context.stats.bump('games/canvas-bans', 'source_records');
+            writers.canvasBans.write({
+                id: toNumber(row.id, 0),
+                user_id: resolveOptionalCanonicalUserId(context, sourceName, row.user_id),
+                ip_address: row.ip || row.ip_address || null,
+                action_type: row.action_type || row.ban_type || 'ban',
+                reason: row.reason || '',
+                expires_at: row.expires_at || null,
+                created_by_user_id: resolveOptionalCanonicalUserId(context, sourceName, row.banned_by || row.created_by),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: row.user_id != null ? String(row.user_id) : null,
+                    legacy_created_by: row.banned_by != null ? String(row.banned_by) : (row.created_by != null ? String(row.created_by) : null),
+                },
+                created_at: row.created_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_bans', row.id),
+            });
+            context.stats.bump('games/canvas-bans', 'written_records');
+        });
+
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_user_overrides'), async (row) => {
+            context.stats.bump('games/canvas-user-overrides', 'source_records');
+            const userId = resolveRequiredCanonicalUserId(context, 'games/canvas-user-overrides', sourceName, row.user_id);
+            if (!userId) return;
+            if (canvasUserOverridesMap.has(userId)) {
+                const existing = canvasUserOverridesMap.get(userId);
+                if (existing.cooldown_seconds == null) {
+                    if (row.cooldown_seconds != null) {
+                        existing.cooldown_seconds = toNumber(row.cooldown_seconds, null);
+                    } else if (row.cooldown_ms != null) {
+                        existing.cooldown_seconds = Math.max(0, Math.round(toNumber(row.cooldown_ms, 0) / 1000));
+                    }
+                }
+                existing.placements_per_minute = existing.placements_per_minute == null ? toNumber(row.max_placements, null) : existing.placements_per_minute;
+                existing.note = existing.note || row.note || '';
+                existing.updated_at = latestTimestamp(existing.updated_at, row.updated_at || null);
+                appendSourceMetadata(existing, sourceName, makeLegacyRef(sourceName, 'canvas_user_overrides', row.user_id));
+                context.stats.bump('games/canvas-user-overrides', 'merged_records');
+                return;
+            }
+            canvasUserOverridesMap.set(userId, {
+                id: buildEntityId('canvas-user-override', sourceName, row.user_id),
+                user_id: userId,
+                cooldown_seconds: row.cooldown_seconds == null
+                    ? (row.cooldown_ms == null ? null : Math.max(0, Math.round(toNumber(row.cooldown_ms, 0) / 1000)))
+                    : toNumber(row.cooldown_seconds, null),
+                placements_per_minute: row.placements_per_minute == null ? toNumber(row.max_placements, null) : toNumber(row.placements_per_minute, null),
+                bypass_read_only: !!row.bypass_read_only,
+                note: row.note || '',
+                updated_by_user_id: resolveOptionalCanonicalUserId(context, sourceName, row.updated_by),
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                },
+                updated_at: row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'canvas_user_overrides', row.user_id),
+            });
+        });
+    }
+
+    for (const sourceName of GAME_SOURCE_PRIORITY) {
+        await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'user_equipped'), async (row) => {
+            const userId = resolveRequiredCanonicalUserId(context, 'games/cosmetics', sourceName, row.user_id);
+            if (!userId) return;
+            const slot = String(row.slot);
+            const itemId = String(row.item_id);
+            const key = `${userId}:${slot}:${itemId}`;
+            if (cosmeticMap.has(key)) return;
+            cosmeticMap.set(key, {
+                id: buildEntityId('cosmetic', sourceName, `${row.user_id}:${slot}:${itemId}`),
+                user_id: userId,
+                slot,
+                item_id: itemId,
+                equipped: true,
+                source: sourceName,
+                metadata: {
+                    legacy_user_id: String(row.user_id),
+                    synthesized_from_equipped: true,
+                },
+                acquired_at: null,
+                updated_at: row.updated_at || null,
+                legacy_ref: makeLegacyRef(sourceName, 'user_equipped', `${row.user_id}:${slot}`),
+            });
+        });
+    }
+
+    for (const row of worldStateMap.values()) {
+        writers.worldState.write(row);
+        context.stats.bump('games/world-state', 'written_records');
+    }
+    for (const row of playerMap.values()) {
+        writers.players.write(row);
+        context.stats.bump('games/players', 'written_records');
+    }
+    for (const row of inventoryMap.values()) {
+        writers.inventory.write(row);
+        context.stats.bump('games/inventory', 'written_records');
+    }
+    for (const row of bankMap.values()) {
+        writers.bank.write(row);
+        context.stats.bump('games/bank', 'written_records');
+    }
+    for (const row of farmPlotMap.values()) {
+        writers.farmPlots.write(row);
+        context.stats.bump('games/farm-plots', 'written_records');
+    }
+    for (const row of recipeMap.values()) {
+        writers.recipes.write(row);
+        context.stats.bump('games/recipes', 'written_records');
+    }
+    for (const row of battleStatsMap.values()) {
+        writers.battleStats.write(row);
+        context.stats.bump('games/battle-stats', 'written_records');
+    }
+    for (const row of fishCollectionMap.values()) {
+        writers.fishCollection.write(row);
+        context.stats.bump('games/fish-collection', 'written_records');
+    }
+    for (const row of dailyQuestMap.values()) {
+        writers.dailyQuests.write(row);
+        context.stats.bump('games/daily-quests', 'written_records');
+    }
+    for (const row of achievementMap.values()) {
+        writers.achievements.write(row);
+        context.stats.bump('games/achievements', 'written_records');
+    }
+    for (const row of cosmeticMap.values()) {
+        writers.cosmetics.write(row);
+        context.stats.bump('games/cosmetics', 'written_records');
+    }
+    for (const row of tagMap.values()) {
+        writers.tags.write(row);
+        context.stats.bump('games/tags', 'written_records');
+    }
+    for (const row of equippedTagMap.values()) {
+        writers.equippedTags.write(row);
+        context.stats.bump('games/equipped-tags', 'written_records');
+    }
+    for (const row of tagGuardianMap.values()) {
+        writers.tagGuardianDefeats.write(row);
+        context.stats.bump('games/tag-guardian-defeats', 'written_records');
+    }
+    for (const row of canvasSettingsMap.values()) {
+        writers.canvasSettings.write(row);
+        context.stats.bump('games/canvas-settings', 'written_records');
+    }
+    for (const row of canvasUserOverridesMap.values()) {
+        writers.canvasUserOverrides.write(row);
+        context.stats.bump('games/canvas-user-overrides', 'written_records');
+    }
 }
 
 async function writeIdentityDatasets(context) {
@@ -984,6 +1990,7 @@ async function importCanonicalBundle(options) {
     context.exclusions = [
         ...(context.manifests.hobostreamer ? context.manifests.hobostreamer.exclusions || [] : []),
         ...(context.manifests.hobotools ? context.manifests.hobotools.exclusions || [] : []),
+        ...(context.manifests.hoboquest ? context.manifests.hoboquest.exclusions || [] : []),
     ];
 
     await buildUserContext(context);
@@ -995,6 +2002,7 @@ async function importCanonicalBundle(options) {
     await writeMediaDatasets(context);
     await writeBillingDatasets(context);
     await writeLoyaltyDatasets(context);
+    await writeGamesDatasets(context);
 
     const files = await context.writers.closeAll();
     const report = {

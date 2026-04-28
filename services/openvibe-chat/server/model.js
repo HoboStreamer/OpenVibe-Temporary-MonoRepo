@@ -23,6 +23,7 @@ function hydrateRoom(r) {
         created_by_actor_type: r.created_by_actor_type,
         created_by_actor_id: r.created_by_actor_id,
         metadata: safeJson(r.metadata_json, {}),
+        unread_count: Number(r.unread_count || 0),
         archived_at: r.archived_at || null,
         created_at: r.created_at, updated_at: r.updated_at,
     };
@@ -88,8 +89,8 @@ function archiveRoom(id) {
 // ── participants ─────────────────────────────────────────
 function upsertParticipant({ room_id, actor_type, actor_id, role, metadata }) {
     db.get().prepare(`
-        INSERT INTO chat_participants (room_id, actor_type, actor_id, role, metadata_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO chat_participants (room_id, actor_type, actor_id, role, joined_at, metadata_json)
+        VALUES (?, ?, ?, ?, STRFTIME('%Y-%m-%d %H:%M:%f', 'now'), ?)
         ON CONFLICT(room_id, actor_type, actor_id) DO UPDATE SET
             role = excluded.role,
             metadata_json = excluded.metadata_json
@@ -102,7 +103,7 @@ function getParticipant(room_id, actor_type, actor_id) {
         `SELECT * FROM chat_participants WHERE room_id = ? AND actor_type = ? AND actor_id = ?`
     ).get(String(room_id), String(actor_type), String(actor_id));
     if (!r) return null;
-    return Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) });
+    return Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}), last_read_at: r.last_read_at || null, last_seen_at: r.last_seen_at || null });
 }
 
 function removeParticipant(room_id, actor_type, actor_id) {
@@ -115,7 +116,21 @@ function listParticipants(room_id) {
     const rows = db.get().prepare(
         `SELECT * FROM chat_participants WHERE room_id = ? ORDER BY joined_at ASC`
     ).all(String(room_id));
-    return rows.map(r => Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) }));
+    return rows.map(r => Object.assign({}, r, {
+        metadata: safeJson(r.metadata_json, {}),
+        last_read_at: r.last_read_at || null,
+        last_seen_at: r.last_seen_at || null,
+    }));
+}
+
+function markRoomRead(room_id, actor_type, actor_id) {
+    db.get().prepare(`
+        UPDATE chat_participants
+        SET last_read_at = STRFTIME('%Y-%m-%d %H:%M:%f', 'now'),
+            last_seen_at = STRFTIME('%Y-%m-%d %H:%M:%f', 'now')
+        WHERE room_id = ? AND actor_type = ? AND actor_id = ?
+    `).run(String(room_id), String(actor_type), String(actor_id));
+    return getParticipant(room_id, actor_type, actor_id);
 }
 
 // ── messages ─────────────────────────────────────────────
@@ -142,8 +157,8 @@ function createMessage(input) {
     db.get().prepare(`
         INSERT INTO chat_messages (id, room_id, sender_type, sender_id, message_type,
             body, rich_payload_json, reply_to_message_id, legacy_source, legacy_id,
-            moderation_status, metadata_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            moderation_status, metadata_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, STRFTIME('%Y-%m-%d %H:%M:%f', 'now'))
     `).run(
         id,
         String(input.room_id),
@@ -229,12 +244,32 @@ function findOrCreateDmRoom(actorA, actorB) {
 
 function listDmsForActor(actor_type, actor_id) {
     const rows = db.get().prepare(`
-        SELECT r.* FROM chat_rooms r
+        SELECT r.*,
+               COALESCE((
+                   SELECT COUNT(*)
+                   FROM chat_messages m
+                   WHERE m.room_id = r.id
+                     AND m.deleted_at IS NULL
+                     AND NOT (m.sender_type = p.actor_type AND COALESCE(m.sender_id, '') = COALESCE(p.actor_id, ''))
+                     AND julianday(m.created_at) > julianday(COALESCE(p.last_read_at, p.joined_at, '1970-01-01 00:00:00'))
+               ), 0) AS unread_count
+        FROM chat_rooms r
         INNER JOIN chat_participants p ON p.room_id = r.id
-        WHERE r.room_type = 'dm' AND p.actor_type = ? AND p.actor_id = ?
+        WHERE r.room_type = 'dm' AND r.archived_at IS NULL AND p.actor_type = ? AND p.actor_id = ?
         ORDER BY r.updated_at DESC
     `).all(String(actor_type), String(actor_id));
     return rows.map(hydrateRoom);
+}
+
+function getDmUnreadSummary(actor_type, actor_id) {
+    const items = listDmsForActor(actor_type, actor_id);
+    const rooms = items
+        .filter((room) => room.unread_count > 0)
+        .map((room) => ({ room_id: room.id, unread_count: room.unread_count }));
+    return {
+        total_unread: rooms.reduce((total, room) => total + room.unread_count, 0),
+        rooms,
+    };
 }
 
 // ── calls ────────────────────────────────────────────────
@@ -473,11 +508,11 @@ module.exports = {
     // rooms
     createRoom, getRoom, findRoomByExternal, ensureRoomForExternal, listRooms, archiveRoom,
     // participants
-    upsertParticipant, getParticipant, removeParticipant, listParticipants,
+    upsertParticipant, getParticipant, removeParticipant, listParticipants, markRoomRead,
     // messages
     createMessage, getMessage, listMessages, editMessage, deleteMessage, moderateMessage,
     // dm
-    findOrCreateDmRoom, listDmsForActor,
+    findOrCreateDmRoom, listDmsForActor, getDmUnreadSummary,
     // calls
     createCall, getCall, updateCallStatus, recordCallSignal, listCallSignals, listActiveCalls,
     // tts

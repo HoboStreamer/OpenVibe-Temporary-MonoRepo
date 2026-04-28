@@ -48,6 +48,17 @@ assert.ok(dms.find(r => r.id === dmRoom.id));
 // idempotent DM
 const dmRoom2 = model.findOrCreateDmRoom({ actor_type: 'user', actor_id: '99' }, { actor_type: 'user', actor_id: '42' });
 assert.strictEqual(dmRoom2.id, dmRoom.id, 'DM room should be order-independent');
+const dmIncoming = model.createMessage({ room_id: dmRoom.id, sender_type: 'user', sender_id: '99', body: 'hey there' });
+assert.ok(dmIncoming.id.startsWith('msg_'));
+let unread = model.getDmUnreadSummary('user', '42');
+assert.strictEqual(unread.total_unread, 1);
+assert.strictEqual(unread.rooms[0].room_id, dmRoom.id);
+const dmListWithUnread = model.listDmsForActor('user', '42');
+assert.strictEqual(dmListWithUnread.find((r) => r.id === dmRoom.id).unread_count, 1);
+const readParticipant = model.markRoomRead(dmRoom.id, 'user', '42');
+assert.ok(readParticipant.last_read_at);
+unread = model.getDmUnreadSummary('user', '42');
+assert.strictEqual(unread.total_unread, 0);
 
 // calls
 const call = model.createCall({ room_id: dmRoom.id, call_type: 'voice', status: 'ringing', started_by_actor_type: 'user', started_by_actor_id: '42', target_actor_type: 'user', target_actor_id: '99' });

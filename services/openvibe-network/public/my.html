@@ -4,64 +4,339 @@
 <meta charset="utf-8" />
 <title>my.openvibe.network — your account</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
+<style>
+.ov-toggle-list {
+    display: grid;
+    gap: .85rem;
+}
+.ov-toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: .8rem;
+    padding: .9rem 1rem;
+    border-radius: 18px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.06);
+}
+.ov-toggle-row input {
+    margin-top: .25rem;
+}
+</style>
 </head>
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero" style="text-align:left;padding-bottom:1rem">
-        <h1 style="background:none;-webkit-text-fill-color:initial;color:var(--ov-text)">My OpenVibe</h1>
-        <p>Your account hub for identity, themes, linked services, and notifications.</p>
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <span class="ov-kicker">My OpenVibe</span>
+                <h1>Your account,<br><span class="ov-gradient">without the scavenger hunt.</span></h1>
+                <p>Profile, theme, sessions, linked providers, notifications, and launcher memory now live in one control-plane hub instead of being scattered across legacy surfaces.</p>
+                <div class="ov-chip-row">
+                    <span class="ov-chip soft" id="account-session-chip">Checking session…</span>
+                    <span class="ov-chip primary" id="account-theme-chip">Loading theme…</span>
+                </div>
+                <div class="ov-cta-row" id="account-actions"></div>
+            </div>
+            <aside class="ov-panel" id="account-overview"></aside>
+        </div>
     </section>
-    <div class="ov-tabs">
-        <div class="ov-tab active" data-tab="profile">Profile</div>
-        <div class="ov-tab" data-tab="linked">Linked accounts</div>
-        <div class="ov-tab" data-tab="theme">Theme</div>
-        <div class="ov-tab" data-tab="notifications">Notifications</div>
-        <div class="ov-tab" data-tab="security">Security</div>
+
+    <div class="ov-tabs" id="account-tabs">
+        <button class="ov-tab active" type="button" data-tab="profile">Profile</button>
+        <button class="ov-tab" type="button" data-tab="linked">Linked accounts</button>
+        <button class="ov-tab" type="button" data-tab="theme">Theme</button>
+        <button class="ov-tab" type="button" data-tab="notifications">Notifications</button>
+        <button class="ov-tab" type="button" data-tab="sessions">Sessions</button>
+        <button class="ov-tab" type="button" data-tab="launcher">Launcher</button>
     </div>
-    <div id="tab-profile"></div>
-    <div id="tab-linked" hidden></div>
-    <div id="tab-theme" hidden></div>
-    <div id="tab-notifications" hidden></div>
-    <div id="tab-security" hidden></div>
+
+    <section class="ov-panel" id="tab-profile"></section>
+    <section class="ov-panel" id="tab-linked" hidden></section>
+    <section class="ov-panel" id="tab-theme" hidden></section>
+    <section class="ov-panel" id="tab-notifications" hidden></section>
+    <section class="ov-panel" id="tab-sessions" hidden></section>
+    <section class="ov-panel" id="tab-launcher" hidden></section>
 </main>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('my');
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    document.querySelectorAll('.ov-tab').forEach(t => t.addEventListener('click', () => {
-        document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        document.querySelectorAll('main > div[id^=tab-]').forEach(x => x.hidden = true);
-        document.getElementById('tab-' + t.dataset.tab).hidden = false;
-    }));
-    let me = null;
-    try { me = await OpenVibe.api('/me'); } catch { me = null; }
-    const user = me && me.user ? me.user : null;
-    document.getElementById('tab-profile').innerHTML = user
-        ? `<div class="ov-card"><div class="title">${OpenVibe.escapeHtml(user.username || user.id || 'You')}</div>
-           <div class="desc">role=${OpenVibe.escapeHtml(user.role || 'user')} · id=${OpenVibe.escapeHtml(user.id || '')}</div></div>`
-        : `<div class="ov-banner warn">You are not signed in. <a class="ov-btn ov-btn-primary" href="/oauth/authorize">Sign in</a></div>`;
+    function activateTab(tabName) {
+        document.querySelectorAll('#account-tabs .ov-tab').forEach((tab) => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+        document.querySelectorAll('section[id^="tab-"]').forEach((panel) => {
+            panel.hidden = panel.id !== `tab-${tabName}`;
+        });
+    }
+
+    function renderEmptyCard(title, message) {
+        return `<div class="ov-empty"><strong>${OpenVibe.escapeHtml(title)}</strong><p style="margin:.5rem 0 0;">${OpenVibe.escapeHtml(message)}</p></div>`;
+    }
+
+    function themeCardMarkup(theme, currentThemeId) {
+        const current = theme.id === currentThemeId;
+        return `<article class="ov-card">
+            <div style="height:82px; border-radius:16px; background:${OpenVibe.escapeHtml(theme.preview)}; border:1px solid rgba(255,255,255,.08);"></div>
+            <div class="ov-chip-row" style="margin-top:.8rem;">
+                <span class="ov-chip ${current ? 'ok' : 'soft'}">${current ? 'current' : 'catalog'}</span>
+                <span class="ov-chip primary">${OpenVibe.escapeHtml(theme.id)}</span>
+            </div>
+            <h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(theme.name)}</h3>
+            <p class="ov-muted">${OpenVibe.escapeHtml(theme.description)}</p>
+            <div class="ov-card-actions">
+                <button class="ov-btn" type="button" data-preview-theme="${OpenVibe.escapeHtml(theme.id)}">Preview</button>
+                <button class="ov-btn ov-btn-primary" type="button" data-apply-theme="${OpenVibe.escapeHtml(theme.id)}">Apply</button>
+            </div>
+        </article>`;
+    }
+
+    function linkedAccountMarkup(item) {
+        const provider = item.provider || item.type || item.service || 'linked account';
+        const identity = item.username || item.handle || item.external_username || item.external_id || item.id || 'connected';
+        const secondary = [
+            item.display_name || item.label || null,
+            item.linked_at ? `linked ${OpenVibe.formatDateTime(item.linked_at)}` : null,
+        ].filter(Boolean).join(' · ');
+        return `<article class="ov-card">
+            <div class="ov-chip-row"><span class="ov-chip ok">${OpenVibe.escapeHtml(provider)}</span></div>
+            <h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(identity)}</h3>
+            <p class="ov-muted">${OpenVibe.escapeHtml(secondary || 'Imported or connected account identity.')}</p>
+        </article>`;
+    }
+
+    await OpenVibe.primeEnvironment();
+    await OpenVibe.renderChrome('my');
+
+    document.querySelectorAll('#account-tabs .ov-tab').forEach((button) => {
+        button.addEventListener('click', function () {
+            activateTab(button.dataset.tab);
+        });
+    });
+
+    const session = await OpenVibe.loadSession();
+    const overview = document.getElementById('account-overview');
+    const actions = document.getElementById('account-actions');
+
+    if (!session.authenticated || !session.user) {
+        document.getElementById('account-session-chip').className = 'ov-chip warn';
+        document.getElementById('account-session-chip').textContent = 'Not signed in';
+        document.getElementById('account-theme-chip').textContent = 'Local preview theme only';
+        actions.innerHTML = `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Sign in to OpenVibe</a>
+            <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Preview themes</a>`;
+        overview.innerHTML = `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">Guest mode</span></div>
+            <h2>Account sync starts after sign-in</h2>
+            <p class="ov-muted">Once authenticated, this page becomes your native account dashboard for profile data, linked services, themes, notifications, sessions, and launcher state.</p>`;
+        document.getElementById('account-tabs').hidden = true;
+        document.getElementById('tab-profile').innerHTML = `
+            <div class="ov-section-head"><div><h2>What unlocks after sign-in</h2><p class="ov-section-sub">A quick preview of the OpenVibe-native account surface.</p></div></div>
+            <div class="ov-grid">
+                <article class="ov-card"><div class="ov-kicker">Profile</div><h3 class="ov-service-title" style="margin-top:.8rem;">Own your public identity</h3><p class="ov-muted">Edit username, display name, avatar URL, and richer profile metadata from one place.</p></article>
+                <article class="ov-card"><div class="ov-kicker">Theme</div><h3 class="ov-service-title" style="margin-top:.8rem;">Sync visual preferences</h3><p class="ov-muted">Choose a network-wide theme stored in <code>openvibe.theme</code> instead of relying on old scattered settings.</p></article>
+                <article class="ov-card"><div class="ov-kicker">Sessions</div><h3 class="ov-service-title" style="margin-top:.8rem;">Inspect active sign-ins</h3><p class="ov-muted">See the native auth sessions issued by the control plane and how recently they were seen.</p></article>
+            </div>`;
+        ['linked', 'theme', 'notifications', 'sessions', 'launcher'].forEach((tab) => {
+            document.getElementById(`tab-${tab}`).hidden = true;
+        });
+        return;
+    }
+
+    const [accountProfile, accountSessions, linkedAccounts, remoteServices, launcherState] = await Promise.all([
+        OpenVibe.loadAccountProfile().catch(() => null),
+        OpenVibe.loadAccountSessions(),
+        OpenVibe.loadAccountLinked(),
+        OpenVibe.loadServices(),
+        OpenVibe.loadLauncherState(),
+    ]);
+
+    const services = OpenVibe.mergedServices(remoteServices);
+    const user = (accountProfile && accountProfile.user) || session.user;
+    const publicProfile = (accountProfile && accountProfile.profile) || { data: {} };
+    const notificationPrefs = (accountProfile && accountProfile.notifications && accountProfile.notifications.data) || {};
+    let currentThemeId = (accountProfile && accountProfile.theme && accountProfile.theme.data && accountProfile.theme.data.theme_id)
+        || localStorage.getItem('openvibe.theme')
+        || OpenVibe.BUILTIN_THEMES[0].id;
+
+    OpenVibe.applyTheme(currentThemeId);
+    document.getElementById('account-session-chip').className = 'ov-chip ok';
+    document.getElementById('account-session-chip').textContent = `Signed in as @${user.username || user.id}`;
+    document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
+    actions.innerHTML = `<a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('themes')}">Browse full theme catalog</a>
+        <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('tools')}">Open launcher</a>
+        <a class="ov-btn ov-btn-ghost" href="${OpenVibe.signOutUrl(OpenVibe.resolveSurfaceUrl('network'))}">Sign out</a>`;
+
+    overview.innerHTML = `
+        <div class="ov-chip-row" style="margin-bottom:.8rem;">
+            <span class="ov-chip ok">@${OpenVibe.escapeHtml(user.username || user.id)}</span>
+            <span class="ov-chip soft">${OpenVibe.escapeHtml(user.role || 'user')}</span>
+            ${user.email ? `<span class="ov-chip primary">${OpenVibe.escapeHtml(user.email)}</span>` : ''}
+        </div>
+        <h2>${OpenVibe.escapeHtml(user.display_name || user.username || 'OpenVibe user')}</h2>
+        <p class="ov-muted">Edit the native account record and the public profile module from one place. The launcher, notifications, and theme preferences you see here are real control-plane state.</p>
+        <div class="ov-grid" style="margin-top:1rem;">
+            <article class="ov-card"><span class="ov-chip primary">sessions</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((accountSessions.items || []).length))}</h3><p class="ov-muted">known native auth session${(accountSessions.items || []).length === 1 ? '' : 's'}</p></article>
+            <article class="ov-card"><span class="ov-chip primary">linked</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((linkedAccounts.items || []).length))}</h3><p class="ov-muted">linked provider${(linkedAccounts.items || []).length === 1 ? '' : 's'}</p></article>
+        </div>`;
+
+    document.getElementById('tab-profile').innerHTML = `
+        <div class="ov-section-head"><div><h2>Profile</h2><p class="ov-section-sub">Core auth fields plus extra profile metadata stored in <code>identity.profile</code>.</p></div></div>
+        <form id="profile-form" class="ov-form-grid">
+            <div class="ov-field"><label for="username">Username</label><input class="ov-input" id="username" name="username" value="${OpenVibe.escapeHtml(user.username || '')}" maxlength="32" required /><small>Your canonical @handle.</small></div>
+            <div class="ov-field"><label for="display_name">Display name</label><input class="ov-input" id="display_name" name="display_name" value="${OpenVibe.escapeHtml(user.display_name || '')}" maxlength="80" /></div>
+            <div class="ov-field"><label for="email">Email</label><input class="ov-input" id="email" name="email" type="email" value="${OpenVibe.escapeHtml(user.email || '')}" maxlength="160" /></div>
+            <div class="ov-field"><label for="avatar_url">Avatar URL</label><input class="ov-input" id="avatar_url" name="avatar_url" value="${OpenVibe.escapeHtml(user.avatar_url || '')}" maxlength="400" placeholder="https://…" /></div>
+            <div class="ov-field"><label for="tagline">Tagline</label><input class="ov-input" id="tagline" name="tagline" value="${OpenVibe.escapeHtml(publicProfile.data && publicProfile.data.tagline || '')}" maxlength="120" placeholder="Short one-line intro" /></div>
+            <div class="ov-field"><label for="website">Website</label><input class="ov-input" id="website" name="website" value="${OpenVibe.escapeHtml(publicProfile.data && publicProfile.data.website || '')}" maxlength="240" placeholder="https://your.site" /></div>
+            <div class="ov-field"><label for="location">Location</label><input class="ov-input" id="location" name="location" value="${OpenVibe.escapeHtml(publicProfile.data && publicProfile.data.location || '')}" maxlength="120" /></div>
+            <div class="ov-field"><label for="pronouns">Pronouns</label><input class="ov-input" id="pronouns" name="pronouns" value="${OpenVibe.escapeHtml(publicProfile.data && publicProfile.data.pronouns || '')}" maxlength="60" /></div>
+            <div class="ov-field" style="grid-column:1/-1;"><label for="bio">Bio</label><textarea class="ov-textarea" id="bio" name="bio" rows="4" placeholder="What should the network know about you?">${OpenVibe.escapeHtml(publicProfile.data && publicProfile.data.bio || '')}</textarea></div>
+            <div class="ov-action-row" style="grid-column:1/-1; justify-content:space-between;">
+                <span class="ov-muted" id="profile-status">Changes will update both the native auth user and your public profile module.</span>
+                <button class="ov-btn ov-btn-primary" type="submit">Save profile</button>
+            </div>
+        </form>`;
+
     document.getElementById('tab-linked').innerHTML = `
-        <h2>Linked accounts</h2>
-        <p class="ov-section-sub">Migrated linked accounts come from the Phase 8 canonical bundle (<code>identity/linked-accounts.ndjson</code>).</p>
-        <p>Once signed in, this view will list your providers (HoboTools, Discord, Twitch, etc.).</p>`;
+        <div class="ov-section-head"><div><h2>Linked accounts</h2><p class="ov-section-sub">Provider links surfaced from the native account record.</p></div></div>
+        <div class="ov-grid" id="linked-grid">${(linkedAccounts.items || []).length ? (linkedAccounts.items || []).map(linkedAccountMarkup).join('') : renderEmptyCard('No linked providers yet', 'Migrated or newly linked provider identities will appear here as they are connected.')}</div>`;
+
     document.getElementById('tab-theme').innerHTML = `
-        <h2>Theme</h2>
-        <p>Visit <a href="https://themes.openvibe.network">themes.openvibe.network</a> to apply a network-wide theme.</p>`;
+        <div class="ov-section-head"><div><h2>Theme</h2><p class="ov-section-sub">Preview locally here or jump into the full catalog page for a dedicated theme view.</p></div></div>
+        <div class="ov-card" style="margin-bottom:1rem;"><div class="ov-chip-row"><span class="ov-chip ok">Current theme</span><span class="ov-chip primary" id="theme-tab-current-id">${OpenVibe.escapeHtml(currentThemeId)}</span></div><p class="ov-muted" id="theme-tab-status" style="margin-top:.8rem;">${OpenVibe.escapeHtml(OpenVibe.themeById(currentThemeId).description)}</p></div>
+        <div class="ov-grid" id="theme-tab-grid">${OpenVibe.BUILTIN_THEMES.map((theme) => themeCardMarkup(theme, currentThemeId)).join('')}</div>`;
+
     document.getElementById('tab-notifications').innerHTML = `
-        <h2>Notifications</h2>
-        <p>Notification preferences are stored in <code>control_notification_preferences</code> and travel with your account.</p>`;
-    document.getElementById('tab-security').innerHTML = `
-        <h2>Security</h2>
-        <ul>
-            <li>Sessions are issued by <code>auth.openvibe.network</code> as RS256 JWTs.</li>
-            <li>OAuth client secrets are <strong>never</strong> migrated from legacy systems and must be re-issued.</li>
-            <li>Set <code>OPENVIBE_LEGACY_COMPAT_MODE=true</code> only if you intentionally federate to <code>hobo.tools</code>.</li>
-        </ul>`;
+        <div class="ov-section-head"><div><h2>Notifications</h2><p class="ov-section-sub">Notification preference storage lives in <code>control.notification_preferences</code>.</p></div></div>
+        <form id="notifications-form">
+            <div class="ov-toggle-list">
+                ${[
+                    ['email', 'Email notifications', 'Useful for announcements, receipts, and alerts you should not miss.'],
+                    ['browser', 'Browser notifications', 'Short in-browser signals for live, chat, or moderation activity.'],
+                    ['live', 'Live alerts', 'Tell me when followed creators or highlighted surfaces go live.'],
+                    ['mentions', 'Mentions and replies', 'Notify me when someone pings me in chat or community surfaces.'],
+                    ['dms', 'Direct messages', 'Highlight new private conversations and requests.'],
+                    ['system', 'System notices', 'Maintenance, migration readiness, and network-level operational messages.'],
+                ].map(([key, label, desc]) => `<label class="ov-toggle-row"><input type="checkbox" name="${OpenVibe.escapeHtml(key)}" ${notificationPrefs[key] ? 'checked' : ''} /><span><strong>${OpenVibe.escapeHtml(label)}</strong><br><span class="ov-muted">${OpenVibe.escapeHtml(desc)}</span></span></label>`).join('')}
+            </div>
+            <div class="ov-action-row" style="justify-content:space-between; margin-top:1rem;">
+                <span class="ov-muted" id="notifications-status">These choices are stored in your account preferences module.</span>
+                <button class="ov-btn ov-btn-primary" type="submit">Save notification settings</button>
+            </div>
+        </form>`;
+
+    document.getElementById('tab-sessions').innerHTML = `
+        <div class="ov-section-head"><div><h2>Sessions</h2><p class="ov-section-sub">Native auth sessions issued by the OpenVibe control plane.</p></div></div>
+        <div class="ov-table-wrap">
+            <table class="ov-table">
+                <thead><tr><th>session</th><th>created</th><th>last seen</th><th>user agent</th><th>ip</th><th>state</th></tr></thead>
+                <tbody>${(accountSessions.items || []).length ? (accountSessions.items || []).map((row) => `<tr><td><code>${OpenVibe.escapeHtml(row.id)}</code></td><td>${OpenVibe.escapeHtml(OpenVibe.formatDateTime(row.created_at))}</td><td>${OpenVibe.escapeHtml(OpenVibe.formatRelativeTime(row.last_seen_at || row.created_at))}</td><td>${OpenVibe.escapeHtml(row.user_agent || '—')}</td><td>${OpenVibe.escapeHtml(row.ip_address || '—')}</td><td>${row.revoked_at ? '<span class="ov-tag warn">revoked</span>' : '<span class="ov-tag ok">active</span>'}</td></tr>`).join('') : '<tr><td colspan="6">No sessions recorded yet.</td></tr>'}</tbody>
+            </table>
+        </div>`;
+
+    function renderLauncherTab() {
+        const favorites = (launcherState.favorites || []).map((id) => services.find((item) => item.service_id === id)).filter(Boolean);
+        const recents = (launcherState.recents || []).map((id) => services.find((item) => item.service_id === id)).filter(Boolean);
+        document.getElementById('tab-launcher').innerHTML = `
+            <div class="ov-section-head"><div><h2>Launcher state</h2><p class="ov-section-sub">The same favorites and recents used by the network launcher live here too.</p></div></div>
+            <div class="ov-action-row" style="justify-content:flex-end; margin-bottom:1rem;">
+                <button class="ov-btn" type="button" id="clear-recents">Clear recents</button>
+                <button class="ov-btn ov-btn-ghost" type="button" id="clear-favorites">Clear favorites</button>
+            </div>
+            <div class="ov-grid" id="launcher-favorites">${favorites.length ? '' : renderEmptyCard('No favorites yet', 'Star a few services from the launcher or tools directory and they will appear here.')}</div>
+            <div class="ov-grid" id="launcher-recents" style="margin-top:1rem;">${recents.length ? '' : renderEmptyCard('No recent launches yet', 'Once you jump between services, the launcher will remember the path here.')}</div>`;
+
+        if (favorites.length) {
+            OpenVibe.renderServiceCards(document.getElementById('launcher-favorites'), favorites).catch(() => {});
+        }
+        if (recents.length) {
+            OpenVibe.renderServiceCards(document.getElementById('launcher-recents'), recents).catch(() => {});
+        }
+
+        document.getElementById('clear-recents').addEventListener('click', async function () {
+            launcherState.recents = [];
+            await OpenVibe.saveLauncherState(launcherState);
+            renderLauncherTab();
+        });
+        document.getElementById('clear-favorites').addEventListener('click', async function () {
+            launcherState.favorites = [];
+            await OpenVibe.saveLauncherState(launcherState);
+            renderLauncherTab();
+        });
+    }
+
+    renderLauncherTab();
+
+    document.getElementById('profile-form').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = document.getElementById('profile-status');
+        status.textContent = 'Saving profile…';
+        try {
+            const patch = {
+                username: form.username.value,
+                display_name: form.display_name.value,
+                email: form.email.value,
+                avatar_url: form.avatar_url.value,
+                profile: {
+                    tagline: form.tagline.value,
+                    website: form.website.value,
+                    location: form.location.value,
+                    pronouns: form.pronouns.value,
+                    bio: form.bio.value,
+                },
+            };
+            await OpenVibe.saveAccountProfile(patch);
+            status.textContent = 'Profile saved.';
+            document.getElementById('account-session-chip').textContent = `Signed in as @${form.username.value}`;
+        } catch (error) {
+            status.textContent = `Could not save profile (${error.status || 'error'}).`;
+        }
+    });
+
+    document.getElementById('notifications-form').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = document.getElementById('notifications-status');
+        status.textContent = 'Saving notification settings…';
+        const nextPrefs = Array.from(form.querySelectorAll('input[type="checkbox"]')).reduce((accumulator, input) => {
+            accumulator[input.name] = input.checked;
+            return accumulator;
+        }, {});
+        try {
+            await OpenVibe.putUserModule('control.notification_preferences', nextPrefs);
+            status.textContent = 'Notification preferences saved.';
+        } catch (error) {
+            status.textContent = `Could not save notification settings (${error.status || 'error'}).`;
+        }
+    });
+
+    document.getElementById('tab-theme').addEventListener('click', async function (event) {
+        const previewButton = event.target.closest('[data-preview-theme]');
+        if (previewButton) {
+            currentThemeId = previewButton.dataset.previewTheme;
+            OpenVibe.applyTheme(currentThemeId);
+            document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
+            document.getElementById('theme-tab-current-id').textContent = currentThemeId;
+            document.getElementById('theme-tab-status').textContent = OpenVibe.themeById(currentThemeId).description;
+            document.getElementById('theme-tab-grid').innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => themeCardMarkup(theme, currentThemeId)).join('');
+            return;
+        }
+        const applyButton = event.target.closest('[data-apply-theme]');
+        if (!applyButton) return;
+        currentThemeId = applyButton.dataset.applyTheme;
+        try {
+            await OpenVibe.syncThemePreference(currentThemeId);
+            document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
+            document.getElementById('theme-tab-current-id').textContent = currentThemeId;
+            document.getElementById('theme-tab-status').textContent = 'Theme saved to your account and applied locally.';
+            document.getElementById('theme-tab-grid').innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => themeCardMarkup(theme, currentThemeId)).join('');
+        } catch (error) {
+            document.getElementById('theme-tab-status').textContent = `Could not save theme (${error.status || 'error'}).`;
+        }
+    });
 })();
 </script>
 </body>

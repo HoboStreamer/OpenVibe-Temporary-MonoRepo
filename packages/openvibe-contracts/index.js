@@ -13,6 +13,7 @@ const chatEvents = require('./chat-events');
 const communityEvents = require('./community-events');
 const billingEvents = require('./billing-events');
 const aiEvents = require('./ai-events');
+const gameEvents = require('./game-events');
 
 module.exports = {
     ...topics,
@@ -28,4 +29,5 @@ module.exports = {
     ...communityEvents,
     ...billingEvents,
     ...aiEvents,
+    ...gameEvents,
 };

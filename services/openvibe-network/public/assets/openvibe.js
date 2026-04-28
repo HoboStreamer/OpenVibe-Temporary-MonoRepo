@@ -1,116 +1,611 @@
-// OpenVibe shared frontend helpers — used by all openvibe-network surfaces.
-// No build step. ES modules optional; we expose globals for inline scripts.
+// OpenVibe shared frontend helpers — environment-aware chrome, account tools,
+// favorites/recents sync, and theme utilities for openvibe-network surfaces.
 
 (function (global) {
     'use strict';
 
     const API_BASE = (global.OV_API_BASE || '/api/v1').replace(/\/$/, '');
+    const LOCAL_LAUNCHER_KEY = 'openvibe.launcher';
+    const LOCAL_THEME_KEY = 'openvibe.theme';
+    const relativeTime = typeof Intl !== 'undefined' && Intl.RelativeTimeFormat
+        ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+        : null;
+
+    const SURFACE_URL_KEYS = {
+        network: 'OPENVIBE_NETWORK_URL',
+        auth: 'OPENVIBE_AUTH_URL',
+        admin: 'OPENVIBE_ADMIN_URL',
+        my: 'OPENVIBE_MY_URL',
+        themes: 'OPENVIBE_THEMES_URL',
+        live: 'OPENVIBE_LIVE_URL',
+        media: 'OPENVIBE_MEDIA_URL',
+        restream: 'OPENRE_STREAM_URL',
+        chat: 'OPENVIBE_CHAT_URL',
+        community: 'OPENVIBE_COMMUNITY_URL',
+        billing: 'OPENVIBE_BILLING_URL',
+        ai: 'OPENVIBE_AI_URL',
+        games: 'OPENVIBE_GAMES_URL',
+    };
+
+    const SURFACE_FALLBACKS = {
+        network: 'https://openvibe.network',
+        auth: 'https://auth.openvibe.network',
+        admin: 'https://admin.openvibe.network',
+        my: 'https://my.openvibe.network',
+        themes: 'https://themes.openvibe.network',
+        tools: 'https://openvibe.tools',
+        live: 'https://openvibe.live',
+        media: 'https://openvibe.media',
+        restream: 'https://openre.stream',
+        chat: 'https://openvibe.chat',
+        community: 'https://openvibe.community',
+        billing: 'https://billing.openvibe.network',
+        ai: 'https://ai.openvibe.network',
+        games: 'https://openvibe.games',
+    };
+
+    const SERVICE_SURFACE_MAP = {
+        'openvibe-network': 'network',
+        'openvibe-tools': 'tools',
+        'openvibe-admin': 'admin',
+        'openvibe-my': 'my',
+        'openvibe-themes': 'themes',
+        'openvibe-live': 'live',
+        'openvibe-media': 'media',
+        'openre-stream': 'restream',
+        'openvibe-chat': 'chat',
+        'openvibe-community': 'community',
+        'openvibe-billing': 'billing',
+        'openvibe-ai': 'ai',
+        'openvibe-games': 'games',
+    };
+
+    const BUILTIN_THEMES = [
+        {
+            id: 'openvibe-dark',
+            name: 'OpenVibe Dark',
+            description: 'The default neon-night palette for the network.',
+            accent: '#8b5cf6',
+            accent2: '#22d3ee',
+            bg: '#060917',
+            bgSoft: 'rgba(11, 16, 33, 0.84)',
+            text: '#eef4ff',
+            textDim: '#a7b5d2',
+            preview: 'linear-gradient(135deg, #080d1b 0%, #151d39 55%, #102b46 100%)',
+        },
+        {
+            id: 'openvibe-dim',
+            name: 'OpenVibe Dim',
+            description: 'Cooler blues and seafoam with softer contrast.',
+            accent: '#2dd4bf',
+            accent2: '#60a5fa',
+            bg: '#0b1323',
+            bgSoft: 'rgba(17, 24, 39, 0.88)',
+            text: '#edf6ff',
+            textDim: '#b4c7dd',
+            preview: 'linear-gradient(135deg, #0c1528 0%, #18304d 50%, #0e3b44 100%)',
+        },
+        {
+            id: 'openvibe-light',
+            name: 'OpenVibe Light',
+            description: 'Bright, crisp, and still unmistakably OpenVibe.',
+            accent: '#5b3df0',
+            accent2: '#0ea5e9',
+            bg: '#eef4ff',
+            bgSoft: 'rgba(255, 255, 255, 0.92)',
+            text: '#0f172a',
+            textDim: '#475569',
+            preview: 'linear-gradient(135deg, #ffffff 0%, #e8f0ff 55%, #dff7ff 100%)',
+        },
+        {
+            id: 'sunset',
+            name: 'Sunset Broadcast',
+            description: 'Orange/pink glow built for creator dashboards.',
+            accent: '#f97316',
+            accent2: '#fb7185',
+            bg: '#1a1118',
+            bgSoft: 'rgba(38, 20, 28, 0.9)',
+            text: '#fff1f2',
+            textDim: '#fecdd3',
+            preview: 'linear-gradient(135deg, #241018 0%, #52203c 55%, #9a3412 100%)',
+        },
+        {
+            id: 'forest',
+            name: 'Forest Signal',
+            description: 'Deep green tones for a calmer operator feel.',
+            accent: '#22c55e',
+            accent2: '#2dd4bf',
+            bg: '#0d1410',
+            bgSoft: 'rgba(16, 28, 23, 0.9)',
+            text: '#ecfdf5',
+            textDim: '#a7f3d0',
+            preview: 'linear-gradient(135deg, #07130d 0%, #0f3a22 50%, #0d5f46 100%)',
+        },
+        {
+            id: 'cyberpunk',
+            name: 'Cyberpunk Relay',
+            description: 'Hot magenta + cyan for maximal arcade energy.',
+            accent: '#ec4899',
+            accent2: '#22d3ee',
+            bg: '#0c0a18',
+            bgSoft: 'rgba(21, 14, 38, 0.9)',
+            text: '#faf5ff',
+            textDim: '#d8b4fe',
+            preview: 'linear-gradient(135deg, #12091f 0%, #2b0f58 50%, #0e7490 100%)',
+        },
+    ];
+
+    const FALLBACK_SERVICES = [
+        { service_id: 'openvibe-network', display_name: 'OpenVibe Network', description: 'The platform hub, identity directory, and registry surface.', public_url: resolveSurfaceFallback('network'), category: 'platform', tags: ['hub', 'identity', 'network'], spotlight: true },
+        { service_id: 'openvibe-tools', display_name: 'OpenVibe Tools', description: 'Search and launch every OpenVibe surface from one directory.', public_url: resolveSurfaceFallback('tools'), category: 'platform', tags: ['search', 'directory', 'launcher'], spotlight: true },
+        { service_id: 'openvibe-live', display_name: 'OpenVibe Live', description: 'Native live streaming, clips, VODs, discovery, and creator routes.', public_url: resolveSurfaceFallback('live'), category: 'streaming', tags: ['live', 'vods', 'clips'], spotlight: true },
+        { service_id: 'openre-stream', display_name: 'OpenRe.Stream', description: 'Low-latency ingest and restream control plane for creators.', public_url: resolveSurfaceFallback('restream'), category: 'streaming', tags: ['rtmp', 'whip', 'restream'], spotlight: true },
+        { service_id: 'openvibe-chat', display_name: 'OpenVibe Chat', description: 'Rooms, DMs, calls, TTS, and cross-surface chat.', public_url: resolveSurfaceFallback('chat'), category: 'chat', tags: ['chat', 'dms', 'tts'], spotlight: true },
+        { service_id: 'openvibe-community', display_name: 'OpenVibe Community', description: 'Threads, spaces, pastes, comments, and Discord relay.', public_url: resolveSurfaceFallback('community'), category: 'community', tags: ['threads', 'pastes', 'relay'], spotlight: true },
+        { service_id: 'openvibe-media', display_name: 'OpenVibe Media', description: 'Shared uploads, derivatives, lifecycle, and storage diagnostics.', public_url: resolveSurfaceFallback('media'), category: 'platform', tags: ['uploads', 'storage', 'derivatives'] },
+        { service_id: 'openvibe-billing', display_name: 'OpenVibe Billing', description: 'Tips, VIP plans, subscriptions, and creator ledger flows.', public_url: resolveSurfaceFallback('billing'), category: 'billing', tags: ['tips', 'vip', 'ledger'] },
+        { service_id: 'openvibe-ai', display_name: 'OpenVibe AI', description: 'AI provider routing, captions, automation, and enrichment.', public_url: resolveSurfaceFallback('ai'), category: 'ai', tags: ['captions', 'automation', 'search'] },
+        { service_id: 'openvibe-games', display_name: 'OpenVibe Games', description: 'MMORPG progression, canvas, cosmetics, and shared world state.', public_url: resolveSurfaceFallback('games'), category: 'games', tags: ['canvas', 'mmorpg', 'quests'], spotlight: true },
+        { service_id: 'openvibe-admin', display_name: 'Admin', description: 'Operator surface for staff, migration readiness, and audit.', public_url: resolveSurfaceFallback('admin'), category: 'admin', tags: ['audit', 'ops', 'readiness'] },
+        { service_id: 'openvibe-my', display_name: 'My Account', description: 'Profile, sessions, notifications, themes, and linked account hub.', public_url: resolveSurfaceFallback('my'), category: 'account', tags: ['profile', 'security', 'account'] },
+        { service_id: 'openvibe-themes', display_name: 'Themes', description: 'Network-wide theme catalog and previews.', public_url: resolveSurfaceFallback('themes'), category: 'account', tags: ['themes', 'design', 'prefs'] },
+    ];
+
+    let sessionPromise = null;
+    let launcherStatePromise = null;
+    let urlRegistryPromise = null;
+    let urlRegistryCache = null;
+    let accountProfilePromise = null;
+
+    function resolveSurfaceFallback(surface) {
+        const local = inferLocalOrigin(surface);
+        return local || SURFACE_FALLBACKS[surface] || '#';
+    }
+
+    function mergeFetchOptions(opts) {
+        const headers = Object.assign({ Accept: 'application/json' }, opts && opts.headers ? opts.headers : {});
+        return Object.assign({ credentials: 'include', headers }, opts || {});
+    }
 
     async function api(pathname, opts) {
-        const res = await fetch(`${API_BASE}${pathname}`, Object.assign({
-            credentials: 'include',
-            headers: { 'Accept': 'application/json' },
-        }, opts || {}));
-        const text = await res.text();
+        const response = await fetch(`${API_BASE}${pathname}`, mergeFetchOptions(opts));
+        const text = await response.text();
         let body = null;
-        try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-        if (!res.ok) {
-            const err = new Error(`api ${pathname} failed: ${res.status}`);
-            err.status = res.status;
-            err.body = body;
-            throw err;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = text;
+        }
+        if (!response.ok) {
+            const error = new Error(`api ${pathname} failed: ${response.status}`);
+            error.status = response.status;
+            error.body = body;
+            throw error;
         }
         return body;
+    }
+
+    function safeParse(value, fallback) {
+        if (typeof value !== 'string') return value == null ? fallback : value;
+        try {
+            return JSON.parse(value);
+        } catch {
+            return fallback;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[char]));
+    }
+
+    function slugifyLabel(value) {
+        return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function getInitials(value) {
+        const words = String(value || 'OV').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+        return (words.length ? words : ['OV']).map((word) => word.charAt(0).toUpperCase()).join('');
+    }
+
+    function currentPortPart() {
+        return global.location && global.location.port ? `:${global.location.port}` : '';
+    }
+
+    function inferLocalOrigin(surface) {
+        const hostname = global.location && global.location.hostname ? global.location.hostname : '';
+        if (!/localhost$/i.test(hostname)) return null;
+        const protocol = global.location.protocol || 'http:';
+        const portPart = currentPortPart();
+        switch (surface) {
+        case 'network':
+            return `${protocol}//openvibe.network.localhost${portPart}`;
+        case 'auth':
+            return `${protocol}//auth.openvibe.network.localhost${portPart}`;
+        case 'admin':
+            return `${protocol}//admin.openvibe.network.localhost${portPart}`;
+        case 'my':
+            return `${protocol}//my.openvibe.network.localhost${portPart}`;
+        case 'themes':
+            return `${protocol}//themes.openvibe.network.localhost${portPart}`;
+        case 'tools':
+            return `${protocol}//tools.openvibe.network.localhost${portPart}`;
+        default:
+            return null;
+        }
+    }
+
+    function registryValue(key) {
+        return urlRegistryCache && urlRegistryCache.registry && urlRegistryCache.registry[key]
+            ? urlRegistryCache.registry[key].value
+            : null;
+    }
+
+    async function loadUrlRegistry(force) {
+        if (!force && urlRegistryPromise) return urlRegistryPromise;
+        urlRegistryPromise = api('/url-registry/resolved').then((data) => {
+            urlRegistryCache = data && data.registry ? data : { registry: {} };
+            return urlRegistryCache;
+        }).catch(() => {
+            urlRegistryCache = { registry: {} };
+            return urlRegistryCache;
+        });
+        return urlRegistryPromise;
+    }
+
+    function resolveSurfaceUrl(surface) {
+        if (!surface) return '#';
+        const local = inferLocalOrigin(surface);
+        if (local) return local;
+        if (surface === 'tools') return SURFACE_FALLBACKS.tools;
+        const fromRegistry = registryValue(SURFACE_URL_KEYS[surface]);
+        return fromRegistry || inferLocalOrigin(surface) || SURFACE_FALLBACKS[surface] || '#';
+    }
+
+    function resolveServiceUrl(item) {
+        const surface = SERVICE_SURFACE_MAP[item && item.service_id];
+        return surface ? resolveSurfaceUrl(surface) : (item && item.public_url) || '#';
+    }
+
+    async function loadSession(force) {
+        if (!force && sessionPromise) return sessionPromise;
+        sessionPromise = api('/session').catch(() => ({ authenticated: false, user: null }));
+        return sessionPromise;
     }
 
     async function loadServices() {
         try {
             const data = await api('/services');
             return Array.isArray(data && data.items) ? data.items : [];
-        } catch (e) {
-            console.warn('[openvibe] failed to load services:', e.message);
+        } catch (error) {
+            console.warn('[openvibe] failed to load services:', error.message);
             return [];
         }
     }
 
-    // Static fallback service catalog so offline / pre-load UI still feels real.
-    const FALLBACK_SERVICES = [
-        { service_id: 'openvibe-network', display_name: 'OpenVibe Network', description: 'The platform hub and identity surface.', public_url: 'https://openvibe.network', category: 'platform' },
-        { service_id: 'openvibe-tools', display_name: 'OpenVibe Tools', description: 'Searchable directory of every OpenVibe service.', public_url: 'https://openvibe.tools', category: 'platform' },
-        { service_id: 'openvibe-live', display_name: 'OpenVibe Live', description: 'Native live streaming.', public_url: 'https://openvibe.live', category: 'streaming' },
-        { service_id: 'openre-stream', display_name: 'OpenRe.Stream', description: 'Restream / multi-destination broadcast.', public_url: 'https://openre.stream', category: 'streaming' },
-        { service_id: 'openvibe-chat', display_name: 'OpenVibe Chat', description: 'Chat, DMs, voice rooms, TTS.', public_url: 'https://openvibe.chat', category: 'chat' },
-        { service_id: 'openvibe-community', display_name: 'OpenVibe Community', description: 'Pastes, threads, forums.', public_url: 'https://openvibe.community', category: 'community' },
-        { service_id: 'openvibe-media', display_name: 'OpenVibe Media', description: 'Shared media object storage.', public_url: 'https://openvibe.media', category: 'platform' },
-        { service_id: 'openvibe-billing', display_name: 'OpenVibe Billing', description: 'Subscriptions, tips, ledger.', public_url: 'https://billing.openvibe.network', category: 'billing' },
-        { service_id: 'openvibe-ai', display_name: 'OpenVibe AI', description: 'Provider routing, captions, search backbone.', public_url: 'https://ai.openvibe.network', category: 'ai' },
-        { service_id: 'openvibe-admin', display_name: 'Admin', description: 'Operator surface for staff.', public_url: 'https://admin.openvibe.network', category: 'admin' },
-        { service_id: 'openvibe-my', display_name: 'My Account', description: 'Account hub, themes, linked accounts.', public_url: 'https://my.openvibe.network', category: 'account' },
-        { service_id: 'openvibe-themes', display_name: 'Themes', description: 'Network-wide theme catalog.', public_url: 'https://themes.openvibe.network', category: 'account' },
-    ];
-
     function mergedServices(remote) {
         const map = new Map();
-        for (const item of FALLBACK_SERVICES) map.set(item.service_id, { ...item, source: 'fallback' });
+        for (const item of FALLBACK_SERVICES) {
+            map.set(item.service_id, Object.assign({}, item, { source: 'fallback' }));
+        }
         for (const item of remote || []) {
-            const meta = item.metadata_json ? safeParse(item.metadata_json, {}) : (item.metadata || {});
+            const metadata = safeParse(item.metadata_json, null) || item.metadata || {};
             const merged = Object.assign({}, map.get(item.service_id) || {}, item, {
-                category: (meta && meta.category) || item.category || 'service',
-                tags: (meta && meta.tags) || [],
+                metadata,
+                category: metadata.category || item.category || 'service',
+                tags: Array.isArray(metadata.tags) ? metadata.tags : (Array.isArray(item.tags) ? item.tags : []),
+                spotlight: Boolean(metadata.spotlight || item.spotlight),
+                public_url: resolveServiceUrl(item) || item.public_url,
                 source: 'registry',
             });
             map.set(item.service_id, merged);
         }
-        return [...map.values()].sort((a, b) => (a.display_name || a.service_id).localeCompare(b.display_name || b.service_id));
+        return [...map.values()]
+            .map((item) => Object.assign({}, item, { public_url: resolveServiceUrl(item) || item.public_url || '#' }))
+            .sort((left, right) => (left.display_name || left.service_id).localeCompare(right.display_name || right.service_id));
     }
 
-    function safeParse(value, fallback) {
-        if (typeof value !== 'string') return value || fallback;
-        try { return JSON.parse(value); } catch { return fallback; }
-    }
-
-    function renderServiceCards(target, items) {
-        if (!target) return;
-        target.innerHTML = '';
-        for (const item of items) {
-            const a = document.createElement('a');
-            a.className = 'ov-card';
-            a.href = item.public_url || '#';
-            a.target = '_blank';
-            a.rel = 'noopener';
-            a.innerHTML = `
-                <div class="title">${escapeHtml(item.display_name || item.service_id)}</div>
-                <div class="desc">${escapeHtml(item.description || '')}</div>
-                <div class="meta">
-                    <span class="ov-tag">${escapeHtml(item.category || 'service')}</span>
-                    ${item.source === 'registry' ? '<span class="ov-tag ok">live</span>' : '<span class="ov-tag">catalog</span>'}
-                </div>`;
-            target.appendChild(a);
+    function readLocalLauncherState() {
+        try {
+            const parsed = safeParse(localStorage.getItem(LOCAL_LAUNCHER_KEY), null);
+            return Object.assign({ favorites: [], recents: [] }, parsed || {});
+        } catch {
+            return { favorites: [], recents: [] };
         }
     }
 
-    function escapeHtml(s) {
-        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-        }[c]));
+    function writeLocalLauncherState(state) {
+        try {
+            localStorage.setItem(LOCAL_LAUNCHER_KEY, JSON.stringify(state));
+        } catch {
+            // ignore local storage write failures
+        }
+    }
+
+    async function loadRemoteLauncherState() {
+        try {
+            const session = await loadSession();
+            if (!session || !session.authenticated) return null;
+            const profile = await loadAccountProfile();
+            return profile && profile.launcher && profile.launcher.data ? profile.launcher.data : null;
+        } catch {
+            return null;
+        }
+    }
+
+    async function loadLauncherState(force) {
+        if (!force && launcherStatePromise) return launcherStatePromise;
+        launcherStatePromise = (async function () {
+            const local = readLocalLauncherState();
+            const remote = await loadRemoteLauncherState();
+            const merged = {
+                favorites: Array.from(new Set([...(remote && remote.favorites || []), ...(local.favorites || [])])).slice(0, 20),
+                recents: Array.from(new Set([...(local.recents || []), ...(remote && remote.recents || [])])).slice(0, 20),
+            };
+            writeLocalLauncherState(merged);
+            return merged;
+        }());
+        return launcherStatePromise;
+    }
+
+    async function saveLauncherState(state) {
+        const normalized = {
+            favorites: Array.from(new Set(state && state.favorites || [])).slice(0, 20),
+            recents: Array.from(new Set(state && state.recents || [])).slice(0, 20),
+        };
+        writeLocalLauncherState(normalized);
+        launcherStatePromise = Promise.resolve(normalized);
+        try {
+            const session = await loadSession();
+            if (session && session.authenticated) {
+                await api('/user-modules/me/control.launcher', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: normalized }),
+                });
+            }
+        } catch (error) {
+            console.warn('[openvibe] launcher state sync failed:', error.message);
+        }
+        return normalized;
+    }
+
+    async function toggleFavorite(serviceId) {
+        const current = await loadLauncherState();
+        const nextFavorites = current.favorites.includes(serviceId)
+            ? current.favorites.filter((id) => id !== serviceId)
+            : [serviceId, ...current.favorites].slice(0, 20);
+        return saveLauncherState(Object.assign({}, current, { favorites: nextFavorites }));
+    }
+
+    async function recordLaunch(serviceId) {
+        const current = await loadLauncherState();
+        const nextRecents = [serviceId, ...current.recents.filter((id) => id !== serviceId)].slice(0, 20);
+        return saveLauncherState(Object.assign({}, current, { recents: nextRecents }));
+    }
+
+    function signInUrl(returnTo) {
+        return `/oauth/authorize?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
+    }
+
+    function signOutUrl(returnTo) {
+        return `/oauth/logout?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
+    }
+
+    function themeById(themeId) {
+        return BUILTIN_THEMES.find((theme) => theme.id === themeId) || BUILTIN_THEMES[0];
+    }
+
+    function applyTheme(themeId, options) {
+        const theme = themeById(themeId);
+        const root = global.document && global.document.documentElement;
+        if (!root) return theme;
+        root.dataset.openvibeTheme = theme.id;
+        root.style.setProperty('--ov-accent', theme.accent);
+        root.style.setProperty('--ov-accent-2', theme.accent2);
+        root.style.setProperty('--ov-bg', theme.bg);
+        root.style.setProperty('--ov-bg-soft', theme.bgSoft);
+        root.style.setProperty('--ov-text', theme.text);
+        root.style.setProperty('--ov-text-dim', theme.textDim);
+        if (!options || options.persistLocal !== false) {
+            try { localStorage.setItem(LOCAL_THEME_KEY, theme.id); } catch { /* ignore */ }
+        }
+        return theme;
+    }
+
+    function applySavedTheme() {
+        try {
+            const saved = localStorage.getItem(LOCAL_THEME_KEY);
+            if (saved) return applyTheme(saved, { persistLocal: false });
+        } catch {
+            // ignore
+        }
+        return applyTheme(BUILTIN_THEMES[0].id, { persistLocal: false });
+    }
+
+    async function getUserModule(namespace) {
+        return api(`/user-modules/me/${encodeURIComponent(namespace)}`);
+    }
+
+    async function putUserModule(namespace, data) {
+        return api(`/user-modules/me/${encodeURIComponent(namespace)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: data || {} }),
+        });
+    }
+
+    async function loadAccountProfile(force) {
+        if (!force && accountProfilePromise) return accountProfilePromise;
+        accountProfilePromise = api('/account/profile');
+        return accountProfilePromise;
+    }
+
+    async function saveAccountProfile(payload) {
+        const result = await api('/account/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {}),
+        });
+        accountProfilePromise = Promise.resolve(result);
+        if (result && result.user) {
+            sessionPromise = Promise.resolve({ authenticated: true, user: result.user });
+        }
+        return result;
+    }
+
+    async function loadAccountSessions() {
+        return api('/account/sessions').catch(() => ({ items: [] }));
+    }
+
+    async function loadAccountLinked() {
+        return api('/account/linked').catch(() => ({ items: [] }));
+    }
+
+    async function syncThemePreference(themeId) {
+        const payload = {
+            theme_id: themeId,
+            updated_at: new Date().toISOString(),
+            source: 'openvibe-network-ui',
+        };
+        const result = await putUserModule('openvibe.theme', payload);
+        applyTheme(themeId);
+        if (accountProfilePromise) {
+            const cached = await accountProfilePromise.catch(() => null);
+            if (cached) {
+                cached.theme = Object.assign({}, result);
+                accountProfilePromise = Promise.resolve(cached);
+            }
+        }
+        return result;
+    }
+
+    async function primeEnvironment(force) {
+        applySavedTheme();
+        await Promise.all([
+            loadUrlRegistry(force),
+            loadSession(force),
+            loadLauncherState(force),
+        ]);
+    }
+
+    function getServiceTags(item) {
+        const tags = Array.isArray(item && item.tags) ? item.tags : [];
+        return tags.slice(0, 4);
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString();
+    }
+
+    function formatRelativeTime(value) {
+        if (!value) return 'just now';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime()) || !relativeTime) return formatDateTime(value);
+        const diffMs = date.getTime() - Date.now();
+        const diffMinutes = Math.round(diffMs / 60000);
+        const absMinutes = Math.abs(diffMinutes);
+        if (absMinutes < 60) return relativeTime.format(diffMinutes, 'minute');
+        const diffHours = Math.round(diffMinutes / 60);
+        if (Math.abs(diffHours) < 48) return relativeTime.format(diffHours, 'hour');
+        const diffDays = Math.round(diffHours / 24);
+        return relativeTime.format(diffDays, 'day');
+    }
+
+    function getServiceHref(item) {
+        return resolveServiceUrl(item);
+    }
+
+    function buildServiceCardMarkup(item, state) {
+        const tags = getServiceTags(item);
+        const href = getServiceHref(item);
+        const favorited = !!(state && state.favorites && state.favorites.includes(item.service_id));
+        const sourceLabel = item.source === 'registry' ? 'live registry' : 'catalog';
+        return `<article class="ov-service-card" data-service-id="${escapeHtml(item.service_id)}">
+            <div class="ov-service-top">
+                <div style="display:flex; gap:.85rem; align-items:flex-start;">
+                    <div class="ov-service-icon">${escapeHtml(getInitials(item.display_name || item.service_id))}</div>
+                    <div>
+                        <h3 class="ov-service-title">${escapeHtml(item.display_name || item.service_id)}</h3>
+                        <div class="ov-chip-row" style="margin-top:.45rem;">
+                            <span class="ov-chip ${item.source === 'registry' ? 'ok' : 'soft'}">${escapeHtml(sourceLabel)}</span>
+                            <span class="ov-chip primary">${escapeHtml(item.category || 'service')}</span>
+                            ${item.spotlight ? '<span class="ov-chip warn">featured</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+                <button class="ov-btn ov-favorite-btn" type="button" data-favorite-toggle="${escapeHtml(item.service_id)}" data-favorited="${favorited ? 'true' : 'false'}" aria-label="${favorited ? 'Remove favorite' : 'Add favorite'}">★</button>
+            </div>
+            <p class="ov-service-desc">${escapeHtml(item.description || 'OpenVibe surface')}</p>
+            <div class="ov-service-meta">
+                ${tags.map((tag) => `<span class="ov-tag">${escapeHtml(tag)}</span>`).join('')}
+            </div>
+            <div class="ov-card-actions">
+                <a class="ov-btn ov-btn-primary" href="${escapeHtml(href)}" data-launch-service="${escapeHtml(item.service_id)}">Open</a>
+                <a class="ov-btn ov-btn-ghost" href="${escapeHtml(href)}">Details</a>
+            </div>
+        </article>`;
+    }
+
+    async function renderServiceCards(target, items, options) {
+        if (!target) return;
+        const state = await loadLauncherState();
+        const list = Array.isArray(items) ? items : [];
+        if (!list.length) {
+            target.innerHTML = '<div class="ov-empty">Nothing matches this view yet.</div>';
+            return;
+        }
+        target.innerHTML = list.map((item) => buildServiceCardMarkup(item, state)).join('');
+        target.querySelectorAll('[data-launch-service]').forEach((link) => {
+            link.addEventListener('click', function () {
+                recordLaunch(link.dataset.launchService).catch(() => {});
+                if (options && typeof options.onLaunch === 'function') options.onLaunch(link.dataset.launchService);
+            });
+        });
+        target.querySelectorAll('[data-favorite-toggle]').forEach((button) => {
+            button.addEventListener('click', async function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const serviceId = button.dataset.favoriteToggle;
+                const nextState = await toggleFavorite(serviceId);
+                const favorited = nextState.favorites.includes(serviceId);
+                global.document.querySelectorAll('[data-favorite-toggle]').forEach((candidate) => {
+                    if (candidate.dataset.favoriteToggle !== serviceId) return;
+                    candidate.dataset.favorited = favorited ? 'true' : 'false';
+                    candidate.setAttribute('aria-label', favorited ? 'Remove favorite' : 'Add favorite');
+                });
+                if (options && typeof options.onFavoriteChange === 'function') await options.onFavoriteChange(nextState);
+            });
+        });
     }
 
     function navbar(activeKey) {
         const links = [
-            { key: 'home', href: 'https://openvibe.network', label: 'Home' },
-            { key: 'tools', href: 'https://openvibe.tools', label: 'Tools' },
-            { key: 'themes', href: 'https://themes.openvibe.network', label: 'Themes' },
-            { key: 'my', href: 'https://my.openvibe.network', label: 'My Account' },
-            { key: 'admin', href: 'https://admin.openvibe.network', label: 'Admin' },
+            { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home' },
+            { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools' },
+            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes' },
+            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account' },
+            { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin' },
             { key: 'docs', href: '/api/v1/services', label: 'Registry API' },
         ];
-        return `
-            <header class="ov-nav"><div class="ov-nav-inner">
-                <a href="/" class="ov-brand">⬢ <b>OpenVibe</b></a>
-                <nav class="ov-nav-links">
-                    ${links.map(l => `<a href="${l.href}"${l.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${l.label}</a>`).join('')}
-                </nav>
-            </div></header>`;
+        return `<header class="ov-nav"><div class="ov-nav-inner">
+            <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">
+                <span class="ov-brand-mark">OV</span>
+                <span class="ov-brand-copy"><b>OpenVibe</b><span>One account. Every surface.</span></span>
+            </a>
+            <nav class="ov-nav-links">
+                ${links.map((link) => `<a href="${escapeHtml(link.href)}" ${link.key === activeKey ? 'data-active="true"' : ''}>${escapeHtml(link.label)}</a>`).join('')}
+            </nav>
+            <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+        </div></header>`;
     }
 
     function footer() {
@@ -118,42 +613,116 @@
             OpenVibe is open source and community-run. ·
             <a href="https://github.com/openvibe">GitHub</a> ·
             <a href="/api/v1/services">Registry</a> ·
-            <a href="/.well-known/openid-configuration">OIDC</a> ·
+            <a href="${escapeHtml(resolveSurfaceUrl('auth'))}/.well-known/openid-configuration">OIDC</a> ·
             <a href="/health">Health</a>
         </footer>`;
     }
 
+    async function hydrateNavSession() {
+        const target = global.document.getElementById('ov-nav-session');
+        if (!target) return;
+        const session = await loadSession();
+        if (!session || !session.authenticated || !session.user) {
+            target.innerHTML = `<a class="ov-btn ov-btn-primary" href="${signInUrl(global.location.href)}">Sign in</a>`;
+            return;
+        }
+        target.innerHTML = `
+            <span class="ov-chip ok">@${escapeHtml(session.user.username || session.user.id || 'you')}</span>
+            <span class="ov-chip soft">${escapeHtml(session.user.role || 'user')}</span>
+            <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
+            <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Sign out</a>`;
+    }
+
+    async function renderChrome(activeKey) {
+        await loadUrlRegistry();
+        const navMount = global.document.getElementById('nav-mount');
+        const footerMount = global.document.getElementById('footer-mount');
+        if (navMount) navMount.innerHTML = navbar(activeKey);
+        if (footerMount) footerMount.innerHTML = footer();
+        hydrateNavSession().catch(() => {});
+    }
+
     function attachLauncher(getItems) {
-        const root = document.createElement('div');
+        const root = global.document.createElement('div');
         root.className = 'ov-launcher';
         root.innerHTML = `<div class="ov-launcher-box">
             <input class="ov-input" placeholder="Search OpenVibe services… (Esc to close)" />
             <div class="ov-launcher-results"></div>
         </div>`;
-        document.body.appendChild(root);
+        global.document.body.appendChild(root);
         const input = root.querySelector('input');
         const results = root.querySelector('.ov-launcher-results');
-        function close() { root.classList.remove('open'); input.value = ''; }
-        function open() { root.classList.add('open'); input.focus(); render(''); }
-        function render(q) {
-            const items = (getItems() || []).filter(it => {
-                const hay = `${it.display_name || ''} ${it.description || ''} ${it.service_id || ''} ${it.category || ''}`.toLowerCase();
-                return !q || hay.includes(q.toLowerCase());
-            }).slice(0, 12);
-            renderServiceCards(results, items);
+
+        function close() {
+            root.classList.remove('open');
+            input.value = '';
         }
-        input.addEventListener('input', () => render(input.value));
-        root.addEventListener('click', (e) => { if (e.target === root) close(); });
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open(); }
-            if (e.key === 'Escape') close();
+
+        async function render(query) {
+            const items = (getItems() || []).filter((item) => {
+                const haystack = `${item.display_name || ''} ${item.description || ''} ${item.service_id || ''} ${item.category || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
+                return !query || haystack.includes(String(query).toLowerCase());
+            }).slice(0, 12);
+            await renderServiceCards(results, items);
+        }
+
+        function open() {
+            root.classList.add('open');
+            input.focus();
+            render('');
+        }
+
+        input.addEventListener('input', function () { render(input.value); });
+        root.addEventListener('click', function (event) {
+            if (event.target === root) close();
+        });
+        global.document.addEventListener('keydown', function (event) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+                event.preventDefault();
+                open();
+            }
+            if (event.key === 'Escape') close();
         });
         return { open, close };
     }
 
     global.OpenVibe = {
-        api, escapeHtml, footer, navbar,
-        loadServices, mergedServices, renderServiceCards,
-        attachLauncher, FALLBACK_SERVICES,
+        API_BASE,
+        BUILTIN_THEMES,
+        FALLBACK_SERVICES,
+        api,
+        applySavedTheme,
+        applyTheme,
+        attachLauncher,
+        escapeHtml,
+        footer,
+        formatDateTime,
+        formatRelativeTime,
+        getServiceHref,
+        getUserModule,
+        loadAccountLinked,
+        loadAccountProfile,
+        loadAccountSessions,
+        loadLauncherState,
+        loadServices,
+        loadSession,
+        loadUrlRegistry,
+        mergedServices,
+        navbar,
+        primeEnvironment,
+        putUserModule,
+        recordLaunch,
+        renderChrome,
+        renderServiceCards,
+        resolveServiceUrl,
+        resolveSurfaceUrl,
+        saveAccountProfile,
+        saveLauncherState,
+        signInUrl,
+        signOutUrl,
+        slugifyLabel,
+        syncThemePreference,
+        themeById,
+        toggleFavorite,
     };
 }(window));

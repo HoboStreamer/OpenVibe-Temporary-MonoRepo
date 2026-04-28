@@ -1,11 +1,14 @@
 # Phase 8 — OpenVibe runtime independence + Hobo migration
 
-Status: implemented in this commit.
+Status: hard-cut implementation in progress.
 
 This document is the index for every Phase 8 work package. It points at the
-scripts, services, and per-package docs that together make OpenVibe runnable
-without any hobo.* dependency, while preserving the migration path for
-HoboStreamer.com and the hobo.tools service mesh.
+scripts, services, and per-package docs that move OpenVibe from transitional
+Phase 8 scaffolding to a fully native runtime with legacy Hobo repos retained
+only as migration and archival sources.
+
+That hard-cut now includes the native `openvibe-games` service for migrated
+MMORPG progression, cosmetics, daily quests, and collaborative canvas support.
 
 ## Defaults
 
@@ -15,8 +18,9 @@ HoboStreamer.com and the hobo.tools service mesh.
 * `OPENVIBE_MEDIA_COLD_PROVIDER=none`
 * `OPENVIBE_ALLOW_STAGING_LOAD=false`
 
-OpenVibe is OpenVibe-native by default. Federation with the legacy
-`hobo.tools` install is opt-in via `HOBO_TOOLS_URL` + `OPENVIBE_LEGACY_COMPAT_MODE=true`.
+OpenVibe is OpenVibe-native by default. Legacy Hobo services are migration
+inputs only and should stay out of the runtime path unless an operator is
+performing a narrowly scoped compatibility diagnostic.
 
 ## Work packages
 
@@ -42,7 +46,7 @@ OpenVibe is OpenVibe-native by default. Federation with the legacy
 | WP18 | OpenVibe Chat UI                               | `[openvibe-chat-product-readiness](openvibe-chat-product-readiness.md)` |
 | WP19 | OpenVibe Community UI                          | `[openvibe-community-product-readiness](openvibe-community-product-readiness.md)` |
 | WP20 | OpenVibe Media UI                              | `services/openvibe-media/public/index.html` |
-| WP21 | Compatibility-mode flag                        | `OPENVIBE_LEGACY_COMPAT_MODE` (this file) |
+| WP21 | Legacy runtime removal / compat diagnostics    | `OPENVIBE_LEGACY_COMPAT_MODE` (migration-only diagnostics) |
 | WP22 | Phase 8 docs                                   | This document |
 | WP23 | Cutover report                                 | `data/migrations/cutover-report.json` |
 

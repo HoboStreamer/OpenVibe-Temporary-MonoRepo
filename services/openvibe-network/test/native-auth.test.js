@@ -1,0 +1,226 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const http = require('http');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-native-auth-'));
+process.env.NODE_ENV = 'development';
+process.env.DB_PATH = path.join(tmp, 'network.db');
+process.env.OPENVIBE_PRIVATE_KEY = path.join(tmp, 'keys', 'openvibe-private.pem');
+process.env.OPENVIBE_PUBLIC_KEY = path.join(tmp, 'keys', 'openvibe-public.pem');
+process.env.OPENVIBE_NETWORK_URL = 'http://openvibe.network';
+process.env.OPENVIBE_AUTH_URL = 'http://auth.openvibe.network';
+process.env.OPENVIBE_API_URL = 'http://api.openvibe.network';
+process.env.OPENVIBE_MY_URL = 'http://my.openvibe.network';
+process.env.OPENVIBE_THEMES_URL = 'http://themes.openvibe.network';
+process.env.OPENVIBE_ADMIN_URL = 'http://admin.openvibe.network';
+process.env.HOBO_TOOLS_URL = '';
+process.env.HOBO_TOOLS_PUBLIC_KEY = '';
+
+const { buildApp } = require('../server/index');
+const { deriveCookieDomain } = require('../server/native-auth');
+
+function request({ port, hostHeader, method = 'GET', requestPath = '/', headers, body }) {
+    return new Promise((resolve, reject) => {
+        const req = http.request({
+            host: '127.0.0.1',
+            port,
+            path: requestPath,
+            method,
+            headers: Object.assign({
+                host: hostHeader,
+            }, headers || {}, body ? { 'content-length': Buffer.byteLength(body) } : {}),
+        }, (res) => {
+            let raw = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk) => { raw += chunk; });
+            res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: raw }));
+        });
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+    });
+}
+
+(async () => {
+    assert.strictEqual(deriveCookieDomain('http://auth.openvibe.network.localhost:4100'), '.network.localhost');
+    assert.strictEqual(deriveCookieDomain('http://auth.openvibe.network'), '.openvibe.network');
+
+    const { app } = buildApp();
+    const server = app.listen(0, '127.0.0.1');
+    try {
+        await new Promise((resolve) => server.once('listening', resolve));
+        const port = server.address().port;
+
+        const authorizePage = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            requestPath: '/oauth/authorize?return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+        });
+        assert.strictEqual(authorizePage.status, 200);
+        assert.ok(authorizePage.body.includes('Create an account or sign in'));
+
+        const formBody = [
+            'username=alice',
+            'display_name=Alice%20Example',
+            'email=alice%40example.com',
+            'return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+        ].join('&');
+        const signIn = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            method: 'POST',
+            requestPath: '/oauth/authorize',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: formBody,
+        });
+        assert.strictEqual(signIn.status, 302);
+        assert.strictEqual(signIn.headers.location, 'http://my.openvibe.network/account');
+        const setCookies = Array.isArray(signIn.headers['set-cookie']) ? signIn.headers['set-cookie'] : [signIn.headers['set-cookie']];
+        assert.ok(setCookies.some((value) => value && value.includes('Domain=.openvibe.network')), 'auth cookie should cover the configured OpenVibe domain');
+        const cookie = setCookies[0];
+        assert.ok(cookie && cookie.includes('openvibe_token='), 'auth cookie should be set');
+        const authCookie = cookie.split(';')[0];
+
+        const sessionRes = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/session',
+            headers: { cookie: authCookie },
+        });
+        const session = JSON.parse(sessionRes.body);
+        assert.strictEqual(sessionRes.status, 200);
+        assert.strictEqual(session.authenticated, true);
+        assert.strictEqual(session.user.username, 'alice');
+
+        const bridgeRes = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            requestPath: '/api/v1/session/bridge?return_to=' + encodeURIComponent('http://openvibe.chat.localhost:4800/'),
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(bridgeRes.status, 302);
+        const bridgedUrl = new URL(bridgeRes.headers.location);
+        assert.strictEqual(bridgedUrl.origin, 'http://openvibe.chat.localhost:4800');
+        const bridgedHash = new URLSearchParams(bridgedUrl.hash.slice(1));
+        assert.ok(bridgedHash.get('openvibe_token'), 'session bridge should return a bearer token in the URL fragment');
+
+        const exchangeRes = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/exchange',
+            headers: {
+                cookie: authCookie,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(exchangeRes.status, 200);
+        const exchanged = JSON.parse(exchangeRes.body);
+        assert.ok(exchanged.access_token, 'session exchange should return an access token');
+        assert.strictEqual(exchanged.user.username, 'alice');
+
+        const lookupRes = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/users/lookup?username=alice',
+            headers: { authorization: `Bearer ${exchanged.access_token}` },
+        });
+        assert.strictEqual(lookupRes.status, 200);
+        const lookedUp = JSON.parse(lookupRes.body);
+        assert.strictEqual(lookedUp.items.length, 1);
+        assert.strictEqual(lookedUp.items[0].username, 'alice');
+
+        const themeWrite = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            method: 'PUT',
+            requestPath: '/api/v1/user-modules/me/openvibe.theme',
+            headers: {
+                cookie: authCookie,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({ data: { theme_id: 'aurora-glow' } }),
+        });
+        assert.strictEqual(themeWrite.status, 200);
+        const themeRead = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/user-modules/me/openvibe.theme',
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(JSON.parse(themeRead.body).data.theme_id, 'aurora-glow');
+
+        const verifier = 'pkce-' + crypto.randomBytes(18).toString('hex');
+        const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+        const oauthAuthorize = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            requestPath: '/oauth/authorize?client_id=openvibe-web&redirect_uri=' + encodeURIComponent('http://localhost/callback') + '&response_type=code&state=xyz&code_challenge=' + encodeURIComponent(challenge) + '&code_challenge_method=S256',
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(oauthAuthorize.status, 302);
+        const location = new URL(oauthAuthorize.headers.location);
+        assert.strictEqual(location.searchParams.get('state'), 'xyz');
+        const code = location.searchParams.get('code');
+        assert.ok(code, 'authorization code should be returned');
+
+        const tokenBody = [
+            'grant_type=authorization_code',
+            'client_id=openvibe-web',
+            'redirect_uri=' + encodeURIComponent('http://localhost/callback'),
+            'code=' + encodeURIComponent(code),
+            'code_verifier=' + encodeURIComponent(verifier),
+        ].join('&');
+        const tokenRes = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            method: 'POST',
+            requestPath: '/oauth/token',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: tokenBody,
+        });
+        assert.strictEqual(tokenRes.status, 200);
+        const tokens = JSON.parse(tokenRes.body);
+        assert.ok(tokens.access_token, 'access token returned');
+        assert.ok(tokens.refresh_token, 'refresh token returned');
+
+        const bearerSession = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/session',
+            headers: { authorization: `Bearer ${tokens.access_token}` },
+        });
+        assert.strictEqual(JSON.parse(bearerSession.body).authenticated, true);
+
+        const refreshBody = [
+            'grant_type=refresh_token',
+            'client_id=openvibe-web',
+            'refresh_token=' + encodeURIComponent(tokens.refresh_token),
+        ].join('&');
+        const refreshRes = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            method: 'POST',
+            requestPath: '/oauth/token',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: refreshBody,
+        });
+        assert.strictEqual(refreshRes.status, 200);
+        assert.ok(JSON.parse(refreshRes.body).access_token);
+
+        console.log('native-auth: OK');
+    } finally {
+        server.close();
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+})().catch((err) => {
+    console.error(err);
+    fs.rmSync(tmp, { recursive: true, force: true });
+    process.exitCode = 1;
+});

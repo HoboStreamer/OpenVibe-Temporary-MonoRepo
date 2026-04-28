@@ -18,8 +18,10 @@ async function main() {
         user: args.user || null,
         remoteHobostreamerRoot: args.remoteHobostreamerRoot || null,
         remoteHobotoolsRoot: args.remoteHobotoolsRoot || null,
+        remoteHoboquestRoot: args.remoteHoboquestRoot || null,
         remoteHobostreamerDb: args.remoteHobostreamerDb || null,
         remoteHobotoolsDb: args.remoteHobotoolsDb || null,
+        remoteHoboquestDb: args.remoteHoboquestDb || null,
         outDir: path.resolve(args.out || DEFAULT_OUT),
         dryRun: !!args.dryRun,
         skipMedia: !!args.skipMedia,
@@ -31,6 +33,7 @@ async function main() {
 
     logger.info(`hobostreamer remote db: ${report.hobostreamer.remote_db || 'not discovered'}`);
     logger.info(`hobotools remote db: ${report.hobotools.remote_db || 'not discovered'}`);
+    logger.info(`hoboquest remote db: ${report.hoboquest.remote_db || 'not discovered'}`);
     logger.info(`manual actions: ${report.manual_actions.length}`);
 }
 

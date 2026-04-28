@@ -22,7 +22,11 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({ ok: true, service: config.serviceId }));
+    app.get('/health', (_req, res) => res.json({
+        ok: true,
+        service: config.serviceId,
+        persistence: db.describePersistence(),
+    }));
 
     app.use(express.static(path.join(__dirname, '..', 'public')));
 

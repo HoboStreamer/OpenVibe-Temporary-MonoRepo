@@ -96,7 +96,25 @@ async function main() {
         missing_files: [{ media_id: 'media:hobostreamer-vod:51', source_path: './data/vods/vod1.mp4' }],
     });
 
-    await loadStagingBundle({ bundleDir, dbPaths, logger: { info() {}, warn() {}, error() {} } });
+    const previousAllow = process.env.OPENVIBE_ALLOW_STAGING_LOAD;
+    const previousConfirm = process.env.OPENVIBE_STAGING_CONFIRM;
+    process.env.OPENVIBE_ALLOW_STAGING_LOAD = 'true';
+    process.env.OPENVIBE_STAGING_CONFIRM = 'true';
+
+    try {
+        await loadStagingBundle({
+            bundleDir,
+            dbPaths,
+            confirmLoad: true,
+            runId: 'readiness-test',
+            logger: { info() {}, warn() {}, error() {} },
+        });
+    } finally {
+        if (previousAllow == null) delete process.env.OPENVIBE_ALLOW_STAGING_LOAD;
+        else process.env.OPENVIBE_ALLOW_STAGING_LOAD = previousAllow;
+        if (previousConfirm == null) delete process.env.OPENVIBE_STAGING_CONFIRM;
+        else process.env.OPENVIBE_STAGING_CONFIRM = previousConfirm;
+    }
 
     const report = await buildReadinessReport({
         bundleDir,
@@ -110,11 +128,38 @@ async function main() {
                     body: JSON.stringify({ openvibe: { federation: { mode: 'hobo-tools' } } }),
                 };
             }
+            if (request.url.includes('/api/v1/session')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ authenticated: false, user: null }),
+                };
+            }
+            if (request.url.includes('/api/v1/admin/migration-status')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ artifacts: [], import: { dataset_count: 12 } }),
+                };
+            }
             if (request.url.includes('/api/community/pastes')) {
                 return { ok: false, status: 503, headers: {}, body: 'unavailable' };
             }
-            if (request.url.includes('/health') || request.url.includes('/api/') || request.url.endsWith('/')) {
+            if (request.url.includes('/health')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ ok: true, persistence: { mode: 'sqlite', legacy_compat_mode: false } }),
+                };
+            }
+            if (request.url.includes('/api/')) {
                 return { ok: true, status: 200, headers: { 'content-type': 'application/json' }, body: '{}' };
+            }
+            if (request.url.endsWith('/')) {
+                return { ok: true, status: 200, headers: { 'content-type': 'text/html' }, body: '<!doctype html><title>ok</title>' };
             }
             return { ok: true, status: 200, headers: {}, body: '' };
         },
@@ -124,6 +169,9 @@ async function main() {
     assert.ok(report.summary.yellow > 0, 'expected at least one yellow readiness check');
     assert.ok(report.summary.red > 0, 'expected at least one red readiness check');
     assert.ok(report.manual_actions.some((entry) => entry.includes('community-api')));
+    assert.ok(report.checks.some((check) => check.name === 'staging-persistence-descriptors' && check.status === 'green'));
+    assert.ok(report.checks.some((check) => check.name === 'session-api' && check.status === 'green'));
+    assert.ok(report.checks.some((check) => check.name === 'admin-migration-status' && check.status === 'green'));
 
     console.log('readiness test passed');
 }

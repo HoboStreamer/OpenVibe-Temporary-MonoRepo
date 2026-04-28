@@ -90,6 +90,26 @@ const HOBOSTREAMER_EXPORTS = [
     { table: 'channel_moderation_settings', orderBy: 'channel_id' },
     { table: 'control_configs', orderBy: 'id' },
     { table: 'control_config_buttons', orderBy: 'id' },
+    { table: 'game_world_state', orderBy: 'key' },
+    { table: 'game_players', orderBy: 'user_id' },
+    { table: 'game_inventory', orderBy: 'user_id, item_id' },
+    { table: 'game_bank', orderBy: 'user_id, item_id' },
+    { table: 'game_structures', orderBy: 'id' },
+    { table: 'game_farm_plots', orderBy: 'user_id, plot_index' },
+    { table: 'game_recipes', orderBy: 'user_id, recipe_id' },
+    { table: 'game_effects', orderBy: 'id' },
+    { table: 'game_battle_stats', orderBy: 'user_id' },
+    { table: 'game_dungeon_runs', orderBy: 'id' },
+    { table: 'game_leaderboard', orderBy: 'board_type, rank, user_id' },
+    { table: 'game_fish_collection', orderBy: 'user_id, fish_id' },
+    { table: 'game_daily_quest_progress', orderBy: 'user_id, quest_date, stat_key' },
+    { table: 'game_daily_quest_claims', orderBy: 'user_id, quest_date, quest_id' },
+    { table: 'game_achievements', orderBy: 'user_id, achievement_id' },
+    { table: 'user_cosmetics', orderBy: 'user_id, category, item_id' },
+    { table: 'user_equipped', orderBy: 'user_id, slot' },
+    { table: 'user_tags', orderBy: 'user_id, tag_id' },
+    { table: 'user_equipped_tag', orderBy: 'user_id' },
+    { table: 'tag_guardian_defeats', orderBy: 'user_id' },
 ];
 
 const HOBOSTREAMER_EXCLUSIONS = [
@@ -141,13 +161,46 @@ const HOBOSTREAMER_EXCLUSIONS = [
         entity: 'vpn_approvals',
         reason: 'VPN approval workflows are operational moderation state and not part of the initial cutover foundation.',
     },
+];
+
+const HOBOQUEST_EXPORTS = [
+    { table: 'game_world_state', orderBy: 'key' },
+    { table: 'game_players', orderBy: 'user_id' },
+    { table: 'game_inventory', orderBy: 'user_id, item_id' },
+    { table: 'game_bank', orderBy: 'user_id, item_id' },
+    { table: 'game_structures', orderBy: 'id' },
+    { table: 'game_farm_plots', orderBy: 'user_id, plot_index' },
+    { table: 'game_recipes', orderBy: 'user_id, recipe_id' },
+    { table: 'game_effects', orderBy: 'id' },
+    { table: 'game_battle_stats', orderBy: 'user_id' },
+    { table: 'game_dungeon_runs', orderBy: 'id' },
+    { table: 'game_leaderboard', orderBy: 'board, rank, user_id' },
+    { table: 'game_fish_collection', orderBy: 'user_id, fish_id' },
+    { table: 'game_daily_quest_progress', orderBy: 'user_id, quest_date, stat_key' },
+    { table: 'game_daily_quest_claims', orderBy: 'user_id, quest_date, quest_id' },
+    { table: 'game_achievements', orderBy: 'user_id, achievement_id' },
+    { table: 'user_cosmetics', orderBy: 'user_id, type, item_id' },
+    { table: 'user_equipped', orderBy: 'user_id, slot' },
+    { table: 'user_tags', orderBy: 'user_id, tag_id' },
+    { table: 'user_equipped_tag', orderBy: 'user_id' },
+    { table: 'tag_guardian_defeats', orderBy: 'user_id' },
+    { table: 'canvas_settings', orderBy: 'key' },
+    { table: 'canvas_tiles', orderBy: 'x, y' },
+    { table: 'canvas_actions', orderBy: 'id' },
+    { table: 'canvas_snapshots', orderBy: 'id' },
+    { table: 'canvas_region_locks', orderBy: 'id' },
+    { table: 'canvas_bans', orderBy: 'id' },
+    { table: 'canvas_user_overrides', orderBy: 'user_id' },
+];
+
+const HOBOQUEST_EXCLUSIONS = [
     {
-        entity: 'user_cosmetics',
-        reason: 'Game/cosmetic inventory migration is deferred to the later product-specific migration slice.',
+        entity: 'canvas_pixels',
+        reason: 'Legacy canvas_pixels is a compatibility alias; canonical migration reads canvas_tiles instead.',
     },
     {
-        entity: 'user_equipped',
-        reason: 'Game/cosmetic equipment migration is deferred to the later product-specific migration slice.',
+        entity: 'canvas_cooldowns',
+        reason: 'Per-user placement cooldown rows are transient runtime throttling state and are recalculated after cutover.',
     },
 ];
 
@@ -224,16 +277,20 @@ const HOBOTOOLS_EXCLUSIONS = [
 function getSourcePlan(sourceName) {
     if (sourceName === 'hobostreamer') return HOBOSTREAMER_EXPORTS;
     if (sourceName === 'hobotools') return HOBOTOOLS_EXPORTS;
+    if (sourceName === 'hoboquest') return HOBOQUEST_EXPORTS;
     throw new Error(`Unsupported source plan: ${sourceName}`);
 }
 
 function getSourceExclusions(sourceName) {
     if (sourceName === 'hobostreamer') return HOBOSTREAMER_EXCLUSIONS;
     if (sourceName === 'hobotools') return HOBOTOOLS_EXCLUSIONS;
+    if (sourceName === 'hoboquest') return HOBOQUEST_EXCLUSIONS;
     throw new Error(`Unsupported source exclusions: ${sourceName}`);
 }
 
 module.exports = {
+    HOBOQUEST_EXCLUSIONS,
+    HOBOQUEST_EXPORTS,
     HOBOSTREAMER_EXCLUSIONS,
     HOBOSTREAMER_EXPORTS,
     HOBOTOOLS_EXCLUSIONS,

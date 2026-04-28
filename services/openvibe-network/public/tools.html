@@ -4,30 +4,104 @@
 <meta charset="utf-8" />
 <title>OpenVibe Tools — Search every service</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
-        <h1>OpenVibe Tools</h1>
-        <p>Searchable directory of every OpenVibe service. Press <code>Ctrl/⌘ K</code> for the global launcher, or filter inline.</p>
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <span class="ov-kicker">OpenVibe launcher</span>
+                <h1>Search less.<br><span class="ov-gradient">Launch smarter.</span></h1>
+                <p>OpenVibe Tools is the network-wide directory and launcher: search, favorite, reopen, and jump between live, chat, media, community, billing, AI, and the operator surfaces without losing your place.</p>
+                <div class="ov-chip-row">
+                    <span class="ov-chip ok">Ctrl/⌘ K anywhere</span>
+                    <span class="ov-chip soft" id="tools-session-chip">Checking account state…</span>
+                    <span class="ov-chip primary" id="tools-favorites-chip">Syncing launcher…</span>
+                </div>
+                <div class="ov-cta-row" id="tools-actions"></div>
+            </div>
+            <aside class="ov-panel">
+                <div class="ov-section-head" style="margin-bottom:.8rem;">
+                    <div>
+                        <span class="ov-kicker">Launch lanes</span>
+                        <h2>Favorites, recents, and featured surfaces</h2>
+                    </div>
+                </div>
+                <div class="ov-grid" id="tools-quick-cards"></div>
+            </aside>
+        </div>
     </section>
-    <input class="ov-input" id="search" placeholder="Search tools and services…" />
-    <div class="ov-tabs" id="cats" style="margin-top:1rem"></div>
-    <div class="ov-grid" id="grid"></div>
+
+    <section class="ov-section ov-split-grid">
+        <div class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2>Featured surfaces</h2>
+                    <p class="ov-section-sub">The high-traffic OpenVibe lanes that benefit most from a fast launcher.</p>
+                </div>
+            </div>
+            <div class="ov-grid" id="featured-grid"></div>
+        </div>
+        <div class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2>Your launcher memory</h2>
+                    <p class="ov-section-sub">Pinned surfaces and recent jumps are saved locally and synced to <code>control.launcher</code> when authenticated.</p>
+                </div>
+            </div>
+            <div style="display:grid; gap:1rem;">
+                <div>
+                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip warn">Favorites</span></div>
+                    <div class="ov-grid" id="favorites-grid"></div>
+                </div>
+                <div>
+                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip soft">Recent launches</span></div>
+                    <div class="ov-grid" id="recents-grid"></div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section class="ov-section">
-        <h2>Featured</h2>
-        <div class="ov-grid" id="featured"></div>
+        <div class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2>Browse the network</h2>
+                    <p class="ov-section-sub">Search inline, switch categories, or use the keyboard launcher for a quicker hop.</p>
+                </div>
+            </div>
+            <input class="ov-input" id="search" placeholder="Search tools and services…" />
+            <div class="ov-tabs" id="cats" style="margin-top:1rem"></div>
+            <div class="ov-grid" id="grid"></div>
+        </div>
     </section>
 
     <section class="ov-section">
-        <h2>Community values</h2>
+        <div class="ov-section-head">
+            <div>
+                <h2>Why this launcher exists</h2>
+                <p class="ov-section-sub">Because a growing network gets weird fast if you cannot see and steer it.</p>
+            </div>
+        </div>
         <div class="ov-grid">
-            <div class="ov-card"><div class="title">No ads</div><div class="desc">Tools you can rely on without surveillance ads.</div></div>
-            <div class="ov-card"><div class="title">Open source</div><div class="desc">Every service ships its own deployable code.</div></div>
-            <div class="ov-card"><div class="title">Federated identity</div><div class="desc">One account works across the entire network.</div></div>
+            <article class="ov-card">
+                <div class="ov-kicker">Network memory</div>
+                <h3 class="ov-service-title" style="margin-top:.8rem;">Favorites and recents follow your account</h3>
+                <p class="ov-muted">Signed-in users sync launcher state through the control plane; anonymous users still get a fast local-only version.</p>
+            </article>
+            <article class="ov-card">
+                <div class="ov-kicker">Open source</div>
+                <h3 class="ov-service-title" style="margin-top:.8rem;">Every service exposes enough truth to be searchable</h3>
+                <p class="ov-muted">Capabilities, contracts, descriptions, and tags can be surfaced instead of buried in tribal knowledge.</p>
+            </article>
+            <article class="ov-card">
+                <div class="ov-kicker">Practical</div>
+                <h3 class="ov-service-title" style="margin-top:.8rem;">The launcher is not a novelty modal</h3>
+                <p class="ov-muted">It is a daily operator + creator tool meant to shorten the path between “I need a thing” and “the thing is open now.”</p>
+            </article>
         </div>
     </section>
 </main>
@@ -35,39 +109,115 @@
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('tools');
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    const remote = await OpenVibe.loadServices();
-    const items = OpenVibe.mergedServices(remote);
+    function renderEmpty(target, title, message) {
+        target.innerHTML = `<div class="ov-empty"><strong>${OpenVibe.escapeHtml(title)}</strong><p style="margin:.45rem 0 0;">${OpenVibe.escapeHtml(message)}</p></div>`;
+    }
 
-    const cats = ['all', ...new Set(items.map(i => i.category || 'service'))];
-    const tabs = document.getElementById('cats');
-    let activeCat = 'all';
-    function renderTabs() {
-        tabs.innerHTML = '';
-        for (const c of cats) {
-            const t = document.createElement('div');
-            t.className = 'ov-tab' + (c === activeCat ? ' active' : '');
-            t.textContent = c === 'all' ? `all (${items.length})` : `${c} (${items.filter(i => (i.category||'service')===c).length})`;
-            t.onclick = () => { activeCat = c; renderTabs(); applyFilter(); };
-            tabs.appendChild(t);
+    function pickByIds(items, ids) {
+        const wanted = new Set(ids || []);
+        return items.filter((item) => wanted.has(item.service_id));
+    }
+
+    await OpenVibe.primeEnvironment();
+    await OpenVibe.renderChrome('tools');
+
+    const [session, remoteServices, launcherState] = await Promise.all([
+        OpenVibe.loadSession(),
+        OpenVibe.loadServices(),
+        OpenVibe.loadLauncherState(),
+    ]);
+
+    const items = OpenVibe.mergedServices(remoteServices);
+    const featuredIds = ['openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community', 'openvibe-media', 'openvibe-games'];
+    const featuredItems = pickByIds(items, featuredIds);
+
+    document.getElementById('tools-session-chip').textContent = session.authenticated && session.user
+        ? `Synced as @${session.user.username || session.user.id}`
+        : 'Guest launcher mode';
+    document.getElementById('tools-actions').innerHTML = `
+        <a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('network')}">Open network hub</a>
+        <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('my')}">My account</a>
+        <button class="ov-btn ov-btn-ghost" id="open-launcher" type="button">Open quick launcher</button>`;
+
+    const launcher = OpenVibe.attachLauncher(() => items);
+    document.getElementById('open-launcher').addEventListener('click', function () {
+        launcher.open();
+    });
+
+    async function renderLauncherSections(state) {
+        const currentState = state || await OpenVibe.loadLauncherState();
+        const favoriteItems = pickByIds(items, currentState.favorites);
+        const recentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
+
+        document.getElementById('tools-favorites-chip').textContent = `${(currentState.favorites || []).length} favorite${(currentState.favorites || []).length === 1 ? '' : 's'}`;
+        document.getElementById('tools-quick-cards').innerHTML = [
+            {
+                tag: 'featured',
+                title: 'Top creator lanes',
+                desc: `${featuredItems.length} featured surfaces for live, chat, community, and restream flow.`,
+            },
+            {
+                tag: 'favorites',
+                title: 'Pinned surfaces',
+                desc: `${(currentState.favorites || []).length} service${(currentState.favorites || []).length === 1 ? '' : 's'} ready to relaunch with one click.`,
+            },
+            {
+                tag: 'recent',
+                title: 'Recent hops',
+                desc: `${(currentState.recents || []).length} launch${(currentState.recents || []).length === 1 ? '' : 'es'} remembered in your current lane.`,
+            },
+        ].map((card) => `<article class="ov-card"><span class="ov-chip primary">${OpenVibe.escapeHtml(card.tag)}</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(card.title)}</h3><p class="ov-muted">${OpenVibe.escapeHtml(card.desc)}</p></article>`).join('');
+
+        await OpenVibe.renderServiceCards(document.getElementById('featured-grid'), featuredItems, { onFavoriteChange: renderLauncherSections });
+        if (favoriteItems.length) {
+            await OpenVibe.renderServiceCards(document.getElementById('favorites-grid'), favoriteItems, { onFavoriteChange: renderLauncherSections });
+        } else {
+            renderEmpty(document.getElementById('favorites-grid'), 'No favorites yet', 'Star services from anywhere in the directory and they will collect here.');
+        }
+        if (recentItems.length) {
+            await OpenVibe.renderServiceCards(document.getElementById('recents-grid'), recentItems, { onFavoriteChange: renderLauncherSections });
+        } else {
+            renderEmpty(document.getElementById('recents-grid'), 'No recent launches yet', 'Open a few surfaces and your working set will start to build a memory.');
         }
     }
-    function applyFilter() {
-        const q = document.getElementById('search').value.toLowerCase();
-        const out = items.filter(i => {
-            const hay = `${i.display_name||''} ${i.description||''} ${i.category||''} ${(i.tags||[]).join(' ')}`.toLowerCase();
-            const matchCat = activeCat === 'all' || (i.category || 'service') === activeCat;
-            return matchCat && (!q || hay.includes(q));
-        });
-        OpenVibe.renderServiceCards(document.getElementById('grid'), out);
-    }
-    renderTabs();
-    applyFilter();
-    document.getElementById('search').addEventListener('input', applyFilter);
 
-    OpenVibe.renderServiceCards(document.getElementById('featured'), items.filter(i => ['openvibe-live','openvibe-chat','openvibe-community','openvibe-media'].includes(i.service_id)));
-    OpenVibe.attachLauncher(() => items);
+    const cats = ['all'].concat(Array.from(new Set(items.map((item) => item.category || 'service'))).sort());
+    const tabs = document.getElementById('cats');
+    let activeCat = 'all';
+
+    async function applyFilter() {
+        const q = document.getElementById('search').value.toLowerCase();
+        const filtered = items.filter((item) => {
+            const haystack = `${item.display_name || ''} ${item.description || ''} ${item.category || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
+            const matchesCat = activeCat === 'all' || (item.category || 'service') === activeCat;
+            return matchesCat && (!q || haystack.includes(q));
+        });
+        await OpenVibe.renderServiceCards(document.getElementById('grid'), filtered, { onFavoriteChange: renderLauncherSections });
+    }
+
+    function renderTabs() {
+        tabs.innerHTML = '';
+        cats.forEach((cat) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `ov-tab${cat === activeCat ? ' active' : ''}`;
+            const count = cat === 'all' ? items.length : items.filter((item) => (item.category || 'service') === cat).length;
+            button.textContent = cat === 'all' ? `all (${count})` : `${cat} (${count})`;
+            button.addEventListener('click', function () {
+                activeCat = cat;
+                renderTabs();
+                applyFilter().catch(() => {});
+            });
+            tabs.appendChild(button);
+        });
+    }
+
+    renderTabs();
+    await renderLauncherSections(launcherState);
+    await applyFilter();
+    document.getElementById('search').addEventListener('input', function () {
+        applyFilter().catch(() => {});
+    });
 })();
 </script>
 </body>

@@ -57,6 +57,10 @@ module.exports = {
         internalUrl: trim(process.env.OPENVIBE_AI_INTERNAL_URL) || trim(process.env.OPENVIBE_AI_URL) || 'http://127.0.0.1:5100',
         canonicalHost: trim(process.env.AI_OPENVIBE_NETWORK_HOST) || 'ai.openvibe.network',
     },
+    games: {
+        url:         trim(process.env.OPENVIBE_GAMES_URL)          || 'http://127.0.0.1:5200',
+        internalUrl: trim(process.env.OPENVIBE_GAMES_INTERNAL_URL) || trim(process.env.OPENVIBE_GAMES_URL) || 'http://127.0.0.1:5200',
+    },
 
     hoboTools: {
         publicUrl:   trim(process.env.HOBO_TOOLS_URL),

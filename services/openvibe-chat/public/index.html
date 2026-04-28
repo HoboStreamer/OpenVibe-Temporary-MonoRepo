@@ -6,41 +6,474 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
 <style>
-.chat-layout { display:grid; grid-template-columns: 280px 1fr; gap:1rem; min-height:60vh; }
-@media (max-width:720px){ .chat-layout{grid-template-columns:1fr} }
-.chat-rooms { background:var(--ov-bg-elev); border:1px solid var(--ov-border); border-radius:var(--ov-radius); padding:.5rem; max-height:70vh; overflow-y:auto; }
-.chat-rooms .room { padding:.5rem .65rem; border-radius:var(--ov-radius-sm); cursor:pointer; }
-.chat-rooms .room.active, .chat-rooms .room:hover { background:var(--ov-bg-elev-2); }
-.chat-main { display:flex; flex-direction:column; background:var(--ov-bg-elev); border:1px solid var(--ov-border); border-radius:var(--ov-radius); }
-.chat-feed { flex:1; padding:1rem; overflow-y:auto; max-height:60vh; }
-.chat-msg { padding:.4rem 0; border-bottom:1px solid var(--ov-border); }
-.chat-msg .who { color:var(--ov-accent); font-weight:600; }
-.chat-form { display:flex; gap:.5rem; padding:.5rem; border-top:1px solid var(--ov-border); }
+body {
+    background:
+        radial-gradient(circle at top left, rgba(124, 92, 255, .2), transparent 28%),
+        radial-gradient(circle at 84% 10%, rgba(45, 212, 191, .16), transparent 22%),
+        linear-gradient(180deg, #090c14 0%, #0b1020 48%, #090c14 100%);
+}
+
+.chat-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.chat-hero,
+.chat-sidebar,
+.chat-panel,
+.chat-card,
+.chat-search-results,
+.chat-list-button,
+.chat-empty,
+.chat-message,
+.chat-composer,
+.chat-status-card {
+    background: linear-gradient(180deg, rgba(19, 23, 34, .94), rgba(12, 17, 30, .96));
+    border: 1px solid rgba(91, 100, 115, .22);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+}
+
+.chat-hero {
+    margin-top: 1.25rem;
+    border-radius: 28px;
+    padding: 1.35rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.chat-hero::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(125deg, rgba(124, 92, 255, .16), transparent 34%, rgba(45, 212, 191, .12));
+    pointer-events: none;
+}
+
+.chat-hero-grid,
+.chat-layout,
+.chat-feature-grid,
+.chat-status-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.chat-hero-grid {
+    position: relative;
+    z-index: 1;
+    grid-template-columns: minmax(0, 1.28fr) minmax(320px, .92fr);
+    align-items: stretch;
+}
+
+.chat-hero-copy h1 {
+    margin: .95rem 0 .8rem;
+    font-size: clamp(2.35rem, 5vw, 4.4rem);
+    line-height: .95;
+    letter-spacing: -.05em;
+    background: linear-gradient(120deg, #eef2ff 15%, #c7d2fe 50%, #67e8f9 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.chat-kicker,
+.chat-chip,
+.chat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .44rem .76rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .06);
+    font-size: .78rem;
+}
+
+.chat-kicker {
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 800;
+    color: #dbeafe;
+}
+
+.chat-chip-row,
+.chat-actions,
+.chat-head-actions,
+.chat-section-head,
+.chat-meta-row,
+.chat-feature-meta {
+    display: flex;
+    gap: .65rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.chat-chip.ok,
+.chat-badge.ok {
+    color: #bbf7d0;
+    border-color: rgba(63, 185, 80, .24);
+    background: rgba(63, 185, 80, .12);
+}
+
+.chat-chip.warn,
+.chat-badge.warn {
+    color: #fde68a;
+    border-color: rgba(245, 165, 36, .24);
+    background: rgba(245, 165, 36, .12);
+}
+
+.chat-chip.soft,
+.chat-badge.soft {
+    color: #a5f3fc;
+    border-color: rgba(45, 212, 191, .22);
+    background: rgba(45, 212, 191, .12);
+}
+
+.chat-chip.primary,
+.chat-badge.primary {
+    color: #ddd6fe;
+    border-color: rgba(124, 92, 255, .24);
+    background: rgba(124, 92, 255, .14);
+}
+
+.chat-muted,
+.chat-empty,
+.chat-list-subtitle,
+.chat-message-time,
+.chat-message-text,
+.chat-search-hint,
+.chat-card p {
+    color: var(--ov-text-dim);
+}
+
+.chat-actions {
+    margin-top: 1rem;
+}
+
+.chat-layout {
+    grid-template-columns: 340px minmax(0, 1fr);
+    align-items: start;
+}
+
+.chat-sidebar,
+.chat-panel {
+    border-radius: 28px;
+    padding: 1rem;
+}
+
+.chat-sidebar {
+    display: grid;
+    gap: 1rem;
+    position: sticky;
+    top: 6rem;
+}
+
+.chat-sidebar-section {
+    display: grid;
+    gap: .75rem;
+}
+
+.chat-section-head {
+    justify-content: space-between;
+}
+
+.chat-section-head h2,
+.chat-panel h2,
+.chat-card h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.chat-search-stack {
+    display: grid;
+    gap: .55rem;
+}
+
+.chat-search-results,
+.chat-list {
+    display: grid;
+    gap: .55rem;
+}
+
+.chat-search-results,
+.chat-empty {
+    border-radius: 20px;
+    padding: .9rem;
+}
+
+.chat-list-button,
+.chat-search-result {
+    width: 100%;
+    text-align: left;
+    border-radius: 20px;
+    padding: .9rem 1rem;
+    color: var(--ov-text);
+    cursor: pointer;
+    transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+button.chat-list-button,
+button.chat-search-result {
+    border: 1px solid rgba(255, 255, 255, .08);
+}
+
+.chat-list-button:hover,
+.chat-list-button.active,
+.chat-search-result:hover {
+    transform: translateY(-1px);
+    border-color: rgba(124, 92, 255, .22);
+    background: linear-gradient(180deg, rgba(25, 32, 48, .98), rgba(18, 24, 38, .98));
+}
+
+.chat-list-title,
+.chat-search-title,
+.chat-message-sender {
+    font-weight: 700;
+    color: var(--ov-text);
+}
+
+.chat-list-subtitle,
+.chat-search-subtitle {
+    font-size: .9rem;
+    margin-top: .25rem;
+}
+
+.chat-panel {
+    display: grid;
+    gap: 1rem;
+    min-height: 70vh;
+}
+
+.chat-thread-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-bottom: .9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.chat-thread-head h2 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    letter-spacing: -.03em;
+}
+
+.chat-feed {
+    display: grid;
+    gap: .8rem;
+    align-content: start;
+    min-height: 400px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: .35rem;
+}
+
+.chat-message {
+    border-radius: 22px;
+    padding: .9rem 1rem;
+}
+
+.chat-message-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .45rem;
+}
+
+.chat-message-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.chat-composer {
+    border-radius: 24px;
+    padding: 1rem;
+    display: grid;
+    gap: .75rem;
+}
+
+.chat-composer textarea {
+    min-height: 110px;
+    resize: vertical;
+}
+
+.chat-composer-note {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    color: var(--ov-text-dim);
+    font-size: .92rem;
+}
+
+.chat-feature-grid,
+.chat-status-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.chat-card,
+.chat-status-card {
+    border-radius: 22px;
+    padding: 1rem;
+}
+
+.chat-status-card strong {
+    display: block;
+    font-size: 1.65rem;
+    letter-spacing: -.04em;
+}
+
+.chat-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, .08);
+    margin: .15rem 0;
+}
+
+@media (max-width: 1080px) {
+    .chat-hero-grid,
+    .chat-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .chat-sidebar {
+        position: static;
+    }
+}
+
+@media (max-width: 720px) {
+    .chat-thread-head,
+    .chat-composer-note {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .chat-actions .ov-btn,
+    .chat-head-actions .ov-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
 </style>
 </head>
 <body>
 <div id="nav-mount"></div>
-<main class="ov-shell">
-    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
-        <h1>OpenVibe Chat</h1>
-        <p>Rooms, DMs, voice rooms, and TTS — federated across the OpenVibe network.</p>
+<main class="ov-shell chat-shell">
+    <section class="chat-hero">
+        <div class="chat-hero-grid">
+            <div class="chat-hero-copy">
+                <span class="chat-kicker">OpenVibe Chat</span>
+                <h1>DMs, rooms, and unread state that finally behave like they mean it.</h1>
+                <p class="chat-muted">This native chat surface now understands signed-in OpenVibe sessions, direct-message unread counts, and thread-open-as-read behavior — while still keeping public rooms readable for guests.</p>
+                <div class="chat-chip-row">
+                    <span class="chat-chip soft" id="session-chip">Checking session…</span>
+                    <span class="chat-chip primary" id="unread-chip">Unread DMs: —</span>
+                    <span class="chat-chip ok">Public rooms readable without sign-in</span>
+                </div>
+                <div class="chat-actions" id="hero-actions"></div>
+            </div>
+            <aside class="chat-card">
+                <div class="chat-section-head">
+                    <div>
+                        <span class="chat-kicker">Now shipping</span>
+                        <h2 style="margin-top:.75rem;">Native browser auth bridge</h2>
+                    </div>
+                </div>
+                <p class="chat-muted">The page exchanges your network session for a bearer token, uses it against chat APIs, and hydrates DM participants through the native account directory instead of pretending opaque IDs are a friendly UX.</p>
+                <div class="chat-status-grid" style="margin-top:1rem;">
+                    <article class="chat-status-card">
+                        <span class="chat-badge ok">Auth</span>
+                        <strong id="auth-state">guest</strong>
+                        <span>network session exchange</span>
+                    </article>
+                    <article class="chat-status-card">
+                        <span class="chat-badge primary">Unread</span>
+                        <strong id="unread-total">0</strong>
+                        <span>DM messages pending</span>
+                    </article>
+                </div>
+            </aside>
+        </div>
     </section>
-    <div class="chat-layout">
-        <aside class="chat-rooms" id="rooms"><div class="desc">loading rooms…</div></aside>
-        <section class="chat-main">
-            <div class="chat-feed" id="feed"><div class="desc">Pick a room to start chatting.</div></div>
-            <form class="chat-form" id="send-form">
-                <input class="ov-input" id="msg" placeholder="Say something…" autocomplete="off" />
-                <button class="ov-btn ov-btn-primary" type="submit">Send</button>
+
+    <section class="chat-layout">
+        <aside class="chat-sidebar">
+            <section class="chat-sidebar-section">
+                <div class="chat-section-head">
+                    <h2>Start a DM</h2>
+                    <span class="chat-badge soft">native lookup</span>
+                </div>
+                <form id="dm-search-form" class="chat-search-stack">
+                    <input class="ov-input" id="dm-search" type="search" placeholder="Search usernames or display names" autocomplete="off" />
+                    <div class="chat-search-results" id="dm-search-results">
+                        <div class="chat-search-hint">Sign in to search the OpenVibe user directory and start a DM.</div>
+                    </div>
+                </form>
+            </section>
+
+            <div class="chat-divider"></div>
+
+            <section class="chat-sidebar-section">
+                <div class="chat-section-head">
+                    <h2>Direct messages</h2>
+                    <span class="chat-badge warn" id="dm-total-badge">0 unread</span>
+                </div>
+                <div class="chat-list" id="dm-list"></div>
+            </section>
+
+            <div class="chat-divider"></div>
+
+            <section class="chat-sidebar-section">
+                <div class="chat-section-head">
+                    <h2>Public rooms</h2>
+                    <span class="chat-badge soft">guest-friendly</span>
+                </div>
+                <div class="chat-list" id="room-list"></div>
+            </section>
+        </aside>
+
+        <section class="chat-panel">
+            <header class="chat-thread-head">
+                <div>
+                    <span class="chat-kicker">Conversation</span>
+                    <h2 id="conversation-title" style="margin-top:.75rem;">#global</h2>
+                    <p class="chat-muted" id="conversation-subtitle">The public room is available to everyone. Sending messages requires sign-in.</p>
+                </div>
+                <div class="chat-head-actions" id="thread-actions"></div>
+            </header>
+
+            <div class="chat-feed" id="feed">
+                <div class="chat-empty">Loading conversation…</div>
+            </div>
+
+            <form class="chat-composer" id="send-form">
+                <textarea class="ov-input" id="msg" placeholder="Sign in to send a message." autocomplete="off"></textarea>
+                <div class="chat-composer-note">
+                    <span id="composer-status">Public rooms are readable by guests. DMs require a signed-in OpenVibe account.</span>
+                    <button class="ov-btn ov-btn-primary" id="send-button" type="submit">Send message</button>
+                </div>
             </form>
         </section>
-    </div>
+    </section>
+
     <section class="ov-section">
-        <h2>Public surfaces</h2>
-        <div class="ov-grid">
-            <a class="ov-card" href="/api/chat/rooms"><div class="title">REST API</div><div class="desc">/api/chat/rooms, /messages, /dms, /calls, /tts</div></a>
-            <a class="ov-card" href="https://openvibe.community"><div class="title">Community</div><div class="desc">Long-form discussions live in OpenVibe Community.</div></a>
-            <a class="ov-card" href="https://openvibe.live"><div class="title">Live chat</div><div class="desc">Channel and stream chat embed automatically into OpenVibe Live.</div></a>
+        <h2>Why this matters</h2>
+        <p class="chat-muted" style="margin:0 0 1rem;">This is the first native browser-facing pass that connects OpenVibe network auth to the chat service instead of leaving DM state stranded in backend-only land.</p>
+        <div class="chat-feature-grid">
+            <article class="chat-card">
+                <div class="chat-feature-meta"><span class="chat-badge ok">Unread state</span></div>
+                <h2 style="margin-top:.8rem;">Open a thread, clear the badge</h2>
+                <p>Direct-message unread counts come from the new per-participant read timestamp logic and update when you open the DM thread.</p>
+            </article>
+            <article class="chat-card">
+                <div class="chat-feature-meta"><span class="chat-badge primary">Session bridge</span></div>
+                <h2 style="margin-top:.8rem;">Network session → chat bearer</h2>
+                <p>The page exchanges your authenticated network session for a token the chat service can verify, so the service stays stateless and the browser still gets a real user.</p>
+            </article>
+            <article class="chat-card">
+                <div class="chat-feature-meta"><span class="chat-badge soft">Public + private</span></div>
+                <h2 style="margin-top:.8rem;">Rooms for everyone, DMs for members</h2>
+                <p>Guests can still read the global room, while signed-in users unlock DMs, unread badges, and user lookup without needing a secret incantation.</p>
+            </article>
         </div>
     </section>
 </main>
@@ -48,59 +481,589 @@
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
+    const feedEl = document.getElementById('feed');
+    const dmListEl = document.getElementById('dm-list');
+    const roomListEl = document.getElementById('room-list');
+    const searchInput = document.getElementById('dm-search');
+    const searchResultsEl = document.getElementById('dm-search-results');
+    const heroActionsEl = document.getElementById('hero-actions');
+    const threadActionsEl = document.getElementById('thread-actions');
+    const sendForm = document.getElementById('send-form');
+    const msgInput = document.getElementById('msg');
+    const sendButton = document.getElementById('send-button');
+    const composerStatusEl = document.getElementById('composer-status');
+
+    const protocol = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || '';
+    const isLocalhostSurface = hostname.endsWith('.localhost');
+    const networkBase = isLocalhostSurface ? `${protocol}//openvibe.network.localhost:4100` : 'https://openvibe.network';
+    const authBase = isLocalhostSurface ? `${protocol}//auth.openvibe.network.localhost:4100` : 'https://auth.openvibe.network';
+    const storedTokenKey = 'openvibe.chat.token';
+
+    const state = {
+        token: '',
+        user: null,
+        rooms: [],
+        dms: [],
+        unread: { total_unread: 0, rooms: [] },
+        usersById: new Map(),
+        active: {
+            kind: 'global',
+            id: '__global__',
+            title: '#global',
+            subtitle: 'The public room is available to everyone. Sending messages requires sign-in.',
+        },
+    };
+
     document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
     document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    const roomsEl = document.getElementById('rooms');
-    const feed = document.getElementById('feed');
-    let activeRoom = null;
+
+    function escapeHtml(value) {
+        return OpenVibe.escapeHtml(value);
+    }
+
+    function bridgeReturnUrl() {
+        const target = new URL(window.location.href);
+        target.hash = '';
+        return target.toString();
+    }
+
+    function signInUrl() {
+        return `${networkBase}/api/v1/session/bridge?return_to=${encodeURIComponent(bridgeReturnUrl())}`;
+    }
+
+    function signOutUrl() {
+        return `${authBase}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl())}`;
+    }
+
+    function saveToken(token) {
+        state.token = token || '';
+        try {
+            if (state.token) window.sessionStorage.setItem(storedTokenKey, state.token);
+            else window.sessionStorage.removeItem(storedTokenKey);
+        } catch {
+            // ignore storage failures
+        }
+    }
+
+    function loadStoredToken() {
+        try {
+            return window.sessionStorage.getItem(storedTokenKey) || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function consumeBridgeToken() {
+        const hash = String(window.location.hash || '').replace(/^#/, '');
+        if (!hash) return;
+        const params = new URLSearchParams(hash);
+        const token = params.get('openvibe_token');
+        if (!token) return;
+        saveToken(token);
+        params.delete('openvibe_token');
+        const nextHash = params.toString();
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`;
+        window.history.replaceState({}, document.title, nextUrl);
+    }
+
+    async function parseJsonResponse(response) {
+        const text = await response.text();
+        let body = null;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = { error: text || response.statusText };
+        }
+        if (!response.ok) {
+            const error = new Error(body && body.error ? body.error : `Request failed (${response.status})`);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+        }
+        return body || {};
+    }
+
+    async function networkFetch(pathname, options) {
+        const opts = options || {};
+        const headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
+        const response = await fetch(`${networkBase}${pathname}`, Object.assign({
+            credentials: 'include',
+            headers,
+        }, opts));
+        return parseJsonResponse(response);
+    }
+
+    async function chatFetch(pathname, options) {
+        const opts = options || {};
+        const headers = Object.assign({ Accept: 'application/json' }, opts.headers || {});
+        if (state.token) headers.Authorization = `Bearer ${state.token}`;
+        const response = await fetch(`/api/chat${pathname}`, Object.assign({
+            credentials: 'same-origin',
+            headers,
+        }, opts));
+        return parseJsonResponse(response);
+    }
+
+    function unreadCountFor(roomId) {
+        const found = (state.unread.rooms || []).find((entry) => entry.room_id === roomId);
+        return found ? Number(found.unread_count || 0) : 0;
+    }
+
+    function activeMatches(kind, id) {
+        return state.active.kind === kind && state.active.id === id;
+    }
+
+    function dmPartnerActor(room) {
+        if (!room || !room.external_ref_id) return null;
+        const actors = String(room.external_ref_id)
+            .split('|')
+            .map((value) => {
+                const index = value.indexOf(':');
+                if (index === -1) return null;
+                return {
+                    actor_type: value.slice(0, index),
+                    actor_id: value.slice(index + 1),
+                };
+            })
+            .filter(Boolean);
+        return actors.find((actor) => !(actor.actor_type === 'user' && state.user && actor.actor_id === state.user.id)) || actors[0] || null;
+    }
+
+    function dmLabel(room) {
+        const partner = dmPartnerActor(room);
+        if (!partner) return 'Direct message';
+        if (partner.actor_type === 'user') {
+            const profile = state.usersById.get(partner.actor_id);
+            if (profile) return `@${profile.username}`;
+        }
+        return `${partner.actor_type}:${partner.actor_id}`;
+    }
+
+    function dmSubtitle(room) {
+        const partner = dmPartnerActor(room);
+        const unread = unreadCountFor(room.id);
+        const detail = unread ? `${unread} unread` : 'caught up';
+        if (partner && partner.actor_type === 'user') {
+            const profile = state.usersById.get(partner.actor_id);
+            if (profile && profile.display_name && profile.display_name !== profile.username) {
+                return `${profile.display_name} · ${detail}`;
+            }
+        }
+        return detail;
+    }
+
+    function roomLabel(room) {
+        if (!room) return '#room';
+        if (room.external_ref_type === 'global') return '#global';
+        if (room.title) return room.title;
+        return room.external_ref_id ? `${room.room_type}:${room.external_ref_id}` : room.id;
+    }
+
+    function roomSubtitle(room) {
+        if (!room) return 'Public room';
+        const bits = [];
+        bits.push(room.visibility || 'public');
+        if (room.external_ref_type) bits.push(room.external_ref_type);
+        return bits.join(' · ');
+    }
+
+    function setActiveConversation(kind, id, title, subtitle) {
+        state.active = { kind, id, title, subtitle };
+        document.getElementById('conversation-title').textContent = title;
+        document.getElementById('conversation-subtitle').textContent = subtitle;
+        renderThreadActions();
+    }
+
+    function renderThreadActions() {
+        if (state.active.kind === 'dm') {
+            const unread = unreadCountFor(state.active.id);
+            threadActionsEl.innerHTML = unread
+                ? `<span class="chat-badge warn">${escapeHtml(String(unread))} unread</span>`
+                : '<span class="chat-badge soft">caught up</span>';
+            return;
+        }
+        threadActionsEl.innerHTML = '<span class="chat-badge soft">public thread</span>';
+    }
+
+    function renderHero() {
+        const signedIn = !!state.user;
+        document.getElementById('session-chip').className = `chat-chip ${signedIn ? 'ok' : 'warn'}`;
+        document.getElementById('session-chip').textContent = signedIn
+            ? `Signed in as @${state.user.username || state.user.id}`
+            : 'Guest mode · public rooms only';
+        document.getElementById('unread-chip').textContent = `Unread DMs: ${state.unread.total_unread || 0}`;
+        document.getElementById('auth-state').textContent = signedIn ? 'live' : 'guest';
+        document.getElementById('unread-total').textContent = String(state.unread.total_unread || 0);
+        document.getElementById('dm-total-badge').textContent = `${state.unread.total_unread || 0} unread`;
+        heroActionsEl.innerHTML = signedIn
+            ? `<button class="ov-btn ov-btn-primary" type="button" id="jump-global">Open #global</button>
+               <button class="ov-btn" type="button" id="jump-first-dm">Jump to first unread DM</button>
+                    <button class="ov-btn" type="button" id="sign-out-button">Sign out</button>`
+            : `<a class="ov-btn ov-btn-primary" href="${signInUrl()}">Sign in to use DMs</a>
+               <button class="ov-btn" type="button" id="jump-global">Browse #global</button>`;
+        const jumpGlobal = document.getElementById('jump-global');
+        if (jumpGlobal) {
+            jumpGlobal.addEventListener('click', function () {
+                openConversation('global', '__global__');
+            });
+        }
+        const jumpFirstDm = document.getElementById('jump-first-dm');
+        if (jumpFirstDm) {
+            jumpFirstDm.addEventListener('click', function () {
+                const firstUnread = (state.unread.rooms || [])[0];
+                if (!firstUnread) return;
+                openConversation('dm', firstUnread.room_id);
+            });
+        }
+        const signOutButton = document.getElementById('sign-out-button');
+        if (signOutButton) {
+            signOutButton.addEventListener('click', function () {
+                saveToken('');
+                state.user = null;
+                window.location.href = signOutUrl();
+            });
+        }
+        msgInput.disabled = !signedIn;
+        sendButton.disabled = !signedIn;
+        searchInput.disabled = !signedIn;
+        msgInput.placeholder = signedIn
+            ? `Message ${state.active.title || 'this conversation'}…`
+            : 'Sign in to send messages.';
+        composerStatusEl.textContent = signedIn
+            ? 'Messages are sent through the native chat API using your exchanged OpenVibe session token.'
+            : 'You can read public rooms as a guest. Sign in to send messages or use direct messages.';
+    }
+
+    function renderDmList() {
+        if (!state.user) {
+            dmListEl.innerHTML = '<div class="chat-empty">Sign in to load your DM rooms, unread badges, and user lookup results.</div>';
+            return;
+        }
+        if (!state.dms.length) {
+            dmListEl.innerHTML = '<div class="chat-empty">No DMs yet. Search for another user above and start the conversation from there.</div>';
+            return;
+        }
+        dmListEl.innerHTML = state.dms.map((room) => {
+            const unread = unreadCountFor(room.id);
+            return `<button class="chat-list-button${activeMatches('dm', room.id) ? ' active' : ''}" type="button" data-kind="dm" data-id="${escapeHtml(room.id)}">
+                <div class="chat-meta-row" style="justify-content:space-between;">
+                    <span class="chat-list-title">${escapeHtml(dmLabel(room))}</span>
+                    <span class="chat-badge ${unread ? 'warn' : 'soft'}">${escapeHtml(String(unread))}</span>
+                </div>
+                <div class="chat-list-subtitle">${escapeHtml(dmSubtitle(room))}</div>
+            </button>`;
+        }).join('');
+        dmListEl.querySelectorAll('[data-kind="dm"]').forEach((button) => {
+            button.addEventListener('click', function () {
+                openConversation('dm', button.dataset.id);
+            });
+        });
+    }
+
+    function renderRoomList() {
+        const visibleRooms = [{ id: '__global__', title: '#global', subtitle: 'Always available to read', kind: 'global' }].concat(
+            state.rooms.map((room) => ({
+                id: room.id,
+                title: roomLabel(room),
+                subtitle: roomSubtitle(room),
+                kind: 'room',
+            }))
+        );
+        roomListEl.innerHTML = visibleRooms.map((room) => `<button class="chat-list-button${activeMatches(room.kind, room.id) ? ' active' : ''}" type="button" data-kind="${escapeHtml(room.kind)}" data-id="${escapeHtml(room.id)}">
+            <div class="chat-list-title">${escapeHtml(room.title)}</div>
+            <div class="chat-list-subtitle">${escapeHtml(room.subtitle)}</div>
+        </button>`).join('');
+        roomListEl.querySelectorAll('[data-kind]').forEach((button) => {
+            button.addEventListener('click', function () {
+                openConversation(button.dataset.kind, button.dataset.id);
+            });
+        });
+    }
+
+    function renderSearchResults(items, hint) {
+        if (!state.user) {
+            searchResultsEl.innerHTML = '<div class="chat-search-hint">Sign in to search the OpenVibe user directory and start a DM.</div>';
+            return;
+        }
+        if (!items.length) {
+            searchResultsEl.innerHTML = `<div class="chat-search-hint">${escapeHtml(hint || 'No matches yet. Try a different username or display name fragment.')}</div>`;
+            return;
+        }
+        searchResultsEl.innerHTML = items.map((item) => `<button class="chat-search-result" type="button" data-user-id="${escapeHtml(item.id)}" data-username="${escapeHtml(item.username)}" data-display-name="${escapeHtml(item.display_name || item.username)}">
+            <div class="chat-search-title">@${escapeHtml(item.username)}</div>
+            <div class="chat-search-subtitle">${escapeHtml(item.display_name || item.username)}${item.role ? ` · ${escapeHtml(item.role)}` : ''}</div>
+        </button>`).join('');
+        searchResultsEl.querySelectorAll('[data-user-id]').forEach((button) => {
+            button.addEventListener('click', function () {
+                createDm({
+                    id: button.dataset.userId,
+                    username: button.dataset.username,
+                    display_name: button.dataset.displayName,
+                });
+            });
+        });
+    }
+
+    function senderLabel(message) {
+        const senderId = message.sender_id || message.user_id || '';
+        if (senderId && state.user && senderId === state.user.id) {
+            return `@${state.user.username || state.user.id}`;
+        }
+        if (senderId) {
+            const profile = state.usersById.get(senderId);
+            if (profile && profile.username) {
+                return `@${profile.username}`;
+            }
+        }
+        return message.username || senderId || 'anon';
+    }
+
+    function renderMessages(items, options) {
+        if (!items.length) {
+            feedEl.innerHTML = '<div class="chat-empty">No messages yet — this thread is waiting for its dramatic first line.</div>';
+            return;
+        }
+        feedEl.innerHTML = items.map((message) => `<article class="chat-message">
+            <div class="chat-message-head">
+                <span class="chat-message-sender">${escapeHtml(senderLabel(message))}</span>
+                <span class="chat-message-time">${escapeHtml(message.created_at || '')}</span>
+            </div>
+            <div class="chat-message-text">${escapeHtml(message.body || message.text || '')}</div>
+        </article>`).join('');
+        if (!options || options.scroll !== false) feedEl.scrollTop = feedEl.scrollHeight;
+    }
+
+    async function exchangeNetworkSession() {
+        try {
+            const data = await networkFetch('/api/v1/session/exchange', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            saveToken(data.access_token || '');
+            state.user = data.user || null;
+            return !!data.access_token;
+        } catch {
+            return false;
+        }
+    }
+
+    async function validateStoredToken() {
+        if (!state.token) return false;
+        try {
+            const session = await chatFetch('/session');
+            if (session.authenticated && session.user) {
+                state.user = session.user;
+                return true;
+            }
+        } catch {
+            // fall through
+        }
+        saveToken('');
+        state.user = null;
+        return false;
+    }
+
+    async function hydrateDirectoryProfiles() {
+        const ids = Array.from(new Set(state.dms.map((room) => {
+            const partner = dmPartnerActor(room);
+            return partner && partner.actor_type === 'user' ? partner.actor_id : null;
+        }).filter(Boolean)));
+        if (!ids.length || !state.token) {
+            state.usersById = new Map();
+            return;
+        }
+        try {
+            const data = await networkFetch(`/api/v1/users/lookup?ids=${encodeURIComponent(ids.join(','))}`, {
+                headers: { Authorization: `Bearer ${state.token}` },
+            });
+            state.usersById = new Map((data.items || []).map((item) => [item.id, item]));
+        } catch {
+            state.usersById = new Map();
+        }
+    }
+
     async function loadRooms() {
-        try {
-            const data = await fetch('/api/chat/rooms').then(r => r.json());
-            const items = data.items || [];
-            roomsEl.innerHTML = items.length
-                ? items.map(r => `<div class="room" data-id="${OpenVibe.escapeHtml(r.id)}">${OpenVibe.escapeHtml(r.name || r.id)}</div>`).join('')
-                : '<div class="desc">No rooms yet. The global feed is always available.</div>';
-            roomsEl.insertAdjacentHTML('afterbegin', `<div class="room" data-id="__global__">#global</div>`);
-        } catch {
-            roomsEl.innerHTML = '<div class="room active" data-id="__global__">#global (offline)</div>';
+        const data = await chatFetch('/rooms').catch(() => ({ items: [] }));
+        state.rooms = (data.items || []).filter((room) => room.room_type !== 'dm' && room.external_ref_type !== 'dm-pair');
+    }
+
+    async function loadDms() {
+        if (!state.token) {
+            state.dms = [];
+            state.unread = { total_unread: 0, rooms: [] };
+            state.usersById = new Map();
+            return;
         }
-        roomsEl.querySelectorAll('.room').forEach(el => el.onclick = () => selectRoom(el.dataset.id));
-        selectRoom('__global__');
+        const [dmsData, unreadData] = await Promise.all([
+            chatFetch('/dms').catch(() => ({ items: [] })),
+            chatFetch('/dms/unread').catch(() => ({ total_unread: 0, rooms: [] })),
+        ]);
+        state.dms = dmsData.items || [];
+        state.unread = {
+            total_unread: Number(unreadData.total_unread || 0),
+            rooms: unreadData.rooms || [],
+        };
+        await hydrateDirectoryProfiles();
     }
-    async function selectRoom(id) {
-        activeRoom = id;
-        roomsEl.querySelectorAll('.room').forEach(el => el.classList.toggle('active', el.dataset.id === id));
-        await loadHistory();
+
+    async function refreshSidebar() {
+        await Promise.all([loadRooms(), loadDms()]);
+        renderHero();
+        renderDmList();
+        renderRoomList();
     }
-    async function loadHistory() {
-        feed.innerHTML = '<div class="desc">loading…</div>';
+
+    function conversationInfo(kind, id) {
+        if (kind === 'global') {
+            return {
+                title: '#global',
+                subtitle: 'The public room is available to everyone. Sending messages requires sign-in.',
+            };
+        }
+        if (kind === 'dm') {
+            const room = state.dms.find((item) => item.id === id);
+            return {
+                title: room ? dmLabel(room) : 'Direct message',
+                subtitle: room ? dmSubtitle(room) : 'Private conversation',
+            };
+        }
+        const room = state.rooms.find((item) => item.id === id);
+        return {
+            title: room ? roomLabel(room) : '#room',
+            subtitle: room ? roomSubtitle(room) : 'OpenVibe room',
+        };
+    }
+
+    function historyPathForActive() {
+        if (state.active.kind === 'global') return '/global/history';
+        if (state.active.kind === 'dm') return `/dms/${encodeURIComponent(state.active.id)}/messages`;
+        return `/rooms/${encodeURIComponent(state.active.id)}/messages`;
+    }
+
+    function sendPathForActive() {
+        if (state.active.kind === 'global') return '/global/send';
+        if (state.active.kind === 'dm') return `/dms/${encodeURIComponent(state.active.id)}/messages`;
+        return `/rooms/${encodeURIComponent(state.active.id)}/messages`;
+    }
+
+    async function loadActiveConversation(options) {
+        const info = conversationInfo(state.active.kind, state.active.id);
+        setActiveConversation(state.active.kind, state.active.id, info.title, info.subtitle);
+        feedEl.innerHTML = '<div class="chat-empty">Loading conversation…</div>';
         try {
-            const url = activeRoom === '__global__' ? '/api/chat/global/history' : `/api/chat/rooms/${encodeURIComponent(activeRoom)}/messages`;
-            const data = await fetch(url).then(r => r.json());
-            const items = data.items || [];
-            feed.innerHTML = items.length
-                ? items.map(m => `<div class="chat-msg"><span class="who">${OpenVibe.escapeHtml(m.username || m.user_id || 'anon')}</span> ${OpenVibe.escapeHtml(m.body || m.text || '')}</div>`).join('')
-                : '<div class="desc">No messages yet — be the first.</div>';
-            feed.scrollTop = feed.scrollHeight;
-        } catch (e) {
-            feed.innerHTML = `<div class="ov-banner warn">history unavailable (${e.status||'offline'})</div>`;
+            const data = await chatFetch(historyPathForActive());
+            if (state.active.kind === 'dm' && data.unread) {
+                state.unread = {
+                    total_unread: Number(data.unread.total_unread || 0),
+                    rooms: data.unread.rooms || [],
+                };
+                await loadDms();
+                renderHero();
+                renderDmList();
+                const refreshed = conversationInfo(state.active.kind, state.active.id);
+                setActiveConversation(state.active.kind, state.active.id, refreshed.title, refreshed.subtitle);
+            }
+            renderMessages(data.items || [], options || {});
+        } catch (error) {
+            feedEl.innerHTML = `<div class="chat-empty">${escapeHtml(error.message || 'Conversation unavailable right now.')}</div>`;
         }
     }
-    document.getElementById('send-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('msg');
-        const body = input.value.trim();
-        if (!body || !activeRoom) return;
-        const url = activeRoom === '__global__' ? '/api/chat/global/send' : `/api/chat/rooms/${encodeURIComponent(activeRoom)}/messages`;
+
+    async function openConversation(kind, id) {
+        state.active.kind = kind;
+        state.active.id = id;
+        renderDmList();
+        renderRoomList();
+        await loadActiveConversation();
+    }
+
+    async function createDm(targetUser) {
+        if (!state.token) return;
         try {
-            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) });
-            input.value = '';
-            await loadHistory();
-        } catch {
-            alert('Sign in to send messages.');
+            const data = await chatFetch('/dms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target_actor_type: 'user',
+                    target_actor_id: targetUser.id,
+                }),
+            });
+            searchInput.value = '';
+            renderSearchResults([], 'DM created. Pick another user to start a different thread.');
+            await refreshSidebar();
+            await openConversation('dm', data.room.id);
+        } catch (error) {
+            renderSearchResults([], error.message || 'Could not create the DM right now.');
+        }
+    }
+
+    let searchTimer = null;
+    searchInput.addEventListener('input', function () {
+        if (searchTimer) window.clearTimeout(searchTimer);
+        const query = searchInput.value.trim();
+        if (!query) {
+            renderSearchResults([], 'Search by username or display name to start a DM.');
+            return;
+        }
+        renderSearchResults([], 'Searching the OpenVibe user directory…');
+        searchTimer = window.setTimeout(async function () {
+            if (!state.token) {
+                renderSearchResults([], 'Sign in first to search for DM participants.');
+                return;
+            }
+            try {
+                const data = await networkFetch(`/api/v1/users/lookup?q=${encodeURIComponent(query)}`, {
+                    headers: { Authorization: `Bearer ${state.token}` },
+                });
+                const items = (data.items || []).filter((item) => !state.user || item.id !== state.user.id);
+                renderSearchResults(items, 'No matching usernames yet.');
+            } catch (error) {
+                renderSearchResults([], error.message || 'Directory lookup unavailable right now.');
+            }
+        }, 180);
+    });
+
+    document.getElementById('dm-search-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+    });
+
+    sendForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        const body = msgInput.value.trim();
+        if (!body || !state.user) return;
+        try {
+            await chatFetch(sendPathForActive(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body }),
+            });
+            msgInput.value = '';
+            composerStatusEl.textContent = 'Message sent.';
+            await refreshSidebar();
+            await loadActiveConversation({ scroll: true });
+        } catch (error) {
+            composerStatusEl.textContent = error.message || 'Could not send that message.';
         }
     });
-    loadRooms();
+
+    async function bootstrapAuth() {
+        consumeBridgeToken();
+        saveToken(loadStoredToken());
+        await validateStoredToken();
+    }
+
+    await bootstrapAuth();
+    await refreshSidebar();
+    renderSearchResults([], 'Search by username or display name to start a DM.');
+
+    await openConversation('global', '__global__');
+
+    window.setInterval(async function () {
+        await refreshSidebar();
+        await loadActiveConversation({ scroll: false });
+    }, 30000);
 })();
 </script>
 </body>

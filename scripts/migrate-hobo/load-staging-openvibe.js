@@ -23,13 +23,23 @@ async function main() {
             live: args.liveDb,
             chat: args.chatDb,
             community: args.communityDb,
+            games: args.gamesDb,
         },
+        mode: args.mode,
+        dryRun: !!args.dryRun,
+        confirmLoad: !!args.confirmLoad,
+        runId: args.runId,
+        service: args.service,
+        services: args.services,
+        dataset: args.dataset,
+        datasets: args.datasets,
         logger,
     });
 
     logger.info(`Datasets loaded: ${Object.keys(report.datasets).length}`);
     logger.info(`Manual actions flagged: ${report.manual_actions.length}`);
     logger.info(`Hobo Bucks exclusion confirmed: ${report.hobo_bucks_exclusion_confirmed}`);
+    logger.info(`Effective mode: ${report.effective_mode} (${report.dry_run ? 'dry-run' : 'apply'})`);
 }
 
 main().catch((error) => {

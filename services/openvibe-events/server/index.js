@@ -18,7 +18,11 @@ function buildApp() {
     app.use(cors());
     app.use(express.json({ limit: '512kb' }));
 
-    app.get('/health', (_req, res) => res.json({ ok: true, service: 'openvibe-events' }));
+    app.get('/health', (_req, res) => res.json({
+        ok: true,
+        service: 'openvibe-events',
+        persistence: db.describePersistence(),
+    }));
     app.use('/api/v1', buildRouter(config.internalKey));
 
     app.use((err, _req, res, _next) => {

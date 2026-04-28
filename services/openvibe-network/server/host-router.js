@@ -43,8 +43,10 @@ function detectSurface(host, surfaces) {
     return 'network';
 }
 
-function attachHostRouter({ app, config, hoboToolsProxy, identity }) {
+function attachHostRouter({ app, config, hoboToolsProxy, identity, nativeAuth }) {
     const publicDir = path.resolve(__dirname, '..', 'public');
+    const compatMode = String(process.env.OPENVIBE_LEGACY_COMPAT_MODE || 'false').toLowerCase() === 'true';
+    const authUrl = String(config.surfaces.auth || '').replace(/\/$/, '');
 
     app.use((req, _res, next) => {
         req.openvibeSurface = detectSurface(req.headers.host, config.surfaces);
@@ -61,25 +63,51 @@ function attachHostRouter({ app, config, hoboToolsProxy, identity }) {
         res.json(identity.getJwks());
     });
 
-    // OpenVibe-branded auth landing — when federated, the OAuth2 dance still
-    // happens at hobo-tools, so we redirect /oauth/authorize there. This lets
-    // existing OAuth client configs that point at auth.openvibe.network keep
-    // working today.
+    // OpenVibe-native auth should be served directly by the network service.
+    // If another surface receives an auth link, bounce to auth.openvibe.network
+    // instead of 404ing.
     app.get('/oauth/authorize', (req, res, next) => {
-        if (req.openvibeSurface !== 'auth') return next();
-        if (config.hoboTools.publicUrl) {
+        if (req.openvibeSurface !== 'auth') {
+            const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+            return res.redirect(302, `${authUrl}/oauth/authorize${qs}`);
+        }
+        if (compatMode && config.hoboTools.publicUrl) {
             const target = `${config.hoboTools.publicUrl}/oauth/authorize${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`;
             return res.redirect(302, target);
         }
-        return res.status(503).json({ error: 'OpenVibe-native /oauth/authorize not yet implemented; configure HOBO_TOOLS_URL for federation' });
+        return nativeAuth.handleAuthorizeGet(req, res);
     });
-    app.post('/oauth/token', (req, res, next) => {
-        if (req.openvibeSurface !== 'auth') return next();
-        return hoboToolsProxy(req, res);
+    app.post('/oauth/authorize', express.urlencoded({ extended: false }), (req, res, next) => {
+        if (req.openvibeSurface !== 'auth') {
+            const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+            return res.redirect(307, `${authUrl}/oauth/authorize${qs}`);
+        }
+        if (compatMode && config.hoboTools.publicUrl) {
+            const target = `${config.hoboTools.publicUrl}/oauth/authorize`;
+            return res.redirect(307, target);
+        }
+        return nativeAuth.handleAuthorizePost(req, res);
+    });
+    app.post('/oauth/token', express.urlencoded({ extended: false }), (req, res, next) => {
+        if (req.openvibeSurface !== 'auth') return res.redirect(307, `${authUrl}/oauth/token`);
+        if (compatMode && typeof hoboToolsProxy === 'function') {
+            return hoboToolsProxy(req, res);
+        }
+        return nativeAuth.handleTokenPost(req, res);
+    });
+    app.get('/oauth/logout', (req, res, next) => {
+        if (req.openvibeSurface !== 'auth') {
+            const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+            return res.redirect(302, `${authUrl}/oauth/logout${qs}`);
+        }
+        return nativeAuth.handleLogout(req, res);
     });
 
-    // ── per-surface static shells + legacy proxy ─────────────
+    // ── per-surface static shells ────────────────────────────
+    // OpenVibe-native shells are authoritative. Legacy Hobo UI fallback has
+    // been removed from the default runtime path.
     function serveSurface(surface, htmlFile) {
+        const staticHandler = express.static(publicDir, { fallthrough: true, index: false });
         return (req, res, next) => {
             if (req.openvibeSurface !== surface) return next();
             // API and well-known paths are handled before this point
@@ -88,9 +116,11 @@ function attachHostRouter({ app, config, hoboToolsProxy, identity }) {
             if (req.method === 'GET' && (req.path === '/' || req.path === `/${htmlFile}`)) {
                 return res.sendFile(path.join(publicDir, htmlFile));
             }
-            // Everything else falls through to the legacy hobo-tools proxy so
-            // existing UI bundles keep working under the new domain.
-            return hoboToolsProxy(req, res);
+            // Serve static assets (CSS/JS/images) from the OpenVibe public dir.
+            return staticHandler(req, res, (err) => {
+                if (err) return next(err);
+                return res.status(404).type('text/plain').send('Not found');
+            });
         };
     }
 

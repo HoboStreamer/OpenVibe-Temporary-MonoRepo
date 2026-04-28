@@ -1,13 +1,13 @@
 # OpenVibe
 
-OpenVibe is the platform kernel and the federated set of product surfaces being
-extracted from the existing **HoboStreamer.com** runtime and the **HoboApp** /
-`hobo-tools` monorepo.
+OpenVibe is the native platform kernel and the federated set of product
+surfaces replacing the legacy **HoboStreamer.com** runtime and the
+**HoboApp** / `hobo-tools` monorepo.
 
-This folder is the working monorepo root for the kernel itself. Until the
-extraction completes it intentionally lives **alongside** `HoboApp` and
-`HoboStreamer.com` in the workspace, and it federates with the existing
-`hobo.tools` SSO / URL registry instead of replacing it.
+This folder is the working monorepo root for the kernel itself. The legacy
+trees intentionally remain **alongside** it in the workspace as migration
+inputs, historical references, and rollback-only archives. They are not part
+of the default OpenVibe runtime.
 
 See [context/PLAN.md](context/PLAN.md) for the long-form architecture plan and
 [ARCHITECTURE.md](ARCHITECTURE.md) for the rules every OpenVibe service must
@@ -29,20 +29,25 @@ openvibe/
 │   ├── openvibe-contracts/        Shared schemas / topics / capability + namespace ids
 │   └── openvibe-sdk/              Auth client, middleware, registry + events HTTP clients
 ├── services/
-│   ├── openvibe-network/          Control plane (auth/api/admin/my/themes surfaces)
-│   └── openvibe-events/           Event backbone (publish, subscribe, retry, DLQ)
+│   ├── openvibe-network/          Control plane + public hub (auth/api/admin/my/themes/tools)
+│   ├── openvibe-events/           Event backbone (publish, subscribe, retry, DLQ)
+│   ├── openvibe-media/            Shared media object/storage platform
+│   ├── openre-stream/             Stream ingest + restream runtime
+│   ├── openvibe-live/             Native live discovery / channel / stream product
+│   ├── openvibe-chat/             Native chat / DM / call / TTS product
+│   ├── openvibe-community/        Native threads / pastes / discussion product
+│   ├── openvibe-billing/          Billing / tips / loyalty / subscriptions
+│   ├── openvibe-ai/               AI / SEO / indexing / workflow backbone
+│   └── openvibe-games/            Native games / canvas / progression service
 └── compat/
-    └── hobostreamer/              Notes on the additive HoboStreamer wiring
+  └── hobostreamer/              Legacy migration notes only; not required for runtime
 ```
 
-Both services are independent Node/Express apps with their own `package.json`.
-The currently checked-in implementations still use `better-sqlite3` for local
-bootstrap — same pattern as `hobo-tools` and HoboStreamer — so a developer can
-run them without new infra. That SQLite pattern, plus the existing
-federation/compat bridges, should be treated as **transitional scaffolding
-only**: the production cutover target is PostgreSQL + Redis + object storage +
-async workers, and the end-state is a hard cutover rather than indefinite
-dual-runtime compatibility.
+Each service is an independent Node/Express app with its own `package.json`.
+SQLite remains the local-dev bootstrap path so contributors can run the
+workspace without extra infrastructure, but the target runtime for staging and
+production is PostgreSQL + Redis + object storage + async workers. Legacy Hobo
+runtime compatibility is not part of the steady-state OpenVibe deployment.
 
 ---
 
@@ -66,23 +71,20 @@ dual-runtime compatibility.
   * Host-aware routing for `auth.openvibe.network`, `api.openvibe.network`,
     `admin.openvibe.network`, `my.openvibe.network`, `themes.openvibe.network`
   * OIDC-friendly identity surface: `/.well-known/openid-configuration` +
-    JWKS derived from the existing `hobo-tools` RS256 public key (federation
-    mode) so every existing Hobo token verifies on day one
-  * Themes / admin / my-account surfaces transparently proxy to the existing
-    `hobo-tools` runtime as a backward-compatibility layer; OpenVibe-native
-    pages live alongside as the migration target
-  * URL registry compatibility: the network service mirrors the existing
-    hobo-tools registry and adds `OPENVIBE_*` keys with documented Hobo
-    fallbacks
+    JWKS exposed directly by `services/openvibe-network`
+  * Themes / admin / my-account / tools host surfaces are served natively by
+    OpenVibe and no longer fall through to the legacy Hobo UI in default mode
+  * URL registry and platform discovery live in the OpenVibe control plane;
+    legacy Hobo registry data is migration input only
 
-* **HoboStreamer compatibility**
-  * Additive multi-issuer support so a single deployment can verify tokens
-    issued by **either** `hobo.tools` or `auth.openvibe.network`
-  * No public API renames, no schema changes, fully backwards compatible
-    when the OpenVibe vars are absent
-  * Compatibility bridges remain transitional. After migration validation, the
-    intended end state is redirecting the legacy Hobo domains to the
-    corresponding OpenVibe surfaces
+* **Legacy Hobo sources**
+  * `HoboReposToMigrateFrom/HoboStreamer.com` and
+    `HoboReposToMigrateFrom/HoboApp` remain in the workspace for export,
+    mapping, verification, and archival reference
+  * Production-facing migration access is limited to the read-only export
+    scripts under `scripts/migrate-hobo/`
+  * The OpenVibe runtime does not require the legacy Hobo services to be
+    running in default mode
 
 ---
 
@@ -103,14 +105,15 @@ cd services/openvibe-network
 cp .env.example .env
 npm start                     # listens on :4100
 
-# 4. (Optional) Federate with an existing hobo-tools install
-#    so JWKS + registry compatibility kick in. Set in the openvibe-network .env:
-#       HOBO_TOOLS_INTERNAL_URL=http://127.0.0.1:3100
-#       HOBO_TOOLS_PUBLIC_KEY=/opt/HoboApp/hobo-tools/data/keys/public.pem
-#       INTERNAL_API_KEY=<same as hobo-tools>
+# 4. Optional: point staging/prod at Postgres and Redis.
+#    Local bootstrap can stay on SQLite, but staging/prod should set:
+#       OPENVIBE_PERSISTENCE_MODE=postgres
+#       OPENVIBE_DATABASE_URL=postgres://...
+#       OPENVIBE_REDIS_URL=redis://...
 ```
 
-For HoboStreamer additive wiring see [compat/hobostreamer/README.md](compat/hobostreamer/README.md).
+For the migration and cutover workflow, use the docs under `docs/openvibe/`
+and the scripts under `scripts/migrate-hobo/`.
 
 ---
 

@@ -4,123 +4,264 @@
 <meta charset="utf-8" />
 <title>admin.openvibe.network — operator console</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
 </head>
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem;text-align:left">
-        <h1 style="background:none;-webkit-text-fill-color:initial;color:var(--ov-text)">Admin Console</h1>
-        <p>Native operator surface for OpenVibe staff. All write actions go through the capability map and are audited.</p>
-        <div class="ov-banner">
-            <strong>Capability:</strong> <span id="cap-status">checking…</span>
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <span class="ov-kicker">Operator surface</span>
+                <h1>Run the network<br><span class="ov-gradient">without losing the plot.</span></h1>
+                <p>The native admin console surfaces capabilities, migration readiness, registry health, audit signals, and staff role management from the OpenVibe control plane.</p>
+                <div class="ov-chip-row">
+                    <span class="ov-chip soft" id="cap-status">Checking capabilities…</span>
+                    <span class="ov-chip primary" id="compat-status">Checking federation mode…</span>
+                </div>
+                <div class="ov-cta-row" id="admin-actions"></div>
+            </div>
+            <aside class="ov-panel" id="admin-overview-card"></aside>
         </div>
     </section>
-    <div class="ov-tabs">
-        <div class="ov-tab active" data-tab="overview">Overview</div>
-        <div class="ov-tab" data-tab="users">Users / Staff</div>
-        <div class="ov-tab" data-tab="registry">Registry</div>
-        <div class="ov-tab" data-tab="audit">Audit</div>
-        <div class="ov-tab" data-tab="migration">Migration / Readiness</div>
-        <div class="ov-tab" data-tab="compat">Compatibility</div>
+
+    <div class="ov-tabs" id="admin-tabs">
+        <button class="ov-tab active" type="button" data-tab="overview">Overview</button>
+        <button class="ov-tab" type="button" data-tab="users">Users / roles</button>
+        <button class="ov-tab" type="button" data-tab="registry">Registry</button>
+        <button class="ov-tab" type="button" data-tab="audit">Audit</button>
+        <button class="ov-tab" type="button" data-tab="migration">Migration / readiness</button>
+        <button class="ov-tab" type="button" data-tab="compat">Compatibility</button>
     </div>
-    <div id="tab-overview"></div>
-    <div id="tab-users" hidden></div>
-    <div id="tab-registry" hidden></div>
-    <div id="tab-audit" hidden></div>
-    <div id="tab-migration" hidden></div>
-    <div id="tab-compat" hidden></div>
+
+    <section class="ov-panel" id="tab-overview"></section>
+    <section class="ov-panel" id="tab-users" hidden></section>
+    <section class="ov-panel" id="tab-registry" hidden></section>
+    <section class="ov-panel" id="tab-audit" hidden></section>
+    <section class="ov-panel" id="tab-migration" hidden></section>
+    <section class="ov-panel" id="tab-compat" hidden></section>
 </main>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('admin');
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    document.querySelectorAll('.ov-tab').forEach(t => {
-        t.addEventListener('click', () => {
-            document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
-            t.classList.add('active');
-            document.querySelectorAll('main > div[id^=tab-]').forEach(x => x.hidden = true);
-            document.getElementById('tab-' + t.dataset.tab).hidden = false;
+    const ROLE_OPTIONS = ['user', 'streamer', 'global_mod', 'admin'];
+
+    function activateTab(tabName) {
+        document.querySelectorAll('#admin-tabs .ov-tab').forEach((tab) => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+        document.querySelectorAll('section[id^="tab-"]').forEach((panel) => {
+            panel.hidden = panel.id !== `tab-${tabName}`;
+        });
+    }
+
+    function renderEmpty(title, message) {
+        return `<div class="ov-empty"><strong>${OpenVibe.escapeHtml(title)}</strong><p style="margin:.45rem 0 0;">${OpenVibe.escapeHtml(message)}</p></div>`;
+    }
+
+    await OpenVibe.primeEnvironment();
+    await OpenVibe.renderChrome('admin');
+
+    document.querySelectorAll('#admin-tabs .ov-tab').forEach((button) => {
+        button.addEventListener('click', function () {
+            activateTab(button.dataset.tab);
         });
     });
 
-    let cap = { capabilities: [], role: 'anonymous' };
-    try { cap = await OpenVibe.api('/staff/capabilities'); }
-    catch { /* anonymous */ }
-    document.getElementById('cap-status').textContent = `role=${cap.role || 'user'} capabilities=${(cap.capabilities||[]).join(', ') || 'none'}`;
+    const [session, capabilities, servicesRaw, health, registry, discovery, migrationStatus] = await Promise.all([
+        OpenVibe.loadSession(),
+        OpenVibe.api('/staff/capabilities').catch(() => ({ role: 'anonymous', capabilities: [] })),
+        OpenVibe.loadServices(),
+        fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, federation: { mode: 'offline' }, trusted_issuers: [] })),
+        OpenVibe.loadUrlRegistry(),
+        fetch('/.well-known/openid-configuration').then((response) => response.json()).catch(() => null),
+        OpenVibe.api('/admin/migration-status').catch(() => null),
+    ]);
 
-    // Overview
-    const overview = document.getElementById('tab-overview');
-    const services = OpenVibe.mergedServices(await OpenVibe.loadServices());
-    overview.innerHTML = `
-        <div class="ov-stat-strip">
-            <div class="ov-stat"><div class="n">${services.length}</div><div class="l">services</div></div>
-            <div class="ov-stat"><div class="n">${(cap.capabilities||[]).length}</div><div class="l">your capabilities</div></div>
-            <div class="ov-stat"><div class="n" id="ov-health">…</div><div class="l">network health</div></div>
+    const services = OpenVibe.mergedServices(servicesRaw);
+    const capList = capabilities.capabilities || [];
+    const canManageUsers = capList.includes('manage_users');
+    const canManageRoles = capList.includes('manage_roles');
+    const canViewAudit = capList.includes('view_all_logs');
+    const canBroadcast = capList.includes('broadcast_notifications');
+    const compatOn = !!(health.federation && health.federation.hobo_tools);
+
+    document.getElementById('cap-status').className = `ov-chip ${capList.length ? 'ok' : 'warn'}`;
+    document.getElementById('cap-status').textContent = `role=${capabilities.role || 'user'} · ${capList.length ? capList.join(', ') : 'no elevated capabilities'}`;
+    document.getElementById('compat-status').className = `ov-chip ${compatOn ? 'warn' : 'ok'}`;
+    document.getElementById('compat-status').textContent = compatOn ? 'Legacy compat available' : 'OpenVibe-native mode';
+
+    document.getElementById('admin-actions').innerHTML = session.authenticated && session.user
+        ? `<button class="ov-btn ov-btn-primary" type="button" id="review-operator-data">Review operator data</button>
+           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Network hub</a>
+           <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('my')}">My account</a>`
+        : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('admin'))}">Sign in for staff tools</a>
+           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Browse network hub</a>`;
+
+    const reviewButton = document.getElementById('review-operator-data');
+    if (reviewButton) {
+        reviewButton.addEventListener('click', function () {
+            activateTab('users');
+        });
+    }
+
+    document.getElementById('admin-overview-card').innerHTML = `
+        <div class="ov-chip-row" style="margin-bottom:.8rem;">
+            <span class="ov-chip ok">${OpenVibe.escapeHtml(String(services.length))} services</span>
+            <span class="ov-chip soft">${OpenVibe.escapeHtml(String(capList.length))} capabilities</span>
+            <span class="ov-chip primary">${health.ok ? 'health ok' : 'health degraded'}</span>
         </div>
-        <div class="ov-grid" id="ov-services"></div>`;
-    OpenVibe.renderServiceCards(document.getElementById('ov-services'), services);
-    fetch('/health').then(r => r.json()).then(j => { document.getElementById('ov-health').textContent = j.ok ? 'OK' : 'DEGRADED'; }).catch(() => { document.getElementById('ov-health').textContent = 'OFFLINE'; });
+        <h2>${session.authenticated && session.user ? `Hello, @${OpenVibe.escapeHtml(session.user.username || session.user.id)}` : 'Staff tools are capability-gated'}</h2>
+        <p class="ov-muted">The console remains readable without elevated access, but role management, audit feeds, and broadcast actions only unlock when the capability map allows them.</p>`;
 
-    // Users / Staff
-    const users = document.getElementById('tab-users');
-    users.innerHTML = `<h2>Staff roles</h2><table class="ov-table"><thead><tr><th>User</th><th>Role</th><th>Granted</th></tr></thead><tbody id="staff-rows"><tr><td colspan="3">loading…</td></tr></tbody></table>`;
-    try {
-        const data = await OpenVibe.api('/admin/users');
-        const tbody = document.getElementById('staff-rows');
-        tbody.innerHTML = '';
-        for (const row of data.items || []) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${OpenVibe.escapeHtml(row.user_id)}</td><td>${OpenVibe.escapeHtml(row.role)}</td><td>${OpenVibe.escapeHtml(row.granted_at || '')}</td>`;
-            tbody.appendChild(tr);
+    document.getElementById('tab-overview').innerHTML = `
+        <div class="ov-stat-strip">
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(services.length))}</div><div class="l">services</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(capList.length))}</div><div class="l">your capabilities</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String((health.trusted_issuers || []).length))}</div><div class="l">trusted issuers</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus && migrationStatus.cutover && migrationStatus.cutover.summary ? migrationStatus.cutover.summary.red || 0 : 0))}</div><div class="l">cutover red flags</div></div>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;">
+            <div class="ov-section-head"><div><h2>Surface spotlight</h2><p class="ov-section-sub">The services most likely to matter during operator review.</p></div></div>
+            <div class="ov-grid" id="admin-service-grid"></div>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;">
+            <div class="ov-section-head"><div><h2>Broadcast</h2><p class="ov-section-sub">Queue a network-level announcement when your capability map allows it.</p></div></div>
+            ${canBroadcast ? `<form id="broadcast-form" class="ov-form-grid">
+                <div class="ov-field"><label for="broadcast-title">Title</label><input class="ov-input" id="broadcast-title" name="title" maxlength="120" placeholder="Maintenance tonight at 02:00 UTC" /></div>
+                <div class="ov-field"><label for="broadcast-audience">Audience</label><input class="ov-input" id="broadcast-audience" name="audience" value="all" /></div>
+                <div class="ov-field" style="grid-column:1/-1;"><label for="broadcast-body">Body</label><textarea class="ov-textarea" id="broadcast-body" name="body" rows="4" placeholder="What should staff or users know?"></textarea></div>
+                <div class="ov-action-row" style="grid-column:1/-1; justify-content:space-between;"><span class="ov-muted" id="broadcast-status">Announcements are audited and queued through <code>/admin/broadcast</code>.</span><button class="ov-btn ov-btn-primary" type="submit">Queue broadcast</button></div>
+            </form>` : renderEmpty('Broadcast unavailable', 'Sign in with broadcast_notifications to queue network-wide announcements from here.')}
+        </div>`;
+
+    await OpenVibe.renderServiceCards(document.getElementById('admin-service-grid'), services.filter((item) => ['openvibe-network', 'openvibe-tools', 'openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community'].includes(item.service_id)));
+
+    if (canBroadcast) {
+        document.getElementById('broadcast-form').addEventListener('submit', async function (event) {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const status = document.getElementById('broadcast-status');
+            status.textContent = 'Queueing broadcast…';
+            try {
+                const response = await OpenVibe.api('/admin/broadcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: form.title.value,
+                        body: form.body.value,
+                        audience: form.audience.value || 'all',
+                        source: 'admin-ui',
+                    }),
+                });
+                status.textContent = response && response.queued ? 'Broadcast queued.' : 'Broadcast submitted.';
+                form.reset();
+            } catch (error) {
+                status.textContent = `Broadcast failed (${error.status || 'error'}).`;
+            }
+        });
+    }
+
+    const usersTarget = document.getElementById('tab-users');
+    if (!canManageUsers) {
+        usersTarget.innerHTML = renderEmpty('Role management unavailable', 'Sign in with manage_users to view the staff role table. manage_roles is required to change a role.');
+    } else {
+        const users = await OpenVibe.api('/admin/users').catch(() => ({ items: [] }));
+        usersTarget.innerHTML = `
+            <div class="ov-section-head"><div><h2>Users & staff roles</h2><p class="ov-section-sub">Current staff role assignments from the control plane.</p></div></div>
+            <div class="ov-table-wrap">
+                <table class="ov-table">
+                    <thead><tr><th>user</th><th>role</th><th>granted</th><th>action</th></tr></thead>
+                    <tbody>${(users.items || []).length ? (users.items || []).map((row) => `<tr data-user-row="${OpenVibe.escapeHtml(row.user_id)}"><td><code>${OpenVibe.escapeHtml(row.user_id)}</code></td><td>${canManageRoles ? `<select class="ov-select" data-role-select="${OpenVibe.escapeHtml(row.user_id)}">${ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === row.role ? 'selected' : ''}>${role}</option>`).join('')}</select>` : OpenVibe.escapeHtml(row.role)}</td><td>${OpenVibe.escapeHtml(OpenVibe.formatDateTime(row.granted_at))}</td><td>${canManageRoles ? `<button class="ov-btn" type="button" data-save-role="${OpenVibe.escapeHtml(row.user_id)}">Save</button>` : '<span class="ov-tag warn">read-only</span>'}</td></tr>`).join('') : '<tr><td colspan="4">No staff roles assigned yet.</td></tr>'}</tbody>
+                </table>
+            </div>
+            <p class="ov-muted" id="users-status" style="margin-top:1rem;">${canManageRoles ? 'Update a role and click Save to write through /admin/users/:id/role.' : 'You can view staff users, but not change their roles.'}</p>`;
+
+        if (canManageRoles) {
+            usersTarget.addEventListener('click', async function (event) {
+                const button = event.target.closest('[data-save-role]');
+                if (!button) return;
+                const userId = button.dataset.saveRole;
+                const select = Array.from(usersTarget.querySelectorAll('[data-role-select]')).find((element) => element.dataset.roleSelect === userId);
+                const status = document.getElementById('users-status');
+                status.textContent = `Saving role for ${userId}…`;
+                try {
+                    await OpenVibe.api(`/admin/users/${encodeURIComponent(userId)}/role`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ role: select.value }),
+                    });
+                    status.textContent = `Role updated for ${userId}.`;
+                } catch (error) {
+                    status.textContent = `Could not update ${userId} (${error.status || 'error'}).`;
+                }
+            });
         }
-        if (!(data.items || []).length) tbody.innerHTML = '<tr><td colspan="3">no staff records yet — promote your first admin via PUT /api/v1/staff/roles/:id</td></tr>';
-    } catch (e) {
-        document.getElementById('staff-rows').innerHTML = `<tr><td colspan="3">requires capability <code>manage_users</code> (status ${e.status||'?'})</td></tr>`;
     }
 
-    // Registry
-    document.getElementById('tab-registry').innerHTML = `<h2>Service registry</h2><table class="ov-table"><thead><tr><th>id</th><th>display_name</th><th>public_url</th></tr></thead><tbody>${services.map(s => `<tr><td><code>${OpenVibe.escapeHtml(s.service_id)}</code></td><td>${OpenVibe.escapeHtml(s.display_name||'')}</td><td>${s.public_url ? `<a href="${s.public_url}">${OpenVibe.escapeHtml(s.public_url)}</a>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    document.getElementById('tab-registry').innerHTML = `
+        <div class="ov-section-head"><div><h2>Service registry</h2><p class="ov-section-sub">The runtime directory of OpenVibe services and their resolved public URLs.</p></div></div>
+        <div class="ov-grid" id="registry-service-grid"></div>
+        <div class="ov-table-wrap" style="margin-top:1rem;">
+            <table class="ov-table">
+                <thead><tr><th>service</th><th>public url</th><th>last heartbeat</th><th>source</th></tr></thead>
+                <tbody>${services.map((service) => `<tr><td><code>${OpenVibe.escapeHtml(service.service_id)}</code></td><td><a href="${OpenVibe.escapeHtml(service.public_url || '#')}">${OpenVibe.escapeHtml(service.public_url || '—')}</a></td><td>${OpenVibe.escapeHtml(service.last_heartbeat || '—')}</td><td>${OpenVibe.escapeHtml(service.source || 'catalog')}</td></tr>`).join('')}</tbody>
+            </table>
+        </div>`;
+    await OpenVibe.renderServiceCards(document.getElementById('registry-service-grid'), services.slice(0, 6));
 
-    // Audit
-    const auditEl = document.getElementById('tab-audit');
-    auditEl.innerHTML = `<h2>Recent audit</h2><pre id="audit-pre">loading…</pre>`;
-    try {
-        const data = await OpenVibe.api('/admin/audit');
-        document.getElementById('audit-pre').textContent = JSON.stringify(data.items || [], null, 2);
-    } catch (e) {
-        document.getElementById('audit-pre').textContent = `requires capability view_all_logs (status ${e.status||'?'})`;
+    const auditTarget = document.getElementById('tab-audit');
+    if (!canViewAudit) {
+        auditTarget.innerHTML = renderEmpty('Audit access unavailable', 'Sign in with view_all_logs to inspect the recent staff audit trail.');
+    } else {
+        const audit = await OpenVibe.api('/admin/audit').catch(() => ({ items: [] }));
+        auditTarget.innerHTML = `
+            <div class="ov-section-head"><div><h2>Recent audit</h2><p class="ov-section-sub">The latest staff actions recorded by the control plane.</p></div></div>
+            <div class="ov-table-wrap">
+                <table class="ov-table">
+                    <thead><tr><th>when</th><th>actor</th><th>action</th><th>target</th><th>detail</th></tr></thead>
+                    <tbody>${(audit.items || []).length ? (audit.items || []).map((entry) => `<tr><td>${OpenVibe.escapeHtml(OpenVibe.formatRelativeTime(entry.recorded_at))}</td><td>${OpenVibe.escapeHtml(entry.actor_id || 'system')}</td><td>${OpenVibe.escapeHtml(entry.action || '—')}</td><td>${OpenVibe.escapeHtml(entry.target_id || '—')}</td><td><code>${OpenVibe.escapeHtml(entry.detail_json || '{}')}</code></td></tr>`).join('') : '<tr><td colspan="5">No recent audit entries.</td></tr>'}</tbody>
+                </table>
+            </div>`;
     }
 
-    // Migration
+    const artifacts = (migrationStatus && migrationStatus.artifacts) || [];
+    const manualActions = (migrationStatus && migrationStatus.manual_actions_preview) || [];
     document.getElementById('tab-migration').innerHTML = `
-        <h2>Phase 8 migration & readiness</h2>
-        <p class="ov-section-sub">Reports are produced by <code>scripts/migrate-hobo/staging-cutover-rehearsal.js</code> and <code>scripts/cutover/run-cutover-rehearsal.js</code>.</p>
-        <ul>
-            <li><code>data/migrations/audit/hobo-ref-list.json</code></li>
-            <li><code>data/migrations/audit/hobo-ref-summary.md</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/import-report.json</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/validation-summary.json</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/staging-load-report.json</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/postgres-load-report.json</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/media-backfill-report.json</code></li>
-            <li><code>data/migrations/hobo-production-staging/openvibe-target/audit/readiness-report.json</code></li>
-            <li><code>data/migrations/readiness-phase8.json</code></li>
-            <li><code>data/migrations/cutover-report.json</code></li>
-        </ul>`;
+        <div class="ov-section-head"><div><h2>Migration / readiness</h2><p class="ov-section-sub">Phase 8 migration diagnostics surfaced directly from the repo artifacts.</p></div></div>
+        ${migrationStatus ? `
+            <div class="ov-stat-strip">
+                <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus.import && migrationStatus.import.dataset_count || 0))}</div><div class="l">import datasets</div></div>
+                <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus.staging && migrationStatus.staging.manual_action_count || 0))}</div><div class="l">manual actions</div></div>
+                <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus.media && migrationStatus.media.missing_files || 0))}</div><div class="l">missing media files</div></div>
+                <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus.cutover && migrationStatus.cutover.gate || 'unknown'))}</div><div class="l">cutover gate</div></div>
+            </div>
+            <div class="ov-table-wrap" style="margin-top:1rem;">
+                <table class="ov-table">
+                    <thead><tr><th>artifact</th><th>status</th><th>updated</th><th>bytes</th></tr></thead>
+                    <tbody>${artifacts.map((artifact) => `<tr><td><code>${OpenVibe.escapeHtml(artifact.path)}</code></td><td>${artifact.exists ? '<span class="ov-tag ok">present</span>' : '<span class="ov-tag warn">missing</span>'}</td><td>${OpenVibe.escapeHtml(OpenVibe.formatDateTime(artifact.updated_at))}</td><td>${OpenVibe.escapeHtml(String(artifact.size_bytes || 0))}</td></tr>`).join('')}</tbody>
+                </table>
+            </div>
+            <div class="ov-grid" style="margin-top:1rem;">
+                <article class="ov-card"><div class="ov-kicker">Readiness summary</div><p class="ov-muted" style="margin-top:.8rem;">green=${OpenVibe.escapeHtml(String(migrationStatus.readiness && migrationStatus.readiness.summary && migrationStatus.readiness.summary.green || 0))} · yellow=${OpenVibe.escapeHtml(String(migrationStatus.readiness && migrationStatus.readiness.summary && migrationStatus.readiness.summary.yellow || 0))} · red=${OpenVibe.escapeHtml(String(migrationStatus.readiness && migrationStatus.readiness.summary && migrationStatus.readiness.summary.red || 0))}</p></article>
+                <article class="ov-card"><div class="ov-kicker">Manual action preview</div>${manualActions.length ? `<ul>${manualActions.map((item) => `<li>${OpenVibe.escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="ov-muted" style="margin-top:.8rem;">No current manual actions recorded.</p>'}</article>
+            </div>` : renderEmpty('Migration report unavailable', 'The migration status endpoint did not return a payload.')}`;
 
-    // Compat
     document.getElementById('tab-compat').innerHTML = `
-        <h2>Compatibility mode</h2>
-        <p>OpenVibe is OpenVibe-native by default. Hobo federation requires <code>OPENVIBE_LEGACY_COMPAT_MODE=true</code> and configured <code>HOBO_TOOLS_*</code> env vars.</p>
-        <p>Default Phase 8 stance: <span class="ov-tag ok">OpenVibe-native</span>. Compat: <span class="ov-tag" id="compat-state">checking…</span></p>`;
-    fetch('/health').then(r => r.json()).then(j => {
-        const compat = j.federation && j.federation.hobo_tools ? 'on' : 'off';
-        const el = document.getElementById('compat-state');
-        if (el) { el.textContent = compat; el.className = 'ov-tag ' + (compat === 'on' ? 'warn' : 'ok'); }
-    }).catch(() => {});
+        <div class="ov-section-head"><div><h2>Compatibility / identity</h2><p class="ov-section-sub">Current federation mode, discovery document, and resolved runtime URLs.</p></div></div>
+        <div class="ov-grid">
+            <article class="ov-card"><div class="ov-kicker">Mode</div><h3 class="ov-service-title" style="margin-top:.8rem;">${compatOn ? 'Compat available' : 'OpenVibe-native only'}</h3><p class="ov-muted">${compatOn ? 'Legacy Hobo federation is configured as an optional path.' : 'No Hobo compat dependency is active in the runtime health report.'}</p></article>
+            <article class="ov-card"><div class="ov-kicker">Issuers</div><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((health.trusted_issuers || []).length))}</h3><p class="ov-muted">Trusted issuers returned by the health endpoint.</p></article>
+            <article class="ov-card"><div class="ov-kicker">OIDC issuer</div><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(discovery && discovery.issuer || 'unavailable')}</h3><p class="ov-muted">Discovery document value currently published by auth.openvibe.network.</p></article>
+        </div>
+        <div class="ov-table-wrap" style="margin-top:1rem;">
+            <table class="ov-table">
+                <thead><tr><th>resolved key</th><th>value</th><th>source</th></tr></thead>
+                <tbody>${Object.entries((registry && registry.registry) || {}).map(([key, entry]) => `<tr><td><code>${OpenVibe.escapeHtml(key)}</code></td><td>${OpenVibe.escapeHtml(String(entry && entry.value || '—'))}</td><td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td></tr>`).join('') || '<tr><td colspan="3">No runtime registry values resolved.</td></tr>'}</tbody>
+            </table>
+        </div>`;
 })();
 </script>
 </body>

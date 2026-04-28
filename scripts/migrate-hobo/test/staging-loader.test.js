@@ -25,6 +25,7 @@ async function main() {
         live: path.join(root, 'db', 'openvibe-live.db'),
         chat: path.join(root, 'db', 'openvibe-chat.db'),
         community: path.join(root, 'db', 'openvibe-community.db'),
+        games: path.join(root, 'db', 'openvibe-games.db'),
     };
 
     writeNdjson(path.join(bundleDir, 'identity', 'users.ndjson'), [
@@ -158,6 +159,58 @@ async function main() {
             legacy_ref: { source: 'hobostreamer', legacy_id: '101' },
         },
     ]);
+    writeNdjson(path.join(bundleDir, 'games', 'players.ndjson'), [
+        {
+            id: 'game-player:hoboquest:1',
+            source: 'hoboquest',
+            user_id: 'user:hobotools:1',
+            display_name: 'Alice Quest',
+            class_name: 'ranger',
+            zone: 'forest',
+            coins: 77,
+            combat_xp: 15,
+            metadata: { legacy_user_id: '1' },
+            legacy_ref: { source: 'hoboquest', legacy_id: '1' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'games', 'inventory.ndjson'), [
+        {
+            id: 'game_inventory:hoboquest:1:oak_log',
+            source: 'hoboquest',
+            user_id: 'user:hobotools:1',
+            item_id: 'oak_log',
+            quantity: 12,
+            metadata: { legacy_user_id: '1' },
+            legacy_ref: { source: 'hoboquest', legacy_id: '1:oak_log' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'games', 'canvas-tiles.ndjson'), [
+        {
+            id: 'canvas-tile:hoboquest:3:5',
+            source: 'hoboquest',
+            x: 3,
+            y: 5,
+            color_index: 7,
+            user_id: 'user:hobotools:1',
+            username: 'alice',
+            legacy_ref: { source: 'hoboquest', legacy_id: '3:5' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'games', 'daily-quests.ndjson'), [
+        {
+            id: 'daily-quest:hoboquest:1',
+            source: 'hoboquest',
+            user_id: 'user:hobotools:1',
+            quest_date: '2026-01-04',
+            quest_id: 'daily_gather_wood',
+            title: 'Gather wood',
+            description: 'Collect 10 logs',
+            progress: 4,
+            goal: 10,
+            reward: { coins: 25 },
+            legacy_ref: { source: 'hoboquest', legacy_id: '1:2026-01-04:daily_gather_wood' },
+        },
+    ]);
 
     writeJson(path.join(bundleDir, 'audit', 'import-report.json'), {
         exclusions: [
@@ -175,11 +228,80 @@ async function main() {
             'media/objects': {},
             'billing/subscriptions': {},
             'loyalty/coin-transactions': {},
+            'games/players': {},
+            'games/inventory': {},
+            'games/canvas-tiles': {},
+            'games/daily-quests': {},
         },
     });
 
-    await loadStagingBundle({ bundleDir, dbPaths, logger: { info() {}, warn() {}, error() {} } });
-    await loadStagingBundle({ bundleDir, dbPaths, logger: { info() {}, warn() {}, error() {} } });
+    let gatedError = null;
+    try {
+        await loadStagingBundle({ bundleDir, dbPaths, logger: { info() {}, warn() {}, error() {} } });
+    } catch (error) {
+        gatedError = error;
+    }
+    assert.ok(gatedError, 'expected staging load to require explicit confirmation');
+    assert.match(gatedError.message, /OPENVIBE_ALLOW_STAGING_LOAD=true/);
+
+    const previousAllow = process.env.OPENVIBE_ALLOW_STAGING_LOAD;
+    const previousConfirm = process.env.OPENVIBE_STAGING_CONFIRM;
+    process.env.OPENVIBE_ALLOW_STAGING_LOAD = 'true';
+    process.env.OPENVIBE_STAGING_CONFIRM = 'true';
+
+    let report;
+    try {
+        report = await loadStagingBundle({
+            bundleDir,
+            dbPaths,
+            confirmLoad: true,
+            runId: 'staging-loader-test',
+            logger: { info() {}, warn() {}, error() {} },
+        });
+        await loadStagingBundle({
+            bundleDir,
+            dbPaths,
+            confirmLoad: true,
+            runId: 'staging-loader-test-repeat',
+            logger: { info() {}, warn() {}, error() {} },
+        });
+
+        assert.strictEqual(report.run_id, 'staging-loader-test');
+        assert.strictEqual(report.effective_mode, 'sqlite-staging');
+        assert.strictEqual(report.dry_run, false);
+        assert.strictEqual(report.service_persistence.network.mode, 'sqlite');
+
+        const dryRunDbPaths = {
+            network: path.join(root, 'dry-run', 'openvibe-network.db'),
+            media: path.join(root, 'dry-run', 'openvibe-media.db'),
+            billing: path.join(root, 'dry-run', 'openvibe-billing.db'),
+            restream: path.join(root, 'dry-run', 'openre-stream.db'),
+            live: path.join(root, 'dry-run', 'openvibe-live.db'),
+            chat: path.join(root, 'dry-run', 'openvibe-chat.db'),
+            community: path.join(root, 'dry-run', 'openvibe-community.db'),
+            games: path.join(root, 'dry-run', 'openvibe-games.db'),
+        };
+        const dryRunReport = await loadStagingBundle({
+            bundleDir,
+            dbPaths: dryRunDbPaths,
+            dryRun: true,
+            services: 'chat',
+            datasets: 'chat/messages',
+            runId: 'staging-loader-dry-run',
+            logger: { info() {}, warn() {}, error() {} },
+        });
+        assert.strictEqual(dryRunReport.dry_run, true);
+        assert.deepStrictEqual(dryRunReport.selected_services, ['chat']);
+        assert.deepStrictEqual(dryRunReport.selected_datasets, ['chat/messages']);
+        assert.deepStrictEqual(Object.keys(dryRunReport.datasets), ['chat/messages']);
+        assert.strictEqual(dryRunReport.effective_service_db_paths.chat, ':memory:');
+        assert.strictEqual(fs.existsSync(dryRunDbPaths.chat), false);
+    } finally {
+        if (previousAllow == null) delete process.env.OPENVIBE_ALLOW_STAGING_LOAD;
+        else process.env.OPENVIBE_ALLOW_STAGING_LOAD = previousAllow;
+        if (previousConfirm == null) delete process.env.OPENVIBE_STAGING_CONFIRM;
+        else process.env.OPENVIBE_STAGING_CONFIRM = previousConfirm;
+    }
 
     const networkDb = new Database(dbPaths.network, { readonly: true });
     const restreamDb = new Database(dbPaths.restream, { readonly: true });
@@ -188,6 +310,7 @@ async function main() {
     const communityDb = new Database(dbPaths.community, { readonly: true });
     const mediaDb = new Database(dbPaths.media, { readonly: true });
     const billingDb = new Database(dbPaths.billing, { readonly: true });
+    const gamesDb = new Database(dbPaths.games, { readonly: true });
 
     try {
         assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/users'").get().count, 1);
@@ -209,6 +332,17 @@ async function main() {
         assert.strictEqual(mediaDb.prepare('SELECT COUNT(*) AS count FROM media_objects').get().count, 1);
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'billing/subscriptions'").get().count, 1);
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'loyalty/coin-transactions'").get().count, 1);
+        assert.strictEqual(gamesDb.prepare('SELECT COUNT(*) AS count FROM game_players').get().count, 1);
+        assert.strictEqual(gamesDb.prepare('SELECT COUNT(*) AS count FROM game_inventory').get().count, 1);
+        assert.strictEqual(gamesDb.prepare('SELECT COUNT(*) AS count FROM canvas_tiles').get().count, 1);
+        assert.deepStrictEqual(
+            gamesDb.prepare("SELECT class_name, zone, coins FROM game_players WHERE user_id = 'user:hobotools:1'").get(),
+            { class_name: 'ranger', zone: 'forest', coins: 77 }
+        );
+        assert.deepStrictEqual(
+            gamesDb.prepare("SELECT progress, goal FROM game_daily_quests WHERE user_id = 'user:hobotools:1' AND quest_id = 'daily_gather_wood'").get(),
+            { progress: 4, goal: 10 }
+        );
     } finally {
         networkDb.close();
         restreamDb.close();
@@ -217,6 +351,7 @@ async function main() {
         communityDb.close();
         mediaDb.close();
         billingDb.close();
+        gamesDb.close();
     }
 
     console.log('staging loader test passed');

@@ -30,6 +30,29 @@ function buildRouter({ eventBus }) {
     }
     function publicMessage(m) { return m; }
 
+    r.get('/session', (req, res) => {
+        const actor = policy.actorOfReq(req);
+        res.json({
+            authenticated: actor.type !== 'anonymous',
+            actor,
+            user: req.user || null,
+        });
+    });
+
+    function syncDmReadState(room, actor) {
+        if (!room || room.room_type !== 'dm') return null;
+        if (!actor || actor.actor_type !== 'user' || !actor.actor_id) return null;
+        const participant = model.markRoomRead(room.id, actor.actor_type, actor.actor_id);
+        if (!participant) return null;
+        const unread = model.getDmUnreadSummary(actor.actor_type, actor.actor_id);
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.DM_READ, {
+            room_id: room.id,
+            unread_count: 0,
+            total_unread: unread.total_unread,
+        }, actor);
+        return { participant, unread };
+    }
+
     // ── rooms ────────────────────────────────────────────
     r.get('/rooms', (req, res) => {
         const items = model.listRooms({
@@ -88,6 +111,7 @@ function buildRouter({ eventBus }) {
             metadata: b.metadata,
             legacy_source: b.legacy_source, legacy_id: b.legacy_id,
         });
+        syncDmReadState(room, a);
         eventBus.publishChatEvent(CHAT_EVENT_TYPES.MESSAGE_CREATED,
             { room_id: room.id, message_id: msg.id, room_type: room.room_type, sender_type: msg.sender_type, sender_id: msg.sender_id }, a);
         res.status(201).json({ message: msg });
@@ -163,6 +187,11 @@ function buildRouter({ eventBus }) {
         if (a.type === 'anonymous') return res.status(401).json({ error: 'auth required' });
         res.json({ items: model.listDmsForActor(a.type, a.id) });
     });
+    r.get('/dms/unread', (req, res) => {
+        const a = policy.actorOfReq(req);
+        if (a.type === 'anonymous') return res.status(401).json({ error: 'auth required' });
+        res.json(model.getDmUnreadSummary(a.type, a.id));
+    });
     r.post('/dms', json, (req, res) => {
         const a = policy.actorOfReq(req);
         if (a.type === 'anonymous') return res.status(401).json({ error: 'auth required' });
@@ -182,7 +211,10 @@ function buildRouter({ eventBus }) {
         if (!room || room.room_type !== 'dm') return res.status(404).json({ error: 'dm not found' });
         try { policy.assert(policy.decideRead({ req, room, model }), actorMeta(req)); }
         catch (err) { return denied(res, err); }
-        res.json({ items: model.listMessages({ room_id: room.id, limit: req.query.limit }) });
+        const a = actorMeta(req);
+        const items = model.listMessages({ room_id: room.id, limit: req.query.limit });
+        const readState = syncDmReadState(room, a);
+        res.json({ items, unread: readState ? readState.unread : model.getDmUnreadSummary(a.actor_type, a.actor_id) });
     });
     r.post('/dms/:roomId/messages', json, (req, res) => {
         const room = model.getRoom(req.params.roomId);
@@ -195,8 +227,19 @@ function buildRouter({ eventBus }) {
             room_id: room.id, sender_type: a.actor_type, sender_id: a.actor_id,
             message_type: 'text', body: b.body, rich_payload: b.rich_payload,
         });
+        const readState = syncDmReadState(room, a);
         eventBus.publishChatEvent(CHAT_EVENT_TYPES.MESSAGE_CREATED, { room_id: room.id, message_id: msg.id, room_type: 'dm' }, a);
-        res.status(201).json({ message: msg });
+        res.status(201).json({ message: msg, unread: readState ? readState.unread : model.getDmUnreadSummary(a.actor_type, a.actor_id) });
+    });
+    r.post('/dms/:roomId/read', (req, res) => {
+        const room = model.getRoom(req.params.roomId);
+        if (!room || room.room_type !== 'dm') return res.status(404).json({ error: 'dm not found' });
+        try { policy.assert(policy.decideRead({ req, room, model }), actorMeta(req)); }
+        catch (err) { return denied(res, err); }
+        const a = actorMeta(req);
+        const readState = syncDmReadState(room, a);
+        if (!readState) return res.status(400).json({ error: 'read state unavailable for actor' });
+        res.json(readState.unread);
     });
 
     // ── Calls ────────────────────────────────────────────

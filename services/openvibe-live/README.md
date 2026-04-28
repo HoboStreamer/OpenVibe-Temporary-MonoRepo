@@ -9,8 +9,9 @@ It maintains a read-model derived from `stream.events` (mirrored from
 [openre-stream](../openre-stream)) and exposes:
 
 - `GET /` — channel directory
-- `GET /c/:slug` — channel page (live banner + recent streams)
-- `GET /c/:slug/s/:streamId` — stream page (embed + metadata)
+- `GET /@:slug` — canonical channel page (live banner + recent streams)
+- `GET /@:slug/s/:streamId` — canonical stream page (embed + metadata)
+- `GET /c/:slug`, `GET /c/:slug/s/:streamId` — legacy compatibility redirects
 - `GET /api/v1/channels`, `/api/v1/streams` — JSON for the same data
 - `POST /api/v1/channels`, `/api/v1/streams` — service-only upsert
 - `POST /api/v1/events/stream` — service-only push from openvibe-events
@@ -25,7 +26,7 @@ node services/openvibe-live/server/index.js
 ## SSR validation
 
 ```bash
-curl -s http://127.0.0.1:4600/c/alice | head -n 30
+curl -s http://127.0.0.1:4600/@alice | head -n 30
 # → must show <title>...</title>, <meta name="description">, <link rel="canonical">,
 #   <meta property="og:title">, <meta property="og:url">, twitter:card meta tags.
 ```
@@ -43,5 +44,5 @@ curl -s http://127.0.0.1:4600/c/alice | head -n 30
 
 `scripts/migrate-hobo/load-staging-openvibe.js` now hydrates the current
 `live_channels` and `live_streams` SQLite tables from the canonical Hobo →
-OpenVibe bundle so `/`, `/c/:slug`, and `/api/v1/channels` can be exercised on
+OpenVibe bundle so `/`, `/@:slug`, and `/api/v1/channels` can be exercised on
 real migrated data during the staging/development hard-cutover rehearsal.

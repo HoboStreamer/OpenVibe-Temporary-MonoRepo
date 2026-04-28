@@ -12,6 +12,13 @@
 //                'admin'   -> admin role only
 
 const NAMESPACES = Object.freeze({
+    // openvibe-network
+    'identity.profile':                { owner: 'openvibe-network', read_scope: 'public', user_writable: true  },
+    'identity.linked_accounts':        { owner: 'openvibe-network', read_scope: 'self',   user_writable: false },
+    'openvibe.theme':                  { owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
+    'control.notification_preferences':{ owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
+    'control.launcher':                { owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
+
     // openvibe-live (HoboStreamer in the meantime)
     'live.profile':       { owner: 'openvibe-live',      read_scope: 'public',  user_writable: true  },
     'live.stats':         { owner: 'openvibe-live',      read_scope: 'public',  user_writable: false },

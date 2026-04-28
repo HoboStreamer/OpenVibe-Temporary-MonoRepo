@@ -34,6 +34,19 @@ CREATE TABLE IF NOT EXISTS live_streams (
 );
 CREATE INDEX IF NOT EXISTS idx_live_streams_channel ON live_streams(channel_id);
 
+CREATE TABLE IF NOT EXISTS live_stream_definitions (
+    id              TEXT PRIMARY KEY,
+    channel_id      TEXT REFERENCES live_channels(id) ON DELETE CASCADE,
+    owner_user_id   TEXT,
+    title           TEXT,
+    ingest_kind     TEXT,
+    metadata_json   JSONB DEFAULT '{}'::jsonb,
+    legacy_source   TEXT,
+    legacy_id       TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_live_stream_definitions_channel ON live_stream_definitions(channel_id);
+
 CREATE TABLE IF NOT EXISTS live_channel_moderators (
     channel_id  TEXT REFERENCES live_channels(id) ON DELETE CASCADE,
     user_id     TEXT,

@@ -90,8 +90,17 @@ function summarizeChecks(checks) {
     }, { green: 0, yellow: 0, red: 0 });
 }
 
+function parseJsonBody(body, fallback) {
+    try {
+        return body ? JSON.parse(body) : (fallback || {});
+    } catch {
+        return fallback || {};
+    }
+}
+
 function buildDatasetChecks(dbs, importReport, mediaBackfillReport, stagingLoadReport) {
     const checks = [];
+    const persistenceDescriptors = stagingLoadReport && stagingLoadReport.service_persistence || {};
 
     const networkUsers = readHoldingRows(dbs.network, 'identity/users');
     const linkedAccounts = readHoldingRows(dbs.network, 'identity/linked-accounts');
@@ -200,6 +209,22 @@ function buildDatasetChecks(dbs, importReport, mediaBackfillReport, stagingLoadR
         status: stagingManualActions.length === 0 ? 'green' : 'yellow',
         detail: `${stagingManualActions.length} loader manual-action notes recorded`,
     });
+    const requiredPersistenceServices = ['network', 'media', 'billing', 'restream', 'live', 'chat', 'community'];
+    const missingPersistence = requiredPersistenceServices.filter((service) => {
+        const descriptor = persistenceDescriptors[service];
+        return !descriptor || !descriptor.mode;
+    });
+    pushCheck(checks, {
+        name: 'staging-persistence-descriptors',
+        status: missingPersistence.length === 0
+            ? 'green'
+            : (Object.keys(persistenceDescriptors).length === 0 ? 'yellow' : 'red'),
+        detail: missingPersistence.length === 0
+            ? requiredPersistenceServices.map((service) => `${service}=${persistenceDescriptors[service].mode}`).join(', ')
+            : (Object.keys(persistenceDescriptors).length === 0
+                ? 'staging-load-report predates persistence descriptors; rerun load-staging-openvibe to refresh the audit artifact'
+                : `missing persistence descriptors for ${missingPersistence.join(', ')}`),
+    });
 
     return checks;
 }
@@ -219,10 +244,19 @@ async function buildRouteChecks(options) {
         {
             name: 'network-health',
             request: { url: `${networkBase}/health` },
-            classify: (result) => ({
-                status: result.ok ? 'green' : 'red',
-                detail: result.ok ? 'openvibe-network /health responded' : (result.error || `HTTP ${result.status}`),
-            }),
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                if (!body.persistence || !body.persistence.mode) {
+                    return { status: 'yellow', detail: 'openvibe-network /health responded without persistence metadata' };
+                }
+                if (body.persistence.legacy_compat_mode === true) {
+                    return { status: 'yellow', detail: `openvibe-network /health reports persistence=${body.persistence.mode} but legacy compat mode is enabled` };
+                }
+                return { status: 'green', detail: `openvibe-network /health responded with persistence=${body.persistence.mode}` };
+            },
         },
         {
             name: 'auth-openid-configuration',
@@ -249,6 +283,19 @@ async function buildRouteChecks(options) {
             }),
         },
         {
+            name: 'session-api',
+            request: { url: `${networkBase}/api/v1/session`, headers: { Host: 'my.openvibe.network', Accept: 'application/json' } },
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                return Object.prototype.hasOwnProperty.call(body, 'authenticated')
+                    ? { status: 'green', detail: `anonymous-safe session endpoint responded (authenticated=${body.authenticated ? 'true' : 'false'})` }
+                    : { status: 'yellow', detail: 'session endpoint responded but omitted authenticated flag' };
+            },
+        },
+        {
             name: 'admin-shell',
             request: { url: `${networkBase}/`, headers: { Host: 'admin.openvibe.network', Accept: 'text/html' } },
             classify: (result) => ({
@@ -265,6 +312,19 @@ async function buildRouteChecks(options) {
             }),
         },
         {
+            name: 'admin-migration-status',
+            request: { url: `${networkBase}/api/v1/admin/migration-status`, headers: { Host: 'admin.openvibe.network', Accept: 'application/json' } },
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                return Array.isArray(body.artifacts)
+                    ? { status: 'green', detail: `migration summary API responded with ${body.artifacts.length} artifacts` }
+                    : { status: 'yellow', detail: 'migration summary API responded without artifact inventory' };
+            },
+        },
+        {
             name: 'themes-shell',
             request: { url: `${networkBase}/`, headers: { Host: 'themes.openvibe.network', Accept: 'text/html' } },
             classify: (result) => ({
@@ -275,18 +335,28 @@ async function buildRouteChecks(options) {
         {
             name: 'events-health',
             request: { url: `${eventsBase}/health`, headers: { Accept: 'application/json' } },
-            classify: (result) => ({
-                status: result.ok ? 'green' : 'red',
-                detail: result.ok ? 'openvibe-events /health responded' : (result.error || `HTTP ${result.status}`),
-            }),
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                return body.persistence && body.persistence.mode
+                    ? { status: 'green', detail: `openvibe-events /health responded with persistence=${body.persistence.mode}` }
+                    : { status: 'yellow', detail: 'openvibe-events /health responded without persistence metadata' };
+            },
         },
         {
             name: 'media-health',
             request: { url: `${mediaBase}/health`, headers: { Accept: 'application/json' } },
-            classify: (result) => ({
-                status: result.ok ? 'green' : 'red',
-                detail: result.ok ? 'openvibe-media /health responded' : (result.error || `HTTP ${result.status}`),
-            }),
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                return body.persistence && body.persistence.mode
+                    ? { status: 'green', detail: `openvibe-media /health responded with persistence=${body.persistence.mode}` }
+                    : { status: 'yellow', detail: 'openvibe-media /health responded without persistence metadata' };
+            },
         },
         {
             name: 'media-api',
@@ -299,18 +369,23 @@ async function buildRouteChecks(options) {
         {
             name: 'live-health',
             request: { url: `${liveBase}/health`, headers: { Accept: 'application/json' } },
-            classify: (result) => ({
-                status: result.ok ? 'green' : 'red',
-                detail: result.ok ? 'openvibe-live /health responded' : (result.error || `HTTP ${result.status}`),
-            }),
+            classify: (result) => {
+                if (!result.ok) {
+                    return { status: 'red', detail: result.error || `HTTP ${result.status}` };
+                }
+                const body = parseJsonBody(result.body, {});
+                return body.persistence && body.persistence.mode
+                    ? { status: 'green', detail: `openvibe-live /health responded with persistence=${body.persistence.mode}` }
+                    : { status: 'yellow', detail: 'openvibe-live /health responded without persistence metadata' };
+            },
         },
         {
             name: 'live-ssr',
-            request: { url: liveSlug ? `${liveBase}/c/${encodeURIComponent(liveSlug)}` : `${liveBase}/`, headers: { Accept: 'text/html' } },
+            request: { url: liveSlug ? `${liveBase}/@${encodeURIComponent(liveSlug)}` : `${liveBase}/`, headers: { Accept: 'text/html' } },
             classify: (result) => ({
                 status: result.ok ? 'green' : 'yellow',
                 detail: result.ok
-                    ? `openvibe-live SSR responded${liveSlug ? ` for /c/${liveSlug}` : ' on /'}`
+                    ? `openvibe-live SSR responded${liveSlug ? ` for /@${liveSlug}` : ' on /'}`
                     : (result.error || `HTTP ${result.status}`),
             }),
         },

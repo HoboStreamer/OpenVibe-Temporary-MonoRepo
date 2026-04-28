@@ -31,15 +31,16 @@ module.exports = {
         publicBaseUrl,
         coldProvider: (process.env.OPENVIBE_MEDIA_COLD_PROVIDER || 'none').toLowerCase(),
         s3: {
-            bucket:        process.env.S3_BUCKET || null,
-            region:        process.env.S3_REGION || null,
-            publicBaseUrl: process.env.S3_PUBLIC_BASE_URL || null,
+            bucket:        process.env.OPENVIBE_S3_BUCKET || process.env.S3_BUCKET || null,
+            region:        process.env.OPENVIBE_S3_REGION || process.env.S3_REGION || null,
+            endpoint:      process.env.OPENVIBE_S3_ENDPOINT || process.env.S3_ENDPOINT || null,
+            publicBaseUrl: process.env.OPENVIBE_S3_PUBLIC_BASE_URL || process.env.S3_PUBLIC_BASE_URL || null,
         },
         cold: {
-            bucket: process.env.OPENVIBE_MEDIA_COLD_S3_BUCKET || process.env.S3_BUCKET || null,
-            region: process.env.OPENVIBE_MEDIA_COLD_S3_REGION || process.env.S3_REGION || null,
-            endpoint: process.env.OPENVIBE_MEDIA_COLD_S3_ENDPOINT || null,
-            publicBaseUrl: process.env.OPENVIBE_MEDIA_COLD_S3_PUBLIC_BASE_URL || process.env.S3_PUBLIC_BASE_URL || null,
+            bucket: process.env.OPENVIBE_MEDIA_COLD_S3_BUCKET || process.env.OPENVIBE_S3_BUCKET || process.env.S3_BUCKET || null,
+            region: process.env.OPENVIBE_MEDIA_COLD_S3_REGION || process.env.OPENVIBE_S3_REGION || process.env.S3_REGION || null,
+            endpoint: process.env.OPENVIBE_MEDIA_COLD_S3_ENDPOINT || process.env.OPENVIBE_S3_ENDPOINT || process.env.S3_ENDPOINT || null,
+            publicBaseUrl: process.env.OPENVIBE_MEDIA_COLD_S3_PUBLIC_BASE_URL || process.env.OPENVIBE_S3_PUBLIC_BASE_URL || process.env.S3_PUBLIC_BASE_URL || null,
         },
     },
 

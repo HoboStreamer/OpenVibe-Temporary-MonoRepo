@@ -28,7 +28,7 @@ Routes (all writes guarded by `policy.assert`):
   `stream.created`.
 * `POST /api/v1/streams/:id/start` → emits `stream.started` *and*
   `stream.mirrored_to_live` (records `mirror_state.live_url =
-  ${OPENVIBE_LIVE_URL}/c/${slug}`).
+  ${OPENVIBE_LIVE_URL}/@${slug}`).
 * `POST /api/v1/streams/:id/end` → emits `stream.ended`; when body has
   `vod_media_id` also emits `stream.vod.attached`.
 * `POST /api/v1/streams/:id/attach-vod`
@@ -45,7 +45,7 @@ Routes (all writes guarded by `policy.assert`):
 | Read model upserts (COALESCE-based, never destroys data) | [services/openvibe-live/server/model.js](../../services/openvibe-live/server/model.js) |
 | SSR (escapes HTML, emits `<title>`, `<meta name=description>`, `<link rel=canonical>`, full og: + twitter: cards) | [services/openvibe-live/server/ssr.js](../../services/openvibe-live/server/ssr.js) |
 | Stream-event ingestion (translates `STREAM_EVENT_TYPES.*` envelopes into read-model upserts) | [services/openvibe-live/server/ingestion.js](../../services/openvibe-live/server/ingestion.js) |
-| HTTP routes (`/`, `/c/:slug`, `/c/:slug/s/:streamId`, JSON `/api/v1/channels`, `/api/v1/streams`, `/api/v1/events/stream`) | [services/openvibe-live/server/index.js](../../services/openvibe-live/server/index.js) |
+| HTTP routes (`/`, `/@:slug`, `/@:slug/s/:streamId`, legacy `/c/:slug*` redirects, JSON `/api/v1/channels`, `/api/v1/streams`, `/api/v1/events/stream`) | [services/openvibe-live/server/index.js](../../services/openvibe-live/server/index.js) |
 
 `og:type` flips to `video.other` on a channel page when the most-recent
 stream is `started`, and the SSR page emits a `LIVE NOW` badge plus an
@@ -107,7 +107,7 @@ curl -sS -X POST http://127.0.0.1:4700/api/v1/streams/$SID/end    \
   -d '{"vod_media_id":"med_..."}'
 curl -sS "http://127.0.0.1:4400/api/v1/events?topic=stream.events&limit=10" \
   -H 'X-Internal-Key:k' | jq '.items[].envelope.event_type'
-curl -sS http://127.0.0.1:4600/c/alice | grep -E 'og:type|LIVE NOW'
+curl -sS http://127.0.0.1:4600/@alice | grep -E 'og:type|LIVE NOW'
 ```
 
 Expected event sequence:

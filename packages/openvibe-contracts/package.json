@@ -13,7 +13,8 @@
     "./envelope": "./envelope.js",
     "./media-namespaces": "./media-namespaces.js",
     "./media-events": "./media-events.js",
-    "./stream-events": "./stream-events.js"
+    "./stream-events": "./stream-events.js",
+    "./game-events": "./game-events.js"
   },
   "license": "MIT"
 }

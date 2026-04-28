@@ -69,12 +69,16 @@ function createMockClient() {
         ensure('themes/catalog.ndjson', [{ id: 't1', name: 'OpenVibe Default' }]);
         ensure('control-plane/url-registry.ndjson', [{ key: 'support', value: 'https://example.com' }]);
         ensure('media/objects.ndjson', [{ id: 'm1', namespace: 'live.vods', media_type: 'video' }]);
+        ensure('games/players.ndjson', [{ user_id: 'u1', class_name: 'ranger', zone: 'forest', coins: 77 }]);
+        ensure('games/canvas-tiles.ndjson', [{ x: 3, y: 5, color_index: 7, user_id: 'u1', username: 'alice' }]);
         ensure('loyalty/accounts.ndjson', [{ user_id: 'u1', coins_balance: 100, nickels_balance: 25 }]);
 
         const client = createMockClient();
         await applySchema({ client });
         assert.ok(client._tables.has('identity_users'), 'schema applied');
         assert.ok(client._tables.has('legacy_finance_archive'), 'finance archive present');
+        assert.ok(client._tables.has('game_players'), 'games schema present');
+        assert.ok(client._tables.has('canvas_tiles'), 'canvas schema present');
 
         const report = await loadBundle({ client, bundleDir: bundle, runId: 'test', dryRun: false, batchSize: 10 });
         assert.strictEqual(report.hobo_bucks_excluded, true);
@@ -82,6 +86,8 @@ function createMockClient() {
         assert.strictEqual(report.datasets['identity/users'].count, 2);
         assert.strictEqual(report.datasets['themes/catalog'].count, 1);
         assert.strictEqual(report.datasets['media/objects'].count, 1);
+        assert.strictEqual(report.datasets['games/players'].count, 1);
+        assert.strictEqual(report.datasets['games/canvas-tiles'].count, 1);
 
         const validation = await validate({ client });
         assert.strictEqual(validation.missing_tables.length, 0, `unexpected missing: ${validation.missing_tables}`);
@@ -96,7 +102,7 @@ function createMockClient() {
     const datasets = DATASET_PLAN.map((p) => p.dataset);
     for (const required of [
         'identity/users', 'themes/catalog', 'live/channels', 'live/streams',
-        'chat/messages', 'community/pastes', 'media/objects', 'loyalty/accounts', 'loyalty/transactions',
+        'chat/messages', 'community/pastes', 'media/objects', 'games/players', 'games/canvas-tiles', 'loyalty/accounts', 'loyalty/transactions',
     ]) {
         assert.ok(datasets.includes(required), `plan missing ${required}`);
     }

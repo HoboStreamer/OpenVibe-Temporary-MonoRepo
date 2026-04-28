@@ -14,6 +14,14 @@ function writeNdjson(filePath, rows) {
     fs.writeFileSync(filePath, rows.map((row) => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : ''), 'utf8');
 }
 
+function readNdjson(filePath) {
+    return fs.readFileSync(filePath, 'utf8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-migrate-test-'));
     const sourceDir = path.join(root, 'source');
@@ -21,6 +29,7 @@ async function main() {
 
     ensureDir(path.join(sourceDir, 'hobotools', 'tables'));
     ensureDir(path.join(sourceDir, 'hobostreamer', 'tables'));
+    ensureDir(path.join(sourceDir, 'hoboquest', 'tables'));
 
     writeNdjson(path.join(sourceDir, 'hobotools', 'tables', 'users.ndjson'), [
         {
@@ -127,6 +136,9 @@ async function main() {
     writeNdjson(path.join(sourceDir, 'hobostreamer', 'tables', 'coin_transactions.ndjson'), [
         { id: 91, user_id: 42, amount: 25, reason: 'watch', created_at: '2026-01-03T01:00:00Z' },
     ]);
+    writeNdjson(path.join(sourceDir, 'hobostreamer', 'tables', 'canvas_user_overrides.ndjson'), [
+        { user_id: 42, note: 'legacy artist', updated_at: '2026-01-05T00:00:00Z' },
+    ]);
 
     writeJson(path.join(sourceDir, 'hobostreamer', 'manifest.json'), {
         source: 'hobostreamer',
@@ -136,12 +148,62 @@ async function main() {
         ],
     });
 
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'game_players.ndjson'), [
+        {
+            user_id: 1,
+            display_name: 'Alice Quest',
+            class_name: 'ranger',
+            zone: 'forest',
+            coins: 77,
+            combat_xp: 15,
+            updated_at: '2026-01-04T00:00:00Z',
+        },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'game_inventory.ndjson'), [
+        { user_id: 1, item_id: 'oak_log', quantity: 12, updated_at: '2026-01-04T00:00:00Z' },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'game_daily_quest_progress.ndjson'), [
+        { user_id: 1, quest_date: '2026-01-04', quest_id: 'daily_gather_wood', value: 4, goal: 10, updated_at: '2026-01-04T10:00:00Z' },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'canvas_settings.ndjson'), [
+        { key: 'board:mode', value: '"classic"', updated_at: '2026-01-04T00:00:00Z' },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'canvas_tiles.ndjson'), [
+        { x: 3, y: 5, color_index: 7, user_id: 1, username: 'alice', placed_at: '2026-01-04T00:00:00Z' },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'canvas_user_overrides.ndjson'), [
+        { user_id: 1, placements_per_minute: 12, updated_at: '2026-01-04T00:00:00Z' },
+    ]);
+    writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'user_equipped.ndjson'), [
+        { user_id: 1, slot: 'hat', item_id: 'straw-hat', updated_at: '2026-01-04T00:00:00Z' },
+    ]);
+
+    writeJson(path.join(sourceDir, 'hoboquest', 'manifest.json'), {
+        source: 'hoboquest',
+        exclusions: [
+            { entity: 'canvas_pixels', reason: 'consolidated into canvas_tiles' },
+            { entity: 'canvas_cooldowns', reason: 'consolidated into canvas_user_overrides' },
+        ],
+    });
+
     const report = await importCanonicalBundle({ sourceDir, outDir, logger: { info() {}, warn() {}, error() {} } });
     assert.strictEqual(report.user_merge.canonical_users, 1, 'expected HoboStreamer user to merge into hobo-tools canonical user');
     assert.strictEqual(report.datasets['identity/users'].written_records, 1, 'expected one canonical user');
     assert.strictEqual(report.datasets['loyalty/coin-transactions'].written_records, 1, 'expected one loyalty transaction');
+    assert.strictEqual(report.datasets['games/players'].written_records, 1, 'expected one canonical game player');
+    assert.strictEqual(report.datasets['games/canvas-tiles'].written_records, 1, 'expected one canonical canvas tile');
+    assert.strictEqual(report.datasets['games/cosmetics'].written_records, 1, 'expected synthesized equipped-only cosmetics to count once');
     assert.ok(report.exclusions.some((entry) => entry.entity === 'users.hobo_bucks_balance'));
+    assert.ok(report.exclusions.some((entry) => entry.entity === 'canvas_pixels'));
     assert.ok(fs.existsSync(path.join(report.bundle_dir, 'audit', 'import-report.json')));
+
+    const importedCosmetics = readNdjson(path.join(report.bundle_dir, 'games', 'cosmetics.ndjson'));
+    const importedOverrides = readNdjson(path.join(report.bundle_dir, 'games', 'canvas-user-overrides.ndjson'));
+    assert.strictEqual(importedCosmetics.length, 1, 'expected one cosmetic row in canonical bundle');
+    assert.strictEqual(importedCosmetics[0].equipped, true);
+    assert.strictEqual(importedOverrides.length, 1, 'expected one canvas override row in canonical bundle');
+    assert.strictEqual(importedOverrides[0].cooldown_seconds, null, 'null legacy cooldowns should stay null, not coerce to zero');
+    assert.strictEqual(importedOverrides[0].placements_per_minute, 12);
 
     const summary = await validateBundle({ bundleDir: report.bundle_dir });
     assert.strictEqual(summary.ok, true, `expected validation to pass: ${JSON.stringify(summary, null, 2)}`);

@@ -9,6 +9,10 @@ function buildRouter({ eventBus, config }) {
     const r = express.Router();
     const json = express.json({ limit: '256kb' });
 
+    function liveChannelUrl(slug) {
+        return `${config.live.url}/@${encodeURIComponent(slug)}`;
+    }
+
     function actorMeta(req) {
         const a = policy.actorOfReq(req);
         return { actor_type: a.type, actor_id: a.id };
@@ -66,7 +70,7 @@ function buildRouter({ eventBus, config }) {
         // Auto-mirror to openvibe.live: emit MIRRORED_TO_LIVE so openvibe-live
         // can react to it via subscription (openvibe-live also subscribes to
         // STARTED — both paths converge on the same mirror_state row).
-        const liveUrl = `${config.live.url}/c/${encodeURIComponent(ch.slug)}`;
+        const liveUrl = liveChannelUrl(ch.slug);
         model.recordMirror({ stream_id: started.id, live_url: liveUrl, channel_slug: ch.slug, details: {} });
         eventBus.publishStreamEvent(STREAM_EVENT_TYPES.MIRRORED_TO_LIVE, started, ch, { live_url: liveUrl });
 

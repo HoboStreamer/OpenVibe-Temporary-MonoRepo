@@ -10,25 +10,32 @@ const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
-const { serviceActorMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
 
     const eventBus = buildEventBus(config);
+    const authClient = buildAuthClient(config);
 
     const app = express();
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
-    app.use(cors());
+    app.use(cors({ origin: true, credentials: true }));
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({ ok: true, service: config.serviceId }));
+    app.get('/health', (_req, res) => res.json({
+        ok: true,
+        service: config.serviceId,
+        persistence: db.describePersistence(),
+    }));
 
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     // Service-actor middleware MUST run before policy decisions.
-    app.use('/api/chat', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus }));
+    app.use(serviceActorMiddleware(config.internalKey));
+    app.use(optionalOpenVibeAuth(authClient));
+    app.use('/api/chat', buildRouter({ eventBus }));
 
     app.use((err, _req, res, _next) => {
         console.error('[chat] unhandled:', err.message);
