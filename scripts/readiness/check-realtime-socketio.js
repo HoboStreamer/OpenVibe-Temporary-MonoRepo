@@ -10,7 +10,7 @@ const { ensureDir, parseArgs, writeJson } = require('../migrate-hobo/lib/common'
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_OUT = path.join(ROOT, 'data', 'readiness', 'realtime-socketio-report.json');
-const REQUIRED_NAMESPACES = Object.freeze(['/realtime', '/chat', '/live', '/media', '/clips', '/notifications', '/admin', '/games']);
+const REQUIRED_NAMESPACES = Object.freeze(['/realtime', '/chat', '/live', '/community', '/media', '/clips', '/billing', '/ai', '/notifications', '/admin', '/games']);
 
 function buildCheck(name, status, details, message) {
     return { name, status, details: details || null, message: message || null };
@@ -31,9 +31,12 @@ function isLocalLikeEnv() {
 async function checkRealtimeSocketIo(options = {}) {
     const offline = !!options.offline || !!options.skipExternal || !!options.dryRun;
     const runtimeSource = fs.readFileSync(path.join(ROOT, 'services', 'openvibe-realtime', 'server', 'socket-runtime.js'), 'utf8');
-    const { socketRuntime } = buildApp();
+    const { socketRuntime, eventBridge } = buildApp();
     const summaryState = socketRuntime.summary();
+    await eventBridge.start().catch(() => {});
+    const bridgeState = eventBridge.summary();
     await socketRuntime.stop().catch(() => {});
+    await eventBridge.stop().catch(() => {});
 
     const namespaceNames = summaryState.namespaces.map((entry) => entry.namespace).sort();
     const missingNamespaces = REQUIRED_NAMESPACES.filter((name) => !namespaceNames.includes(name));
@@ -65,6 +68,16 @@ async function checkRealtimeSocketIo(options = {}) {
         { ttl_seconds: realtimeConfig.presenceTtlSeconds },
         realtimeConfig.presenceTtlSeconds > 0 ? null : 'Presence TTL must be greater than zero.',
     ));
+    checks.push(buildCheck(
+        'event_bridge_mode',
+        bridgeState.mode === 'redis-stream' ? 'green' : (bridgeState.mode === 'polling' ? 'yellow' : 'red'),
+        bridgeState,
+        bridgeState.mode === 'redis-stream'
+            ? null
+            : bridgeState.mode === 'polling'
+                ? 'Realtime bridge is running in HTTP polling fallback mode.'
+                : 'Realtime event bridge is missing or disabled.',
+    ));
 
     const summary = summarize(checks);
     const gate = summary.red > 0 ? 'red' : summary.yellow > 0 ? 'yellow' : 'green';
@@ -79,9 +92,10 @@ async function checkRealtimeSocketIo(options = {}) {
             presence_ttl_seconds: realtimeConfig.presenceTtlSeconds,
         },
         namespaces: namespaceNames,
-        continuation_points: missingNamespaces.length ? [
+        continuation_points: missingNamespaces.length || bridgeState.mode === 'disabled' ? [
             'services/openvibe-realtime/server/socket-runtime.js:namespaces',
             'services/openvibe-realtime/server/socket-runtime.js:transport config',
+            'services/openvibe-realtime/server/event-bridge.js',
         ] : [],
         checks,
     };

@@ -64,6 +64,27 @@
         return `<div class="ov-empty"><strong>${OpenVibe.escapeHtml(title)}</strong><p style="margin:.45rem 0 0;">${OpenVibe.escapeHtml(message)}</p></div>`;
     }
 
+    function toneForStatus(status) {
+        return status === 'green' ? 'ok' : status === 'yellow' ? 'warn' : 'danger';
+    }
+
+    function renderRemoteServiceCard(label, runtime) {
+        if (!runtime) return renderEmpty(label, 'Runtime data unavailable.');
+        const readiness = runtime.readiness || {};
+        const status = readiness.status || (runtime.health && runtime.health.ok === true ? 'green' : 'red');
+        const summary = readiness.summary || {};
+        return `<article class="ov-card">
+            <div class="ov-kicker">${OpenVibe.escapeHtml(label)}</div>
+            <h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String(status))}</h3>
+            <div class="ov-chip-row" style="margin-top:.85rem;">
+                <span class="ov-chip ${toneForStatus(status)}">status=${OpenVibe.escapeHtml(String(status))}</span>
+                <span class="ov-chip soft">green=${OpenVibe.escapeHtml(String(summary.green || 0))}</span>
+                <span class="ov-chip soft">yellow=${OpenVibe.escapeHtml(String(summary.yellow || 0))}</span>
+                <span class="ov-chip soft">red=${OpenVibe.escapeHtml(String(summary.red || 0))}</span>
+            </div>
+        </article>`;
+    }
+
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('admin');
 
@@ -73,7 +94,7 @@
         });
     });
 
-    const [session, capabilities, servicesRaw, health, registry, discovery, migrationStatus, readiness, metricsText] = await Promise.all([
+    const [session, capabilities, servicesRaw, health, registry, discovery, migrationStatus, readiness, metricsText, runtimeStatus] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.api('/staff/capabilities').catch(() => ({ role: 'anonymous', capabilities: [] })),
         OpenVibe.loadServices(),
@@ -83,6 +104,7 @@
         OpenVibe.api('/admin/migration-status').catch(() => null),
         fetch('/ready').then((response) => response.json()).catch(() => null),
         fetch('/metrics').then((response) => response.text()).catch(() => ''),
+        OpenVibe.api('/admin/runtime-status').catch(() => null),
     ]);
 
     const services = OpenVibe.mergedServices(servicesRaw);
@@ -160,6 +182,7 @@
 
     await OpenVibe.renderServiceCards(document.getElementById('admin-service-grid'), services.filter((item) => ['openvibe-network', 'openvibe-tools', 'openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community'].includes(item.service_id)));
 
+    const remoteServices = runtimeStatus && runtimeStatus.services || {};
     document.getElementById('tab-runtime').innerHTML = readiness ? `
         <div class="ov-stat-strip">
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.status || 'unknown'))}</div><div class="l">runtime status</div></div>
@@ -197,6 +220,30 @@
         <div class="ov-section" style="margin-top:1rem;">
             <div class="ov-section-head"><div><h2>Metrics preview</h2><p class="ov-section-sub">First 42 non-empty lines from the Prometheus scrape output so operators can spot obvious regressions without leaving the console.</p></div></div>
             <pre class="ov-code-scroll">${OpenVibe.escapeHtml(metricsPreview || '# metrics endpoint returned no data')}</pre>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;">
+            <div class="ov-section-head"><div><h2>Distributed runtime status</h2><p class="ov-section-sub">Worker heartbeat, queues, events fanout, and realtime bridge state pulled from the running services.</p></div></div>
+            <div class="ov-grid">
+                ${renderRemoteServiceCard('openvibe-events', remoteServices.events)}
+                ${renderRemoteServiceCard('openvibe-workers', remoteServices.workers)}
+                ${renderRemoteServiceCard('openvibe-realtime', remoteServices.realtime)}
+            </div>
+            <div class="ov-grid" style="margin-top:1rem;">
+                <article class="ov-card">
+                    <div class="ov-kicker">Worker heartbeat</div>
+                    <pre class="ov-code-scroll">${OpenVibe.escapeHtml(JSON.stringify(remoteServices.workers && remoteServices.workers.runtime && remoteServices.workers.runtime.heartbeat || {}, null, 2))}</pre>
+                </article>
+                <article class="ov-card">
+                    <div class="ov-kicker">Realtime bridge</div>
+                    <pre class="ov-code-scroll">${OpenVibe.escapeHtml(JSON.stringify(remoteServices.realtime && remoteServices.realtime.bridge || {}, null, 2))}</pre>
+                </article>
+            </div>
+            <div class="ov-table-wrap" style="margin-top:1rem;">
+                <table class="ov-table">
+                    <thead><tr><th>queue</th><th>waiting</th><th>active</th><th>completed</th><th>failed</th><th>worker running</th></tr></thead>
+                    <tbody>${((remoteServices.workers && remoteServices.workers.queues && remoteServices.workers.queues.items) || []).map((queue) => `<tr><td><code>${OpenVibe.escapeHtml(queue.queue_name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(String(queue.waiting || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.active || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.completed || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.failed || 0))}</td><td>${queue.worker_running ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag warn">no</span>'}</td></tr>`).join('') || '<tr><td colspan="6">No queue data returned.</td></tr>'}</tbody>
+                </table>
+            </div>
         </div>`
         : renderEmpty('Runtime report unavailable', 'The readiness or metrics endpoints did not return a payload.');
 

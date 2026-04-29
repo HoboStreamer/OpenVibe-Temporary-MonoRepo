@@ -1,11 +1,32 @@
 'use strict';
 
+const {
+    roomAdmin,
+    roomCanvas,
+    roomChannel,
+    roomChannelChat,
+    roomChat,
+    roomClip,
+    roomDm,
+    roomGame,
+    roomGlobalChat,
+    roomLiveStream,
+    roomMedia,
+    roomPublicSpace,
+    roomPublicThread,
+    roomStreamChat,
+    roomUser,
+} = require('./rooms');
+
 const REALTIME_NAMESPACES = Object.freeze([
     '/realtime',
     '/chat',
     '/live',
+    '/community',
     '/media',
     '/clips',
+    '/billing',
+    '/ai',
     '/notifications',
     '/admin',
     '/games',
@@ -48,7 +69,153 @@ function isRealtimeEventType(value) {
     return typeof value === 'string' && REALTIME_EVENT_TYPE_LIST.includes(value);
 }
 
+function buildRealtimeEnvelopePayload(envelope, extra) {
+    const source = envelope || {};
+    return Object.assign({
+        event_id: source.event_id || null,
+        trace_id: source.trace_id || null,
+        topic: source.topic || null,
+        event_type: source.event_type || null,
+        source: source.source || null,
+        actor_type: source.actor_type || null,
+        actor_id: source.actor_id || null,
+        timestamp: source.timestamp || null,
+        payload: source.payload || {},
+    }, extra || {});
+}
+
+function mapEnvelopeToRealtimeTargets(envelope) {
+    const source = envelope || {};
+    const payload = source.payload || {};
+    const eventType = String(source.event_type || '').trim();
+    const targets = [];
+
+    if (!eventType || source.source === 'openvibe-realtime') return targets;
+
+    const message = buildRealtimeEnvelopePayload(source);
+
+    function add(namespace, room, extra) {
+        if (!namespace || !room) return;
+        targets.push({
+            namespace,
+            room,
+            event: eventType,
+            payload: extra ? buildRealtimeEnvelopePayload(source, extra) : message,
+        });
+    }
+
+    function addUsers(namespace, ids) {
+        for (const id of new Set((ids || []).filter(Boolean).map((value) => String(value)))) {
+            add(namespace, roomUser(id));
+        }
+    }
+
+    function isPublicVisibility(value) {
+        return value == null || value === '' || value === 'public' || value === 'unlisted';
+    }
+
+    function chatRoomTarget() {
+        if (payload.room_type === 'global') return roomGlobalChat();
+        if (payload.room_type === 'stream') return roomStreamChat(payload.external_ref_id || payload.stream_id || payload.channel_id || payload.room_id);
+        if (payload.room_type === 'channel') return roomChannelChat(payload.external_ref_id || payload.channel_id || payload.room_id);
+        if (payload.room_type === 'dm' && payload.room_id && String(payload.room_id).includes(':')) return roomDm(payload.room_id);
+        if (payload.room_id && (payload.room_type === 'community' || payload.room_type === 'system')) return roomChat(payload.room_id);
+        return null;
+    }
+
+    if (eventType === 'user.module.updated') {
+        addUsers('/realtime', [payload.user_id]);
+    }
+
+    if (eventType.startsWith('chat.')) {
+        const chatRoom = chatRoomTarget();
+        if (chatRoom && !chatRoom.startsWith('chat:room:')) add('/chat', chatRoom);
+        if (eventType.startsWith('chat.dm.') || eventType.startsWith('chat.call.')) {
+            addUsers('/chat', [
+                payload.user_id,
+                payload.target_user_id,
+                payload.recipient_user_id,
+                payload.sender_id,
+                payload.caller_user_id,
+                payload.callee_user_id,
+            ]);
+        }
+        if (payload.room_id && payload.room_type === 'dm' && String(payload.room_id).includes(':')) {
+            add('/chat', roomDm(payload.room_id));
+        }
+    }
+
+    if (eventType.startsWith('stream.')) {
+        if (payload.stream_id) add('/live', roomLiveStream(payload.stream_id));
+        if (payload.channel_id || payload.channel_slug) add('/live', roomChannel(payload.channel_id || payload.channel_slug));
+    }
+
+    if (eventType.startsWith('media.')) {
+        if (payload.media_id) add('/media', roomMedia(payload.media_id));
+        if (payload.clip_id) add('/clips', roomClip(payload.clip_id));
+    }
+
+    if (eventType.startsWith('billing.') || eventType.startsWith('tips.') || eventType.startsWith('vip.')) {
+        addUsers('/billing', [
+            payload.user_id,
+            payload.owner_id,
+            payload.owner_user_id,
+            payload.recipient_owner_id,
+            payload.sender_actor_id,
+            payload.subscriber_actor_id,
+            payload.target_owner_id,
+        ]);
+        if (payload.target_context_type === 'stream' && payload.target_context_id) {
+            add('/chat', roomStreamChat(payload.target_context_id));
+            add('/live', roomLiveStream(payload.target_context_id));
+        }
+        if (payload.target_context_type === 'channel' && payload.target_context_id) {
+            add('/chat', roomChannelChat(payload.target_context_id));
+            add('/live', roomChannel(payload.target_context_id));
+        }
+        addUsers('/notifications', [payload.recipient_owner_id, payload.sender_actor_id, payload.subscriber_actor_id]);
+    }
+
+    if (eventType.startsWith('community.')) {
+        const spaceId = payload.space_id || payload.community_id || payload.community_slug;
+        const threadId = payload.thread_id;
+        if (spaceId && isPublicVisibility(payload.visibility)) add('/community', roomPublicSpace(spaceId));
+        if (threadId && isPublicVisibility(payload.visibility)) add('/community', roomPublicThread(threadId));
+    }
+
+    if (eventType.startsWith('ai.') || eventType.startsWith('seo.') || eventType.startsWith('content.') || eventType.startsWith('search.')) {
+        addUsers('/ai', [
+            payload.user_id,
+            payload.requested_by_id,
+            payload.actor_id,
+            payload.owner_id,
+            payload.target_type === 'user' ? payload.target_id : null,
+        ]);
+        addUsers('/notifications', [payload.requested_by_id, payload.user_id]);
+    }
+
+    if (eventType.startsWith('game.')) {
+        addUsers('/games', [payload.user_id]);
+        if (payload.game_id || payload.world_id) add('/games', roomGame(payload.game_id || payload.world_id));
+        if (payload.canvas_id) add('/games', roomCanvas(payload.canvas_id));
+    }
+
+    if (eventType === 'admin.broadcast' || eventType.startsWith('admin.')) {
+        add('/admin', roomAdmin());
+    }
+
+    const seen = new Set();
+    return targets.filter((target) => {
+        const key = `${target.namespace}:${target.room}:${target.event}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 module.exports = {
+    buildRealtimeEnvelopePayload,
+    mapEnvelopeToRealtimeTargets,
     REALTIME_EVENT_TYPES,
     REALTIME_EVENT_TYPE_LIST,
     REALTIME_NAMESPACES,

@@ -93,10 +93,13 @@ function createQueueWorker(options) {
 }
 
 async function getQueueStats(queueOrBundle) {
-    const queue = queueOrBundle && queueOrBundle.queue ? queueOrBundle.queue : queueOrBundle;
-    if (!queue) {
+    const hasQueueProp = !!(queueOrBundle && typeof queueOrBundle === 'object' && Object.prototype.hasOwnProperty.call(queueOrBundle, 'queue'));
+    const queue = hasQueueProp ? queueOrBundle.queue : queueOrBundle;
+    const queueName = queueOrBundle && queueOrBundle.queueName ? queueOrBundle.queueName : queue && queue.name || null;
+    if (!queue || typeof queue.getWaitingCount !== 'function') {
         return {
             enabled: false,
+            queue_name: queueName,
             waiting: 0,
             active: 0,
             delayed: 0,

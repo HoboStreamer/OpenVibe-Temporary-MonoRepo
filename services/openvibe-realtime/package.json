@@ -10,9 +10,12 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@openvibe/contracts": "*",
     "@openvibe/observability": "*",
+    "@openvibe/queue": "*",
     "@openvibe/realtime": "*",
     "@openvibe/redis": "*",
+    "@openvibe/sdk": "*",
     "@openvibe/runtime": "*",
     "@socket.io/redis-streams-adapter": "^0.2.2",
     "cors": "^2.8.5",

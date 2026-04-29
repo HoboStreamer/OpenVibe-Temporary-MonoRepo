@@ -6,10 +6,12 @@ const {
     authenticateSocket,
     canJoinRoom,
     REALTIME_NAMESPACES,
+    mapEnvelopeToRealtimeTargets,
     normalizeRoomName,
     parseToken,
     roomAdmin,
     roomGlobalChat,
+    roomPublicSpace,
     roomUser,
 } = require('..');
 
@@ -32,12 +34,27 @@ const {
     assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, roomUser('77')), false);
     assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, roomAdmin()), false);
     assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, 'dm:42:77'), true);
+    assert.strictEqual(canJoinRoom({ type: 'anonymous', id: null }, roomPublicSpace('space-1')), true);
+    assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, 'space:private-1'), false);
 })();
 
 (function exposesProductionNamespaces() {
     assert.ok(Array.isArray(REALTIME_NAMESPACES));
     assert.ok(REALTIME_NAMESPACES.includes('/realtime'));
     assert.ok(REALTIME_NAMESPACES.includes('/admin'));
+    assert.ok(REALTIME_NAMESPACES.includes('/community'));
+    assert.ok(REALTIME_NAMESPACES.includes('/billing'));
+    assert.ok(REALTIME_NAMESPACES.includes('/ai'));
+})();
+
+(function mapsCanonicalEnvelopeTargets() {
+    const targets = mapEnvelopeToRealtimeTargets({
+        event_type: 'stream.started',
+        source: 'openre-stream',
+        payload: { stream_id: 'stream-1', channel_id: 'channel-9' },
+    });
+    assert.ok(targets.some((target) => target.namespace === '/live' && target.room === 'live:stream:stream-1'));
+    assert.ok(targets.some((target) => target.namespace === '/live' && target.room === 'channel:channel-9'));
 })();
 
 console.log('openvibe-realtime helpers: OK');

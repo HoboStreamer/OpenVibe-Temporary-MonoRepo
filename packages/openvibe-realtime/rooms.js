@@ -12,6 +12,10 @@ function roomGlobalChat() {
     return 'chat:global';
 }
 
+function roomChat(chatRoomId) {
+    return normalizeRoomName(`chat:room:${chatRoomId}`);
+}
+
 function roomStreamChat(streamId) {
     return normalizeRoomName(`chat:stream:${streamId}`);
 }
@@ -22,6 +26,10 @@ function roomChannelChat(channelSlug) {
 
 function roomDm(threadId) {
     return normalizeRoomName(`dm:${threadId}`);
+}
+
+function roomChannel(channelId) {
+    return normalizeRoomName(`channel:${channelId}`);
 }
 
 function roomLiveStream(streamId) {
@@ -38,6 +46,22 @@ function roomClip(clipId) {
 
 function roomUser(userId) {
     return normalizeRoomName(`user:${userId}`);
+}
+
+function roomPublicSpace(spaceId) {
+    return normalizeRoomName(`public:space:${spaceId}`);
+}
+
+function roomSpace(spaceId) {
+    return normalizeRoomName(`space:${spaceId}`);
+}
+
+function roomPublicThread(threadId) {
+    return normalizeRoomName(`public:thread:${threadId}`);
+}
+
+function roomThread(threadId) {
+    return normalizeRoomName(`thread:${threadId}`);
 }
 
 function roomAdmin() {
@@ -57,6 +81,7 @@ function isPublicRoom(roomName) {
     if (!room) return false;
     return room === roomGlobalChat()
         || room.startsWith('public:')
+        || room.startsWith('channel:')
         || room.startsWith('chat:stream:')
         || room.startsWith('chat:channel:')
         || room.startsWith('live:stream:')
@@ -70,6 +95,8 @@ module.exports = {
     isPublicRoom,
     normalizeRoomName,
     roomAdmin,
+    roomChannel,
+    roomChat,
     roomCanvas,
     roomChannelChat,
     roomClip,
@@ -78,6 +105,10 @@ module.exports = {
     roomGlobalChat,
     roomLiveStream,
     roomMedia,
+    roomPublicSpace,
+    roomPublicThread,
+    roomSpace,
     roomStreamChat,
+    roomThread,
     roomUser,
 };

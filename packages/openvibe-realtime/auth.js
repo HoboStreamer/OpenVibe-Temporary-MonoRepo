@@ -42,6 +42,7 @@ function canJoinRoom(actor, roomName) {
     if (!actor || actor.type === 'anonymous') return isPublicRoom(room);
     if (actor.type === 'service') return true;
     if (room === roomAdmin() || room.startsWith('admin:')) return false;
+    if (room.startsWith('space:') || room.startsWith('thread:')) return false;
     if (room.startsWith('dm:')) {
         return room.split(':').includes(String(actor.id));
     }

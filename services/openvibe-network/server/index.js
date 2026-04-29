@@ -106,7 +106,7 @@ function buildApp() {
     apiRouter.use(capabilityInvoke.buildRouter({ events, config }));
     apiRouter.use(contractRegistry.buildRouter({ events }));
     apiRouter.use(urlRegistry.buildRouter({ config }));
-    apiRouter.use(staff.buildRouter());
+    apiRouter.use(staff.buildRouter({ config }));
     apiRouter.use(nativeAuth.buildAccountRouter());
 
     apiRouter.get('/session', (req, res) => res.json({ authenticated: !!req.user, user: req.user || null }));

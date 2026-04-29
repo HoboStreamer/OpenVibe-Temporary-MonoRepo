@@ -31,6 +31,12 @@ module.exports = {
     events: {
         url: trim(process.env.OPENVIBE_EVENTS_URL) || 'http://127.0.0.1:4400',
     },
+    workers: {
+        internalUrl: trim(process.env.OPENVIBE_WORKERS_INTERNAL_URL) || 'http://127.0.0.1:5300',
+    },
+    realtime: {
+        internalUrl: trim(process.env.OPENVIBE_REALTIME_INTERNAL_URL) || 'http://127.0.0.1:5400',
+    },
 
     // Phase 3 / Phase 4 service URLs (overlay registry seeds).
     media: {

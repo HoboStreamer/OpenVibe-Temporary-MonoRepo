@@ -7,12 +7,27 @@ const {
     buildJobId,
     buildStreamKey,
     createQueueBundle,
+    getQueueStats,
     summarizeWorkerRegistry,
 } = require('..');
 
 (function queueBundleDisablesWithoutRedis() {
     const bundle = createQueueBundle({ queueName: 'media-processing' });
     assert.strictEqual(bundle.enabled, false);
+})();
+
+(async function queueStatsStaySafeWithoutRedis() {
+    const bundle = createQueueBundle({ queueName: 'media-processing' });
+    const stats = await getQueueStats(bundle);
+    assert.deepStrictEqual(stats, {
+        enabled: false,
+        queue_name: 'media-processing',
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        completed: 0,
+        failed: 0,
+    });
 })();
 
 (function queueHelpersBuildDeterministicNames() {

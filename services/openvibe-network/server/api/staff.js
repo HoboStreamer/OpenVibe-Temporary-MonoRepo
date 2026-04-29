@@ -206,6 +206,100 @@ function buildMigrationStatus(rootDir = REPO_ROOT) {
     };
 }
 
+async function fetchJson(url, internalKey) {
+    if (!url) {
+        return { ok: false, url: null, error: 'not configured' };
+    }
+
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'accept': 'application/json',
+                'x-internal-key': internalKey,
+                'x-openvibe-service': 'openvibe-network',
+            },
+        });
+        const text = await response.text();
+        let body = null;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = text || null;
+        }
+        return response.ok
+            ? { ok: true, url, body }
+            : { ok: false, url, status: response.status, body, error: body && body.error || `http_${response.status}` };
+    } catch (error) {
+        return { ok: false, url, error: error.message };
+    }
+}
+
+function unwrapFetch(record) {
+    if (!record) return null;
+    if (record.ok) return record.body;
+    if (record.body && typeof record.body === 'object' && !Array.isArray(record.body)) {
+        return Object.assign({}, record.body, {
+            error: record.error || record.body.error || null,
+            http_status: record.status || null,
+            url: record.url || null,
+        });
+    }
+    return {
+        error: record.error || 'request failed',
+        http_status: record.status || null,
+        url: record.url || null,
+        body: record.body || null,
+    };
+}
+
+async function buildRuntimeStatus(config) {
+    const [
+        eventsHealth,
+        eventsReadiness,
+        workersHealth,
+        workersReadiness,
+        workersRuntime,
+        workersQueues,
+        realtimeHealth,
+        realtimeReadiness,
+        realtimeConnections,
+        realtimeBridge,
+    ] = await Promise.all([
+        fetchJson(`${config.events.url}/health`, config.internalKey),
+        fetchJson(`${config.events.url}/ready`, config.internalKey),
+        fetchJson(`${config.workers.internalUrl}/health`, config.internalKey),
+        fetchJson(`${config.workers.internalUrl}/ready`, config.internalKey),
+        fetchJson(`${config.workers.internalUrl}/api/v1/runtime`, config.internalKey),
+        fetchJson(`${config.workers.internalUrl}/api/v1/queues`, config.internalKey),
+        fetchJson(`${config.realtime.internalUrl}/health`, config.internalKey),
+        fetchJson(`${config.realtime.internalUrl}/ready`, config.internalKey),
+        fetchJson(`${config.realtime.internalUrl}/api/v1/realtime/connections`, config.internalKey),
+        fetchJson(`${config.realtime.internalUrl}/api/v1/realtime/bridge`, config.internalKey),
+    ]);
+
+    return {
+        generated_at: new Date().toISOString(),
+        services: {
+            events: {
+                health: unwrapFetch(eventsHealth),
+                readiness: unwrapFetch(eventsReadiness),
+            },
+            workers: {
+                health: unwrapFetch(workersHealth),
+                readiness: unwrapFetch(workersReadiness),
+                runtime: unwrapFetch(workersRuntime),
+                queues: unwrapFetch(workersQueues),
+            },
+            realtime: {
+                health: unwrapFetch(realtimeHealth),
+                readiness: unwrapFetch(realtimeReadiness),
+                connections: unwrapFetch(realtimeConnections),
+                bridge: unwrapFetch(realtimeBridge),
+            },
+        },
+    };
+}
+
 function actorOfReq(req) {
     const u = req.user || {};
     const role = u.role || (u.id ? getRole(u.id) : 'user');
@@ -223,9 +317,10 @@ function requireCapability(cap) {
     };
 }
 
-function buildRouter() {
+function buildRouter(deps) {
     ensureTables();
     const r = express.Router();
+    const config = deps && deps.config || null;
 
     r.get('/staff/capabilities', (req, res) => {
         const userId = req.query.user || (req.user && req.user.id) || null;
@@ -275,6 +370,11 @@ function buildRouter() {
         res.json(buildMigrationStatus());
     });
 
+    r.get('/admin/runtime-status', async (_req, res) => {
+        if (!config) return res.status(503).json({ error: 'runtime status configuration unavailable' });
+        res.json(await buildRuntimeStatus(config));
+    });
+
     r.post('/admin/broadcast', express.json(), requireCapability('broadcast_notifications'), (req, res) => {
         recordAudit({ actor: req.staffActor, action: 'admin.broadcast', target: null, detail: req.body || {} });
         res.json({ ok: true, queued: true });
@@ -295,6 +395,7 @@ module.exports = {
     recentAudit,
     recordAudit,
     buildMigrationStatus,
+    buildRuntimeStatus,
     requireCapability,
     setRole,
 };
