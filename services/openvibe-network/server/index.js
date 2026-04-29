@@ -21,12 +21,15 @@ const { OpenVibeAuthClient, optionalOpenVibeAuth, requireOpenVibeAuth, EventsCli
 const userModules = require('./api/user-modules');
 const serviceRegistry = require('./api/service-registry');
 const capabilityRegistry = require('./api/capability-registry');
+const capabilityInvoke = require('./api/capability-invoke');
 const contractRegistry = require('./api/contract-registry');
 const urlRegistry = require('./api/url-registry');
 const staff = require('./api/staff');
+const { seedCapabilityRegistry } = require('./capabilities');
 
 function buildApp() {
     db.init(config.db.path);
+    seedCapabilityRegistry(db.get());
 
     const identity = buildIdentity(config);
     const nativeAuth = buildNativeAuth({ config, identity });
@@ -100,6 +103,7 @@ function buildApp() {
     apiRouter.use(userModules.buildRouter({ events }));
     apiRouter.use(serviceRegistry.buildRouter({ events }));
     apiRouter.use(capabilityRegistry.buildRouter({ events }));
+    apiRouter.use(capabilityInvoke.buildRouter({ events, config }));
     apiRouter.use(contractRegistry.buildRouter({ events }));
     apiRouter.use(urlRegistry.buildRouter({ config }));
     apiRouter.use(staff.buildRouter());

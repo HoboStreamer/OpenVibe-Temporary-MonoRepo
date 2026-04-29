@@ -11,6 +11,8 @@ const { ChatClient } = require('./chat-client');
 const { CommunityClient } = require('./community-client');
 const { BillingClient } = require('./billing-client');
 const { AiClient } = require('./ai-client');
+const { CapabilitiesClient } = require('./capabilities');
+const { UserModulesClient } = require('./user-modules');
 const persistenceMode = require('./persistence-mode');
 const urlDefaults = require('./url-defaults');
 
@@ -24,6 +26,8 @@ module.exports = {
     CommunityClient,
     BillingClient,
     AiClient,
+    CapabilitiesClient,
+    UserModulesClient,
     persistenceMode,
     urlDefaults,
     ...persistenceMode,

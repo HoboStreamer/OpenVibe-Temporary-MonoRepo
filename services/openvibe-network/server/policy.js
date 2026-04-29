@@ -40,7 +40,14 @@ function decideUserModuleRead({ req, userId, namespace }) {
     const def = namespaces.getNamespaceDef(namespace);
     if (!def) {
         if (namespaces.isModNamespace(namespace)) {
-            return { allow: !!req.user, reason: 'mod-namespace requires authentication' };
+            const actor = actorOfReq(req);
+            const mod = namespaces.parseModNamespace(namespace);
+            return {
+                allow: isAdmin(req)
+                    || (actor.type === 'service' && mod && actor.id === mod.modId)
+                    || (actor.type === 'user' && String(userId) === actor.id),
+                reason: 'mod-namespace reads require owning user, owning mod service, or admin',
+            };
         }
         return { allow: false, reason: 'unknown namespace' };
     }
@@ -63,10 +70,11 @@ function decideUserModuleWrite({ req, userId, namespace }) {
     const def = namespaces.getNamespaceDef(namespace);
     if (!def) {
         if (namespaces.isModNamespace(namespace)) {
-            // Mods may write only their own namespace; full enforcement comes in
-            // the future mod-trust phase. For now we require an authenticated
-            // service actor that matches the mod id.
-            return { allow: req.serviceActor != null, reason: 'mod-namespace write requires service actor' };
+            const mod = namespaces.parseModNamespace(namespace);
+            return {
+                allow: isAdmin(req) || (req.serviceActor != null && mod && req.serviceActor === mod.modId),
+                reason: 'mod-namespace write requires owning mod service or admin',
+            };
         }
         return { allow: false, reason: 'unknown namespace' };
     }
@@ -91,6 +99,47 @@ function decideRegistryWrite({ req, registry }) {
     return { allow: false, reason: `${registry} writes require service actor or admin` };
 }
 
+function decideCapabilityInvoke({ req, capability, input }) {
+    const actor = actorOfReq(req);
+    const policyDef = capability && capability.policy ? capability.policy : {};
+    const access = policyDef.access || policyDef.invoke_scope || 'authenticated';
+
+    if (access === 'public') {
+        return { allow: true, reason: 'public capability' };
+    }
+    if (actor.type === 'anonymous') {
+        return { allow: false, reason: 'authentication required' };
+    }
+    if (isAdmin(req)) {
+        return { allow: true, reason: 'admin override' };
+    }
+    if (Array.isArray(policyDef.allowed_actor_types) && !policyDef.allowed_actor_types.includes(actor.type)) {
+        return { allow: false, reason: `capability requires actor types: ${policyDef.allowed_actor_types.join(',')}` };
+    }
+
+    switch (access) {
+        case 'authenticated':
+            return { allow: true, reason: 'authenticated actor' };
+        case 'user':
+            return { allow: actor.type === 'user', reason: 'user actor required' };
+        case 'service':
+            return { allow: actor.type === 'service', reason: 'service actor required' };
+        case 'self': {
+            const targetFields = [policyDef.target_field].concat(policyDef.target_field_aliases || []).filter(Boolean);
+            const target = targetFields.map((field) => input && input[field]).find((value) => value != null && value !== '');
+            if (actor.type === 'service') {
+                return { allow: true, reason: 'service actor may act on behalf of self-scoped capability' };
+            }
+            return {
+                allow: actor.type === 'user' && target != null && String(target) === actor.id,
+                reason: 'self-scoped capability requires the target user to match the caller',
+            };
+        }
+        default:
+            return { allow: false, reason: `unknown capability access policy: ${access}` };
+    }
+}
+
 // ── public assert/check ───────────────────────────────────────
 function assert(decision, ctx) {
     const c = ctx || {};
@@ -112,5 +161,6 @@ module.exports = {
     decideUserModuleRead,
     decideUserModuleWrite,
     decideRegistryWrite,
+    decideCapabilityInvoke,
     assert,
 };

@@ -7,6 +7,7 @@
 //   user_modules_history — append-only changelog for user_modules
 //   service_registry     — service identity + URLs + declared capabilities/topics + heartbeat
 //   capability_registry  — capability id + owner service + version + schemas + policy
+//   capability_invocations — invocation audit/status rows for capability dispatch
 //   contract_registry    — schema/contract definitions (events, modules, media, ...)
 //   url_registry_overlay — OpenVibe-only URL registry keys (extends hobo-tools registry)
 //   audit_log            — every mutating action across the kernel
@@ -85,6 +86,27 @@ function init(dbPath) {
             updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (capability_id, version)
         );
+
+        CREATE TABLE IF NOT EXISTS capability_invocations (
+            invocation_id      TEXT PRIMARY KEY,
+            capability_id      TEXT NOT NULL,
+            capability_version INTEGER NOT NULL,
+            actor_type         TEXT,
+            actor_id           TEXT,
+            trace_id           TEXT NOT NULL,
+            idempotency_key    TEXT,
+            target_service     TEXT,
+            request_json       TEXT NOT NULL DEFAULT '{}',
+            response_json      TEXT,
+            error_json         TEXT,
+            status             TEXT NOT NULL DEFAULT 'pending',
+            http_status        INTEGER NOT NULL DEFAULT 202,
+            created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (capability_id, actor_type, actor_id, idempotency_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_capability_invocations_trace ON capability_invocations(trace_id);
+        CREATE INDEX IF NOT EXISTS idx_capability_invocations_actor ON capability_invocations(actor_type, actor_id, created_at DESC);
 
         CREATE TABLE IF NOT EXISTS contract_registry (
             contract_id     TEXT NOT NULL,        -- e.g. 'event:auth.token.issued' or 'module:live.profile'
