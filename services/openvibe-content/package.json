@@ -7,12 +7,15 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/content-ssr.test.js"
+    "test": "node test/content-ssr.test.js && node test/content-api.test.js"
   },
   "license": "MIT",
   "dependencies": {
+    "@openvibe/icons": "*",
+    "@openvibe/persistence": "*",
     "@openvibe/runtime": "*",
     "@openvibe/sdk": "*",
+    "better-sqlite3": "^11.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

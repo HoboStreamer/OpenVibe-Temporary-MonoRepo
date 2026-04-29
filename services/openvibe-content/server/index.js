@@ -5,15 +5,19 @@ const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
 
+const { attachIconAssets } = require('@openvibe/icons/express');
+
 const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
+const { createContentStore } = require('./db');
 const { attachHostRouter } = require('./host-router');
 const { buildRouter } = require('./routes');
 const { hostStatuses } = require('./ssr');
 
 function buildApp() {
     const app = express();
+    const contentStore = createContentStore(config);
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
     app.use(cors());
@@ -21,13 +25,23 @@ function buildApp() {
     const runtime = createServiceRuntime({
         serviceName: config.serviceId,
         getHealth: () => ({
+            persistence: contentStore.describePersistence(),
             ai_url_configured: !!config.aiUrl,
             network_url_configured: !!config.networkUrl,
             surfaces: hostStatuses(config),
             limits: config.limits,
+            content_store: contentStore.getStatus(),
         }),
         getReadiness: () => ({
             checks: [
+                {
+                    name: 'content_store_ready',
+                    ok: !contentStore.getStatus().error && (contentStore.adapter === 'sqlite' || !!contentStore.getStatus().ready),
+                    status: contentStore.getStatus().error ? 'red' : (contentStore.getStatus().ready || contentStore.adapter === 'sqlite' ? 'green' : 'yellow'),
+                    critical: true,
+                    details: contentStore.getStatus(),
+                    message: contentStore.getStatus().error || null,
+                },
                 {
                     name: 'wave_one_hosts_online',
                     ok: true,
@@ -53,16 +67,19 @@ function buildApp() {
                 },
             ],
             extra: {
+                persistence: contentStore.describePersistence(),
                 surfaces: hostStatuses(config),
                 limits: config.limits,
+                content_store: contentStore.getStatus(),
             },
         }),
     });
     runtime.attach(app);
 
     attachHostRouter({ app, config });
+    attachIconAssets(app, { routePrefix: '/assets' });
     app.use('/assets', express.static(path.join(__dirname, '..', 'public')));
-    app.use(buildRouter({ config }));
+    app.use(buildRouter({ config, contentStore }));
 
     app.use((err, _req, res, _next) => {
         console.error('[openvibe-content] unhandled:', err && err.stack || err);

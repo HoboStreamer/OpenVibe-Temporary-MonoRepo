@@ -95,6 +95,19 @@
         'openvibe-games': 'games',
     };
 
+    const CATEGORY_ICONS = {
+        platform: 'network',
+        streaming: 'live',
+        chat: 'chat',
+        community: 'community',
+        billing: 'billing',
+        ai: 'ai',
+        games: 'games',
+        admin: 'admin',
+        account: 'my',
+        service: 'runtime',
+    };
+
     const BUILTIN_THEMES = [
         {
             id: 'openvibe-dark',
@@ -541,6 +554,23 @@
         return resolveServiceUrl(item);
     }
 
+    function icon(name, options) {
+        const icons = global.OpenVibeIcons;
+        return icons && typeof icons.icon === 'function'
+            ? icons.icon(name, Object.assign({ decorative: true }, options || {}))
+            : '';
+    }
+
+    function serviceIconName(item) {
+        return SERVICE_SURFACE_MAP[item && item.service_id]
+            || CATEGORY_ICONS[item && item.category]
+            || 'runtime';
+    }
+
+    function iconLabel(name, label, className) {
+        return `<span class="${escapeHtml(className || 'ov-icon-label')}">${icon(name)}<span>${escapeHtml(label)}</span></span>`;
+    }
+
     function buildServiceCardMarkup(item, state) {
         const tags = getServiceTags(item);
         const href = getServiceHref(item);
@@ -549,9 +579,9 @@
         return `<article class="ov-service-card" data-service-id="${escapeHtml(item.service_id)}">
             <div class="ov-service-top">
                 <div style="display:flex; gap:.85rem; align-items:flex-start;">
-                    <div class="ov-service-icon">${escapeHtml(getInitials(item.display_name || item.service_id))}</div>
+                    <div class="ov-service-icon">${icon(serviceIconName(item)) || escapeHtml(getInitials(item.display_name || item.service_id))}</div>
                     <div>
-                        <h3 class="ov-service-title">${escapeHtml(item.display_name || item.service_id)}</h3>
+                        <h3 class="ov-service-title">${iconLabel(serviceIconName(item), item.display_name || item.service_id)}</h3>
                         <div class="ov-chip-row" style="margin-top:.45rem;">
                             <span class="ov-chip ${item.source === 'registry' ? 'ok' : 'soft'}">${escapeHtml(sourceLabel)}</span>
                             <span class="ov-chip primary">${escapeHtml(item.category || 'service')}</span>
@@ -606,20 +636,20 @@
 
     function navbar(activeKey) {
         const links = [
-            { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home' },
-            { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools' },
-            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account' },
-            { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin' },
-            { key: 'docs', href: '/api/v1/services', label: 'Registry API' },
+            { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
+            { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
+            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
+            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
+            { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
+            { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
         return `<header class="ov-nav"><div class="ov-nav-inner">
             <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">
-                <span class="ov-brand-mark">OV</span>
+                <span class="ov-brand-mark">${icon('network') || 'OV'}</span>
                 <span class="ov-brand-copy"><b>OpenVibe</b><span>One account. Every surface.</span></span>
             </a>
             <nav class="ov-nav-links">
-                ${links.map((link) => `<a href="${escapeHtml(link.href)}" ${link.key === activeKey ? 'data-active="true"' : ''}>${escapeHtml(link.label)}</a>`).join('')}
+                ${links.map((link) => `<a href="${escapeHtml(link.href)}" ${link.key === activeKey ? 'data-active="true"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
             </nav>
             <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
         </div></header>`;
@@ -716,6 +746,8 @@
         formatDateTime,
         formatRelativeTime,
         getServiceHref,
+        icon,
+        iconLabel,
         getUserModule,
         loadAccountLinked,
         loadAccountProfile,
@@ -735,6 +767,7 @@
         resolveSurfaceUrl,
         saveAccountProfile,
         saveLauncherState,
+        serviceIconName,
         signInUrl,
         signOutUrl,
         slugifyLabel,

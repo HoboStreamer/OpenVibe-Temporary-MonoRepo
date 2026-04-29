@@ -2,6 +2,8 @@
 
 require('dotenv').config();
 
+const path = require('path');
+
 const {
     resolvePublicOrigin,
     trimUrl,
@@ -24,6 +26,9 @@ module.exports = {
     aiUrl: trimUrl(process.env.OPENVIBE_AI_URL || ''),
     networkUrl: trimUrl(process.env.OPENVIBE_NETWORK_URL || ''),
     realtimeUrl: trimUrl(process.env.OPENVIBE_REALTIME_URL || ''),
+    db: {
+        path: process.env.OPENVIBE_CONTENT_DB_PATH || path.resolve(__dirname, '..', 'data', 'openvibe-content.db'),
+    },
     limits: {
         publicMediaObjectMaxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES, PUBLIC_MEDIA_OBJECT_MAX_BYTES),
         targetPublicObjectBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_TARGET_PUBLIC_OBJECT_BYTES, TARGET_PUBLIC_OBJECT_MAX_BYTES),

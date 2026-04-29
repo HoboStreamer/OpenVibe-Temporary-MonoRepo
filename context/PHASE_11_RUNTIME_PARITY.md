@@ -1,6 +1,6 @@
 # Phase 11 — runtime parity tracker
 
-Last audited: 2026-04-29 (post-validation update)
+Last audited: 2026-04-29 (post-validation update, content runtime + icon pass)
 
 ## Implemented
 
@@ -59,6 +59,35 @@ Last audited: 2026-04-29 (post-validation update)
   - `services/openvibe-network/server/api/staff.js`
   - `services/openvibe-network/server/index.js`
   - `services/openvibe-network/public/admin.html`
+- Shared icon workspace and browser asset pipeline are now implemented:
+  - `packages/openvibe-icons/package.json`
+  - `packages/openvibe-icons/index.js`
+  - `packages/openvibe-icons/express.js`
+  - `.npmrc.example`
+- Content service DB-backed runtime foundation is now implemented:
+  - `services/openvibe-content/server/db/index.js`
+  - `services/openvibe-content/server/db/sqlite.js`
+  - `services/openvibe-content/server/db/postgres.js`
+  - `services/openvibe-content/server/migrations/postgres/001_init.sql`
+  - `services/openvibe-content/server/index.js`
+  - `services/openvibe-content/server/routes.js`
+  - `services/openvibe-content/test/content-api.test.js`
+- Shared browser icon pass is now applied across the major public shells:
+  - `services/openvibe-network/public/assets/openvibe.js`
+  - `services/openvibe-network/public/admin.html`
+  - `services/openvibe-network/public/index.html`
+  - `services/openvibe-network/public/my.html`
+  - `services/openvibe-network/public/themes.html`
+  - `services/openvibe-network/public/tools.html`
+  - `services/openvibe-network/public/auth.html`
+  - `services/openvibe-chat/public/assets/openvibe.js`
+  - `services/openvibe-live/public/assets/openvibe.js`
+  - `services/openvibe-community/public/assets/openvibe.js`
+  - `services/openvibe-media/public/assets/openvibe.js`
+  - `services/openvibe-games/public/assets/openvibe.js`
+  - `services/openvibe-ai/public/index.html`
+  - `services/openvibe-billing/public/index.html`
+  - `services/openvibe-content/server/ssr.js`
 - Offline readiness/report scripts already exist:
   - `scripts/readiness/check-scalable-runtime.js`
   - `scripts/readiness/check-queue-health.js`
@@ -94,6 +123,7 @@ Last audited: 2026-04-29 (post-validation update)
 - Worker heartbeat/runtime visibility is now surfaced, but workers remain red/yellow until Redis-backed distributed mode is configured:
   - `services/openvibe-workers/server/runtime.js`
   - `services/openvibe-network/public/admin.html`
+- Icon assets are mounted across the main UI-facing services, but some untouched pages still need deeper surface-specific polish beyond the shared nav/card treatment.
 - Browser smoke exists only as HTTP/file inspection, not Playwright automation:
   - `scripts/staging/browser-smoke.js`
   - `scripts/staging/test/browser-smoke.test.js`
@@ -114,9 +144,6 @@ Last audited: 2026-04-29 (post-validation update)
   - `services/openvibe-ai/server/db/index.js`
   - `services/openvibe-games/server/db/index.js`
   - plus corresponding `server/db/sqlite.js`, `server/db/postgres.js`, and `server/migrations/postgres/` trees
-- Content service DB-backed runtime foundation:
-  - missing file `services/openvibe-content/server/db.js`
-  - missing models/admin/search adapters requested by the runtime-parity prompt
 - Playwright browser smoke implementation:
   - missing file `scripts/staging/browser-smoke-playwright.js`
   - missing test `scripts/staging/test/browser-smoke-playwright.test.js`
@@ -134,6 +161,7 @@ Last audited: 2026-04-29 (post-validation update)
 
 Required existing commands after each runtime-parity tranche:
 
+- `npm install`
 - `npm run check`
 - `npm test`
 - `npm run readiness`
@@ -154,8 +182,9 @@ Additional acceptance gates still not yet satisfiable from the current repo stat
 
 Validated on 2026-04-29 for this tranche:
 
-- `npm run check` ✅ — `[check] 230 files, 0 failures`
-- `npm test` ✅ — `[test] 45 files, 45 pass, 0 fail`
+- `npm install` ✅ — added 5 packages, audited 368 packages, 0 vulnerabilities
+- `npm run check` ✅ — `[check] 236 files, 0 failures`
+- `npm test` ✅ — `[test] 46 files, 46 pass, 0 fail`
 - `npm run smoke:browser` ❌ — `gate=red`, summary `green=7 yellow=1 red=16`; network/admin/auth/session surfaces passed, but `live`, `chat`, `community`, `media`, `ai`, `games`, and `content` default ports were not running.
 - `node packages/openvibe-realtime/test/helpers.test.js` ✅
 - `node packages/openvibe-queue/test/queue.test.js` ✅
@@ -166,7 +195,12 @@ Validated on 2026-04-29 for this tranche:
 - `node scripts/readiness/check-realtime-socketio.js --offline --dry-run --skip-external` ✅ — gate `yellow` (polling fallback, no Redis)
 - `node scripts/readiness/check-queue-health.js --offline --dry-run --skip-external` ✅ — gate `yellow` (registry-only, no Redis)
 - `npm run readiness` ✅ artifact written to `data/readiness/openvibe-production-readiness-report.json` with `gate=red`, summary `green=6 yellow=5 red=1`
-- Browser validation ✅ on an isolated validation stack (`events:4410`, `workers:5310`, `realtime:5410`, `network:4110`): `admin.html` runtime tab rendered the new **Distributed runtime status** section, including service cards, worker heartbeat JSON, realtime bridge JSON, and populated queue rows.
+- Browser validation ✅ on a focused validation stack (`network:4110`, `ai:5100`, `billing:5001`, `chat:4800`, `content:5500`):
+  - `admin.openvibe.network.localhost:4110/admin.html` rendered iconized nav/tabs plus snapshot timestamp and refresh controls after fixing icon asset route ordering in `services/openvibe-network/server/index.js`
+  - `ai.openvibe.network.localhost:5100/` rendered the refreshed icon-aware surface and `/api/v1/ai/status` returned live JSON from the page controls
+  - `billing.openvibe.network.localhost:5001/` rendered the refreshed icon-aware economy surface
+  - `openvibe.chat.localhost:4800/` rendered the shared icon-aware nav successfully
+  - `openvibe.codes.localhost:5500/` rendered iconized content navigation and article chrome via the new content runtime foundation
 
 ## Files changed
 
@@ -193,3 +227,37 @@ Validated on 2026-04-29 for this tranche:
 - `services/openvibe-workers/server/runtime.js` — surfaced heartbeat in health/readiness payloads.
 - `services/openvibe-workers/test/workers-smoke.test.js` — added heartbeat readiness assertions.
 - `scripts/readiness/check-realtime-socketio.js` — started the bridge during offline readiness inspection and checked bridge mode explicitly.
+- `packages/openvibe-icons/package.json` — added a shared icon workspace package with free-solid defaults and optional Pro compatibility.
+- `packages/openvibe-icons/index.js` — added the shared icon catalog plus server/browser rendering helpers.
+- `packages/openvibe-icons/express.js` — added Express helpers for serving icon JS/CSS assets.
+- `.npmrc.example` — documented the private Font Awesome registry token wiring without committing secrets.
+- `.gitignore` — now ignores local `.npmrc` auth files.
+- `.env` — now includes a placeholder `FONTAWESOME_PACKAGE_TOKEN=` entry.
+- `services/openvibe-content/server/db/index.js` — added persistence-mode-aware content store selection.
+- `services/openvibe-content/server/db/sqlite.js` — added the SQLite content store implementation.
+- `services/openvibe-content/server/db/postgres.js` — added the Postgres content store implementation and migrations bootstrap.
+- `services/openvibe-content/server/migrations/postgres/001_init.sql` — added the initial Postgres content schema.
+- `services/openvibe-content/server/index.js` — wired content-store status into health/readiness and mounted shared icon assets.
+- `services/openvibe-content/server/routes.js` — added DB-backed content status/source/item/search/job APIs.
+- `services/openvibe-content/server/ssr.js` — added icon-aware SSR chrome for content surfaces.
+- `services/openvibe-content/test/content-api.test.js` — added end-to-end coverage for the new content API store.
+- `services/openvibe-network/server/index.js` — fixed icon asset middleware ordering for host-routed admin/network shells.
+- `services/openvibe-network/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-chat/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-live/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-community/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-media/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-games/public/assets/openvibe.js` — added shared browser icon helpers for nav/service cards.
+- `services/openvibe-network/public/admin.html` — added iconized tabs plus refresh/timestamp runtime polish.
+- `services/openvibe-network/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-network/public/my.html` — now loads the shared icon browser bundle.
+- `services/openvibe-network/public/themes.html` — now loads the shared icon browser bundle.
+- `services/openvibe-network/public/tools.html` — now loads the shared icon browser bundle.
+- `services/openvibe-network/public/auth.html` — now loads the shared icon browser bundle.
+- `services/openvibe-chat/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-community/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-games/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-live/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-media/public/index.html` — now loads the shared icon browser bundle.
+- `services/openvibe-ai/public/index.html` — refreshed the AI landing page with icon-aware controls and live action timestamps.
+- `services/openvibe-billing/public/index.html` — refreshed the billing landing page with icon-aware section grouping.

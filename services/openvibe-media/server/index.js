@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
@@ -85,6 +86,7 @@ function buildApp() {
     runtime.attach(app);
 
     // Static admin shell (read-only landing page).
+    attachIconAssets(app, { routePrefix: '/assets' });
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     // Mount API. service-actor middleware MUST run before policy decisions.

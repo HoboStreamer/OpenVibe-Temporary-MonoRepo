@@ -20,6 +20,7 @@
                     <span class="ov-chip soft" id="cap-status">Checking capabilities…</span>
                     <span class="ov-chip primary" id="compat-status">Checking federation mode…</span>
                     <span class="ov-chip soft" id="runtime-status">Checking runtime…</span>
+                    <span class="ov-chip soft" id="refresh-status">Capturing snapshot…</span>
                 </div>
                 <div class="ov-cta-row" id="admin-actions"></div>
             </div>
@@ -46,6 +47,7 @@
     <section class="ov-panel" id="tab-compat" hidden></section>
 </main>
 <div id="footer-mount"></div>
+<script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
@@ -68,13 +70,52 @@
         return status === 'green' ? 'ok' : status === 'yellow' ? 'warn' : 'danger';
     }
 
+    function iconLabel(name, label) {
+        return typeof OpenVibe.iconLabel === 'function'
+            ? OpenVibe.iconLabel(name, label)
+            : OpenVibe.escapeHtml(label);
+    }
+
+    function serviceTimestamp(runtime) {
+        return runtime && runtime.readiness && runtime.readiness.checked_at
+            || runtime && runtime.health && runtime.health.checked_at
+            || runtime && runtime.runtime && runtime.runtime.heartbeat && (runtime.runtime.heartbeat.observed_at || runtime.runtime.heartbeat.received_at || runtime.runtime.heartbeat.recorded_at)
+            || runtime && runtime.checked_at
+            || null;
+    }
+
+    function formatSnapshot(value) {
+        if (!value) return 'snapshot unavailable';
+        return `${OpenVibe.formatDateTime(value)} · ${OpenVibe.formatRelativeTime(value)}`;
+    }
+
+    function decorateTabs() {
+        const tabIcons = {
+            overview: 'admin',
+            runtime: 'runtime',
+            users: 'my',
+            registry: 'docs',
+            audit: 'events',
+            migration: 'content',
+            compat: 'info',
+        };
+        document.querySelectorAll('#admin-tabs .ov-tab').forEach((tab) => {
+            const label = tab.textContent.trim();
+            tab.innerHTML = iconLabel(tabIcons[tab.dataset.tab] || 'info', label);
+        });
+    }
+
     function renderRemoteServiceCard(label, runtime) {
         if (!runtime) return renderEmpty(label, 'Runtime data unavailable.');
         const readiness = runtime.readiness || {};
         const status = readiness.status || (runtime.health && runtime.health.ok === true ? 'green' : 'red');
         const summary = readiness.summary || {};
+        const checkedAt = serviceTimestamp(runtime);
+        const iconName = typeof OpenVibe.serviceIconName === 'function'
+            ? OpenVibe.serviceIconName({ service_id: label })
+            : 'runtime';
         return `<article class="ov-card">
-            <div class="ov-kicker">${OpenVibe.escapeHtml(label)}</div>
+            <div class="ov-kicker">${iconLabel(iconName, label)}</div>
             <h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String(status))}</h3>
             <div class="ov-chip-row" style="margin-top:.85rem;">
                 <span class="ov-chip ${toneForStatus(status)}">status=${OpenVibe.escapeHtml(String(status))}</span>
@@ -82,11 +123,13 @@
                 <span class="ov-chip soft">yellow=${OpenVibe.escapeHtml(String(summary.yellow || 0))}</span>
                 <span class="ov-chip soft">red=${OpenVibe.escapeHtml(String(summary.red || 0))}</span>
             </div>
+            <p class="ov-muted" style="margin-top:.9rem;">${OpenVibe.escapeHtml(formatSnapshot(checkedAt))}</p>
         </article>`;
     }
 
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('admin');
+    decorateTabs();
 
     document.querySelectorAll('#admin-tabs .ov-tab').forEach((button) => {
         button.addEventListener('click', function () {
@@ -116,6 +159,7 @@
     const compatOn = !!(health.federation && health.federation.hobo_tools);
      const readinessTone = readiness && readiness.status === 'green' ? 'ok' : readiness && readiness.status === 'yellow' ? 'warn' : 'danger';
      const metricsPreview = String(metricsText || '').split('\n').filter(Boolean).slice(0, 42).join('\n');
+     const snapshotCapturedAt = readiness && readiness.checked_at || new Date().toISOString();
 
     document.getElementById('cap-status').className = `ov-chip ${capList.length ? 'ok' : 'warn'}`;
     document.getElementById('cap-status').textContent = `role=${capabilities.role || 'user'} · ${capList.length ? capList.join(', ') : 'no elevated capabilities'}`;
@@ -125,14 +169,18 @@
      document.getElementById('runtime-status').textContent = readiness
           ? `runtime ${readiness.status} · ${String((readiness.checks || []).length)} checks`
           : 'Runtime report unavailable';
+     document.getElementById('refresh-status').className = 'ov-chip soft';
+     document.getElementById('refresh-status').innerHTML = iconLabel('clock', formatSnapshot(snapshotCapturedAt));
 
     document.getElementById('admin-actions').innerHTML = session.authenticated && session.user
         ? `<button class="ov-btn ov-btn-primary" type="button" id="review-operator-data">Review operator data</button>
               <button class="ov-btn" type="button" id="review-runtime">Review runtime</button>
+                  <button class="ov-btn ov-btn-ghost" type="button" id="refresh-admin">${iconLabel('refresh', 'Refresh snapshot')}</button>
            <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Network hub</a>
            <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('my')}">My account</a>`
-        : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('admin'))}">Sign in for staff tools</a>
-           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Browse network hub</a>`;
+          : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('admin'))}">${iconLabel('signin', 'Sign in for staff tools')}</a>
+              <button class="ov-btn ov-btn-ghost" type="button" id="refresh-admin">${iconLabel('refresh', 'Refresh snapshot')}</button>
+              <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Browse network hub</a>`;
 
     const reviewButton = document.getElementById('review-operator-data');
     if (reviewButton) {
@@ -146,6 +194,12 @@
             activateTab('runtime');
         });
     }
+    const refreshButton = document.getElementById('refresh-admin');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', function () {
+            window.location.reload();
+        });
+    }
 
     document.getElementById('admin-overview-card').innerHTML = `
         <div class="ov-chip-row" style="margin-bottom:.8rem;">
@@ -155,7 +209,8 @@
             <span class="ov-chip ${readiness ? readinessTone : 'danger'}">runtime ${OpenVibe.escapeHtml(String(readiness && readiness.status || 'down'))}</span>
         </div>
         <h2>${session.authenticated && session.user ? `Hello, @${OpenVibe.escapeHtml(session.user.username || session.user.id)}` : 'Staff tools are capability-gated'}</h2>
-        <p class="ov-muted">The console remains readable without elevated access, but role management, audit feeds, and broadcast actions only unlock when the capability map allows them.</p>`;
+        <p class="ov-muted">The console remains readable without elevated access, but role management, audit feeds, and broadcast actions only unlock when the capability map allows them.</p>
+        <p class="ov-muted" style="margin-top:.8rem;">Latest snapshot: ${OpenVibe.escapeHtml(formatSnapshot(snapshotCapturedAt))}</p>`;
 
     document.getElementById('tab-overview').innerHTML = `
         <div class="ov-stat-strip">
@@ -189,6 +244,7 @@
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.green || 0))}</div><div class="l">green checks</div></div>
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.yellow || 0))}</div><div class="l">yellow checks</div></div>
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.red || 0))}</div><div class="l">red checks</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(OpenVibe.formatRelativeTime(snapshotCapturedAt))}</div><div class="l">last snapshot</div></div>
         </div>
         <div class="ov-grid" style="margin-top:1rem;">
             <article class="ov-card">

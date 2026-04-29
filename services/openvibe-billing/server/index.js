@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
@@ -53,6 +54,7 @@ function buildApp() {
     });
     runtime.attach(app);
 
+    attachIconAssets(app, { routePrefix: '/assets' });
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     const svcMw = serviceActorMiddleware(config.internalKey);

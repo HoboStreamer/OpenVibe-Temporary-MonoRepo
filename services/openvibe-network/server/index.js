@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const { createServiceRuntime } = require('@openvibe/runtime');
+const { attachIconAssets } = require('@openvibe/icons/express');
 
 const config = require('./config');
 const db = require('./db');
@@ -124,6 +125,10 @@ function buildApp() {
     });
 
     app.use('/api/v1', apiRouter);
+
+    // Shared icon assets must be mounted before host-aware shell routing so
+    // per-surface static fallbacks do not 404 /assets/openvibe-icons.* first.
+    attachIconAssets(app, { routePrefix: '/assets' });
 
     // ── host-aware surfaces (Phase 2) ────────────────────────
     attachHostRouter({ app, config, hoboToolsProxy, identity, nativeAuth });

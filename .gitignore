@@ -25,9 +25,18 @@ data/migrations/
 **/*.seed
 
 # Secrets and keys
+.env
+.env.*
+!.env.example
+.npmrc
+.npmrc.*
+!.npmrc.example
 **/*.local
 **/*.secret
 **/*.secrets
+**/.npmrc
+**/.npmrc.*
+!**/.npmrc.example
 **/*.pem
 **/*.key
 **/*.crt

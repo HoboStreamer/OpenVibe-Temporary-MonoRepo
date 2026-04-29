@@ -1,5 +1,7 @@
 'use strict';
 
+const { renderIcon } = require('@openvibe/icons');
+
 function escapeHtml(value) {
     return String(value == null ? '' : value)
         .replace(/&/g, '&amp;')
@@ -353,7 +355,7 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
     const title = pageTitle || surface.title;
     const nav = navItems(config).map((item) => {
         const active = item.id === surface.id ? 'ov-nav-link active' : 'ov-nav-link';
-        return `<a class="${active}" href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>`;
+        return `<a class="${active}" href="${escapeHtml(item.href)}">${renderIcon(item.id, { decorative: true })}<span>${escapeHtml(item.label)}</span></a>`;
     }).join('');
     return `<!doctype html>
 <html lang="en">
@@ -373,6 +375,7 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(description)}">
+    <link rel="stylesheet" href="/assets/openvibe-icons.css">
     <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
     <style>
         :root {
@@ -398,9 +401,9 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
         a { color: var(--accent); }
         .ov-shell { max-width: 1120px; margin: 0 auto; padding: 32px 20px 72px; }
         .ov-nav { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 28px; }
-        .ov-brand { font-weight: 700; font-size: 1.15rem; color: var(--fg); text-decoration: none; }
+        .ov-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--fg); text-decoration: none; }
         .ov-nav-links { display: flex; gap: 14px; flex-wrap: wrap; }
-        .ov-nav-link { text-decoration: none; color: var(--muted); padding: 8px 12px; border-radius: 999px; }
+        .ov-nav-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--muted); padding: 8px 12px; border-radius: 999px; }
         .ov-nav-link.active, .ov-nav-link:hover { background: rgba(108, 198, 255, 0.12); color: var(--fg); }
         .ov-hero, .ov-card, .ov-note, article { background: var(--card); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.22); }
         .ov-hero { padding: 28px; margin-bottom: 24px; }
@@ -425,7 +428,7 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
 <body>
     <div class="ov-shell">
         <header class="ov-nav">
-            <a class="ov-brand" href="${escapeHtml(surface.origin)}/">${escapeHtml(surface.label)}</a>
+            <a class="ov-brand" href="${escapeHtml(surface.origin)}/">${renderIcon(surface.id, { decorative: true })}<span>${escapeHtml(surface.label)}</span></a>
             <nav class="ov-nav-links" aria-label="OpenVibe content surfaces">${nav}</nav>
         </header>
         ${statusNote ? `<div class="ov-status">${escapeHtml(statusNote)}</div>` : ''}
@@ -440,13 +443,13 @@ function renderHome({ config, surface }) {
     const cards = surface.entries.map((entry) => `
         <section class="ov-card">
             <div class="ov-path">${escapeHtml(entry.path)}</div>
-            <h2><a href="${escapeHtml(surface.origin + entry.path)}">${escapeHtml(entry.title)}</a></h2>
+            <h2><a href="${escapeHtml(surface.origin + entry.path)}" style="display:inline-flex;align-items:center;gap:10px;">${renderIcon(surface.id, { decorative: true })}<span>${escapeHtml(entry.title)}</span></a></h2>
             <p>${escapeHtml(entry.summary)}</p>
             <div class="ov-meta"><span>${escapeHtml(new Date(entry.publishedAt).toISOString().slice(0, 10))}</span><span>${escapeHtml(entry.kind)}</span></div>
         </section>`).join('');
     const body = `
         <section class="ov-hero">
-            <div class="ov-kicker">${surfaceKicker(surface)}</div>
+            <div class="ov-kicker">${renderIcon(surface.id, { decorative: true })}<span>${surfaceKicker(surface)}</span></div>
             <h1>${escapeHtml(surface.heroTitle)}</h1>
             <p>${escapeHtml(surface.heroText)}</p>
         </section>

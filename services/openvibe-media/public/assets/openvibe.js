@@ -39,6 +39,19 @@
         'openvibe-themes': 'themes',
     };
 
+    const CATEGORY_ICONS = {
+        platform: 'network',
+        streaming: 'live',
+        chat: 'chat',
+        community: 'community',
+        billing: 'billing',
+        ai: 'ai',
+        games: 'games',
+        admin: 'admin',
+        account: 'my',
+        service: 'runtime',
+    };
+
     function isLocalHostname() {
         const hostname = global.location && global.location.hostname ? global.location.hostname : '';
         return /localhost$/i.test(hostname);
@@ -106,6 +119,23 @@
         return surface ? resolveSurfaceUrl(surface) : ((item && item.public_url) || '#');
     }
 
+    function icon(name, options) {
+        const icons = global.OpenVibeIcons;
+        return icons && typeof icons.icon === 'function'
+            ? icons.icon(name, Object.assign({ decorative: true }, options || {}))
+            : '';
+    }
+
+    function serviceIconName(item) {
+        return SERVICE_SURFACES[item && item.service_id]
+            || CATEGORY_ICONS[item && item.category]
+            || 'runtime';
+    }
+
+    function iconLabel(name, label, className) {
+        return `<span class="${escapeHtml(className || 'ov-icon-label')}">${icon(name)}<span>${escapeHtml(label)}</span></span>`;
+    }
+
     function mergedServices(remote) {
         const map = new Map();
         for (const item of FALLBACK_SERVICES) map.set(item.service_id, Object.assign({}, item, { source: 'fallback' }));
@@ -132,7 +162,7 @@
             a.className = 'ov-card';
             a.href = resolveServiceUrl(item);
             a.innerHTML = `
-                <div class="title">${escapeHtml(item.display_name || item.service_id)}</div>
+                <div class="title">${iconLabel(serviceIconName(item), item.display_name || item.service_id)}</div>
                 <div class="desc">${escapeHtml(item.description || '')}</div>
                 <div class="meta">
                     <span class="ov-tag">${escapeHtml(item.category || 'service')}</span>
@@ -150,18 +180,18 @@
 
     function navbar(activeKey) {
         const links = [
-            { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home' },
-            { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools' },
-            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account' },
-            { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin' },
-            { key: 'docs', href: '/api/v1/services', label: 'Registry API' },
+            { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
+            { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
+            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
+            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
+            { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
+            { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
         return `
             <header class="ov-nav"><div class="ov-nav-inner">
-                <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">⬢ <b>OpenVibe</b></a>
+                <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">${icon('network')} <b>OpenVibe</b></a>
                 <nav class="ov-nav-links">
-                    ${links.map((link) => `<a href="${escapeHtml(link.href)}"${link.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${escapeHtml(link.label)}</a>`).join('')}
+                    ${links.map((link) => `<a href="${escapeHtml(link.href)}"${link.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
                 </nav>
             </div></header>`;
     }
@@ -213,11 +243,14 @@
         attachLauncher,
         escapeHtml,
         footer,
+        icon,
+        iconLabel,
         loadServices,
         mergedServices,
         navbar,
         renderServiceCards,
         resolveServiceUrl,
         resolveSurfaceUrl,
+        serviceIconName,
     };
 }(window));

@@ -4,31 +4,97 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>openvibe-billing</title>
+<link rel="stylesheet" href="/assets/openvibe-icons.css">
 <style>
-body { font: 14px/1.45 system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #d4d4d4; background: #0f1115; }
-h1 { font-size: 1.4rem; margin: 0 0 8px; }
-code, pre { background: #1a1d23; padding: 2px 6px; border-radius: 4px; }
-pre { padding: 12px; overflow:auto; }
-a { color: #c0965c; }
-small { color: #888; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.55 system-ui, sans-serif; color: #e6edf7; background: radial-gradient(circle at top, rgba(245, 158, 11, .14), transparent 30%), linear-gradient(180deg, #10131b 0%, #0b1018 100%); }
+main { max-width: 1080px; margin: 0 auto; padding: 36px 20px 56px; }
+a { color: #f5c36c; }
+.hero, .panel { background: rgba(15, 20, 31, .9); border: 1px solid rgba(148, 163, 184, .18); border-radius: 24px; box-shadow: 0 24px 80px rgba(2, 8, 23, .32); }
+.hero { padding: 28px; }
+.eyebrow, .chip, .link-row a { display: inline-flex; align-items: center; gap: .55rem; }
+.eyebrow { padding: .45rem .85rem; border-radius: 999px; background: rgba(245, 158, 11, .14); color: #f8d48b; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: .82rem; }
+h1 { margin: 12px 0 8px; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.05; }
+.muted { color: #b8c5d7; margin: 0; max-width: 62ch; }
+.chip-row, .link-row { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.chip { padding: .45rem .8rem; border-radius: 999px; background: rgba(15, 23, 42, .72); border: 1px solid rgba(148, 163, 184, .18); color: #dbe7f8; }
+.chip.primary { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .25); color: #fbd38d; }
+.chip.ok { background: rgba(34, 197, 94, .14); border-color: rgba(34, 197, 94, .24); color: #bbf7d0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
+.panel { padding: 20px; }
+.panel h2 { margin: 0 0 .35rem; font-size: 1.12rem; }
+.panel p { margin: 0 0 1rem; color: #b8c5d7; }
+pre { margin: 0; padding: 14px; border-radius: 16px; overflow: auto; background: rgba(15, 23, 42, .86); border: 1px solid rgba(148, 163, 184, .14); color: #f8fafc; }
+.link-row a { padding: .75rem 1rem; border-radius: 999px; text-decoration: none; background: rgba(15, 23, 42, .78); border: 1px solid rgba(148, 163, 184, .16); }
+.link-row a:hover { border-color: rgba(245, 158, 11, .34); }
+.icon-inline { display: inline-flex; align-items: center; gap: .55rem; }
 </style>
 </head>
 <body>
-<h1>openvibe-billing</h1>
-<p><small>OpenVibe Phase 6 — credits ledger, tips, VIP / subscriptions, entitlements.</small></p>
-<pre>GET  /health
-GET  /api/billing/wallet/:ownerType/:ownerId
+<main>
+	<section class="hero">
+		<div class="eyebrow" id="billing-eyebrow">Economy surface</div>
+		<h1 id="billing-title">OpenVibe Billing</h1>
+		<p class="muted">Credits ledger, tips, VIP plans, entitlements, and operator freeze controls. This page stays intentionally lightweight, but it no longer looks like it was rendered during a coffee outage.</p>
+		<div class="chip-row">
+			<span class="chip primary" id="billing-host">billing.openvibe.network</span>
+			<span class="chip ok" id="billing-domain">credits · tips · subscriptions</span>
+			<span class="chip" id="billing-phase">Phase 6 billing kernel</span>
+		</div>
+		<div class="link-row">
+			<a href="/health" id="billing-health-link">/health</a>
+			<a href="../../docs/openvibe/phase-6-billing-tips-vip.md" id="billing-docs-link">Phase 6 docs</a>
+		</div>
+	</section>
+
+	<div class="grid">
+		<section class="panel">
+			<h2 id="wallet-heading">Wallet & ledger</h2>
+			<p>Core balance retrieval and credit lifecycle APIs.</p>
+			<pre>GET  /api/billing/wallet/:ownerType/:ownerId
 POST /api/billing/credits/checkout
 POST /api/billing/credits/charge
-POST /api/billing/credits/refund
-POST /api/tips
+POST /api/billing/credits/refund</pre>
+		</section>
+
+		<section class="panel">
+			<h2 id="tips-heading">Tips & VIP</h2>
+			<p>Audience-facing monetization flows and subscription state.</p>
+			<pre>POST /api/tips
 GET  /api/tips/overlay/:targetType/:targetId
 POST /api/vip/plans
 POST /api/vip/subscriptions
-POST /api/vip/subscriptions/:id/cancel
-GET  /api/billing/entitlements/:targetType/:targetId
+POST /api/vip/subscriptions/:id/cancel</pre>
+		</section>
+
+		<section class="panel">
+			<h2 id="entitlement-heading">Entitlements & controls</h2>
+			<p>Downstream access checks plus operator intervention endpoints.</p>
+			<pre>GET  /api/billing/entitlements/:targetType/:targetId
 POST /api/billing/admin/freeze    (admin/service)
 POST /api/billing/admin/unfreeze  (admin/service)</pre>
-<p>See <a href="../../docs/openvibe/phase-6-billing-tips-vip.md">Phase 6 docs</a>.</p>
+		</section>
+	</div>
+</main>
+
+<script src="/assets/openvibe-icons.js"></script>
+<script>
+const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
+
+function withIcon(name, label) {
+	return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
+}
+
+document.getElementById('billing-eyebrow').innerHTML = withIcon('billing', 'Economy surface');
+document.getElementById('billing-title').innerHTML = withIcon('billing', 'OpenVibe Billing');
+document.getElementById('billing-host').innerHTML = withIcon('network', 'billing.openvibe.network');
+document.getElementById('billing-domain').innerHTML = withIcon('success', 'credits · tips · subscriptions');
+document.getElementById('billing-phase').innerHTML = withIcon('info', 'Phase 6 billing kernel');
+document.getElementById('billing-health-link').innerHTML = withIcon('health', '/health');
+document.getElementById('billing-docs-link').innerHTML = withIcon('docs', 'Phase 6 docs');
+document.getElementById('wallet-heading').innerHTML = withIcon('billing', 'Wallet & ledger');
+document.getElementById('tips-heading').innerHTML = withIcon('community', 'Tips & VIP');
+document.getElementById('entitlement-heading').innerHTML = withIcon('admin', 'Entitlements & controls');
+</script>
 </body>
 </html>

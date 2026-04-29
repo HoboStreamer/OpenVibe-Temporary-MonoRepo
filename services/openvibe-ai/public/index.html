@@ -5,50 +5,163 @@
 <title>OpenVibe AI — ai.openvibe.network</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <meta name="robots" content="noindex,nofollow" />
+<link rel="stylesheet" href="/assets/openvibe-icons.css" />
 <style>
-body{font:14px/1.4 system-ui,sans-serif;margin:24px;color:#222;background:#fafafa}
-h1{margin:0 0 4px;font-size:22px}
-small{color:#888}
-section{background:#fff;border:1px solid #eee;border-radius:8px;padding:16px;margin:16px 0}
-pre{background:#f5f5f5;padding:8px;border-radius:6px;overflow:auto;max-height:300px}
-button{background:#222;color:#fff;border:0;border-radius:6px;padding:6px 10px;cursor:pointer}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.tag{display:inline-block;padding:2px 6px;border-radius:4px;background:#eef;color:#225;font-size:12px}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.55 system-ui,sans-serif;color:#edf4ff;background:radial-gradient(circle at top,rgba(56,189,248,.16),transparent 30%),linear-gradient(180deg,#081121 0%,#0b1427 50%,#0a1020 100%)}
+a{color:#8bd3ff}
+main{max-width:1100px;margin:0 auto;padding:32px 20px 56px}
+.hero,.panel{background:rgba(10,18,35,.88);border:1px solid rgba(148,163,184,.2);border-radius:24px;box-shadow:0 24px 80px rgba(2,8,23,.35)}
+.hero{padding:28px}
+.hero h1{margin:10px 0 8px;font-size:clamp(2rem,5vw,3.3rem);line-height:1.05}
+.hero p{margin:0;max-width:60ch;color:#bfd0ea}
+.eyebrow{display:inline-flex;align-items:center;gap:.55rem;padding:.45rem .85rem;border-radius:999px;background:rgba(56,189,248,.12);color:#7dd3fc;font-weight:700;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em}
+.chip-row,.row{display:flex;gap:.75rem;flex-wrap:wrap}
+.chip-row{margin-top:1.1rem}
+.chip{display:inline-flex;align-items:center;gap:.45rem;padding:.45rem .8rem;border-radius:999px;background:rgba(15,23,42,.68);border:1px solid rgba(148,163,184,.18);color:#dbeafe;font-size:.9rem}
+.chip.ok{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.28);color:#bbf7d0}
+.chip.soft{color:#cbd5e1}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:18px}
+.panel{padding:20px}
+.section-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}
+.section-head h2,.section-head h3{margin:0 0 .35rem;font-size:1.1rem}
+.section-head p,.muted,.panel li{color:#b5c5df}
+.section-head p,.muted{margin:0}
+button{display:inline-flex;align-items:center;gap:.55rem;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;border:0;border-radius:999px;padding:.8rem 1.05rem;cursor:pointer;font-weight:700;box-shadow:0 14px 32px rgba(37,99,235,.24)}
+button.secondary{background:rgba(15,23,42,.75);border:1px solid rgba(148,163,184,.2);box-shadow:none}
+pre{margin:0;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.12);padding:14px;border-radius:16px;overflow:auto;max-height:360px;color:#dbeafe}
+ul{padding-left:1.1rem;margin:.25rem 0 0}
+.icon-inline{display:inline-flex;align-items:center;gap:.55rem}
 </style>
 </head>
 <body>
-<h1>OpenVibe AI</h1>
-<small>Canonical host: <span class="tag">ai.openvibe.network</span> &nbsp; Stub provider works offline (no API keys required).</small>
+<main>
+    <section class="hero">
+        <div class="eyebrow" id="hero-eyebrow">AI control surface</div>
+        <h1 id="hero-title">OpenVibe AI</h1>
+        <p>Canonical routing surface for provider configuration, workflow visibility, and truthful offline stub generation. The stub lane remains usable locally even when external model keys are intentionally absent.</p>
+        <div class="chip-row">
+            <span class="chip ok" id="mode-chip">Stub provider ready</span>
+            <span class="chip soft" id="host-chip">ai.openvibe.network</span>
+            <span class="chip soft" id="last-action">No requests yet</span>
+        </div>
+    </section>
 
-<section>
-    <h3>Status</h3>
-    <div class="row">
-        <button onclick="load('/api/v1/ai/status', 'status')">/status</button>
-        <button onclick="load('/api/v1/ai/providers', 'status')">providers</button>
-        <button onclick="load('/api/v1/ai/routes', 'status')">routes</button>
-        <button onclick="load('/api/v1/ai/workflows', 'status')">workflows</button>
-        <button onclick="load('/api/v1/ai/sources', 'status')">sources</button>
-        <button onclick="load('/api/v1/ai/search/status', 'status')">search</button>
+    <div class="grid">
+        <section class="panel">
+            <div class="section-head">
+                <div>
+                    <h2 id="status-heading">Runtime status probes</h2>
+                    <p>Hit the public diagnostic endpoints and inspect the JSON without leaving the surface.</p>
+                </div>
+            </div>
+            <div class="row" style="margin-bottom:1rem;">
+                <button data-icon="health" onclick="load('/api/v1/ai/status', 'status')">/status</button>
+                <button class="secondary" data-icon="docs" onclick="load('/api/v1/ai/providers', 'status')">providers</button>
+                <button class="secondary" data-icon="runtime" onclick="load('/api/v1/ai/routes', 'status')">routes</button>
+                <button class="secondary" data-icon="launch" onclick="load('/api/v1/ai/workflows', 'status')">workflows</button>
+                <button class="secondary" data-icon="content" onclick="load('/api/v1/ai/sources', 'status')">sources</button>
+                <button class="secondary" data-icon="search" onclick="load('/api/v1/ai/search/status', 'status')">search</button>
+            </div>
+            <pre id="status">click a button…</pre>
+        </section>
+
+        <section class="panel">
+            <div class="section-head">
+                <div>
+                    <h2 id="generate-heading">Stub generate lane</h2>
+                    <p>Send a sample generation request through the current default route to verify the local AI contract.</p>
+                </div>
+            </div>
+            <div class="row" style="margin-bottom:1rem;">
+                <button data-icon="launch" onclick="run()">POST /api/v1/ai/generate</button>
+            </div>
+            <pre id="run">…</pre>
+        </section>
     </div>
-    <pre id="status">click a button…</pre>
-</section>
 
-<section>
-    <h3>Run a stub generate</h3>
-    <button onclick="run()">POST /api/v1/ai/generate</button>
-    <pre id="run">…</pre>
-</section>
+    <div class="grid">
+        <section class="panel">
+            <div class="section-head">
+                <div>
+                    <h3 id="notes-heading">Routing notes</h3>
+                    <p>What this page assumes right now.</p>
+                </div>
+            </div>
+            <ul>
+                <li>Stub mode is expected to work offline with no external provider credentials.</li>
+                <li>Provider routing and workflow visibility should remain truthful even when downstream vendors are disabled.</li>
+                <li>Search status is exposed separately so indexing and retrieval can fail loudly instead of being hand-waved away.</li>
+            </ul>
+        </section>
+        <section class="panel">
+            <div class="section-head">
+                <div>
+                    <h3 id="ops-heading">Operator shortcuts</h3>
+                    <p>Handy direct endpoints for verification and debugging.</p>
+                </div>
+            </div>
+            <ul>
+                <li><a href="/health">/health</a> for coarse process liveness.</li>
+                <li><a href="/ready">/ready</a> for dependency-aware readiness truth.</li>
+                <li><a href="/api/v1/ai/status">/api/v1/ai/status</a> for service and provider posture.</li>
+                <li><a href="/api/v1/ai/routes">/api/v1/ai/routes</a> for route registration visibility.</li>
+            </ul>
+        </section>
+    </div>
+</main>
 
+<script src="/assets/openvibe-icons.js"></script>
 <script>
+const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
+
+function withIcon(name, label) {
+    return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
+}
+
+function markAction(label) {
+    document.getElementById('last-action').innerHTML = withIcon('clock', `${label} · ${new Date().toLocaleTimeString()}`);
+}
+
+function decorate() {
+    document.getElementById('hero-eyebrow').innerHTML = withIcon('ai', 'AI control surface');
+    document.getElementById('hero-title').innerHTML = withIcon('ai', 'OpenVibe AI');
+    document.getElementById('mode-chip').innerHTML = withIcon('success', 'Stub provider ready');
+    document.getElementById('host-chip').innerHTML = withIcon('network', 'ai.openvibe.network');
+    document.getElementById('last-action').innerHTML = withIcon('clock', 'No requests yet');
+    document.getElementById('status-heading').innerHTML = withIcon('health', 'Runtime status probes');
+    document.getElementById('generate-heading').innerHTML = withIcon('launch', 'Stub generate lane');
+    document.getElementById('notes-heading').innerHTML = withIcon('info', 'Routing notes');
+    document.getElementById('ops-heading').innerHTML = withIcon('tools', 'Operator shortcuts');
+    document.querySelectorAll('button[data-icon]').forEach((button) => {
+        button.innerHTML = withIcon(button.dataset.icon, button.textContent.trim());
+    });
+}
+
 async function load(p, target){
-    const r = await fetch(p); document.getElementById(target).textContent = JSON.stringify(await r.json(), null, 2);
+    try {
+        const r = await fetch(p);
+        document.getElementById(target).textContent = JSON.stringify(await r.json(), null, 2);
+        markAction(`Fetched ${p}`);
+    } catch (error) {
+        document.getElementById(target).textContent = JSON.stringify({ error: error.message || String(error) }, null, 2);
+        markAction(`Failed ${p}`);
+    }
 }
 async function run(){
-    const r = await fetch('/api/v1/ai/generate', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ input: { prompt: 'Hello, AI ' + new Date().toISOString() } })
-    });
-    document.getElementById('run').textContent = JSON.stringify(await r.json(), null, 2);
+    try {
+        const r = await fetch('/api/v1/ai/generate', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ input: { prompt: 'Hello, AI ' + new Date().toISOString() } })
+        });
+        document.getElementById('run').textContent = JSON.stringify(await r.json(), null, 2);
+        markAction('Ran stub generate');
+    } catch (error) {
+        document.getElementById('run').textContent = JSON.stringify({ error: error.message || String(error) }, null, 2);
+        markAction('Stub generate failed');
+    }
 }
+
+decorate();
 </script>
 </body></html>
