@@ -9,6 +9,7 @@ const { exportSource } = require('./lib/exporter');
 const { importCanonicalBundle } = require('./lib/importer');
 const { validateBundle } = require('./lib/validator');
 const { fetchProductionArtifacts } = require('./lib/production-fetch');
+const { resolveFetchCliOptions } = require('./lib/production-fetch-options');
 const { loadStagingBundle, resolveServiceDbPaths } = require('./lib/staging-loader');
 const { backfillMedia } = require('./lib/media-backfill');
 const { buildReadinessReport } = require('./lib/readiness');
@@ -66,23 +67,12 @@ async function main() {
     });
 
     if (args.host || args.fetchProduction) {
-        fetchProductionArtifacts({
-            host: args.host || 'hobo.tools',
-            user: args.user || null,
-            remoteHobostreamerRoot: args.remoteHobostreamerRoot || null,
-            remoteHobotoolsRoot: args.remoteHobotoolsRoot || null,
-            remoteHoboquestRoot: args.remoteHoboquestRoot || null,
-            remoteHobostreamerDb: args.remoteHobostreamerDb || null,
-            remoteHobotoolsDb: args.remoteHobotoolsDb || null,
-            remoteHoboquestDb: args.remoteHoboquestDb || null,
+        const fetchOptions = resolveFetchCliOptions({ args, defaultOut: sourceDir });
+        fetchProductionArtifacts(Object.assign({}, fetchOptions, {
             outDir: sourceDir,
-            dryRun: !!args.dryRun,
-            skipMedia: !!args.skipMedia,
-            mediaMode: args.mediaMode || 'metadata-only',
-            sshOptions: args.sshOptions || '',
             logger,
-        });
-        if (args.dryRun) {
+        }));
+        if (fetchOptions.dryRun) {
             logger.info('Dry-run requested: stopping after production fetch planning.');
             return;
         }

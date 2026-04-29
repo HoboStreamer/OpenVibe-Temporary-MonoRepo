@@ -92,6 +92,7 @@ function createMockClient() {
         const validation = await validate({ client });
         assert.strictEqual(validation.missing_tables.length, 0, `unexpected missing: ${validation.missing_tables}`);
         assert.ok(validation.checks.find((c) => c.name === 'required-tables-present').status === 'green');
+        assert.strictEqual(validation.gate, 'green');
         console.log('postgres-loader: OK');
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });

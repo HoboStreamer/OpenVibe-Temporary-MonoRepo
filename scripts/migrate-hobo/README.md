@@ -13,7 +13,8 @@ It is intentionally **non-destructive**:
 - validation produces reconciliation artifacts without deleting or rewriting
   legacy data
 - production fetches use SSH plus read-only SQLite snapshots under isolated
-  `/tmp/openvibe-migration-*` paths on the remote host
+  `/tmp/openvibe-migration-*` paths on the remote host, default to **dry-run**,
+  and require `--confirm` before any remote snapshot/copy operation executes
 
 ## Why the importer writes a bundle instead of the current service DBs
 
@@ -155,27 +156,37 @@ The readiness runner writes `openvibe-target/audit/readiness-report.json`.
 
 Run from the monorepo root.
 
-### Dry-run remote discovery
+### Dry-run remote discovery (default)
+
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools`
+
+or explicitly:
 
 `node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --dry-run`
 
 ### Fetch production artifacts to the staging workspace
 
-`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only --confirm`
 
 If your SSH key is passphrase-protected, you can specify `--ssh-key` or let the script discover the key from your `~/.ssh/config`:
 
-`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --ssh-key ~/.ssh/id_ed25519 --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --ssh-key ~/.ssh/id_ed25519 --out ./data/migrations/hobo-production-staging --media-mode metadata-only --confirm`
 
 or simply:
 
-`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only`
+`node scripts/migrate-hobo/fetch-production-hobo.js --host hobo.tools --out ./data/migrations/hobo-production-staging --media-mode metadata-only --confirm`
 
 The script will automatically start `ssh-agent` if needed, load the configured key, and prompt for the passphrase once.
 
 When HoboQuest is deployed outside the default paths, pass
 `--remote-hoboquest-root` and `--remote-hoboquest-db` so the fetch stage can
 copy the quest/canvas snapshot deterministically.
+
+When you want deterministic production-path overrides, place them in JSON and pass
+`--production-paths ./scripts/migrate-hobo/production-paths.example.json`. CLI flags
+override the JSON file. The fetch report records discovered candidates, selected paths,
+db snapshots, config redactions, media manifests, copied artifacts, sizes, checksums,
+warnings, and planned/executed commands.
 
 ### Full staging rehearsal
 
@@ -198,8 +209,22 @@ copy the quest/canvas snapshot deterministically.
 │   ├── hobostreamer/
 │   │   └── data/
 │   ├── hobotools/
-│       └── data/
+│   │   └── data/
 │   └── hoboquest/
+│       └── data/
+│   ├── hobo-img/
+│   │   └── data/
+│   ├── hobo-docs/
+│   │   └── data/
+│   ├── hobo-text/
+│   │   └── data/
+│   ├── hobo-audio/
+│   │   └── data/
+│   ├── hobo-maps/
+│   │   └── data/
+│   ├── hobo-food/
+│   │   └── data/
+│   └── hobo-yt/
 │       └── data/
 ├── hobostreamer/
 │   ├── manifest.json
@@ -236,9 +261,14 @@ copy the quest/canvas snapshot deterministically.
 - Export artifacts may contain **password hashes** from legacy account tables.
   Treat the output directory as sensitive infrastructure data.
 - The scripts never print hashes, tokens, or secrets to stdout.
+- `fetch-production-hobo.js` is **dry-run by default**. Any snapshot/copy run
+  requires `--confirm`; otherwise the command will refuse to mutate the staging
+  output tree.
 - Production fetch skips deployed `.env` files and other secret-bearing config
   by default; manifests record their presence without copying secrets into the
   staging workspace.
+- `--cleanup-remote-temp` only removes the exact `/tmp/openvibe-migration-*`
+  directory created by the current run.
 - Fields such as RobotStreamer tokens, restream keys, camera credentials, and
   OAuth client secrets are redacted from the exported bundle.
 - Missing media files are reported to diagnostics instead of causing deletes or

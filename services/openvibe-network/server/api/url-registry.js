@@ -53,6 +53,7 @@ function buildRouter(deps) {
             OPENVIBE_ADMIN_URL:   config.surfaces.admin,
             OPENVIBE_MY_URL:      config.surfaces.my,
             OPENVIBE_THEMES_URL:  config.surfaces.themes,
+            OPENVIBE_TOOLS_URL:   config.surfaces.tools,
             OPENVIBE_EVENTS_URL:  config.events.url,
             OPENVIBE_MEDIA_URL:            config.media && config.media.url,
             OPENVIBE_MEDIA_INTERNAL_URL:   config.media && config.media.internalUrl,

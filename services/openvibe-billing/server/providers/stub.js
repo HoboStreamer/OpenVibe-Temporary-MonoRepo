@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+
 // Stub payment provider — returns a simulated checkout URL. The "complete"
 // call must come back through POST /api/billing/credits/checkout/:id/complete
 // or POST /api/billing/webhooks/stub. Useful for tests and dev.
@@ -7,7 +9,7 @@
 function name() { return 'stub'; }
 
 async function createCheckoutUrl({ session, publicBaseUrl }) {
-    const base = publicBaseUrl || `http://127.0.0.1:5000`;
+    const base = publicBaseUrl || resolvePublicOrigin({ surface: 'billing', envKeys: ['PUBLIC_BASE_URL', 'OPENVIBE_BILLING_URL'] });
     return {
         provider: 'stub',
         external_ref: `stub_${session.id}`,

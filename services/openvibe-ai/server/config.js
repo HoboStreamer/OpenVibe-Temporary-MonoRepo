@@ -3,11 +3,15 @@
 require('dotenv').config();
 
 const path = require('path');
-
-function trim(u) { return u ? String(u).replace(/\/$/, '') : ''; }
+const {
+    resolveAuthIssuer,
+    resolveInternalOrigin,
+    resolvePublicOrigin,
+    trimUrl: trim,
+} = require('@openvibe/sdk/url-defaults');
 
 const port = parseInt(process.env.PORT, 10) || 5100;
-const publicUrl = trim(process.env.OPENVIBE_AI_URL) || `http://127.0.0.1:${port}`;
+const publicUrl = resolvePublicOrigin({ surface: 'ai' });
 
 module.exports = {
     port,
@@ -23,19 +27,23 @@ module.exports = {
 
     // Canonical OpenVibe AI public identity
     publicUrl,
-    internalUrl:   trim(process.env.OPENVIBE_AI_INTERNAL_URL) || publicUrl,
+    internalUrl: resolveInternalOrigin({
+        envKeys: ['OPENVIBE_AI_INTERNAL_URL'],
+        publicEnvKeys: ['OPENVIBE_AI_URL'],
+        fallbackPort: port,
+    }),
     canonicalHost: process.env.AI_OPENVIBE_NETWORK_HOST || 'ai.openvibe.network',
     canonicalUrl:  `https://${process.env.AI_OPENVIBE_NETWORK_HOST || 'ai.openvibe.network'}`,
 
     // Cross-service URLs (best-effort; AI service tolerates missing peers)
     events:    { url: trim(process.env.OPENVIBE_EVENTS_URL)    || 'http://127.0.0.1:4400' },
-    network:   { url: trim(process.env.OPENVIBE_NETWORK_URL)   || 'http://127.0.0.1:4100' },
-    media:     { url: trim(process.env.OPENVIBE_MEDIA_URL)     || null },
-    community: { url: trim(process.env.OPENVIBE_COMMUNITY_URL) || null },
-    billing:   { url: trim(process.env.OPENVIBE_BILLING_URL)   || null },
+    network:   { url: resolvePublicOrigin({ surface: 'network' }) },
+    media:     { url: resolvePublicOrigin({ surface: 'media' }) },
+    community: { url: resolvePublicOrigin({ surface: 'community' }) },
+    billing:   { url: resolvePublicOrigin({ surface: 'billing' }) },
 
     auth: {
-        issuer:  process.env.OPENVIBE_AUTH_ISSUER  || null,
+        issuer:  resolveAuthIssuer(),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
         cookieNames: ['openvibe_token', 'hobo_token', 'token'],
     },

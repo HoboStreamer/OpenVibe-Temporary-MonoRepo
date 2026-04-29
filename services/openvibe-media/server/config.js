@@ -3,14 +3,20 @@
 require('dotenv').config();
 
 const path = require('path');
+const {
+    resolveAuthIssuer,
+    resolveInternalOrigin,
+    resolvePublicOrigin,
+} = require('@openvibe/sdk/url-defaults');
 
 const port = parseInt(process.env.PORT, 10) || 4500;
 const hotRoot = process.env.OPENVIBE_MEDIA_HOT_ROOT
     || process.env.STORAGE_ROOT
     || path.resolve(process.cwd(), 'data/storage/hot');
-const publicBaseUrl = process.env.OPENVIBE_MEDIA_PUBLIC_BASE_URL
-    || process.env.PUBLIC_BASE_URL
-    || `http://127.0.0.1:${port}`;
+const publicBaseUrl = resolvePublicOrigin({
+    surface: 'media',
+    envKeys: ['OPENVIBE_MEDIA_PUBLIC_BASE_URL', 'PUBLIC_BASE_URL', 'OPENVIBE_MEDIA_URL'],
+});
 
 module.exports = {
     port,
@@ -49,12 +55,16 @@ module.exports = {
     },
 
     network: {
-        url:         process.env.OPENVIBE_NETWORK_URL || 'http://127.0.0.1:4100',
-        internalUrl: process.env.OPENVIBE_NETWORK_INTERNAL_URL || process.env.OPENVIBE_NETWORK_URL || 'http://127.0.0.1:4100',
+        url: resolvePublicOrigin({ surface: 'network' }),
+        internalUrl: resolveInternalOrigin({
+            envKeys: ['OPENVIBE_NETWORK_INTERNAL_URL'],
+            publicEnvKeys: ['OPENVIBE_NETWORK_URL'],
+            fallbackPort: 4100,
+        }),
     },
 
     auth: {
-        issuer:   process.env.OPENVIBE_AUTH_ISSUER || null,
+        issuer:   resolveAuthIssuer(),
         jwksUrl:  process.env.OPENVIBE_AUTH_JWKS_URL || null,
         cookieNames: ['openvibe_token', 'hobo_token', 'token'],
     },

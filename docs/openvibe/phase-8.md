@@ -2,6 +2,10 @@
 
 Status: hard-cut implementation in progress.
 
+Follow-on hardening/parity work is now tracked in
+[context/PHASE_9.md](../../context/PHASE_9.md) so this Phase 8 index can stay
+focused on the migration/runtime-independence work packages themselves.
+
 This document is the index for every Phase 8 work package. It points at the
 scripts, services, and per-package docs that move OpenVibe from transitional
 Phase 8 scaffolding to a fully native runtime with legacy Hobo repos retained

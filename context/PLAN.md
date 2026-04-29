@@ -1437,6 +1437,11 @@ Monetization stops being scattered inside HoboStreamer.
 
 ## Phase 9 — final cutover
 
+Current execution note: the checked-in repository is actively tracking the
+post-Phase-8 hardening/parity tranche in [PHASE_9.md](PHASE_9.md). Use that
+file plus [../PHASES.md](../PHASES.md) as the authoritative status documents
+for the current hard-cut work.
+
 ### Actions
 - final export/import/reconciliation completed against the canonical OpenVibe
 	persistence target

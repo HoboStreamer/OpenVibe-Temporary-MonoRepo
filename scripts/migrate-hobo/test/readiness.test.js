@@ -168,6 +168,7 @@ async function main() {
     assert.ok(report.summary.green > 0, 'expected at least one green readiness check');
     assert.ok(report.summary.yellow > 0, 'expected at least one yellow readiness check');
     assert.ok(report.summary.red > 0, 'expected at least one red readiness check');
+    assert.strictEqual(report.gate, 'red');
     assert.ok(report.manual_actions.some((entry) => entry.includes('community-api')));
     assert.ok(report.checks.some((check) => check.name === 'staging-persistence-descriptors' && check.status === 'green'));
     assert.ok(report.checks.some((check) => check.name === 'session-api' && check.status === 'green'));

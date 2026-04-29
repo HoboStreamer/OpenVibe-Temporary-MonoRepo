@@ -10,7 +10,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const ROOTS = ['packages', 'services', path.join('scripts', 'migrate-hobo'), path.join('scripts', 'cutover')];
+const ROOTS = ['packages', 'services', path.join('scripts', 'migrate-hobo'), path.join('scripts', 'cutover'), path.join('scripts', 'staging')];
 
 function* walk(dir) {
     let entries;

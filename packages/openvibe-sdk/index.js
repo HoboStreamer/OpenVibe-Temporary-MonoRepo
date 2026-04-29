@@ -12,6 +12,7 @@ const { CommunityClient } = require('./community-client');
 const { BillingClient } = require('./billing-client');
 const { AiClient } = require('./ai-client');
 const persistenceMode = require('./persistence-mode');
+const urlDefaults = require('./url-defaults');
 
 module.exports = {
     OpenVibeAuthClient,
@@ -24,7 +25,9 @@ module.exports = {
     BillingClient,
     AiClient,
     persistenceMode,
+    urlDefaults,
     ...persistenceMode,
+    ...urlDefaults,
     ...middleware,
     ...http,
 };

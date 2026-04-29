@@ -130,8 +130,8 @@
         <div class="ov-grid">
             <a class="ov-card" href="/api/games/player/demo-player"><div class="title">Progression API</div><div class="desc">Profiles, inventory, bank, farm plots, cosmetics, and achievements.</div></a>
             <a class="ov-card" href="/api/games/canvas/state"><div class="title">Canvas API</div><div class="desc">Sparse board state, history, place flow, staff bans, and region locks.</div></a>
-            <a class="ov-card" href="https://openvibe.media"><div class="title">Games assets namespace</div><div class="desc"><code>games.assets</code> is reserved in OpenVibe Media for sprites, maps, and audio packs.</div></a>
-            <a class="ov-card" href="https://openvibe.network"><div class="title">Platform hub</div><div class="desc">The network registry will surface this service as <code>openvibe-games</code>.</div></a>
+            <a class="ov-card" id="games-assets-link" href="#"><div class="title">Games assets namespace</div><div class="desc"><code>games.assets</code> is reserved in OpenVibe Media for sprites, maps, and audio packs.</div></a>
+            <a class="ov-card" id="games-platform-link" href="#"><div class="title">Platform hub</div><div class="desc">The network registry will surface this service as <code>openvibe-games</code>.</div></a>
         </div>
     </section>
 </main>
@@ -153,6 +153,8 @@
     document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
     state.services = OpenVibe.mergedServices(await OpenVibe.loadServices());
     OpenVibe.attachLauncher(() => state.services);
+    document.getElementById('games-assets-link').href = OpenVibe.resolveSurfaceUrl('media');
+    document.getElementById('games-platform-link').href = OpenVibe.resolveSurfaceUrl('network');
 
     const userInput = document.getElementById('user-id');
     const leaderboardSelect = document.getElementById('leaderboard-type');

@@ -3,6 +3,7 @@
 require('dotenv').config();
 
 const path = require('path');
+const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
 
 module.exports = {
     port:    parseInt(process.env.PORT, 10) || 4700,
@@ -15,9 +16,9 @@ module.exports = {
     db: { path: process.env.DB_PATH || path.resolve(process.cwd(), 'data/openre-stream.db') },
 
     events:  { url: process.env.OPENVIBE_EVENTS_URL  || 'http://127.0.0.1:4400' },
-    network: { url: process.env.OPENVIBE_NETWORK_URL || 'http://127.0.0.1:4100' },
-    live:    { url: process.env.OPENVIBE_LIVE_URL    || 'http://127.0.0.1:4600' },
-    media:   { url: process.env.OPENVIBE_MEDIA_URL   || 'http://127.0.0.1:4500' },
+    network: { url: resolvePublicOrigin({ surface: 'network' }) },
+    live:    { url: resolvePublicOrigin({ surface: 'live' }) },
+    media:   { url: resolvePublicOrigin({ surface: 'media' }) },
 
     ingest: {
         rtmp:   process.env.INGEST_RTMP_URL   || 'rtmp://ingest.openre.stream/live',

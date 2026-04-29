@@ -14,6 +14,7 @@
     const SURFACE_URL_KEYS = {
         network: 'OPENVIBE_NETWORK_URL',
         auth: 'OPENVIBE_AUTH_URL',
+        tools: 'OPENVIBE_TOOLS_URL',
         admin: 'OPENVIBE_ADMIN_URL',
         my: 'OPENVIBE_MY_URL',
         themes: 'OPENVIBE_THEMES_URL',
@@ -42,6 +43,40 @@
         billing: 'https://billing.openvibe.network',
         ai: 'https://ai.openvibe.network',
         games: 'https://openvibe.games',
+    };
+
+    const LOCAL_SURFACE_HOSTS = {
+        network: 'openvibe.network.localhost',
+        auth: 'auth.openvibe.network.localhost',
+        tools: 'openvibe.tools.localhost',
+        admin: 'admin.openvibe.network.localhost',
+        my: 'my.openvibe.network.localhost',
+        themes: 'themes.openvibe.network.localhost',
+        live: 'openvibe.live.localhost',
+        media: 'openvibe.media.localhost',
+        restream: 'openre.stream.localhost',
+        chat: 'openvibe.chat.localhost',
+        community: 'openvibe.community.localhost',
+        billing: 'billing.openvibe.network.localhost',
+        ai: 'ai.openvibe.network.localhost',
+        games: 'openvibe.games.localhost',
+    };
+
+    const LOCAL_SURFACE_PORTS = {
+        network: 4100,
+        auth: 4100,
+        tools: 4100,
+        admin: 4100,
+        my: 4100,
+        themes: 4100,
+        live: 4600,
+        media: 4500,
+        restream: 4700,
+        chat: 4800,
+        community: 4900,
+        billing: 5000,
+        ai: 5100,
+        games: 5200,
     };
 
     const SERVICE_SURFACE_MAP = {
@@ -213,31 +248,14 @@
         return (words.length ? words : ['OV']).map((word) => word.charAt(0).toUpperCase()).join('');
     }
 
-    function currentPortPart() {
-        return global.location && global.location.port ? `:${global.location.port}` : '';
-    }
-
     function inferLocalOrigin(surface) {
         const hostname = global.location && global.location.hostname ? global.location.hostname : '';
         if (!/localhost$/i.test(hostname)) return null;
         const protocol = global.location.protocol || 'http:';
-        const portPart = currentPortPart();
-        switch (surface) {
-        case 'network':
-            return `${protocol}//openvibe.network.localhost${portPart}`;
-        case 'auth':
-            return `${protocol}//auth.openvibe.network.localhost${portPart}`;
-        case 'admin':
-            return `${protocol}//admin.openvibe.network.localhost${portPart}`;
-        case 'my':
-            return `${protocol}//my.openvibe.network.localhost${portPart}`;
-        case 'themes':
-            return `${protocol}//themes.openvibe.network.localhost${portPart}`;
-        case 'tools':
-            return `${protocol}//tools.openvibe.network.localhost${portPart}`;
-        default:
-            return null;
-        }
+        const localHost = LOCAL_SURFACE_HOSTS[surface];
+        const localPort = LOCAL_SURFACE_PORTS[surface];
+        if (!localHost || !localPort) return null;
+        return `${protocol}//${localHost}:${localPort}`;
     }
 
     function registryValue(key) {
@@ -262,7 +280,6 @@
         if (!surface) return '#';
         const local = inferLocalOrigin(surface);
         if (local) return local;
-        if (surface === 'tools') return SURFACE_FALLBACKS.tools;
         const fromRegistry = registryValue(SURFACE_URL_KEYS[surface]);
         return fromRegistry || inferLocalOrigin(surface) || SURFACE_FALLBACKS[surface] || '#';
     }

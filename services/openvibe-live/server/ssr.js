@@ -1,5 +1,14 @@
 'use strict';
 
+const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+
+const LIVE_NETWORK_URLS = Object.freeze({
+    restream: resolvePublicOrigin({ surface: 'restream' }),
+    chat: resolvePublicOrigin({ surface: 'chat' }),
+    community: resolvePublicOrigin({ surface: 'community' }),
+    network: resolvePublicOrigin({ surface: 'network' }),
+});
+
 const BUILD_UPDATES = [
     {
         id: 'native-live-routes',
@@ -128,25 +137,25 @@ const GO_LIVE_TRACKS = [
 
 const OPENVIBE_NETWORK_LINKS = [
     {
-        href: 'https://openre.stream',
+        href: LIVE_NETWORK_URLS.restream,
         label: 'OpenRe.Stream',
         title: 'Restream control plane',
         body: 'Keep OBS, RTMP, WHIP, and multi-destination publishing under an OpenVibe-owned ingest and routing layer.',
     },
     {
-        href: 'https://openvibe.chat',
+        href: LIVE_NETWORK_URLS.chat,
         label: 'OpenVibe Chat',
         title: 'Chat, DMs, calls, and TTS',
         body: 'Move stream chat, private conversations, voice/video calls, and TTS queue management into a reusable network product.',
     },
     {
-        href: 'https://openvibe.community',
+        href: LIVE_NETWORK_URLS.community,
         label: 'OpenVibe Community',
         title: 'Pastes, threads, and Discord relay',
         body: 'Bring Hobo-style pastes, social discussion, and relay-aware community surfaces into a native OpenVibe home.',
     },
     {
-        href: 'https://openvibe.network',
+        href: LIVE_NETWORK_URLS.network,
         label: 'OpenVibe Network',
         title: 'Accounts, themes, and platform control',
         body: 'Tie together identity, operator visibility, themes, service discovery, and account management without losing creator ownership.',
@@ -1429,10 +1438,10 @@ function renderFooter() {
                             <div class="data-point">
                                 <div class="data-point-label">Network</div>
                                 <div class="footer-links is-column">
-                                    <a href="https://openre.stream">OpenRe.Stream</a>
-                                    <a href="https://openvibe.chat">OpenVibe Chat</a>
-                                    <a href="https://openvibe.community">OpenVibe Community</a>
-                                    <a href="https://openvibe.network">OpenVibe Network</a>
+                                    <a href="${LIVE_NETWORK_URLS.restream}">OpenRe.Stream</a>
+                                    <a href="${LIVE_NETWORK_URLS.chat}">OpenVibe Chat</a>
+                                    <a href="${LIVE_NETWORK_URLS.community}">OpenVibe Community</a>
+                                    <a href="${LIVE_NETWORK_URLS.network}">OpenVibe Network</a>
                                 </div>
                             </div>
                             <div class="data-point">
@@ -1974,7 +1983,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                     <p>Discover what is live, who just wrapped a session, which creators are active, and which adjacent community/chat surfaces are already awake — all without falling back to a legacy UI shell or a vibes-only broadcast stack.</p>
                     <div class="hero-actions">
                         <a class="button" href="#live-now">Watch live now</a>
-                        <a class="button-secondary" href="https://openre.stream">Open openre.stream</a>
+                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
                         <a class="button-ghost" href="/go-live">Set up your stream</a>
                     </div>
                     <p class="hero-note">Fresh now: animated live-frame hero transitions, live-now immediately under the fold, creator recap cards with total live time, clipped highlights ahead of VODs, and a recent-changes feed that stays visibly unread until you clear it.</p>
@@ -2006,7 +2015,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                     </aside>
                     <article class="glass-card" data-reveal>
                         <div class="eyebrow">Low-latency route</div>
-                        <h3 class="card-title">Keep <a class="link-inline" href="https://openre.stream">openre.stream</a> obvious</h3>
+                        <h3 class="card-title">Keep <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> obvious</h3>
                         <p class="card-body">Use openvibe.live for discovery, canonical creator routing, clips, and VOD visibility. Use openre.stream when you need ingest control, multi-destination restreaming, and a stronger operational cockpit.</p>
                         <div class="pill-row" style="margin-top:0.9rem;">
                             ${renderPill('Discovery on openvibe.live', 'soft')}
@@ -2105,8 +2114,8 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                     <p class="section-subtitle">Recent threads, fresh pastes, Discord relay readiness, and chat/call activity from the canonical OpenVibe community and chat services.</p>
                 </div>
                 <div class="inline-actions">
-                    <a class="section-link" href="https://openvibe.community">Open community</a>
-                    <a class="section-link" href="https://openvibe.chat">Open chat</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Open chat</a>
                 </div>
             </div>
             <div class="story-grid">
@@ -2502,10 +2511,10 @@ function renderGoLivePage({ baseUrl }) {
             <div class="hero-copy" data-reveal>
                 <div class="eyebrow">Broadcast guide</div>
                 <h1 class="hero-heading">Go live on <span class="hero-gradient">OpenVibe</span></h1>
-                <p>OpenVibe Live keeps the broadcast path explicit: start quickly in-browser, use a studio route like OBS/RTMP, adopt WHIP where available, or hand the heavier multi-destination and ingest-control work to <a class="link-inline" href="https://openre.stream">openre.stream</a> without hiding your canonical creator route.</p>
+                <p>OpenVibe Live keeps the broadcast path explicit: start quickly in-browser, use a studio route like OBS/RTMP, adopt WHIP where available, or hand the heavier multi-destination and ingest-control work to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> without hiding your canonical creator route.</p>
                 <div class="hero-actions">
                     <a class="button" href="/channels">Browse channels first</a>
-                    <a class="button-secondary" href="https://openre.stream">Open openre.stream</a>
+                    <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
                     <a class="button-secondary" href="/updates">See recent product work</a>
                     <a class="button-ghost" href="/">Back to live discovery</a>
                 </div>

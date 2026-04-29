@@ -36,6 +36,13 @@ async function countRows(client, table) {
     }
 }
 
+function summarizeChecks(checks) {
+    return checks.reduce((summary, check) => {
+        summary[check.status] = (summary[check.status] || 0) + 1;
+        return summary;
+    }, { green: 0, yellow: 0, red: 0 });
+}
+
 async function validate({ databaseUrl, client }) {
     return withClient({ databaseUrl, client }, async (c) => {
         const tables = await listTables(c);
@@ -62,12 +69,15 @@ async function validate({ databaseUrl, client }) {
                 detail: `legacy_finance_archive exists with ${hoboBucksRows ?? 0} archive rows (non-spendable by schema)`,
             },
         ];
+        const summary = summarizeChecks(checks);
         return {
             generated_at: new Date().toISOString(),
             tables,
             counts,
             missing_tables: missingTables,
             checks,
+            summary,
+            gate: summary.red > 0 ? 'red' : (summary.yellow > 0 ? 'yellow' : 'green'),
         };
     });
 }

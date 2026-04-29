@@ -143,6 +143,7 @@ async function validateBundle(options) {
     }
 
     summary.ok = summary.mismatches.length === 0 && summary.duplicates.length === 0 && summary.missing_refs.length === 0;
+    summary.gate = summary.ok ? 'green' : 'red';
     writeJson(path.join(bundleDir, 'audit', 'validation-summary.json'), summary);
     return summary;
 }

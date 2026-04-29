@@ -8,6 +8,7 @@
     "./auth-client": "./auth-client.js",
     "./middleware": "./middleware.js",
     "./http": "./http.js",
+    "./url-defaults": "./url-defaults.js",
     "./registry-client": "./registry-client.js",
     "./events-client": "./events-client.js",
     "./media-client": "./media-client.js",

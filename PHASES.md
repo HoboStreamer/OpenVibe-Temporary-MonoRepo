@@ -1,7 +1,10 @@
 # OpenVibe — Phase status
 
-Numbering follows the later (corrected) numbering used in
-[context/META_PROMPT_FOR_CHATGPT.md](context/META_PROMPT_FOR_CHATGPT.md):
+Execution note: earlier planning drafts used a different label for late-phase
+mod work. The checked-in repository now treats **Phase 8** as the native
+runtime-independence + migration milestone and **Phase 9** as the hardening /
+parity / final-cutover-truthfulness tranche. The table below reflects the
+current execution track.
 
 | # | Name | Status | Where |
 |---|---|---|---|
@@ -12,7 +15,8 @@ Numbering follows the later (corrected) numbering used in
 | 5 | Chat / community / product migration | ✅ implemented in this commit | `services/openvibe-chat`, `services/openvibe-community`, `packages/openvibe-contracts/{chat-events,community-events}.js`, `packages/openvibe-sdk` (`ChatClient`, `CommunityClient`), `/opt/hobostreamer/server/openvibe-bridge/{chat,community}.js` |
 | 6 | Billing / credits / tips ledger | ✅ implemented in this commit | `services/openvibe-billing`, `packages/openvibe-contracts/billing-events.js`, `packages/openvibe-sdk` (`BillingClient`), `/opt/hobostreamer/server/openvibe-bridge/billing.js` |
 | 7 | AI / SEO / Sources / Search backbone | ✅ implemented in this commit | `services/openvibe-ai`, `packages/openvibe-contracts/ai-events.js`, `packages/openvibe-sdk` (`AiClient`), `/opt/hobostreamer/server/openvibe-bridge/ai.js` |
-| 8 | Mods + trust tiers | ⏳ deferred | extends capability + policy registries |
+| 8 | OpenVibe runtime independence + Hobo migration | 🚧 in progress | `scripts/migrate-hobo/`, `scripts/cutover/`, native OpenVibe surfaces, `docs/openvibe/phase-8.md` |
+| 9 | Hard-cut hardening + cutover parity | 🚧 in progress | `context/PHASE_9.md`, `scripts/migrate-hobo/`, cutover/reporting/browser parity work |
 
 > Note: the checked-in SQLite services remain useful for local bring-up, but
 > the requested hard-cut target is PostgreSQL-backed native OpenVibe runtime
@@ -439,3 +443,39 @@ and collaborative canvas APIs/UI.
     [phase-8.md](docs/openvibe/phase-8.md) for the index). ✅
 23. **Cutover report** — `data/migrations/cutover-report.json` produced by the
     orchestrator; current local gate: **green** (audit-only). ✅
+
+## Phase 9 — hard-cut hardening + cutover parity 🚧
+
+Phase 9 is the follow-on tranche that converts the large Phase 8 foundation
+into a cutover path operators can trust. It focuses on safety defaults,
+truthful reports, browser parity, and compatibility-off validation rather than
+net-new platform categories.
+
+1. **Phase 9 baseline doc** — [context/PHASE_9.md](context/PHASE_9.md)
+   captures the active hardening scope, work packages, and verification loop. ✅
+2. **Localhost/staging URL correctness** — shared origin resolution now keeps
+   `openvibe.*.localhost` surfaces on local canonical domains instead of
+   leaking to production URLs. Verified in-session via browser validation. ✅
+3. **Production fetch hardening** — [scripts/migrate-hobo/fetch-production-hobo.js](scripts/migrate-hobo/fetch-production-hobo.js)
+   now defaults to dry-run, refuses snapshot/copy flows without `--confirm`,
+   supports `--production-paths`, expands analytics DB discovery, and emits a
+   richer `production-fetch-report.json`. Covered by
+   [scripts/migrate-hobo/test/production-fetch.test.js](scripts/migrate-hobo/test/production-fetch.test.js). ✅
+4. **Focused + repo-wide validation** — the current Phase 9 fetch tranche is
+   verified by `node scripts/migrate-hobo/test/production-fetch.test.js`,
+   `npm run check`, and `npm test`. ✅
+5. **Postgres runtime truthfulness** — tighten loader/validator/readiness flows
+   so runtime messaging matches actual canonical persistence behavior. ⏳
+6. **Cutover report honesty** — the top-level rehearsal now emits `phase: 9`,
+   records `track: 'hard-cut-hardening'`, and can fold
+   `data/migrations/browser-smoke-report.json` into the final gate via
+   `browser_smoke_gate`. Additional go/no-go tightening remains next. 🚧
+7. **Browser smoke/parity harness** — initial harness landed at
+   [scripts/staging/browser-smoke.js](scripts/staging/browser-smoke.js) with
+   regression coverage in
+   [scripts/staging/test/browser-smoke.test.js](scripts/staging/test/browser-smoke.test.js).
+   In-session browser checks also verified real local pages for
+   `openvibe.network.localhost`, `openvibe.tools.localhost`,
+   `openvibe.live.localhost`, and `openvibe.chat.localhost`. 🚧
+8. **Compatibility-off staging proof** — validate native OpenVibe flows with
+   `OPENVIBE_LEGACY_COMPAT_MODE=false` and no hidden Hobo runtime dependency. ⏳

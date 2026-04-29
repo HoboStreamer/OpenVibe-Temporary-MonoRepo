@@ -47,6 +47,7 @@ async function main() {
 
     const summary = await validateBundle({ bundleDir });
     assert.strictEqual(summary.ok, false, 'expected validation to fail on missing user refs');
+    assert.strictEqual(summary.gate, 'red');
     assert.ok(summary.missing_refs.length >= 1, 'expected a missing user ref to be reported');
 
     console.log('bundle validator test passed');

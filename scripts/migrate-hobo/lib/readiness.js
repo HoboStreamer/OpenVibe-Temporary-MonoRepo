@@ -90,6 +90,14 @@ function summarizeChecks(checks) {
     }, { green: 0, yellow: 0, red: 0 });
 }
 
+function gateFromSummary(summary) {
+    const red = Number(summary && summary.red) || 0;
+    const yellow = Number(summary && summary.yellow) || 0;
+    if (red > 0) return 'red';
+    if (yellow > 0) return 'yellow';
+    return 'green';
+}
+
 function parseJsonBody(body, fallback) {
     try {
         return body ? JSON.parse(body) : (fallback || {});
@@ -465,6 +473,7 @@ async function buildReadinessReport(options) {
             service_db_paths: dbPaths,
             checks,
             summary,
+            gate: gateFromSummary(summary),
             manual_actions: manualActions,
         };
 

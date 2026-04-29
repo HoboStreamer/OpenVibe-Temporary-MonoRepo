@@ -490,7 +490,7 @@
                 <h2>Community pulse</h2>
                 <p class="section-sub">Recent threads, pastes, relays, and chat activity from the adjacent OpenVibe services.</p>
             </div>
-            <a class="section-link" href="https://openvibe.community">Open community</a>
+            <a class="section-link" id="community-surface-link" href="#">Open community</a>
         </div>
         <div class="grid" id="community-grid"><div class="empty">Loading community signals…</div></div>
     </section>
@@ -500,6 +500,9 @@
 <script>
 (async function () {
     const helper = window.OpenVibe || {};
+    const surfaceHref = helper.resolveSurfaceUrl
+        ? (surface) => helper.resolveSurfaceUrl(surface)
+        : () => '#';
     const escapeHtml = helper.escapeHtml || function (value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;')
@@ -554,6 +557,7 @@
 
     if (helper.navbar) document.getElementById('nav-mount').innerHTML = helper.navbar();
     document.getElementById('footer-mount').innerHTML = renderFooterHtml();
+    document.getElementById('community-surface-link').href = surfaceHref('community');
 
     const routes = [
         { href: '/channels', label: 'Creator directory', title: 'Browse every staged creator', body: 'Search channels, inspect activity, and jump straight into live or recent broadcasts.' },
@@ -765,7 +769,7 @@
             title: room.title || room.external_ref_type || 'Public room',
             body: 'Live-adjacent conversation surface from openvibe.chat.',
             meta: room.updated_at || 'recently updated',
-            href: 'https://openvibe.chat',
+            href: surfaceHref('chat'),
         }));
     });
     document.getElementById('community-grid').innerHTML = communityCards.length
