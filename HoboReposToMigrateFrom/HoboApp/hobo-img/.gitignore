@@ -1,8 +1,0 @@
-node_modules/
-*.log
-
-# Editor
-.vscode/
-.idea/
-*.swp
-.DS_Store
