@@ -112,4 +112,8 @@ assert.strictEqual(policy.decideTtsOwnership({ req: svcReq, owner_type: 'user', 
 model.recordLegacyMap({ source: 'hobostreamer', kind: 'message', legacy_id: 'm1', new_id: msg.id });
 assert.strictEqual(model.lookupLegacy('hobostreamer', 'message', 'm1').new_id, msg.id);
 
+const shellHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+assert.ok(!shellHtml.includes('https://openvibe.network'), 'chat shell should not embed production network origin literals in inline HTML');
+assert.ok(!shellHtml.includes('https://auth.openvibe.network'), 'chat shell should not embed production auth origin literals in inline HTML');
+
 console.log('openvibe-chat smoke OK');

@@ -1,5 +1,11 @@
 'use strict';
 
+const {
+    isPublicRoom,
+    normalizeRoomName,
+    roomAdmin,
+} = require('./rooms');
+
 function parseToken(raw) {
     const value = String(raw || '').trim().replace(/^Bearer\s+/i, '');
     if (!value) return null;
@@ -30,21 +36,17 @@ function authenticateSocket(handshake, options) {
     return { type: 'anonymous', id: null };
 }
 
-function normalizeRoomName(value) {
-    return String(value || '')
-        .trim()
-        .replace(/[^a-zA-Z0-9:_./-]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 120);
-}
-
 function canJoinRoom(actor, roomName) {
     const room = normalizeRoomName(roomName);
     if (!room) return false;
-    if (!actor || actor.type === 'anonymous') return room.startsWith('public:');
+    if (!actor || actor.type === 'anonymous') return isPublicRoom(room);
     if (actor.type === 'service') return true;
+    if (room === roomAdmin() || room.startsWith('admin:')) return false;
     if (room.startsWith('dm:')) {
         return room.split(':').includes(String(actor.id));
+    }
+    if (room.startsWith('user:')) {
+        return room.split(':')[1] === String(actor.id);
     }
     return true;
 }

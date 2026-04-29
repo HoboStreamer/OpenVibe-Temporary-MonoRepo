@@ -69,6 +69,7 @@ assert.ok(/Recent VODs/.test(homeHtml), 'home page renders vod section');
 assert.ok(/Recent clips/.test(homeHtml), 'home page renders clips section');
 assert.ok(/Go live however you want/.test(homeHtml), 'home page renders onboarding section');
 assert.ok(/Why OpenVibe exists/.test(homeHtml), 'home page renders origin story section');
+assert.ok(/openvibe\.live — native fallback shell/.test(homeHtml), 'home page includes browser-smoke shell marker');
 assert.ok(/Mark updates as seen/.test(homeHtml), 'home page renders unread updates clear action');
 assert.ok(/data-updates-feed/.test(homeHtml), 'home page renders updates feed state marker');
 assert.ok(/openre\.stream/.test(homeHtml), 'home page emphasizes openre.stream');

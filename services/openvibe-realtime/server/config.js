@@ -11,6 +11,7 @@ module.exports = {
     queuePrefix: process.env.OPENVIBE_QUEUE_PREFIX || 'openvibe',
     allowAnonymous: String(process.env.OPENVIBE_REALTIME_ALLOW_ANONYMOUS || 'true').toLowerCase() === 'true',
     presenceTtlSeconds: parseInt(process.env.OPENVIBE_REALTIME_PRESENCE_TTL_SECONDS, 10) || 60,
+    enablePollingTransport: String(process.env.OPENVIBE_REALTIME_ENABLE_POLLING_TRANSPORT || 'false').toLowerCase() === 'true',
     rateLimits: {
         join: [{ capacity: 30, refillPerSecond: 10, cost: 1 }],
         message: [{ capacity: 60, refillPerSecond: 15, cost: 1 }],

@@ -29,6 +29,11 @@ function navItems(config) {
         { id: 'codes', label: 'Codes', href: `${config.surfaces.codes}/` },
         { id: 'blog', label: 'Blog', href: `${config.surfaces.blog}/` },
         { id: 'wiki', label: 'Wiki', href: `${config.surfaces.wiki}/` },
+        { id: 'news', label: 'News', href: `${config.surfaces.news}/` },
+        { id: 'reviews', label: 'Reviews', href: `${config.surfaces.reviews}/` },
+        { id: 'deals', label: 'Deals', href: `${config.surfaces.deals}/` },
+        { id: 'coupons', label: 'Coupons', href: `${config.surfaces.coupons}/` },
+        { id: 'trade', label: 'Trade', href: `${config.surfaces.trade}/` },
     ];
 }
 
@@ -155,82 +160,156 @@ function buildSurfaceCatalog(config) {
             host: 'openvibe.news',
             origin: config.surfaces.news,
             label: 'openvibe.news',
-            title: 'openvibe.news — deferred public runtime',
-            description: 'News ingestion and publication runtime not yet enabled for public indexing.',
+            title: 'openvibe.news — draft source review surface',
+            description: 'Draft news publication surface that stays noindex until cited ingestion and review are complete.',
             kind: 'WebSite',
-            implemented: false,
+            implemented: true,
             indexable: false,
             readiness: 'yellow',
             deferReason: 'Source ingestion and review workflows exist in openvibe-ai, but the public news runtime is not ready for truthful launch yet.',
-            heroTitle: 'News runtime is staged but not launched',
-            heroText: 'The AI/content control plane exists, but this host remains intentionally noindex until source review and publication states are wired end to end.',
-            entries: [],
+            heroTitle: 'Draft news pages stay reviewed and noindex',
+            heroText: 'The AI/content control plane exists, and this public host is now rendered end to end, but it remains intentionally noindex until source review and publication states are fully wired.',
+            entries: [
+                {
+                    path: '/briefs/source-review-pipeline',
+                    title: 'Source review stays ahead of public indexing',
+                    summary: 'How the OpenVibe news surface keeps draft output review-only until sources, status, and publication approvals line up.',
+                    publishedAt: '2026-04-29T14:00:00.000Z',
+                    kind: 'NewsArticle',
+                    sections: [
+                        'This draft surface intentionally avoids public indexing until the ingestion job, source transparency, and editorial review states agree.',
+                        'No fake bylines, no fabricated quotes, and no made-up citations appear here while the review seam is still prelaunch.',
+                        'The host is real, but the robots policy remains noindex so operators can verify HTML, canonical URLs, and structured data without pretending launch readiness.',
+                    ],
+                },
+            ],
         },
         reviews: {
             id: 'reviews',
             host: 'openvibe.reviews',
             origin: config.surfaces.reviews,
             label: 'openvibe.reviews',
-            title: 'openvibe.reviews — deferred public runtime',
-            description: 'Reviews runtime remains draft-only until source, authorship, and moderation truth are fully wired.',
+            title: 'openvibe.reviews — draft review workspace',
+            description: 'Draft review surface that refuses fake stars, fake authors, and fake merchant claims.',
             kind: 'WebSite',
-            implemented: false,
+            implemented: true,
             indexable: false,
             readiness: 'yellow',
             deferReason: 'Review pages must not fabricate ratings, authors, or merchant facts. Public runtime remains draft-only until those seams are complete.',
             heroTitle: 'Reviews stay noindex until source truth is ready',
             heroText: 'No fake stars, no fake authors, no fake merchant claims. This host stays honest and noindex for now.',
-            entries: [],
+            entries: [
+                {
+                    path: '/drafts/review-evidence-checklist',
+                    title: 'Review evidence checklist before publication',
+                    summary: 'What has to be true before a review page can ever become indexable on OpenVibe.',
+                    publishedAt: '2026-04-29T14:10:00.000Z',
+                    kind: 'Article',
+                    sections: [
+                        'Merchant facts, pricing, authorship, and citations must be attributable before a review page can move beyond draft mode.',
+                        'This host currently renders only draft guidance pages so operators can validate the route, metadata, and noindex posture.',
+                        'The absence of ratings here is deliberate: a blank rating is more truthful than a fake one.',
+                    ],
+                },
+            ],
         },
         deals: {
             id: 'deals',
             host: 'openvibe.deals',
             origin: config.surfaces.deals,
             label: 'openvibe.deals',
-            title: 'openvibe.deals — deferred public runtime',
-            description: 'Deals runtime is deferred until pricing freshness and source verification are ready.',
+            title: 'openvibe.deals — draft deal verification surface',
+            description: 'Draft-only deal surface for source freshness and pricing verification workflows.',
             kind: 'WebSite',
-            implemented: false,
+            implemented: true,
             indexable: false,
             readiness: 'yellow',
             deferReason: 'Public deals pages need source freshness and pricing truth checks before launch.',
             heroTitle: 'Deals runtime remains a draft surface',
             heroText: 'This host is intentionally noindex until source freshness and merchant truth checks are online.',
-            entries: [],
+            entries: [
+                {
+                    path: '/drafts/pricing-freshness-policy',
+                    title: 'Pricing freshness policy for deal pages',
+                    summary: 'Why OpenVibe deals pages stay draft until freshness windows and merchant attribution are verifiable.',
+                    publishedAt: '2026-04-29T14:20:00.000Z',
+                    kind: 'Article',
+                    sections: [
+                        'Deal pages must expire or refresh cleanly when pricing changes; stale prices are not a cute quirk, they are a product bug.',
+                        'This draft host renders publication policy and verification notes only, with no fake discounts or synthetic offers.',
+                        'The noindex stance remains in place until freshness and source-review jobs can prove the published numbers are current.',
+                    ],
+                },
+            ],
         },
         coupons: {
             id: 'coupons',
             host: 'openvibe.coupons',
             origin: config.surfaces.coupons,
             label: 'openvibe.coupons',
-            title: 'openvibe.coupons — deferred public runtime',
-            description: 'Coupons runtime remains draft-only until verification and expiration handling are ready.',
+            title: 'openvibe.coupons — draft coupon validation surface',
+            description: 'Draft-only coupon surface focused on expiry, verification, and source trust.',
             kind: 'WebSite',
-            implemented: false,
+            implemented: true,
             indexable: false,
             readiness: 'yellow',
             deferReason: 'Coupon claims must be verifiable and time-bounded before public indexing is allowed.',
             heroTitle: 'Coupons are not launched yet',
             heroText: 'Coupon surfaces stay noindex until validation, expiry, and source review are all truthful.',
-            entries: [],
+            entries: [
+                {
+                    path: '/drafts/coupon-expiry-guardrails',
+                    title: 'Coupon expiry guardrails',
+                    summary: 'A draft policy page for coupon freshness, expiration, and claim verification.',
+                    publishedAt: '2026-04-29T14:30:00.000Z',
+                    kind: 'Article',
+                    sections: [
+                        'Coupon pages remain noindex until the platform can prove codes, expiry windows, and source attribution are still valid.',
+                        'The draft surface is intentionally useful for operator review without pretending a public coupon program exists today.',
+                        'That means no fake promo codes, no fake savings values, and no invented merchant endorsements.',
+                    ],
+                },
+            ],
         },
         trade: {
             id: 'trade',
             host: 'openvibe.trade',
             origin: config.surfaces.trade,
             label: 'openvibe.trade',
-            title: 'openvibe.trade — deferred public runtime',
-            description: 'Trade runtime remains draft-only and explicitly non-financial-advice.',
+            title: 'openvibe.trade — draft market context surface',
+            description: 'Draft-only market context surface that remains explicitly non-financial-advice.',
             kind: 'WebSite',
-            implemented: false,
+            implemented: true,
             indexable: false,
             readiness: 'yellow',
             deferReason: 'Trade pages require review gates, source transparency, and non-financial-advice handling before public launch.',
             heroTitle: 'Trade stays review-only and noindex',
             heroText: 'Any future trade content must remain explicitly non-financial-advice. This runtime is staged, not launched.',
-            entries: [],
+            entries: [
+                {
+                    path: '/drafts/non-financial-advice-policy',
+                    title: 'Non-financial-advice policy for trade pages',
+                    summary: 'A draft policy page that explains why market context stays noindex until review and source transparency are enforced.',
+                    publishedAt: '2026-04-29T14:40:00.000Z',
+                    kind: 'Article',
+                    sections: [
+                        'This surface is for informational market context only and must never present itself as financial advice.',
+                        'The draft runtime exists so operators can validate host routing, metadata, and disclaimer handling before any public launch.',
+                        'That means no performance promises, no fake analyst voices, and no indexable pages until review gates are complete.',
+                    ],
+                },
+            ],
         },
     };
+}
+
+function surfaceStatusNote(surface) {
+    return surface.indexable ? null : surface.deferReason || null;
+}
+
+function surfaceKicker(surface) {
+    if (!surface.indexable) return 'draft / noindex';
+    return surface.implemented ? 'published' : 'deferred / noindex';
 }
 
 function pageForPath(surface, routePath) {
@@ -367,7 +446,7 @@ function renderHome({ config, surface }) {
         </section>`).join('');
     const body = `
         <section class="ov-hero">
-            <div class="ov-kicker">${surface.implemented ? 'wave 1 live' : 'deferred / noindex'}</div>
+            <div class="ov-kicker">${surfaceKicker(surface)}</div>
             <h1>${escapeHtml(surface.heroTitle)}</h1>
             <p>${escapeHtml(surface.heroText)}</p>
         </section>
@@ -380,7 +459,7 @@ function renderHome({ config, surface }) {
         canonicalUrl: `${surface.origin}/`,
         robots: surface.indexable ? 'index,follow,max-image-preview:large' : 'noindex,nofollow',
         jsonLd: buildJsonLd(surface, `${surface.origin}/`, null),
-        statusNote: surface.implemented ? null : surface.deferReason,
+        statusNote: surfaceStatusNote(surface),
         bodyHtml: body,
         currentPath: '/',
     });
@@ -422,7 +501,7 @@ function renderNotFound({ config, surface, routePath }) {
         canonicalUrl: `${surface.origin}${routePath}`,
         robots: 'noindex,nofollow',
         jsonLd: buildJsonLd(surface, `${surface.origin}${routePath}`, null),
-        statusNote: surface.implemented ? null : surface.deferReason,
+        statusNote: surfaceStatusNote(surface),
         bodyHtml: body,
         currentPath: routePath,
     });
@@ -489,7 +568,7 @@ function hostStatuses(config) {
         origin: surface.origin,
         implemented: surface.implemented,
         indexable: surface.indexable,
-        readiness: surface.implemented ? 'green' : surface.readiness || 'yellow',
+        readiness: surface.readiness || (surface.implemented ? 'green' : 'yellow'),
         entry_count: surface.entries.length,
         defer_reason: surface.deferReason || null,
     }));

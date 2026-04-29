@@ -59,6 +59,15 @@ function runPythonScript(config, scriptName, payload) {
     });
 }
 
+async function stubProcessor(name, payload) {
+    return {
+        ok: true,
+        mode: 'local-stub',
+        processor: name,
+        payload: payload || {},
+    };
+}
+
 function createProcessors(config) {
     return {
         async 'media.thumbnail'(job) {
@@ -88,6 +97,27 @@ function createProcessors(config) {
         },
         async 'ai.scene-detect'(job) {
             return runPythonScript(config, 'scene_detect.py', job.data || {});
+        },
+        async 'clips.materialize'(job) {
+            return stubProcessor('clips.materialize', job.data || {});
+        },
+        async 'analytics.audio-features'(job) {
+            return runPythonScript(config, 'extract_audio_features.py', job.data || {});
+        },
+        async 'analytics.motion-detect'(job) {
+            return runPythonScript(config, 'detect_motion.py', job.data || {});
+        },
+        async 'lifecycle.reconcile'(job) {
+            return stubProcessor('lifecycle.reconcile', job.data || {});
+        },
+        async 'search.reindex'(job) {
+            return stubProcessor('search.reindex', job.data || {});
+        },
+        async 'billing.reconcile'(job) {
+            return stubProcessor('billing.reconcile', job.data || {});
+        },
+        async 'migration.bundle-verify'(job) {
+            return stubProcessor('migration.bundle-verify', job.data || {});
         },
         async 'notifications.broadcast'(job) {
             return {

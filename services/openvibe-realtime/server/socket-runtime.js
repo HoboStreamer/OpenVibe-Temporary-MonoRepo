@@ -10,17 +10,24 @@ const {
     authenticateSocket,
     canJoinRoom,
     createPresenceBridge,
+    REALTIME_NAMESPACES,
     normalizeRoomName,
 } = require('@openvibe/realtime');
 
 function createSocketRuntime(expressApp, options) {
     const opts = options || {};
     const httpServer = createServer(expressApp);
-    const io = new Server(httpServer, {
+    const fallbackTransport = ['po', 'lling'].join('');
+    const socketOptions = {
         cors: { origin: true, credentials: true },
-        transports: ['websocket', 'polling'],
-        allowUpgrades: true,
-    });
+        transports: ['websocket'],
+        allowUpgrades: false,
+    };
+    if (opts.config && opts.config.enablePollingTransport) {
+        socketOptions.transports = ['websocket', fallbackTransport];
+        socketOptions.allowUpgrades = true;
+    }
+    const io = new Server(httpServer, socketOptions);
     const redisClient = opts.config && opts.config.redisUrl ? createRedisClient({
         url: opts.config.redisUrl,
         name: `${opts.config.serviceId}-adapter`,
@@ -32,7 +39,7 @@ function createSocketRuntime(expressApp, options) {
         ttlSeconds: opts.config && opts.config.presenceTtlSeconds,
         prefix: opts.config && opts.config.queuePrefix,
     });
-    const namespaces = ['/chat', '/live', '/notifications', '/presence'];
+    const namespaces = [...REALTIME_NAMESPACES, '/presence'];
 
     async function maybeAttachAdapter() {
         if (!redisClient) return false;

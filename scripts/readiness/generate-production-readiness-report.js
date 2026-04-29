@@ -79,14 +79,15 @@ function collectMigrationReadiness() {
     };
 }
 
-function collectPostgresReadiness() {
+function collectPostgresReadiness(options = {}) {
     const auditRoot = path.join(ROOT, 'data', 'migrations', 'hobo-production-staging', 'openvibe-target', 'audit');
     const loadReport = readJsonIfExists(path.join(auditRoot, 'postgres-load-report.json'));
     const validation = readJsonIfExists(path.join(auditRoot, 'postgres-validation.json'));
     const configured = !!(process.env.OPENVIBE_DATABASE_URL || process.env.OPENVIBE_STAGING_DATABASE_URL);
+    const offline = !!options.offline || !!options.dryRun || !!options.skipExternal;
     const gate = validation
         ? (validation.gate || 'green')
-        : (configured ? 'yellow' : 'red');
+        : (configured ? 'yellow' : (offline ? 'yellow' : 'red'));
     return {
         gate,
         summary: summarizeStatuses([gate]),
@@ -101,7 +102,9 @@ function collectPostgresReadiness() {
             ? null
             : configured
                 ? 'Database URL is configured, but no checked-in Postgres validation artifact is available yet.'
-                : 'OPENVIBE_DATABASE_URL / OPENVIBE_STAGING_DATABASE_URL is not configured for a live Postgres validation run.',
+                : offline
+                    ? 'Offline readiness run skipped live Postgres validation because no database URL is configured.'
+                    : 'OPENVIBE_DATABASE_URL / OPENVIBE_STAGING_DATABASE_URL is not configured for a live Postgres validation run.',
     };
 }
 
@@ -217,7 +220,7 @@ async function generateProductionReadinessReport(options = {}) {
     const nginxConfig = await checkNginxConfig(options);
     const cloudflareAssumptions = await checkCloudflareAssumptions(options);
     const migrationReadiness = collectMigrationReadiness();
-    const postgresReadiness = collectPostgresReadiness();
+    const postgresReadiness = collectPostgresReadiness(options);
     const aiSeoSourceSearch = collectAiSeoSourceSearchReadiness();
     const publicContentRuntime = collectPublicContentRuntimeReadiness();
     const browserSmoke = collectBrowserSmokeStatus();

@@ -36,12 +36,12 @@ function buildApp() {
                     details: hostStatuses(config).filter((surface) => surface.implemented),
                 },
                 {
-                    name: 'deferred_hosts_honest_noindex',
+                    name: 'draft_hosts_honest_noindex',
                     ok: true,
                     status: 'yellow',
                     critical: false,
-                    details: hostStatuses(config).filter((surface) => !surface.implemented),
-                    message: 'News/reviews/deals/coupons/trade remain explicitly draft/noindex until their backend publication seams are ready.',
+                    details: hostStatuses(config).filter((surface) => surface.implemented && !surface.indexable),
+                    message: 'News/reviews/deals/coupons/trade now render as honest draft/noindex hosts until their publication seams are ready.',
                 },
                 {
                     name: 'ai_control_plane_url',

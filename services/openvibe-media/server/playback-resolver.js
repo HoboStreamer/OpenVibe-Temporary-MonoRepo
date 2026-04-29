@@ -43,10 +43,10 @@ async function resolvePlayback(media, locations, storage, options) {
         })
         : {
             provider: location.provider_name,
-            url: location.public_url || storage.publicUrlFor(media.id, {
+            url: storage.publicUrlFor(media.id, {
                 providerName: location.provider_name,
                 storageKey: location.storage_key,
-            }),
+            }) || location.public_url,
             expires_at: null,
         };
 

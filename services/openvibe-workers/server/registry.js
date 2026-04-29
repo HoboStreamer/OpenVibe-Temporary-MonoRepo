@@ -26,6 +26,48 @@ const JOBS = Object.freeze([
         critical: false,
     },
     {
+        name: 'clips.materialize',
+        queue: 'clips',
+        description: 'Materialize virtual clips into playback-ready media references.',
+        critical: true,
+    },
+    {
+        name: 'analytics.audio-features',
+        queue: 'analytics',
+        description: 'Extract cheap local audio features for media review and ranking seams.',
+        critical: false,
+    },
+    {
+        name: 'analytics.motion-detect',
+        queue: 'analytics',
+        description: 'Detect simple motion windows for clip-candidate generation.',
+        critical: false,
+    },
+    {
+        name: 'lifecycle.reconcile',
+        queue: 'lifecycle',
+        description: 'Audit storage lifecycle state and reconcile stale media diagnostics.',
+        critical: false,
+    },
+    {
+        name: 'search.reindex',
+        queue: 'search',
+        description: 'Refresh search/index seams after content or metadata changes.',
+        critical: false,
+    },
+    {
+        name: 'billing.reconcile',
+        queue: 'billing',
+        description: 'Reconcile staged billing imports and loyalty projections.',
+        critical: false,
+    },
+    {
+        name: 'migration.bundle-verify',
+        queue: 'migration',
+        description: 'Re-run canonical migration bundle verification and import-hold diagnostics.',
+        critical: true,
+    },
+    {
         name: 'notifications.broadcast',
         queue: 'notifications',
         description: 'Fan out admin broadcasts and queued notices.',

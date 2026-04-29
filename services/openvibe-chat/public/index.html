@@ -493,11 +493,8 @@ button.chat-search-result {
     const sendButton = document.getElementById('send-button');
     const composerStatusEl = document.getElementById('composer-status');
 
-    const protocol = window.location.protocol || 'http:';
-    const hostname = window.location.hostname || '';
-    const isLocalhostSurface = hostname.endsWith('.localhost');
-    const networkBase = isLocalhostSurface ? `${protocol}//openvibe.network.localhost:4100` : 'https://openvibe.network';
-    const authBase = isLocalhostSurface ? `${protocol}//auth.openvibe.network.localhost:4100` : 'https://auth.openvibe.network';
+    const networkBase = OpenVibe.resolveSurfaceUrl('network');
+    const authBase = OpenVibe.resolveSurfaceUrl('auth');
     const storedTokenKey = 'openvibe.chat.token';
 
     const state = {

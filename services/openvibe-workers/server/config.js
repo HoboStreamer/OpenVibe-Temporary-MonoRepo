@@ -27,6 +27,6 @@ module.exports = {
     enableProcessors: String(process.env.OPENVIBE_WORKER_ENABLE_PROCESSORS || 'false').toLowerCase() === 'true',
     queueFilter: parseQueueFilter(readArg('--worker') || process.env.OPENVIBE_WORKER_QUEUES || ''),
     mediaUrl: process.env.OPENVIBE_MEDIA_URL || 'http://127.0.0.1:4500',
-    aiUrl: process.env.OPENVIBE_AI_URL || 'http://127.0.0.1:4900',
+    aiUrl: process.env.OPENVIBE_AI_URL || 'http://127.0.0.1:5100',
     pythonBin: process.env.OPENVIBE_WORKER_PYTHON_BIN || 'python3',
 };

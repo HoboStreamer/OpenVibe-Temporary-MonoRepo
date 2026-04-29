@@ -43,9 +43,11 @@ with an explicit instruction to run `npm run smoke:browser`.
 
 ## Next readiness extensions
 
-- live Postgres connection checks against a configured database URL
+- live Postgres connection checks against a configured database URL (offline
+   `--dry-run --skip-external` mode now reports missing credentials as yellow
+   instead of a misleading hard-red)
 - live Redis connection and queue lag checks against a configured Redis URL
-- deeper realtime namespace/room/event coverage once the production-shaped
-   Socket.IO namespaces land
+- richer realtime event-bridge and authorization probes beyond the expanded
+   production-shaped namespace map
 - broader browser smoke selectors, screenshots, and same-origin critical-link
    validation once the full stack is running locally in CI/staging

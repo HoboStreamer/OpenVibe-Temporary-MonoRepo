@@ -42,11 +42,16 @@ function isLocalLikeEnv() {
 function implementedQueueCategories(jobs) {
     const categories = new Set();
     for (const job of jobs) {
-        if (job.queue === 'media-processing') categories.add('media');
-        if (job.name === 'media.metadata') categories.add('media');
+        if (job.queue === 'media-processing' || job.name.startsWith('media.')) categories.add('media');
         if (job.name === 'ai.transcript') categories.add('transcription');
         if (job.name === 'ai.scene-detect') categories.add('vision');
-        if (job.queue === 'notifications') categories.add('notifications');
+        if (job.queue === 'clips' || job.name.startsWith('clips.')) categories.add('clips');
+        if (job.queue === 'analytics' || job.name.startsWith('analytics.')) categories.add('analytics');
+        if (job.queue === 'lifecycle' || job.name.startsWith('lifecycle.')) categories.add('lifecycle');
+        if (job.queue === 'search' || job.name.startsWith('search.')) categories.add('search');
+        if (job.queue === 'billing' || job.name.startsWith('billing.')) categories.add('billing');
+        if (job.queue === 'migration' || job.name.startsWith('migration.')) categories.add('migration');
+        if (job.queue === 'notifications' || job.name.startsWith('notifications.')) categories.add('notifications');
     }
     return Array.from(categories).sort();
 }

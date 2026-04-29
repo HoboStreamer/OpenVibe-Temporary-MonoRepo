@@ -14,6 +14,12 @@ function normalizeQueueFilter(filter) {
     const aliases = new Map([
         ['media', 'media-processing'],
         ['ai', 'ai-analysis'],
+        ['clips', 'clips'],
+        ['analytics', 'analytics'],
+        ['lifecycle', 'lifecycle'],
+        ['search', 'search'],
+        ['billing', 'billing'],
+        ['migration', 'migration'],
         ['notifications', 'notifications'],
     ]);
     return new Set(filter.map((value) => aliases.get(String(value).trim()) || String(value).trim()));

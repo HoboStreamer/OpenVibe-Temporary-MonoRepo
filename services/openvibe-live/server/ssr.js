@@ -1974,7 +1974,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             `).join('')}
         </div>` : '';
     const pageContent = `
-        <section class="hero-panel live-home-hero">
+        <section class="hero-panel live-home-hero" data-shell-marker="openvibe.live — native fallback shell">
             ${heroStageHtml}
             <div class="hero-grid">
                 <div class="hero-copy" data-reveal>

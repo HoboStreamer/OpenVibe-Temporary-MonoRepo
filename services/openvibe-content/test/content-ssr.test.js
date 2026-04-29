@@ -56,7 +56,12 @@ async function main() {
         const news = await request(server, 'openvibe.news.localhost', '/');
         assert.strictEqual(news.status, 200);
         assert.ok(news.body.includes('noindex,nofollow'));
-        assert.ok(news.body.includes('News runtime is staged but not launched'));
+        assert.ok(news.body.includes('Draft news pages stay reviewed and noindex'));
+
+        const trade = await request(server, 'openvibe.trade.localhost', '/drafts/non-financial-advice-policy');
+        assert.strictEqual(trade.status, 200);
+        assert.ok(trade.body.includes('Non-financial-advice policy for trade pages'));
+        assert.ok(trade.body.includes('noindex,nofollow'));
 
         const sitemap = await request(server, 'openvibe.codes.localhost', '/sitemap.xml');
         assert.strictEqual(sitemap.status, 200);

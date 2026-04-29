@@ -5,8 +5,12 @@ const assert = require('assert');
 const {
     authenticateSocket,
     canJoinRoom,
+    REALTIME_NAMESPACES,
     normalizeRoomName,
     parseToken,
+    roomAdmin,
+    roomGlobalChat,
+    roomUser,
 } = require('..');
 
 (function parsesDevTokens() {
@@ -22,8 +26,18 @@ const {
 (function normalizesAndAuthorizesRooms() {
     assert.strictEqual(normalizeRoomName(' public:general '), 'public:general');
     assert.strictEqual(canJoinRoom({ type: 'anonymous', id: null }, 'public:general'), true);
+    assert.strictEqual(canJoinRoom({ type: 'anonymous', id: null }, roomGlobalChat()), true);
     assert.strictEqual(canJoinRoom({ type: 'anonymous', id: null }, 'private:mods'), false);
+    assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, roomUser('42')), true);
+    assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, roomUser('77')), false);
+    assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, roomAdmin()), false);
     assert.strictEqual(canJoinRoom({ type: 'user', id: '42' }, 'dm:42:77'), true);
+})();
+
+(function exposesProductionNamespaces() {
+    assert.ok(Array.isArray(REALTIME_NAMESPACES));
+    assert.ok(REALTIME_NAMESPACES.includes('/realtime'));
+    assert.ok(REALTIME_NAMESPACES.includes('/admin'));
 })();
 
 console.log('openvibe-realtime helpers: OK');

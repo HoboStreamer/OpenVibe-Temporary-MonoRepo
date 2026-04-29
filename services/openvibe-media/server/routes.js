@@ -9,16 +9,26 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const db = require('./db');
+const clipModel = require('./clip-model');
 const model = require('./model');
 const policy = require('./policy');
 const quotas = require('./quotas');
 const processing = require('./processing');
 const storageModel = require('./storage-model');
+const vodModel = require('./vod-model');
 const { resolvePlayback } = require('./playback-resolver');
 const { validatePublicPlaybackSize } = require('./size-validator');
 const namespaces = require('@openvibe/contracts/media-namespaces');
 const { MEDIA_EVENT_TYPES } = require('@openvibe/contracts/media-events');
 const { asyncRoute } = require('@openvibe/runtime');
+
+function inferLocationRoleForStorage(storage, providerName) {
+    if (!storage) return 'canonical';
+    if (providerName === storage.hotProviderName) return 'hot';
+    if (providerName === storage.assetOriginProviderName) return 'asset-origin';
+    return 'canonical';
+}
 
 function buildRouter({ storage, eventBus, internalKey, authClient }) {
     const r = express.Router();
@@ -34,18 +44,12 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         return storage.chooseWriteProvider(input || {});
     }
 
-    function inferLocationRole(providerName) {
-        if (providerName === storage.hotProviderName) return 'hot';
-        if (providerName === storage.assetOriginProviderName) return 'asset-origin';
-        return 'canonical';
-    }
-
     function ensureLocation(media, writeResult, options) {
         const opts = options || {};
         return storageModel.recordLocation({
             mediaId: media.id,
             providerName: writeResult.provider || media.storage_provider,
-            role: opts.role || inferLocationRole(writeResult.provider || media.storage_provider),
+            role: opts.role || inferLocationRoleForStorage(storage, writeResult.provider || media.storage_provider),
             storageKey: writeResult.storageKey || media.storage_key,
             publicUrl: writeResult.publicUrl || media.public_url,
             signedUrlRequired: media.visibility !== 'public',
@@ -96,13 +100,368 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         if (!locations.length && media.storage_key) {
             locations.push({
                 provider_name: media.storage_provider,
-                role: inferLocationRole(media.storage_provider),
+                role: inferLocationRoleForStorage(storage, media.storage_provider),
                 storage_key: media.storage_key,
                 public_url: media.public_url,
                 signed_url_required: media.visibility !== 'public',
             });
         }
         return resolvePlayback(media, locations, storage, options || {});
+    }
+
+    function safeJson(value, fallbackValue) {
+        try {
+            return JSON.parse(value || 'null') || fallbackValue;
+        } catch {
+            return fallbackValue;
+        }
+    }
+
+    function computeDurationMs(media) {
+        const metadataDuration = Number(media && media.metadata && media.metadata.duration_seconds);
+        if (Number.isFinite(metadataDuration) && metadataDuration > 0) {
+            return Math.round(metadataDuration * 1000);
+        }
+        const sizeBased = Number(media && media.size_bytes || 0);
+        return Math.max(30000, Math.min(30 * 60 * 1000, sizeBased || 120000));
+    }
+
+    function listTranscriptSegments(mediaId) {
+        return db.get().prepare(`
+            SELECT * FROM transcript_segments WHERE media_id = ? ORDER BY start_ms ASC
+        `).all(String(mediaId)).map((row) => ({
+            id: row.id,
+            media_id: row.media_id,
+            start_ms: row.start_ms,
+            end_ms: row.end_ms,
+            text: row.text,
+            confidence: row.confidence,
+            speaker_label: row.speaker_label,
+            created_at: row.created_at,
+        }));
+    }
+
+    function listSceneMarkers(mediaId) {
+        return db.get().prepare(`
+            SELECT * FROM scene_markers WHERE media_id = ? ORDER BY start_ms ASC
+        `).all(String(mediaId)).map((row) => ({
+            id: row.id,
+            media_id: row.media_id,
+            start_ms: row.start_ms,
+            end_ms: row.end_ms,
+            score: row.score,
+            source: row.source,
+            metadata: safeJson(row.metadata_json, {}),
+            created_at: row.created_at,
+        }));
+    }
+
+    function listClipCandidates(mediaId) {
+        return db.get().prepare(`
+            SELECT * FROM analysis_candidates WHERE media_id = ? ORDER BY score DESC, start_ms ASC
+        `).all(String(mediaId)).map((row) => ({
+            id: row.id,
+            media_id: row.media_id,
+            candidate_type: row.candidate_type,
+            start_ms: row.start_ms,
+            end_ms: row.end_ms,
+            score: row.score,
+            rationale: safeJson(row.rationale_json, {}),
+            status: row.status,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }));
+    }
+
+    function getClipCandidate(mediaId, candidateId) {
+        const row = db.get().prepare(`
+            SELECT * FROM analysis_candidates WHERE media_id = ? AND id = ?
+        `).get(String(mediaId), Number(candidateId));
+        if (!row) return null;
+        return {
+            id: row.id,
+            media_id: row.media_id,
+            candidate_type: row.candidate_type,
+            start_ms: row.start_ms,
+            end_ms: row.end_ms,
+            score: row.score,
+            rationale: safeJson(row.rationale_json, {}),
+            status: row.status,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        };
+    }
+
+    function replaceTranscriptSegments(mediaId, items) {
+        db.get().prepare(`DELETE FROM transcript_segments WHERE media_id = ?`).run(String(mediaId));
+        const insert = db.get().prepare(`
+            INSERT INTO transcript_segments (media_id, start_ms, end_ms, text, confidence, speaker_label)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const item of items || []) {
+            insert.run(
+                String(mediaId),
+                Number(item.start_ms || 0),
+                Number(item.end_ms || 0),
+                String(item.text || ''),
+                item.confidence == null ? null : Number(item.confidence),
+                item.speaker_label || null,
+            );
+        }
+        return listTranscriptSegments(mediaId);
+    }
+
+    function replaceSceneMarkers(mediaId, items) {
+        db.get().prepare(`DELETE FROM scene_markers WHERE media_id = ?`).run(String(mediaId));
+        const insert = db.get().prepare(`
+            INSERT INTO scene_markers (media_id, start_ms, end_ms, score, source, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const item of items || []) {
+            insert.run(
+                String(mediaId),
+                Number(item.start_ms || 0),
+                Number(item.end_ms || 0),
+                Number(item.score || 0),
+                item.source || 'local-stub',
+                JSON.stringify(item.metadata || {}),
+            );
+        }
+        return listSceneMarkers(mediaId);
+    }
+
+    function replaceClipCandidates(mediaId, items) {
+        db.get().prepare(`DELETE FROM analysis_candidates WHERE media_id = ?`).run(String(mediaId));
+        const insert = db.get().prepare(`
+            INSERT INTO analysis_candidates (media_id, candidate_type, start_ms, end_ms, score, rationale_json, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const item of items || []) {
+            insert.run(
+                String(mediaId),
+                item.candidate_type || 'clip',
+                Number(item.start_ms || 0),
+                Number(item.end_ms || 0),
+                Number(item.score || 0),
+                JSON.stringify(item.rationale || {}),
+                item.status || 'ready',
+            );
+        }
+        return listClipCandidates(mediaId);
+    }
+
+    function buildChapters(mediaId) {
+        return listSceneMarkers(mediaId).map((marker, index) => ({
+            id: marker.id,
+            title: marker.metadata && marker.metadata.label || `Chapter ${index + 1}`,
+            start_ms: marker.start_ms,
+            end_ms: marker.end_ms,
+            score: marker.score,
+            source: marker.source,
+        }));
+    }
+
+    function buildLocalAnalysis(media) {
+        const durationMs = computeDurationMs(media);
+        const chunk = Math.max(15000, Math.round(durationMs / 3));
+        const transcriptSegments = [
+            {
+                start_ms: 0,
+                end_ms: Math.min(durationMs, chunk),
+                text: `[local-stub] ${media.id} is staged for transcript review.`,
+                confidence: 0.21,
+                speaker_label: 'system',
+            },
+            {
+                start_ms: Math.min(durationMs, chunk),
+                end_ms: Math.min(durationMs, chunk * 2),
+                text: `[local-stub] ${media.namespace} keeps analysis deterministic until paid providers are explicitly enabled.`,
+                confidence: 0.28,
+                speaker_label: 'system',
+            },
+            {
+                start_ms: Math.min(durationMs, chunk * 2),
+                end_ms: durationMs,
+                text: '[local-stub] Clip candidates are derived from scene windows and operator-visible heuristics.',
+                confidence: 0.24,
+                speaker_label: 'system',
+            },
+        ].filter((segment) => segment.start_ms < segment.end_ms);
+
+        const sceneMarkers = [
+            {
+                start_ms: 0,
+                end_ms: Math.min(durationMs, chunk),
+                score: 0.36,
+                source: 'local-stub',
+                metadata: { label: 'Opening context' },
+            },
+            {
+                start_ms: Math.min(durationMs, chunk),
+                end_ms: Math.min(durationMs, chunk * 2),
+                score: 0.51,
+                source: 'local-stub',
+                metadata: { label: 'Primary activity' },
+            },
+            {
+                start_ms: Math.min(durationMs, chunk * 2),
+                end_ms: durationMs,
+                score: 0.43,
+                source: 'local-stub',
+                metadata: { label: 'Closing window' },
+            },
+        ].filter((marker) => marker.start_ms < marker.end_ms);
+
+        const clipCandidates = sceneMarkers.map((marker, index) => ({
+            candidate_type: 'clip',
+            start_ms: marker.start_ms,
+            end_ms: marker.end_ms,
+            score: Math.min(0.99, Number(marker.score || 0) + 0.2),
+            rationale: {
+                source: 'local-stub',
+                label: marker.metadata && marker.metadata.label || `Candidate ${index + 1}`,
+            },
+            status: 'ready',
+        }));
+
+        return {
+            mode: 'local-stub',
+            duration_ms: durationMs,
+            transcriptSegments,
+            sceneMarkers,
+            clipCandidates,
+        };
+    }
+
+    async function materializeClipProject(clip, actor, mode) {
+        const sourceMedia = clip && clip.source_media_id ? model.getById(clip.source_media_id) : null;
+        if (!sourceMedia) {
+            const failedExport = clipModel.createClipExport({
+                clipId: clip.id,
+                status: 'failed',
+                error: 'source media unavailable',
+            });
+            const updatedClip = clipModel.updateClip(clip.id, {
+                status: 'import_hold',
+                metadata: {
+                    last_materialization_error: 'source media unavailable',
+                    materialization_mode: mode,
+                },
+            });
+            return {
+                ok: false,
+                status: 409,
+                clip: updatedClip,
+                export: failedExport,
+                error: 'source media unavailable',
+            };
+        }
+
+        if (clip.playback_media_id) {
+            const existingMedia = model.getById(clip.playback_media_id);
+            if (existingMedia) {
+                return {
+                    ok: true,
+                    created: false,
+                    clip,
+                    media: existingMedia,
+                    export: clipModel.getLatestClipExport(clip.id),
+                    playback: await buildPlaybackPayload(existingMedia, { preferHot: true }),
+                };
+            }
+        }
+
+        const createdMedia = model.create({
+            owner_type: clip.owner_user_id ? 'user' : (actor.actor_type === 'service' ? 'service' : 'user'),
+            owner_id: clip.owner_user_id || actor.actor_id || 'openvibe-workers',
+            namespace: 'live.clips',
+            type: 'clip',
+            status: 'ready',
+            visibility: sourceMedia.visibility,
+            storage_tier: sourceMedia.storage_tier,
+            storage_provider: sourceMedia.storage_provider,
+            storage_key: sourceMedia.storage_key,
+            public_url: sourceMedia.public_url,
+            cdn_url: sourceMedia.cdn_url,
+            size_bytes: sourceMedia.size_bytes,
+            mime_type: sourceMedia.mime_type,
+            sha256: sourceMedia.sha256,
+            metadata: Object.assign({}, sourceMedia.metadata || {}, {
+                clip_source_stream_id: clip.source_stream_id,
+                clip_source_media_id: sourceMedia.id,
+                clip_range: {
+                    start_ms: clip.start_ms,
+                    end_ms: clip.end_ms,
+                },
+                materialization_mode: mode,
+                virtual_materialization: true,
+            }),
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+        });
+
+        const sourceLocations = storageModel.listLocations(sourceMedia.id);
+        if (sourceLocations.length) {
+            for (const location of sourceLocations) {
+                storageModel.recordLocation({
+                    mediaId: createdMedia.id,
+                    providerName: location.provider_name,
+                    role: location.role,
+                    storageKey: location.storage_key,
+                    publicUrl: location.public_url,
+                    signedUrlRequired: location.signed_url_required,
+                    checksumSha256: location.checksum_sha256,
+                    sizeBytes: location.size_bytes,
+                    metadata: Object.assign({}, location.metadata || {}, {
+                        derived_from_media_id: sourceMedia.id,
+                        virtual_materialization: true,
+                    }),
+                });
+            }
+        } else if (sourceMedia.storage_key) {
+            storageModel.recordLocation({
+                mediaId: createdMedia.id,
+                providerName: sourceMedia.storage_provider,
+                role: inferLocationRoleForStorage(storage, sourceMedia.storage_provider),
+                storageKey: sourceMedia.storage_key,
+                publicUrl: sourceMedia.public_url,
+                signedUrlRequired: sourceMedia.visibility !== 'public',
+                checksumSha256: sourceMedia.sha256,
+                sizeBytes: sourceMedia.size_bytes,
+                metadata: {
+                    derived_from_media_id: sourceMedia.id,
+                    virtual_materialization: true,
+                },
+            });
+        }
+
+        const exportRow = clipModel.createClipExport({
+            clipId: clip.id,
+            status: 'ready',
+            mediaId: createdMedia.id,
+        });
+        const updatedClip = clipModel.updateClip(clip.id, {
+            status: 'ready',
+            playback_media_id: createdMedia.id,
+            metadata: {
+                materialization_mode: mode,
+                materialized_at: new Date().toISOString(),
+            },
+        });
+        const playback = await buildPlaybackPayload(createdMedia, { preferHot: true });
+        eventBus.publishMediaEvent(MEDIA_EVENT_TYPES.READY, createdMedia, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            clip_id: clip.id,
+        });
+        return {
+            ok: true,
+            created: true,
+            clip: updatedClip,
+            media: createdMedia,
+            export: exportRow,
+            playback,
+        };
     }
 
     function validateUploadInitBody(body) {
@@ -526,6 +885,307 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         res.json({ media, playback });
     }));
 
+    r.get('/streams/:streamId/playback', asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording) return res.status(404).json({ error: 'stream recording not found' });
+
+        const media = recording.media_id ? model.getById(recording.media_id) : null;
+        let playback = null;
+        let size_guard = null;
+        if (media) {
+            size_guard = applyPlaybackSizeGuard(media);
+            if (size_guard.ok) {
+                playback = await buildPlaybackPayload(media, { preferHot: true });
+            }
+        }
+
+        res.json({
+            stream_id: req.params.streamId,
+            recording,
+            playback,
+            size_guard,
+            ready: !!(playback && playback.ok),
+        });
+    }));
+
+    r.get('/streams/:streamId/timeline', asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording) return res.status(404).json({ error: 'stream recording not found' });
+        res.json({
+            stream_id: req.params.streamId,
+            timeline: vodModel.buildTimeline(req.params.streamId),
+            recording,
+        });
+    }));
+
+    r.get('/streams/:streamId/segments', asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording) return res.status(404).json({ error: 'stream recording not found' });
+        res.json({
+            stream_id: req.params.streamId,
+            recording,
+            items: vodModel.listSegmentsByRecordingId(recording.id),
+        });
+    }));
+
+    r.get('/streams/:streamId/preview-sprites', asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording) return res.status(404).json({ error: 'stream recording not found' });
+        res.json({
+            stream_id: req.params.streamId,
+            recording,
+            items: vodModel.listPreviewSprites(req.params.streamId),
+        });
+    }));
+
+    r.post('/streams/:streamId/clips', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording) return res.status(404).json({ error: 'stream recording not found' });
+        const segments = vodModel.listSegmentsByRecordingId(recording.id);
+        if (!segments.length) {
+            return res.status(409).json({ error: 'stream segments not ready', stream_id: req.params.streamId });
+        }
+
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+
+        const body = req.body || {};
+        const timeline = vodModel.buildTimeline(req.params.streamId);
+        const startMs = Math.max(0, Number(body.start_ms || 0));
+        const endMs = Math.max(startMs + 1000, Number(body.end_ms || Math.min(timeline.duration_ms || 30000, startMs + 30000)));
+        const clip = clipModel.createClip({
+            sourceStreamId: req.params.streamId,
+            sourceMediaId: recording.media_id,
+            ownerUserId: actor.actor_type === 'user' ? actor.actor_id : (body.owner_user_id || null),
+            title: body.title || `Clip from ${req.params.streamId}`,
+            status: 'virtual',
+            startMs,
+            endMs,
+            metadata: {
+                source_recording_id: recording.id,
+                created_by_actor_type: actor.actor_type,
+                created_by_actor_id: actor.actor_id,
+            },
+        });
+        eventBus.publishMediaEvent('clip:virtual:ready', model.getById(recording.media_id) || { id: recording.media_id }, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            clip_id: clip.id,
+            stream_id: req.params.streamId,
+        });
+        res.status(201).json({ clip, timeline });
+    }));
+
+    r.get('/clips/:clipId', asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+        res.json({ clip, exports: clipModel.listClipExports(clip.id) });
+    }));
+
+    r.patch('/clips/:clipId', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+        const body = req.body || {};
+        const updated = clipModel.updateClip(clip.id, {
+            title: body.title != null ? String(body.title) : clip.title,
+            status: body.status != null ? String(body.status) : clip.status,
+            start_ms: body.start_ms != null ? Number(body.start_ms) : clip.start_ms,
+            end_ms: body.end_ms != null ? Number(body.end_ms) : clip.end_ms,
+            metadata: body.metadata || {},
+        });
+        res.json({ clip: updated });
+    }));
+
+    r.post('/clips/:clipId/materialize', express.json({ limit: '16kb' }), asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+        const result = await materializeClipProject(clip, actor, String(req.body && req.body.mode || 'virtual-copy'));
+        if (!result.ok) {
+            return res.status(result.status || 409).json(result);
+        }
+        res.status(result.created ? 201 : 200).json(result);
+    }));
+
+    r.post('/clips/:clipId/frame-perfect-render', express.json({ limit: '16kb' }), asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+        const result = await materializeClipProject(clip, actor, 'frame-perfect');
+        if (!result.ok) {
+            return res.status(result.status || 409).json(result);
+        }
+        res.status(result.created ? 201 : 200).json(result);
+    }));
+
+    r.delete('/clips/:clipId', asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+        const deleted = clipModel.deleteClip(clip.id);
+        res.json({ clip: deleted });
+    }));
+
+    r.get('/clips/:clipId/playback', asyncRoute(async (req, res) => {
+        const clip = clipModel.getClipById(req.params.clipId);
+        if (!clip) return res.status(404).json({ error: 'clip not found' });
+
+        const playbackMedia = clip.playback_media_id ? model.getById(clip.playback_media_id) : null;
+        if (playbackMedia) {
+            const playback = await buildPlaybackPayload(playbackMedia, { preferHot: true });
+            return res.json({ clip, media: playbackMedia, playback });
+        }
+
+        const sourceMedia = clip.source_media_id ? model.getById(clip.source_media_id) : null;
+        if (!sourceMedia) {
+            return res.status(409).json({ error: 'source media unavailable', clip });
+        }
+
+        const playback = await buildPlaybackPayload(sourceMedia, { preferHot: true });
+        res.json({
+            clip,
+            media: sourceMedia,
+            playback: Object.assign({}, playback, {
+                virtual: true,
+                clip_start_ms: clip.start_ms,
+                clip_end_ms: clip.end_ms,
+            }),
+        });
+    }));
+
+    r.post('/media/:mediaId/analyze', express.json({ limit: '64kb' }), asyncRoute(async (req, res) => {
+        const media = model.getById(req.params.mediaId);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+
+        const analysis = buildLocalAnalysis(media);
+        eventBus.publishMediaEvent(MEDIA_EVENT_TYPES.PROCESSING_STARTED, media, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            phase: 'analysis',
+        });
+        const transcript_segments = replaceTranscriptSegments(media.id, analysis.transcriptSegments);
+        const scene_markers = replaceSceneMarkers(media.id, analysis.sceneMarkers);
+        const clip_candidates = replaceClipCandidates(media.id, analysis.clipCandidates);
+        const updatedMedia = model.update(media.id, {
+            metadata: {
+                analysis_mode: analysis.mode,
+                analysis_updated_at: new Date().toISOString(),
+                transcript_segment_count: transcript_segments.length,
+                clip_candidate_count: clip_candidates.length,
+            },
+        });
+        eventBus.publishMediaEvent('ai.transcription.ready', updatedMedia, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            transcript_segment_count: transcript_segments.length,
+        });
+        eventBus.publishMediaEvent('ai.clip_candidates.ready', updatedMedia, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            clip_candidate_count: clip_candidates.length,
+        });
+        eventBus.publishMediaEvent(MEDIA_EVENT_TYPES.PROCESSING_COMPLETED, updatedMedia, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            phase: 'analysis',
+        });
+        res.json({
+            ok: true,
+            mode: analysis.mode,
+            media: updatedMedia,
+            transcript_segments,
+            scene_markers,
+            chapters: buildChapters(media.id),
+            clip_candidates,
+        });
+    }));
+
+    r.get('/media/:mediaId/transcript', asyncRoute(async (req, res) => {
+        const media = model.getById(req.params.mediaId);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        res.json({ media_id: media.id, items: listTranscriptSegments(media.id) });
+    }));
+
+    r.get('/media/:mediaId/chapters', asyncRoute(async (req, res) => {
+        const media = model.getById(req.params.mediaId);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        res.json({ media_id: media.id, items: buildChapters(media.id) });
+    }));
+
+    r.get('/media/:mediaId/clip-candidates', asyncRoute(async (req, res) => {
+        const media = model.getById(req.params.mediaId);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        res.json({ media_id: media.id, items: listClipCandidates(media.id) });
+    }));
+
+    r.get('/streams/:streamId/transcript', asyncRoute(async (req, res) => {
+        const recording = vodModel.getLatestRecordingByStreamId(req.params.streamId);
+        if (!recording || !recording.media_id) {
+            return res.status(404).json({ error: 'stream transcript not found' });
+        }
+        res.json({
+            stream_id: req.params.streamId,
+            media_id: recording.media_id,
+            items: listTranscriptSegments(recording.media_id),
+        });
+    }));
+
+    r.post('/media/:mediaId/clip-candidates/:candidateId/create-clip', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
+        const media = model.getById(req.params.mediaId);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        const candidate = getClipCandidate(media.id, req.params.candidateId);
+        if (!candidate) return res.status(404).json({ error: 'clip candidate not found' });
+
+        const actor = actorMeta(req);
+        if (actor.actor_type === 'anonymous') {
+            return res.status(401).json({ error: 'authentication required' });
+        }
+
+        const recording = vodModel.getRecordingByMediaId(media.id);
+        if (!recording) {
+            return res.status(409).json({ error: 'stream recording not found for media', media_id: media.id });
+        }
+
+        const body = req.body || {};
+        const clip = clipModel.createClip({
+            sourceStreamId: recording.stream_id,
+            sourceMediaId: media.id,
+            ownerUserId: actor.actor_type === 'user' ? actor.actor_id : (body.owner_user_id || null),
+            title: body.title || candidate.rationale && candidate.rationale.label || `Clip candidate ${candidate.id}`,
+            status: 'virtual',
+            startMs: candidate.start_ms,
+            endMs: candidate.end_ms,
+            metadata: {
+                candidate_id: candidate.id,
+                candidate_score: candidate.score,
+                candidate_rationale: candidate.rationale,
+            },
+        });
+        eventBus.publishMediaEvent('clip:virtual:ready', media, {
+            actor_type: actor.actor_type,
+            actor_id: actor.actor_id,
+            clip_id: clip.id,
+            candidate_id: candidate.id,
+        });
+        res.status(201).json({ clip, candidate });
+    }));
+
     // ── read ─────────────────────────────────────────────────
     r.get('/media/:id', (req, res) => {
         const media = model.getById(req.params.id);
@@ -672,7 +1332,7 @@ function buildFilesRouter({ storage }) {
         if (!locations.length && media.storage_key) {
             locations.push({
                 provider_name: media.storage_provider,
-                role: inferLocationRole(media.storage_provider),
+                role: inferLocationRoleForStorage(storage, media.storage_provider),
                 storage_key: media.storage_key,
                 public_url: media.public_url,
                 signed_url_required: media.visibility !== 'public',
