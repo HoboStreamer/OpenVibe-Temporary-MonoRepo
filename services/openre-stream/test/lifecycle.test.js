@@ -40,4 +40,14 @@ model.setOutputState({ stream_id: s.id, destination_id: dst.id, state: 'started'
 model.recordMirror({ stream_id: s.id, live_url: 'http://live/@alice', channel_slug: 'alice' });
 assert.ok(model.getMirrorState(s.id).live_url.includes('alice'));
 
+const recording = model.upsertRecording({ stream_id: s.id, channel_slug: 'alice', status: 'recording', dvr_playlist_url: 'http://example/playlist.m3u8' });
+assert.strictEqual(recording.stream_id, s.id);
+
+const segment = model.upsertRecordingSegment({ recording_id: recording.id, segment_index: 1, start_ms: 0, duration_ms: 6000, media_id: 'med_seg_1' });
+assert.strictEqual(segment.segment_index, 1);
+
+const clip = model.createClipProject({ stream_id: s.id, owner_user_id: '42', title: 'Best moment', start_ms: 1000, end_ms: 5000 });
+assert.strictEqual(clip.stream_id, s.id);
+assert.ok(model.listClipProjects({ stream_id: s.id }).length >= 1);
+
 console.log('openre-stream lifecycle tests OK');

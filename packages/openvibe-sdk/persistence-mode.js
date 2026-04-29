@@ -97,10 +97,10 @@ function describePersistence(serviceName, dbPath, options) {
             warning = `Requested persistence mode '${requestedMode}' is marked implemented, but no database URL is configured.`;
         }
     } else {
-        effectiveMode = 'sqlite-fallback';
+        effectiveMode = requestedMode;
         adapterStatus = 'not-implemented';
         readiness = 'red';
-        warning = `Requested persistence mode '${requestedMode}' does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.`;
+        warning = `Requested persistence mode '${requestedMode}' does not have a runtime adapter yet; the service cannot run in this mode without a native Postgres adapter.`;
     }
 
     return {
@@ -127,10 +127,11 @@ function warnIfUnsupported(serviceName, dbPath, options) {
         );
     }
     if (desc.mode !== 'sqlite' && desc.adapter_status !== 'implemented') {
-        console.warn(
-            `[${serviceName}] ${desc.warning} /health and readiness artifacts will report adapter_status='${desc.adapter_status}' until a native Postgres adapter lands.`,
+        throw new Error(
+            `[${serviceName}] requested persistence mode '${desc.mode}' is not yet implemented for this service; remove the mode override or implement a Postgres runtime adapter before serving traffic.`,
         );
-    } else if (!isLocalLikeEnv() && desc.mode === 'sqlite') {
+    }
+    if (!isLocalLikeEnv() && desc.mode === 'sqlite') {
         console.warn(
             `[${serviceName}] sqlite mode is intended for local/dev bootstrap only; staging/prod should use OPENVIBE_PERSISTENCE_MODE=postgres with a real runtime adapter.`,
         );

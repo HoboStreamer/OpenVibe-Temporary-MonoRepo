@@ -6,6 +6,72 @@
 const db = require('./db');
 const { validateEnvelope } = require('@openvibe/contracts/envelope');
 const { isKnownTopic } = require('@openvibe/contracts/topics');
+const {
+    buildStreamKey,
+    createStreamClient,
+    getLag,
+    getPending,
+    publish: publishToStream,
+} = require('@openvibe/queue');
+
+let fanout = {
+    client: null,
+    namespace: 'events',
+};
+
+function configureFanout(options) {
+    const opts = options || {};
+    fanout = {
+        client: opts.redisUrl ? createStreamClient({
+            url: opts.redisUrl,
+            name: 'openvibe-events',
+            prefix: opts.queuePrefix || 'openvibe',
+        }) : null,
+        namespace: opts.streamNamespace || 'events',
+    };
+    return fanout;
+}
+
+function fanoutStreamKey(topic) {
+    return buildStreamKey(fanout.namespace || 'events', topic || 'events');
+}
+
+function fanoutEvent(topic, envelope) {
+    if (!fanout.client) {
+        return { configured: false, stream: fanoutStreamKey(topic) };
+    }
+    const stream = fanoutStreamKey(topic);
+    void publishToStream(fanout.client, stream, {
+        event_id: envelope.event_id,
+        trace_id: envelope.trace_id,
+        topic,
+        event_type: envelope.event_type,
+        envelope,
+    }).catch((error) => {
+        console.warn(`[Bus] redis stream fanout failed for ${topic}: ${error.message}`);
+    });
+    return { configured: true, stream };
+}
+
+async function getFanoutLag(topic, groupName) {
+    if (!fanout.client) return { configured: false, lag: null, stream: fanoutStreamKey(topic) };
+    return {
+        configured: true,
+        stream: fanoutStreamKey(topic),
+        group_name: groupName,
+        lag: await getLag(fanout.client, fanoutStreamKey(topic), groupName),
+    };
+}
+
+async function getFanoutPending(topic, groupName) {
+    if (!fanout.client) return { configured: false, pending: null, stream: fanoutStreamKey(topic) };
+    return {
+        configured: true,
+        stream: fanoutStreamKey(topic),
+        group_name: groupName,
+        pending: await getPending(fanout.client, fanoutStreamKey(topic), groupName),
+    };
+}
 
 function persistEvent(topic, envelope) {
     const errs = validateEnvelope(envelope);
@@ -53,8 +119,9 @@ function persistEvent(topic, envelope) {
     }
 
     const enqueued = enqueueForTopic(topic, envelope.event_id, envelope.event_type);
+    const fanoutResult = fanoutEvent(topic, envelope);
     console.log(`[Bus] published topic=${topic} type=${envelope.event_type} event_id=${envelope.event_id} subs=${enqueued}`);
-    return { event: getEventById(envelope.event_id), enqueued };
+    return { event: getEventById(envelope.event_id), enqueued, fanout: fanoutResult };
 }
 
 function enqueueForTopic(topic, eventId, eventType) {
@@ -178,11 +245,15 @@ function replayEvent(eventId) {
         throw err;
     }
     const enqueued = enqueueForTopic(evt.topic, evt.event_id, evt.event_type);
+    const fanoutResult = fanoutEvent(evt.topic, evt);
     console.log(`[Bus] replay event_id=${eventId} subs=${enqueued}`);
-    return { event: evt, enqueued };
+    return { event: evt, enqueued, fanout: fanoutResult };
 }
 
 module.exports = {
+    configureFanout,
+    getFanoutLag,
+    getFanoutPending,
     persistEvent,
     getEventById,
     listEvents,

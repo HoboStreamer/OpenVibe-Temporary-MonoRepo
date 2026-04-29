@@ -14,9 +14,13 @@ Current reality in this tree:
 - Phases 1–7 are materially implemented in native OpenVibe services.
 - Phase 8 is the runtime independence + Hobo migration foundation.
 - Phase 9 is the hard-cut hardening / parity / production-readiness tranche.
+- Phase 10 is the scalable runtime foundation now underway: shared runtime
+  packages, truthful `/ready` + `/metrics` endpoints, operator runtime
+  visibility, deploy scaffolding, and repo-level readiness checks.
 
 Active phase truth is tracked in [`PHASES.md`](PHASES.md) and
-[`context/PHASE_9.md`](context/PHASE_9.md).
+[`context/PHASE_9.md`](context/PHASE_9.md) plus
+[`context/PHASE_10_SCALING.md`](context/PHASE_10_SCALING.md).
 
 The authoritative persistence/cutover plan is
 [`docs/openvibe/persistence-cutover-plan.md`](docs/openvibe/persistence-cutover-plan.md).
@@ -36,6 +40,7 @@ The canonical legacy data map is
 | 7 | AI / SEO / search / content source backbone | ✅ implemented |
 | 8 | Runtime independence + migration foundation | 🚧 in progress |
 | 9 | Cutover hardening / browser smoke / truthful reports | 🚧 in progress |
+| 10 | Scalable runtime foundation / deploy / readiness | 🚧 in progress |
 
 Phase 8 is the native runtime-independence and migration foundation: enable
 OpenVibe-first operation, build the canonical export/import bundle, and make
@@ -44,6 +49,11 @@ service-local staging workable.
 Phase 9 is the follow-on hardening tranche: make production fetch safe by
 default, make reports truthful, add browser smoke parity, and ensure the final
 cutover runbook is honest about what is still incomplete.
+
+Phase 10 is the next runtime tranche: standardize shared runtime middleware,
+ship `/health` + `/ready` + `/metrics` across services, surface runtime state
+inside the admin console, and add the first deployment/CI/readiness scaffolds
+for the horizontally scalable target architecture.
 
 ## Architecture stance
 
@@ -94,6 +104,19 @@ openvibe/
   - runtime helpers and clients: auth client, Express middleware,
     registry client, events client, URL defaults, persistence-mode helpers,
     and product-specific clients for media, stream, chat, community, and AI.
+- `packages/openvibe-observability`
+  - Prometheus metrics, structured logging, and lightweight trace helpers for
+    native OpenVibe services.
+- `packages/openvibe-runtime`
+  - shared request context, `/health`, `/ready`, and `/metrics` runtime hooks.
+- `packages/openvibe-persistence`
+  - env-aware persistence selection and Postgres migration/runtime helpers.
+- `packages/openvibe-redis`
+  - Redis client, locks, presence, and simple rate-limit helpers for the
+    scalable runtime track.
+- `packages/openvibe-queue`
+  - BullMQ queue helpers, stream key builders, and worker-registry summaries
+    for the distributed async execution track.
 
 ## Services and websites
 
@@ -109,10 +132,17 @@ openvibe/
 | OpenVibe Billing | `services/openvibe-billing` | 5000 | `http://localhost:5000` | Ledger, credits, tips, subscriptions, economy controls | local SQLite bootstrap | `docs/openvibe/billing-service.md` |
 | OpenVibe AI | `services/openvibe-ai` | 5100 | `http://localhost:5100` | AI provider routing, workflows, SEO and search seam | local SQLite bootstrap | `docs/openvibe/ai-service.md` |
 | OpenVibe Games | `services/openvibe-games` | 5200 | `http://localhost:5200` | Game progression, inventory, canvas, cosmetics | local SQLite bootstrap | `docs/openvibe/phase-8.md` |
+| OpenVibe Workers | `services/openvibe-workers` | 5300 | `http://localhost:5300` | Distributed worker control plane, queue registry, and async job host | Redis-backed target / registry-only locally until Redis is configured | `context/PHASE_10_SCALING.md` |
 
 > Some surfaces require the Host header to resolve local names such as
 > `openvibe.network.localhost`. Use `curl -H 'Host: openvibe.network.localhost'`
 > when needed.
+
+All native services in the current repo now expose:
+
+- `/health` — descriptive service state
+- `/ready` — truthful green/yellow/red readiness summary
+- `/metrics` — Prometheus scrape output
 
 ## Local development quick start
 
@@ -152,6 +182,7 @@ Recommended startup order for end-to-end flows:
 8. `services/openvibe-billing`
 9. `services/openvibe-ai`
 10. `services/openvibe-games`
+11. `services/openvibe-workers`
 
 Not every service must run for every task. Cross-service demos and migration
 rehearsals need more of the stack.
@@ -189,6 +220,7 @@ Service URL env vars:
 - `OPENVIBE_BILLING_URL`
 - `OPENVIBE_AI_URL`
 - `OPENVIBE_GAMES_URL`
+- `OPENVIBE_WORKERS_URL`
 
 Media storage env vars:
 
@@ -273,6 +305,7 @@ Validation commands:
 
 - `npm run check`
 - `npm test`
+- `npm run readiness`
 - `node scripts/migrate-hobo/test/production-fetch.test.js`
 - `node scripts/staging/test/browser-smoke.test.js`
 - `node scripts/cutover/run-cutover-rehearsal.js --skip-staging`
@@ -431,6 +464,8 @@ handling and review gating.
 | Media backfill | [`docs/openvibe/media-backfill.md`](docs/openvibe/media-backfill.md) |
 | Semantic validation | [`docs/openvibe/semantic-validation.md`](docs/openvibe/semantic-validation.md) |
 | Cutover runbook | [`docs/openvibe/cutover-runbook.md`](docs/openvibe/cutover-runbook.md) |
+| NGINX + Cloudflare deployment | [`docs/openvibe/nginx-cloudflare-deployment.md`](docs/openvibe/nginx-cloudflare-deployment.md) |
+| Production readiness reporting | [`docs/openvibe/production-readiness-reporting.md`](docs/openvibe/production-readiness-reporting.md) |
 | Loyalty migration | [`docs/openvibe/hobo-coins-loyalty-migration.md`](docs/openvibe/hobo-coins-loyalty-migration.md) |
 | Admin/staff model | [`docs/openvibe/admin-staff-model.md`](docs/openvibe/admin-staff-model.md) |
 | Platform hub | [`docs/openvibe/platform-hub.md`](docs/openvibe/platform-hub.md) |
@@ -449,8 +484,8 @@ handling and review gating.
   yet be complete.
 - Compatibility-off browser parity still needs broader Phase 9 coverage.
 - Staging/cutover reporting and readiness gating remain Phase 9 work.
-- Production deployment requires actual PostgreSQL, Redis, object storage, and
-  secrets management.
+- Production deployment still requires actual PostgreSQL, Redis, object
+  storage, worker processors, and secrets management.
 
 ## Contributing / implementation rules
 

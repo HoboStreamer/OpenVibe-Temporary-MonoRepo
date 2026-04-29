@@ -5,17 +5,19 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
 const { buildStorage } = require('./storage');
 const { buildEventBus } = require('./events');
 const { buildRouter, buildFilesRouter } = require('./routes');
-const { ProcessingWorker } = require('./processing');
+const { ProcessingWorker, configureExternalQueue, describeProcessingMode, hasExternalQueue } = require('./processing');
 const { serviceActorMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
+    configureExternalQueue(config.processing);
 
     const storage = buildStorage(config.storage);
     const eventBus = buildEventBus(config);
@@ -26,12 +28,61 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true,
-        service: config.serviceId,
-        persistence: db.describePersistence(),
-        storage: storage.describePlan ? storage.describePlan() : { write_provider: storage.name() },
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: config.serviceId,
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            storage: storage.describePlan ? storage.describePlan() : { write_provider: storage.name() },
+            processing: {
+                interval_ms: config.processing.intervalMs,
+                max_attempts: config.processing.maxAttempts,
+                ...describeProcessingMode(),
+            },
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'events_url_configured',
+                    ok: !!config.events.url,
+                    critical: true,
+                    details: { url: config.events.url || null },
+                },
+                {
+                    name: 'canonical_storage_provider',
+                    ok: !!(config.storage && config.storage.canonicalProvider),
+                    critical: true,
+                    details: { provider: config.storage && config.storage.canonicalProvider || null },
+                },
+                {
+                    name: 'hot_storage_provider',
+                    ok: !!(config.storage && config.storage.hotProvider),
+                    critical: false,
+                    details: { provider: config.storage && config.storage.hotProvider || null },
+                },
+                {
+                    name: 'multipart_root',
+                    ok: !!(config.storage && config.storage.multipartRoot),
+                    critical: true,
+                    details: { multipart_root: config.storage && config.storage.multipartRoot || null },
+                },
+                {
+                    name: 'processing_queue_mode',
+                    ok: !config.processing.useExternalQueue || !!config.processing.redisUrl,
+                    critical: false,
+                    details: describeProcessingMode(),
+                    message: config.processing.useExternalQueue && !config.processing.redisUrl
+                        ? 'External media workers requested but OPENVIBE_REDIS_URL is not configured; using local processing worker.'
+                        : null,
+                },
+            ],
+            extra: {
+                public_base_url: config.storage && config.storage.publicBaseUrl || null,
+                provider_names: storage.providerNames ? storage.providerNames() : [storage.name()],
+            },
+        }),
+    });
+    runtime.attach(app);
 
     // Static admin shell (read-only landing page).
     app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -61,7 +112,7 @@ function buildApp() {
 
 function start() {
     const { app, worker } = buildApp();
-    worker.start();
+    if (!hasExternalQueue()) worker.start();
     const server = app.listen(config.port, config.host, () => {
         console.log(`[openvibe-media] listening on http://${config.host}:${config.port}`);
     });

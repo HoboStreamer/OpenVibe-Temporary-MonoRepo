@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
@@ -22,11 +23,33 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true,
-        service: config.serviceId,
-        persistence: db.describePersistence(),
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: config.serviceId || 'openre-stream',
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            ingest: config.ingest || null,
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'internal_key_overridden',
+                    ok: config.internalKey !== 'change-me-in-production',
+                    critical: false,
+                    details: { using_default_key: config.internalKey === 'change-me-in-production' },
+                },
+                {
+                    name: 'ingest_urls_present',
+                    ok: Object.values(config.ingest || {}).filter(Boolean).length > 0,
+                    critical: false,
+                    details: config.ingest || {},
+                    message: Object.values(config.ingest || {}).filter(Boolean).length > 0 ? null : 'Ingest URLs are not configured yet; this runtime is control-plane only.',
+                },
+            ],
+        }),
+    });
+    runtime.attach(app);
+
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config }));

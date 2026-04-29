@@ -1,0 +1,12 @@
+{
+  "name": "@openvibe/queue",
+  "version": "0.1.0",
+  "description": "OpenVibe queue helpers — BullMQ wrappers, stream key helpers, and worker summaries.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/redis": "*",
+    "bullmq": "^5.15.0",
+    "redis": "^4.7.0"
+  }
+}

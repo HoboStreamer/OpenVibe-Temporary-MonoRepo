@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
@@ -220,11 +221,39 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true,
-        service: config.serviceId,
-        persistence: db.describePersistence(),
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: config.serviceId || 'openvibe-live',
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            optional_dependencies: optionalData,
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'community_feed_bridge',
+                    ok: !!optionalData.community,
+                    critical: false,
+                    details: { enabled: !!optionalData.community },
+                    message: optionalData.community ? null : 'Community feed bridge is unavailable in this runtime.' ,
+                },
+                {
+                    name: 'chat_feed_bridge',
+                    ok: !!optionalData.chat,
+                    critical: false,
+                    details: { enabled: !!optionalData.chat },
+                    message: optionalData.chat ? null : 'Chat feed bridge is unavailable in this runtime.',
+                },
+                {
+                    name: 'public_base_url',
+                    ok: !!config.publicBaseUrl,
+                    critical: true,
+                    details: { public_base_url: config.publicBaseUrl || null },
+                },
+            ],
+        }),
+    });
+    runtime.attach(app);
 
     app.get('/api/thumbnails/:fileName', (req, res) => {
         const fileName = path.basename(String(req.params.fileName || 'thumbnail.svg'));
@@ -331,6 +360,11 @@ function buildApp() {
         const stream = model.getStreamById(req.params.id);
         if (!stream) return res.status(404).json({ error: 'not found' });
         res.json({ stream });
+    });
+    app.get('/api/v1/streams/:id/timeline', (req, res) => {
+        const timeline = model.getStreamTimeline(req.params.id);
+        if (!timeline) return res.status(404).json({ error: 'not found' });
+        res.json({ timeline });
     });
 
     // Service-callable upsert (used by openre-stream → openvibe-live mirror).

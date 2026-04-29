@@ -1,0 +1,10 @@
+{
+  "name": "@openvibe/redis",
+  "version": "0.1.0",
+  "description": "OpenVibe Redis helpers — client setup, locks, presence, and simple rate limits.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}

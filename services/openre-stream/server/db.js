@@ -102,6 +102,53 @@ function init(dbPath) {
             FOREIGN KEY (stream_id) REFERENCES streams(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS recordings (
+            id            TEXT PRIMARY KEY,
+            stream_id     TEXT NOT NULL,
+            channel_slug  TEXT,
+            status        TEXT NOT NULL DEFAULT 'recording',
+            dvr_playlist_url TEXT,
+            source_manifest_url TEXT,
+            started_at    DATETIME,
+            ended_at      DATETIME,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(stream_id),
+            FOREIGN KEY (stream_id) REFERENCES streams(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS recording_segments (
+            id            TEXT PRIMARY KEY,
+            recording_id  TEXT NOT NULL,
+            segment_index INTEGER NOT NULL,
+            start_ms      INTEGER NOT NULL DEFAULT 0,
+            duration_ms   INTEGER NOT NULL DEFAULT 0,
+            media_id      TEXT,
+            storage_key   TEXT,
+            playlist_url  TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(recording_id, segment_index),
+            FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS clip_projects (
+            id            TEXT PRIMARY KEY,
+            stream_id     TEXT NOT NULL,
+            owner_user_id TEXT,
+            title         TEXT,
+            status        TEXT NOT NULL DEFAULT 'draft',
+            start_ms      INTEGER NOT NULL DEFAULT 0,
+            end_ms        INTEGER NOT NULL DEFAULT 0,
+            media_id      TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (stream_id) REFERENCES streams(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS legacy_id_map (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             source      TEXT NOT NULL,

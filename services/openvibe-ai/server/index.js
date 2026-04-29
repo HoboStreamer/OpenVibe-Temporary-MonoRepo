@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
@@ -25,12 +26,38 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true, service: config.serviceId,
-        canonical_host: config.canonicalHost,
-        persistence: db.describePersistence(),
-        seeded,
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: config.serviceId || 'openvibe-ai',
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            canonical_host: config.canonicalHost,
+            seeded,
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'seeded_providers',
+                    ok: !!(seeded && seeded.providers),
+                    critical: true,
+                    details: { providers: seeded && seeded.providers || 0 },
+                },
+                {
+                    name: 'seeded_workflows',
+                    ok: !!(seeded && seeded.workflows),
+                    critical: true,
+                    details: { workflows: seeded && seeded.workflows || 0 },
+                },
+                {
+                    name: 'events_url_configured',
+                    ok: !!(config.events && config.events.url),
+                    critical: true,
+                    details: { url: config.events && config.events.url || null },
+                },
+            ],
+        }),
+    });
+    runtime.attach(app);
 
     app.use(express.static(path.join(__dirname, '..', 'public')));
 

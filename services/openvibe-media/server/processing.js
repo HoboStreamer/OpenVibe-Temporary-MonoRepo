@@ -15,13 +15,74 @@ const model = require('./model');
 
 const JOB_KINDS = Object.freeze(['image_thumbnail', 'video_thumbnail', 'vod_metadata', 'clip_metadata']);
 
+let externalQueueConfig = null;
+let externalQueueInstance = null;
+
+function configureExternalQueue(options) {
+    externalQueueConfig = options && options.useExternalQueue && options.redisUrl ? Object.assign({}, options) : null;
+    externalQueueInstance = null;
+}
+
+function hasExternalQueue() {
+    return !!(externalQueueConfig && externalQueueConfig.redisUrl);
+}
+
+async function getExternalQueue() {
+    if (!hasExternalQueue()) return null;
+    if (externalQueueInstance) return externalQueueInstance;
+    const { createQueue } = require('@openvibe/queue');
+    externalQueueInstance = createQueue({
+        queueName: externalQueueConfig.queueName || 'media-processing',
+        prefix: externalQueueConfig.queuePrefix || 'openvibe',
+        redisUrl: externalQueueConfig.redisUrl,
+    });
+    return externalQueueInstance;
+}
+
+function describeProcessingMode() {
+    return {
+        mode: hasExternalQueue() ? 'bullmq' : 'sqlite-local',
+        queue_name: externalQueueConfig && externalQueueConfig.queueName || null,
+        redis_configured: !!(externalQueueConfig && externalQueueConfig.redisUrl),
+    };
+}
+
+function mapWorkerJob(kind) {
+    if (kind === 'image_thumbnail' || kind === 'video_thumbnail') return 'media.thumbnail';
+    if (kind === 'vod_metadata' || kind === 'clip_metadata') return 'media.metadata';
+    return kind;
+}
+
 function enqueue(mediaId, kind, payload) {
     if (!JOB_KINDS.includes(kind)) throw new Error(`unknown job kind: ${kind}`);
-    const r = db.get().prepare(`
+    const inserted = db.get().prepare(`
         INSERT INTO media_jobs (media_id, kind, state, payload_json)
         VALUES (?, ?, 'pending', ?)
     `).run(String(mediaId), kind, JSON.stringify(payload || {}));
-    return { id: r.lastInsertRowid, media_id: mediaId, kind };
+    const localJobId = inserted.lastInsertRowid;
+    if (hasExternalQueue()) {
+        return getExternalQueue().then(async (queue) => {
+            const { addJob } = require('@openvibe/queue');
+            const job = await addJob(queue, mapWorkerJob(kind), {
+                local_job_id: localJobId,
+                media_id: String(mediaId),
+                kind,
+                payload: payload || {},
+            }, {
+                removeOnComplete: 500,
+                removeOnFail: 1000,
+            });
+            return {
+                id: localJobId,
+                queue_job_id: job && job.id || null,
+                queue_job_name: mapWorkerJob(kind),
+                media_id: mediaId,
+                kind,
+                mode: 'bullmq',
+            };
+        });
+    }
+    return { id: localJobId, media_id: mediaId, kind, mode: 'sqlite-local' };
 }
 
 function nextPending(limit) {
@@ -99,12 +160,34 @@ async function runJob(job, deps) {
     }
 
     // Promote media to ready once all pending jobs for it are done.
-    const pending = db.get().prepare(
-        `SELECT COUNT(*) AS c FROM media_jobs WHERE media_id = ? AND state IN ('pending','running','failed')`
-    ).get(media.id).c;
+    const pending = job.id != null
+        ? db.get().prepare(
+            `SELECT COUNT(*) AS c FROM media_jobs WHERE media_id = ? AND state IN ('pending','running','failed') AND id != ?`
+        ).get(media.id, job.id).c
+        : db.get().prepare(
+            `SELECT COUNT(*) AS c FROM media_jobs WHERE media_id = ? AND state IN ('pending','running','failed')`
+        ).get(media.id).c;
     if (pending === 0 && media.status !== 'ready' && media.status !== 'deleted') {
         const updated = model.update(media.id, { status: 'ready' });
         deps.publishMediaEvent('media.ready', updated);
+    }
+}
+
+async function runTrackedJob(job, deps) {
+    const localJobId = job && job.local_job_id != null ? Number(job.local_job_id) : null;
+    if (localJobId != null) markRunning(localJobId);
+    try {
+        await runJob({
+            id: localJobId,
+            media_id: job.media_id,
+            kind: job.kind,
+            data: job.payload || {},
+        }, deps);
+        if (localJobId != null) markDone(localJobId);
+        return { ok: true, local_job_id: localJobId, media_id: job.media_id, kind: job.kind };
+    } catch (error) {
+        if (localJobId != null) markFailed(localJobId, error.message, 1);
+        throw error;
     }
 }
 
@@ -234,6 +317,7 @@ class ProcessingWorker {
 }
 
 module.exports = {
+    configureExternalQueue, describeProcessingMode, hasExternalQueue,
     JOB_KINDS, enqueue, nextPending, markRunning, markDone, markFailed,
-    listJobs, runJob, ProcessingWorker,
+    listJobs, runJob, runTrackedJob, ProcessingWorker,
 };

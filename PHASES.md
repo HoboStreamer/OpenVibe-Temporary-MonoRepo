@@ -17,6 +17,7 @@ current execution track.
 | 7 | AI / SEO / Sources / Search backbone | ✅ implemented in this commit | `services/openvibe-ai`, `packages/openvibe-contracts/ai-events.js`, `packages/openvibe-sdk` (`AiClient`), `/opt/hobostreamer/server/openvibe-bridge/ai.js` |
 | 8 | OpenVibe runtime independence + Hobo migration | 🚧 in progress | `scripts/migrate-hobo/`, `scripts/cutover/`, native OpenVibe surfaces, `docs/openvibe/phase-8.md` |
 | 9 | Hard-cut hardening + cutover parity | 🚧 in progress | `context/PHASE_9.md`, `scripts/migrate-hobo/`, cutover/reporting/browser parity work |
+| 10 | Scalable runtime foundation / deploy / readiness | 🚧 in progress | `context/PHASE_10_SCALING.md`, `packages/openvibe-runtime`, `packages/openvibe-observability`, `deploy/`, `scripts/readiness/` |
 
 > Note: the checked-in SQLite services remain useful for local bring-up, but
 > the requested hard-cut target is PostgreSQL-backed native OpenVibe runtime
@@ -49,23 +50,20 @@ current execution track.
 1. Host-aware routing serves `auth.openvibe.network`, `api.openvibe.network`,
    `admin.openvibe.network`, `my.openvibe.network`,
    `themes.openvibe.network`. ✅
-2. `auth.openvibe.network` exposes
-   `/.well-known/openid-configuration` and `/.well-known/jwks.json` with the
-   active RS256 public key (the existing hobo-tools key in federation mode).
-   It also redirects to the existing hobo-tools `/oauth/authorize` so existing
-   client redirects keep working. ✅
+2. `auth.openvibe.network` exposes `/.well-known/openid-configuration`
+   and `/.well-known/jwks.json` with the active RS256 public key for native
+   OpenVibe authentication. It serves the OpenVibe authorization flow directly
+   and does not depend on a live `hobo.tools` process. ✅
 3. `themes.openvibe.network`, `admin.openvibe.network`,
-   `my.openvibe.network` serve OpenVibe-branded shells **and** transparently
-   proxy the existing hobo-tools API for the legacy surfaces, so existing
-   browsers continue working through the new domains. ✅
-4. URL registry compatibility: the OpenVibe network mirrors the
-   `hobo-tools` registry plus `OPENVIBE_*` keys with documented Hobo
-   fallbacks. ✅
-5. HoboStreamer can verify a token from **either** `hobo.tools` or
-   `auth.openvibe.network` via the additive `OPENVIBE_*` env vars
-   (compat shim in [HoboStreamer.com/server/auth/openvibe-issuer.js](../HoboStreamer.com/server/auth/openvibe-issuer.js)).
-   When the OpenVibe env vars are absent the existing Hobo flow is bit-for-bit
-   unchanged. ✅
+   `my.openvibe.network` serve OpenVibe-branded shells natively. Legacy Hobo
+   API compatibility is not part of the default runtime path. ✅
+4. URL registry compatibility: the OpenVibe network mirrors imported
+   `hobo-tools` registry data as a migration input, while OpenVibe-native
+   URLs are authoritative. ✅
+5. HoboStreamer can verify tokens from `auth.openvibe.network` via the
+   additive `OPENVIBE_*` env vars and compatibility shim in
+   [HoboStreamer.com/server/auth/openvibe-issuer.js](../HoboStreamer.com/server/auth/openvibe-issuer.js).
+   Legacy `hobo.tools` verification is optional and disabled by default. ✅
 
 ## Phase 3 — Media platform extraction: acceptance
 
@@ -479,3 +477,31 @@ net-new platform categories.
    `openvibe.live.localhost`, and `openvibe.chat.localhost`. 🚧
 8. **Compatibility-off staging proof** — validate native OpenVibe flows with
    `OPENVIBE_LEGACY_COMPAT_MODE=false` and no hidden Hobo runtime dependency. ⏳
+
+## Phase 10 — scalable runtime foundation 🚧
+
+Phase 10 is the first implementation slice of the horizontally scalable target.
+It does not finish Postgres/Redis/media-plane/realtime in one shot, but it does
+land the shared runtime contract every later tranche depends on.
+
+1. **Shared runtime packages** — `packages/openvibe-observability`,
+   `packages/openvibe-runtime`, `packages/openvibe-persistence`, and
+   `packages/openvibe-redis` now exist as first-pass foundation packages. ✅
+2. **Async orchestration foothold** — `packages/openvibe-queue` and
+   `services/openvibe-workers` now provide the first checked-in queue / worker
+   registry layer for distributed background execution. ✅
+3. **Truthful runtime endpoints** — every native service entrypoint now exposes
+   `/health`, `/ready`, and `/metrics` via the shared runtime middleware. ✅
+4. **Admin runtime visibility** — `admin.openvibe.network` now includes a
+   runtime tab with readiness checks and metrics preview. ✅
+5. **Deployment scaffolding** — `deploy/nginx/**`, `deploy/env/**`, and
+   `deploy/compose/docker-compose.local.yml` provide the first checked-in
+   runtime deployment templates. ✅
+6. **Repo-level readiness** — `scripts/readiness/check-scalable-runtime.js`
+   writes `data/migrations/runtime-readiness-report.json` and is exposed at the
+   root via `npm run readiness`. ✅
+7. **CI validation** — `.github/workflows/ci.yml` now runs install, syntax,
+   tests, and offline scalable-runtime readiness. ✅
+8. **Still next** — true Postgres repository adapters, Redis-backed live
+   processors, realtime gateway, object-storage-native media flows, DVR/clips, and AI media
+   analysis remain follow-on implementation work. ⏳

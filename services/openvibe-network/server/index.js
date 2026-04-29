@@ -5,6 +5,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
@@ -52,13 +53,43 @@ function buildApp() {
     app.use(cors({ origin: true, credentials: true }));
     app.use(express.json({ limit: '1mb' }));
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true,
-        service: 'openvibe-network',
-        persistence: db.describePersistence(),
-        federation: config.hoboTools.publicUrl ? { hobo_tools: config.hoboTools.publicUrl } : { mode: 'native' },
-        trusted_issuers: identity.trustedIssuers.map(i => ({ issuer: i.issuer, label: i.label })),
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: 'openvibe-network',
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            federation: config.hoboTools.publicUrl ? { hobo_tools: config.hoboTools.publicUrl } : { mode: 'native' },
+            trusted_issuers: identity.trustedIssuers.map((issuer) => ({ issuer: issuer.issuer, label: issuer.label })),
+            surface_count: Object.keys(config.surfaces || {}).length,
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'trusted_issuers',
+                    ok: identity.trustedIssuers.length > 0,
+                    critical: true,
+                    details: { count: identity.trustedIssuers.length },
+                },
+                {
+                    name: 'events_url_configured',
+                    ok: !!config.events.url,
+                    critical: true,
+                    details: { url: config.events.url || null },
+                },
+                {
+                    name: 'native_mode_default',
+                    ok: !config.hoboTools.publicUrl,
+                    critical: false,
+                    details: { legacy_proxy_url: config.hoboTools.publicUrl || null },
+                    message: config.hoboTools.publicUrl ? 'Legacy federation is configured as an optional runtime path.' : null,
+                },
+            ],
+            extra: {
+                surface_count: Object.keys(config.surfaces || {}).length,
+            },
+        }),
+    });
+    runtime.attach(app);
 
     // Service-actor first (sets req.serviceActor), then optional user auth.
     app.use(serviceActorMiddleware(config.internalKey));

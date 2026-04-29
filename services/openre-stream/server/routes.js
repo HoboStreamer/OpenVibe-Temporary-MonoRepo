@@ -111,6 +111,57 @@ function buildRouter({ eventBus, config }) {
         res.json({ stream: s, mirror: model.getMirrorState(s.id) || null });
     });
 
+    r.post('/streams/:id/recordings', json, (req, res) => {
+        const s = model.getStreamById(req.params.id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        const ch = model.getChannelById(s.channel_id);
+        try { policy.assert(policy.decideStreamWrite({ req, channel: ch }), { ...actorMeta(req), action: 'recording.upsert' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const recording = model.upsertRecording(Object.assign({ stream_id: s.id, channel_slug: ch.slug }, req.body || {}));
+        res.status(201).json({ recording });
+    });
+
+    r.post('/streams/:id/segments', json, (req, res) => {
+        const s = model.getStreamById(req.params.id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        const ch = model.getChannelById(s.channel_id);
+        try { policy.assert(policy.decideStreamWrite({ req, channel: ch }), { ...actorMeta(req), action: 'segment.upsert' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const recording = model.getRecordingByStreamId(s.id) || model.upsertRecording({ stream_id: s.id, channel_slug: ch.slug, status: 'recording' });
+        const segment = model.upsertRecordingSegment(Object.assign({ recording_id: recording.id }, req.body || {}));
+        res.status(201).json({ recording, segment });
+    });
+
+    r.get('/streams/:id/timeline', (req, res) => {
+        const s = model.getStreamById(req.params.id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        const recording = model.getRecordingByStreamId(s.id);
+        res.json({
+            stream: s,
+            recording,
+            segments: recording ? model.listRecordingSegments(recording.id, { limit: req.query.limit }) : [],
+            clips: model.listClipProjects({ stream_id: s.id, limit: req.query.limit }),
+        });
+    });
+
+    r.post('/clips', json, (req, res) => {
+        const b = req.body || {};
+        if (!b.stream_id) return res.status(400).json({ error: 'stream_id required' });
+        const s = model.getStreamById(b.stream_id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        const ch = model.getChannelById(s.channel_id);
+        try { policy.assert(policy.decideStreamWrite({ req, channel: ch }), { ...actorMeta(req), action: 'clip.create' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const clip = model.createClipProject(b);
+        res.status(201).json({ clip });
+    });
+
+    r.get('/streams/:id/clips', (req, res) => {
+        const s = model.getStreamById(req.params.id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        res.json({ items: model.listClipProjects({ stream_id: s.id, limit: req.query.limit }) });
+    });
+
     // ── ingest webhook (called by ingest edge: nginx-rtmp / WHIP server) ──
     r.post('/ingest/connected', json, (req, res) => {
         const b = req.body || {};

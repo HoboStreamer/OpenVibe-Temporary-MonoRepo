@@ -20,9 +20,20 @@ const persistence = require('../persistence-mode');
     process.env.OPENVIBE_DATABASE_URL = 'postgres://example';
     const desc = persistence.describePersistence('openvibe-network', '/tmp/x.db');
     assert.strictEqual(desc.mode, 'postgres');
-    assert.strictEqual(desc.effective_mode, 'sqlite-fallback');
+    assert.strictEqual(desc.effective_mode, 'postgres');
     assert.strictEqual(desc.adapter_status, 'not-implemented');
     assert.strictEqual(desc.database_url_configured, true);
+    delete process.env.OPENVIBE_PERSISTENCE_MODE;
+    delete process.env.OPENVIBE_DATABASE_URL;
+})();
+
+(function throwsWhenPostgresNotImplemented() {
+    process.env.OPENVIBE_PERSISTENCE_MODE = 'postgres';
+    process.env.OPENVIBE_DATABASE_URL = 'postgres://example';
+    delete process.env.OPENVIBE_POSTGRES_RUNTIME_IMPLEMENTED_SERVICES;
+    assert.throws(() => {
+        persistence.warnIfUnsupported('openvibe-network', '/tmp/x.db');
+    }, /not yet implemented/);
     delete process.env.OPENVIBE_PERSISTENCE_MODE;
     delete process.env.OPENVIBE_DATABASE_URL;
 })();

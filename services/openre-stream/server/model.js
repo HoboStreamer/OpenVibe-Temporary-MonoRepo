@@ -29,6 +29,44 @@ function hydrateStream(row) {
     };
 }
 
+function hydrateRecording(row) {
+    if (!row) return null;
+    let metadata = {};
+    try { metadata = JSON.parse(row.metadata_json || '{}'); } catch {}
+    return {
+        id: row.id,
+        stream_id: row.stream_id,
+        channel_slug: row.channel_slug,
+        status: row.status,
+        dvr_playlist_url: row.dvr_playlist_url,
+        source_manifest_url: row.source_manifest_url,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        metadata,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    };
+}
+
+function hydrateClip(row) {
+    if (!row) return null;
+    let metadata = {};
+    try { metadata = JSON.parse(row.metadata_json || '{}'); } catch {}
+    return {
+        id: row.id,
+        stream_id: row.stream_id,
+        owner_user_id: row.owner_user_id,
+        title: row.title,
+        status: row.status,
+        start_ms: row.start_ms,
+        end_ms: row.end_ms,
+        media_id: row.media_id,
+        metadata,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    };
+}
+
 // ── channels ─────────────────────────────────────────────────
 function upsertChannel({ slug, owner_user_id, display_name, metadata }) {
     const sql = db.get();
@@ -160,6 +198,142 @@ function getMirrorState(stream_id) {
     return db.get().prepare(`SELECT * FROM mirror_state WHERE stream_id = ?`).get(String(stream_id));
 }
 
+function upsertRecording({ stream_id, channel_slug, status, dvr_playlist_url, source_manifest_url, started_at, ended_at, metadata }) {
+    const existing = db.get().prepare(`SELECT * FROM recordings WHERE stream_id = ?`).get(String(stream_id));
+    if (existing) {
+        db.get().prepare(`
+            UPDATE recordings SET
+                channel_slug = COALESCE(?, channel_slug),
+                status = COALESCE(?, status),
+                dvr_playlist_url = COALESCE(?, dvr_playlist_url),
+                source_manifest_url = COALESCE(?, source_manifest_url),
+                started_at = COALESCE(?, started_at),
+                ended_at = COALESCE(?, ended_at),
+                metadata_json = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE stream_id = ?
+        `).run(
+            channel_slug || null,
+            status || null,
+            dvr_playlist_url || null,
+            source_manifest_url || null,
+            started_at || null,
+            ended_at || null,
+            JSON.stringify(metadata || {}),
+            String(stream_id),
+        );
+        return getRecordingByStreamId(stream_id);
+    }
+    const id = newId('rec');
+    db.get().prepare(`
+        INSERT INTO recordings (id, stream_id, channel_slug, status, dvr_playlist_url, source_manifest_url, started_at, ended_at, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id,
+        String(stream_id),
+        channel_slug || null,
+        status || 'recording',
+        dvr_playlist_url || null,
+        source_manifest_url || null,
+        started_at || null,
+        ended_at || null,
+        JSON.stringify(metadata || {}),
+    );
+    return getRecordingByStreamId(stream_id);
+}
+
+function getRecordingByStreamId(streamId) {
+    return hydrateRecording(db.get().prepare(`SELECT * FROM recordings WHERE stream_id = ?`).get(String(streamId)));
+}
+
+function upsertRecordingSegment({ recording_id, segment_index, start_ms, duration_ms, media_id, storage_key, playlist_url, metadata }) {
+    const existing = db.get().prepare(`SELECT * FROM recording_segments WHERE recording_id = ? AND segment_index = ?`).get(String(recording_id), Number(segment_index));
+    if (existing) {
+        db.get().prepare(`
+            UPDATE recording_segments SET
+                start_ms = ?, duration_ms = ?, media_id = ?, storage_key = ?, playlist_url = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE recording_id = ? AND segment_index = ?
+        `).run(
+            Number(start_ms || 0),
+            Number(duration_ms || 0),
+            media_id || null,
+            storage_key || null,
+            playlist_url || null,
+            JSON.stringify(metadata || {}),
+            String(recording_id),
+            Number(segment_index),
+        );
+    } else {
+        db.get().prepare(`
+            INSERT INTO recording_segments (id, recording_id, segment_index, start_ms, duration_ms, media_id, storage_key, playlist_url, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            newId('seg'),
+            String(recording_id),
+            Number(segment_index),
+            Number(start_ms || 0),
+            Number(duration_ms || 0),
+            media_id || null,
+            storage_key || null,
+            playlist_url || null,
+            JSON.stringify(metadata || {}),
+        );
+    }
+    return listRecordingSegments(recording_id).find((segment) => segment.segment_index === Number(segment_index)) || null;
+}
+
+function listRecordingSegments(recordingId, { limit } = {}) {
+    const cap = Math.min(parseInt(limit, 10) || 1000, 5000);
+    return db.get().prepare(`SELECT * FROM recording_segments WHERE recording_id = ? ORDER BY segment_index ASC LIMIT ?`).all(String(recordingId), cap).map((row) => {
+        let metadata = {};
+        try { metadata = JSON.parse(row.metadata_json || '{}'); } catch {}
+        return {
+            id: row.id,
+            recording_id: row.recording_id,
+            segment_index: row.segment_index,
+            start_ms: row.start_ms,
+            duration_ms: row.duration_ms,
+            media_id: row.media_id,
+            storage_key: row.storage_key,
+            playlist_url: row.playlist_url,
+            metadata,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        };
+    });
+}
+
+function createClipProject({ stream_id, owner_user_id, title, status, start_ms, end_ms, media_id, metadata }) {
+    const id = newId('clip');
+    db.get().prepare(`
+        INSERT INTO clip_projects (id, stream_id, owner_user_id, title, status, start_ms, end_ms, media_id, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id,
+        String(stream_id),
+        owner_user_id || null,
+        title || null,
+        status || 'draft',
+        Number(start_ms || 0),
+        Number(end_ms || 0),
+        media_id || null,
+        JSON.stringify(metadata || {}),
+    );
+    return getClipProjectById(id);
+}
+
+function getClipProjectById(id) {
+    return hydrateClip(db.get().prepare(`SELECT * FROM clip_projects WHERE id = ?`).get(String(id)));
+}
+
+function listClipProjects({ stream_id, limit }) {
+    const cap = Math.min(parseInt(limit, 10) || 100, 500);
+    const rows = stream_id
+        ? db.get().prepare(`SELECT * FROM clip_projects WHERE stream_id = ? ORDER BY created_at DESC LIMIT ?`).all(String(stream_id), cap)
+        : db.get().prepare(`SELECT * FROM clip_projects ORDER BY created_at DESC LIMIT ?`).all(cap);
+    return rows.map(hydrateClip);
+}
+
 // ── legacy mapping ───────────────────────────────────────────
 function recordLegacy({ source, kind, legacy_id, new_id }) {
     db.get().prepare(`INSERT OR IGNORE INTO legacy_id_map (source, kind, legacy_id, new_id) VALUES (?, ?, ?, ?)`)
@@ -176,5 +350,7 @@ module.exports = {
     recordIngestConnected, recordIngestDisconnected,
     createDestination, getDestinationById, listDestinations, setOutputState,
     recordMirror, getMirrorState,
+    createClipProject, getClipProjectById, getRecordingByStreamId,
     recordLegacy, lookupLegacy,
+    listClipProjects, listRecordingSegments, upsertRecording, upsertRecordingSegment,
 };

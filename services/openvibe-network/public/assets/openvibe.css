@@ -26,7 +26,39 @@
     --ov-max: 1280px;
 }
 
+@keyframes ovFloatIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 * { box-sizing: border-box; }
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.5) rgba(255, 255, 255, 0.08);
+}
+
+*::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(139, 92, 246, 0.85), rgba(34, 211, 238, 0.7));
+    border-radius: 999px;
+    border: 2px solid rgba(6, 9, 23, 0.7);
+}
+
+*::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+}
 
 html, body {
     margin: 0;
@@ -86,6 +118,13 @@ pre {
     border-radius: 18px;
     padding: 1rem;
     overflow-x: auto;
+}
+
+.ov-code-scroll {
+    max-height: 24rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .ov-shell {
@@ -226,6 +265,7 @@ pre {
     background: linear-gradient(180deg, rgba(15, 23, 45, 0.9), rgba(10, 16, 32, 0.92));
     border: 1px solid var(--ov-border);
     box-shadow: var(--ov-shadow);
+    animation: ovFloatIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .ov-hero {

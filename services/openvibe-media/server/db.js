@@ -143,6 +143,166 @@ function init(dbPath) {
             created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(source, kind, legacy_id)
         );
+
+        CREATE TABLE IF NOT EXISTS media_object_locations (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            provider_name     TEXT NOT NULL,
+            role              TEXT NOT NULL DEFAULT 'canonical', -- canonical | hot | asset-origin | derivative
+            storage_key       TEXT NOT NULL,
+            bucket            TEXT,
+            endpoint          TEXT,
+            region            TEXT,
+            public_url        TEXT,
+            signed_url_required INTEGER NOT NULL DEFAULT 0,
+            checksum_sha256   TEXT,
+            size_bytes        INTEGER NOT NULL DEFAULT 0,
+            status            TEXT NOT NULL DEFAULT 'active',
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(media_id, provider_name, role, storage_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_locations_media ON media_object_locations(media_id, role, status);
+
+        CREATE TABLE IF NOT EXISTS media_upload_sessions (
+            id                TEXT PRIMARY KEY,
+            media_id          TEXT NOT NULL,
+            owner_type        TEXT NOT NULL,
+            owner_id          TEXT NOT NULL,
+            namespace         TEXT NOT NULL,
+            provider_name     TEXT NOT NULL,
+            storage_key       TEXT NOT NULL,
+            upload_mode       TEXT NOT NULL DEFAULT 'multipart',
+            status            TEXT NOT NULL DEFAULT 'initialized',
+            token             TEXT,
+            mime_type         TEXT,
+            expected_size_bytes INTEGER,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            expires_at        DATETIME,
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_upload_sessions_media ON media_upload_sessions(media_id, status);
+
+        CREATE TABLE IF NOT EXISTS media_upload_parts (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            upload_id         TEXT NOT NULL,
+            part_number       INTEGER NOT NULL,
+            etag              TEXT,
+            size_bytes        INTEGER NOT NULL DEFAULT 0,
+            status            TEXT NOT NULL DEFAULT 'signed',
+            token             TEXT,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(upload_id, part_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_upload_parts_upload ON media_upload_parts(upload_id, status);
+
+        CREATE TABLE IF NOT EXISTS media_size_violations (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            violation_type    TEXT NOT NULL,
+            detail_json       TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS stream_recordings (
+            id                TEXT PRIMARY KEY,
+            stream_id         TEXT NOT NULL,
+            channel_slug      TEXT,
+            media_id          TEXT,
+            status            TEXT NOT NULL DEFAULT 'recording',
+            storage_key       TEXT,
+            started_at        DATETIME,
+            ended_at          DATETIME,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_stream_recordings_stream ON stream_recordings(stream_id, status);
+
+        CREATE TABLE IF NOT EXISTS recording_segments (
+            id                TEXT PRIMARY KEY,
+            recording_id      TEXT NOT NULL,
+            segment_index     INTEGER NOT NULL,
+            start_ms          INTEGER NOT NULL DEFAULT 0,
+            duration_ms       INTEGER NOT NULL DEFAULT 0,
+            media_id          TEXT,
+            storage_key       TEXT,
+            playlist_key      TEXT,
+            size_bytes        INTEGER NOT NULL DEFAULT 0,
+            status            TEXT NOT NULL DEFAULT 'ready',
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(recording_id, segment_index)
+        );
+
+        CREATE TABLE IF NOT EXISTS clip_projects (
+            id                TEXT PRIMARY KEY,
+            source_stream_id  TEXT,
+            source_media_id   TEXT,
+            owner_user_id     TEXT,
+            title             TEXT,
+            status            TEXT NOT NULL DEFAULT 'draft',
+            start_ms          INTEGER NOT NULL DEFAULT 0,
+            end_ms            INTEGER NOT NULL DEFAULT 0,
+            playback_media_id TEXT,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS clip_exports (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            clip_id           TEXT NOT NULL,
+            job_id            TEXT,
+            status            TEXT NOT NULL DEFAULT 'queued',
+            media_id          TEXT,
+            error             TEXT,
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS transcript_segments (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            start_ms          INTEGER NOT NULL DEFAULT 0,
+            end_ms            INTEGER NOT NULL DEFAULT 0,
+            text              TEXT NOT NULL,
+            confidence        REAL,
+            speaker_label     TEXT,
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_transcript_segments_media ON transcript_segments(media_id, start_ms);
+
+        CREATE TABLE IF NOT EXISTS scene_markers (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            start_ms          INTEGER NOT NULL DEFAULT 0,
+            end_ms            INTEGER NOT NULL DEFAULT 0,
+            score             REAL,
+            source            TEXT,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_scene_markers_media ON scene_markers(media_id, start_ms);
+
+        CREATE TABLE IF NOT EXISTS analysis_candidates (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            candidate_type    TEXT NOT NULL,
+            start_ms          INTEGER NOT NULL DEFAULT 0,
+            end_ms            INTEGER NOT NULL DEFAULT 0,
+            score             REAL NOT NULL DEFAULT 0,
+            rationale_json    TEXT NOT NULL DEFAULT '{}',
+            status            TEXT NOT NULL DEFAULT 'queued',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_analysis_candidates_media ON analysis_candidates(media_id, candidate_type, status);
     `);
 
     dbInstance = db;

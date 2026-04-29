@@ -11,7 +11,10 @@
   "license": "MIT",
   "dependencies": {
     "@openvibe/contracts": "*",
+    "@openvibe/queue": "*",
+    "@openvibe/runtime": "*",
     "@openvibe/sdk": "*",
+    "@openvibe/storage": "*",
     "better-sqlite3": "^11.3.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

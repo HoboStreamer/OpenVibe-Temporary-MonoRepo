@@ -1,0 +1,11 @@
+{
+  "name": "@openvibe/runtime",
+  "version": "0.1.0",
+  "description": "OpenVibe service runtime helpers — request context, readiness, health, and metrics endpoints.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/observability": "*",
+    "express": "^4.19.2"
+  }
+}

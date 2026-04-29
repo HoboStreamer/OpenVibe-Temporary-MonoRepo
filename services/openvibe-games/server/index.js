@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
@@ -23,11 +24,34 @@ function buildApp() {
     app.use(cors());
     app.use(cookieParser());
 
-    app.get('/health', (_req, res) => res.json({
-        ok: true,
-        service: config.serviceId,
-        persistence: db.describePersistence(),
-    }));
+    const runtime = createServiceRuntime({
+        serviceName: config.serviceId || 'openvibe-games',
+        getHealth: () => ({
+            persistence: db.describePersistence(),
+            canvas: {
+                width: config.canvas && config.canvas.width,
+                height: config.canvas && config.canvas.height,
+            },
+        }),
+        getReadiness: () => ({
+            persistence: db.describePersistence(),
+            checks: [
+                {
+                    name: 'events_url_configured',
+                    ok: !!(config.events && config.events.url),
+                    critical: true,
+                    details: { url: config.events && config.events.url || null },
+                },
+                {
+                    name: 'canvas_dimensions',
+                    ok: !!(config.canvas && config.canvas.width && config.canvas.height),
+                    critical: true,
+                    details: config.canvas || null,
+                },
+            ],
+        }),
+    });
+    runtime.attach(app);
 
     app.use(express.static(path.join(__dirname, '..', 'public')));
 

@@ -371,6 +371,27 @@ function getCurrentLiveStream(channel_slug) {
     `).get(String(channel_slug)));
 }
 
+function getStreamTimeline(streamId) {
+    const stream = getStreamById(streamId);
+    if (!stream) return null;
+    const durationSeconds = getStreamDurationSeconds(stream, Date.now());
+    return {
+        stream_id: stream.id,
+        channel_slug: stream.channel_slug,
+        started_at: stream.started_at,
+        ended_at: stream.ended_at,
+        duration_seconds: durationSeconds,
+        markers: stream.clip_media_ids.map((mediaId, index) => ({
+            id: `clip:${mediaId}`,
+            media_id: mediaId,
+            label: `Clip ${index + 1}`,
+            type: 'clip',
+        })),
+        has_vod: !!stream.vod_media_id,
+        vod_media_id: stream.vod_media_id || null,
+    };
+}
+
 function recordMirror({ stream_id, channel_slug, details }) {
     db.get().prepare(`
         INSERT INTO mirror_state (stream_id, channel_slug, mirrored_at, details_json)
@@ -391,5 +412,6 @@ module.exports = {
     upsertChannel, getChannelBySlug, listChannels,
     upsertStream, getStreamById, listStreams, listLiveNow, listRecentlyEnded, listRecentVodStreams, listRecentClips, listVods, listClips,
     listFeaturedChannels, listTrendingStreams, listTopCategories, getChannelStats, getHomeStats, getCurrentLiveStream,
+    getStreamTimeline,
     recordMirror, recordLegacy,
 };

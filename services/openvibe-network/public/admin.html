@@ -19,6 +19,7 @@
                 <div class="ov-chip-row">
                     <span class="ov-chip soft" id="cap-status">Checking capabilities…</span>
                     <span class="ov-chip primary" id="compat-status">Checking federation mode…</span>
+                    <span class="ov-chip soft" id="runtime-status">Checking runtime…</span>
                 </div>
                 <div class="ov-cta-row" id="admin-actions"></div>
             </div>
@@ -28,6 +29,7 @@
 
     <div class="ov-tabs" id="admin-tabs">
         <button class="ov-tab active" type="button" data-tab="overview">Overview</button>
+        <button class="ov-tab" type="button" data-tab="runtime">Runtime</button>
         <button class="ov-tab" type="button" data-tab="users">Users / roles</button>
         <button class="ov-tab" type="button" data-tab="registry">Registry</button>
         <button class="ov-tab" type="button" data-tab="audit">Audit</button>
@@ -36,6 +38,7 @@
     </div>
 
     <section class="ov-panel" id="tab-overview"></section>
+    <section class="ov-panel" id="tab-runtime" hidden></section>
     <section class="ov-panel" id="tab-users" hidden></section>
     <section class="ov-panel" id="tab-registry" hidden></section>
     <section class="ov-panel" id="tab-audit" hidden></section>
@@ -70,14 +73,16 @@
         });
     });
 
-    const [session, capabilities, servicesRaw, health, registry, discovery, migrationStatus] = await Promise.all([
+    const [session, capabilities, servicesRaw, health, registry, discovery, migrationStatus, readiness, metricsText] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.api('/staff/capabilities').catch(() => ({ role: 'anonymous', capabilities: [] })),
         OpenVibe.loadServices(),
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, federation: { mode: 'offline' }, trusted_issuers: [] })),
         OpenVibe.loadUrlRegistry(),
-        fetch('/.well-known/openid-configuration').then((response) => response.json()).catch(() => null),
+        fetch(`${OpenVibe.resolveSurfaceUrl('auth')}/.well-known/openid-configuration`).then((response) => response.json()).catch(() => null),
         OpenVibe.api('/admin/migration-status').catch(() => null),
+        fetch('/ready').then((response) => response.json()).catch(() => null),
+        fetch('/metrics').then((response) => response.text()).catch(() => ''),
     ]);
 
     const services = OpenVibe.mergedServices(servicesRaw);
@@ -87,14 +92,21 @@
     const canViewAudit = capList.includes('view_all_logs');
     const canBroadcast = capList.includes('broadcast_notifications');
     const compatOn = !!(health.federation && health.federation.hobo_tools);
+     const readinessTone = readiness && readiness.status === 'green' ? 'ok' : readiness && readiness.status === 'yellow' ? 'warn' : 'danger';
+     const metricsPreview = String(metricsText || '').split('\n').filter(Boolean).slice(0, 42).join('\n');
 
     document.getElementById('cap-status').className = `ov-chip ${capList.length ? 'ok' : 'warn'}`;
     document.getElementById('cap-status').textContent = `role=${capabilities.role || 'user'} · ${capList.length ? capList.join(', ') : 'no elevated capabilities'}`;
     document.getElementById('compat-status').className = `ov-chip ${compatOn ? 'warn' : 'ok'}`;
     document.getElementById('compat-status').textContent = compatOn ? 'Legacy compat available' : 'OpenVibe-native mode';
+     document.getElementById('runtime-status').className = `ov-chip ${readiness ? readinessTone : 'danger'}`;
+     document.getElementById('runtime-status').textContent = readiness
+          ? `runtime ${readiness.status} · ${String((readiness.checks || []).length)} checks`
+          : 'Runtime report unavailable';
 
     document.getElementById('admin-actions').innerHTML = session.authenticated && session.user
         ? `<button class="ov-btn ov-btn-primary" type="button" id="review-operator-data">Review operator data</button>
+              <button class="ov-btn" type="button" id="review-runtime">Review runtime</button>
            <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Network hub</a>
            <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('my')}">My account</a>`
         : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('admin'))}">Sign in for staff tools</a>
@@ -106,12 +118,19 @@
             activateTab('users');
         });
     }
+    const runtimeButton = document.getElementById('review-runtime');
+    if (runtimeButton) {
+        runtimeButton.addEventListener('click', function () {
+            activateTab('runtime');
+        });
+    }
 
     document.getElementById('admin-overview-card').innerHTML = `
         <div class="ov-chip-row" style="margin-bottom:.8rem;">
             <span class="ov-chip ok">${OpenVibe.escapeHtml(String(services.length))} services</span>
             <span class="ov-chip soft">${OpenVibe.escapeHtml(String(capList.length))} capabilities</span>
             <span class="ov-chip primary">${health.ok ? 'health ok' : 'health degraded'}</span>
+            <span class="ov-chip ${readiness ? readinessTone : 'danger'}">runtime ${OpenVibe.escapeHtml(String(readiness && readiness.status || 'down'))}</span>
         </div>
         <h2>${session.authenticated && session.user ? `Hello, @${OpenVibe.escapeHtml(session.user.username || session.user.id)}` : 'Staff tools are capability-gated'}</h2>
         <p class="ov-muted">The console remains readable without elevated access, but role management, audit feeds, and broadcast actions only unlock when the capability map allows them.</p>`;
@@ -121,6 +140,8 @@
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(services.length))}</div><div class="l">services</div></div>
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(capList.length))}</div><div class="l">your capabilities</div></div>
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String((health.trusted_issuers || []).length))}</div><div class="l">trusted issuers</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness && readiness.summary ? readiness.summary.red || 0 : 0))}</div><div class="l">runtime red checks</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness && readiness.summary ? readiness.summary.yellow || 0 : 0))}</div><div class="l">runtime warnings</div></div>
             <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(migrationStatus && migrationStatus.cutover && migrationStatus.cutover.summary ? migrationStatus.cutover.summary.red || 0 : 0))}</div><div class="l">cutover red flags</div></div>
         </div>
         <div class="ov-section" style="margin-top:1rem;">
@@ -138,6 +159,46 @@
         </div>`;
 
     await OpenVibe.renderServiceCards(document.getElementById('admin-service-grid'), services.filter((item) => ['openvibe-network', 'openvibe-tools', 'openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community'].includes(item.service_id)));
+
+    document.getElementById('tab-runtime').innerHTML = readiness ? `
+        <div class="ov-stat-strip">
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.status || 'unknown'))}</div><div class="l">runtime status</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.green || 0))}</div><div class="l">green checks</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.yellow || 0))}</div><div class="l">yellow checks</div></div>
+            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(String(readiness.summary && readiness.summary.red || 0))}</div><div class="l">red checks</div></div>
+        </div>
+        <div class="ov-grid" style="margin-top:1rem;">
+            <article class="ov-card">
+                <div class="ov-kicker">Serve traffic</div>
+                <h3 class="ov-service-title" style="margin-top:.8rem;">${readiness.ok ? 'Traffic can flow, with current caveats noted.' : 'This service is not ready to serve safely.'}</h3>
+                <p class="ov-muted">The readiness endpoint collapses persistence plus runtime dependency checks into a truthful green / yellow / red report. Yellow means usable with caveats; red means do not pretend everything is fine.</p>
+                <div class="ov-chip-row" style="margin-top:.85rem;">
+                    <span class="ov-chip ${readinessTone}">status=${OpenVibe.escapeHtml(String(readiness.status || 'unknown'))}</span>
+                    <span class="ov-chip soft">checked ${OpenVibe.escapeHtml(OpenVibe.formatDateTime(readiness.checked_at))}</span>
+                </div>
+            </article>
+            <article class="ov-card">
+                <div class="ov-kicker">Telemetry endpoints</div>
+                <h3 class="ov-service-title" style="margin-top:.8rem;">Health, readiness, and Prometheus metrics are live</h3>
+                <p class="ov-muted">Use these links for automation, on-call verification, and external scraping. The admin console previews the same data, but sometimes it’s nice to see the raw truth wearing fewer accessories.</p>
+                <div class="ov-card-actions" style="margin-top:1rem;">
+                    <a class="ov-btn ov-btn-primary" href="/ready">Open /ready</a>
+                    <a class="ov-btn" href="/health">Open /health</a>
+                    <a class="ov-btn ov-btn-ghost" href="/metrics">Open /metrics</a>
+                </div>
+            </article>
+        </div>
+        <div class="ov-table-wrap" style="margin-top:1rem;">
+            <table class="ov-table">
+                <thead><tr><th>check</th><th>status</th><th>critical</th><th>message</th><th>details</th></tr></thead>
+                <tbody>${(readiness.checks || []).map((check) => `<tr><td><code>${OpenVibe.escapeHtml(check.name || 'unnamed')}</code></td><td><span class="ov-tag ${check.status === 'green' ? 'ok' : check.status === 'yellow' ? 'warn' : 'danger'}">${OpenVibe.escapeHtml(check.status)}</span></td><td>${check.critical === false ? '<span class="ov-tag soft">no</span>' : '<span class="ov-tag warn">yes</span>'}</td><td>${OpenVibe.escapeHtml(check.message || '—')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(check.details || {}, null, 0))}</code></td></tr>`).join('') || '<tr><td colspan="5">No readiness checks returned.</td></tr>'}</tbody>
+            </table>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;">
+            <div class="ov-section-head"><div><h2>Metrics preview</h2><p class="ov-section-sub">First 42 non-empty lines from the Prometheus scrape output so operators can spot obvious regressions without leaving the console.</p></div></div>
+            <pre class="ov-code-scroll">${OpenVibe.escapeHtml(metricsPreview || '# metrics endpoint returned no data')}</pre>
+        </div>`
+        : renderEmpty('Runtime report unavailable', 'The readiness or metrics endpoints did not return a payload.');
 
     if (canBroadcast) {
         document.getElementById('broadcast-form').addEventListener('submit', async function (event) {

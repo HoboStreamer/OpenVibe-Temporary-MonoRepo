@@ -1,0 +1,10 @@
+{
+  "name": "@openvibe/realtime",
+  "version": "0.1.0",
+  "description": "OpenVibe realtime helpers — socket auth, presence, room policies, and rate limiting.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/redis": "*"
+  }
+}

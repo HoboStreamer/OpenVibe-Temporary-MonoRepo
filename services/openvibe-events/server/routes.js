@@ -3,6 +3,7 @@
 const express = require('express');
 const bus = require('./bus');
 const { requireInternalKey } = require('@openvibe/sdk/middleware');
+const { asyncRoute } = require('@openvibe/runtime');
 
 function buildRouter(internalKey) {
     const r = express.Router();
@@ -71,6 +72,22 @@ function buildRouter(internalKey) {
     r.get('/dlq', (req, res) => {
         res.json({ items: bus.listDeadLetters({ limit: req.query.limit }) });
     });
+
+    r.get('/streams/lag', asyncRoute(async (req, res) => {
+        if (!req.query.topic || !req.query.group_name) {
+            return res.status(400).json({ error: 'topic and group_name are required' });
+        }
+        const result = await bus.getFanoutLag(req.query.topic, req.query.group_name);
+        res.json(result);
+    }));
+
+    r.get('/streams/pending', asyncRoute(async (req, res) => {
+        if (!req.query.topic || !req.query.group_name) {
+            return res.status(400).json({ error: 'topic and group_name are required' });
+        }
+        const result = await bus.getFanoutPending(req.query.topic, req.query.group_name);
+        res.json(result);
+    }));
 
     return r;
 }

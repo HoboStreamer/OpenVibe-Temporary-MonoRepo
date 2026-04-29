@@ -1,0 +1,90 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: openvibe
+      POSTGRES_PASSWORD: openvibe
+      POSTGRES_DB: openvibe
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - '6379:6379'
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - network
+      - live
+      - media
+      - chat
+      - community
+    ports:
+      - '8080:8080'
+    volumes:
+      - ../../deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+
+  network:
+    image: node:20-bookworm
+    working_dir: /workspace/services/openvibe-network
+    command: sh -lc "npm install && npm start"
+    environment:
+      PORT: 4100
+      OPENVIBE_PERSISTENCE_MODE: sqlite
+      OPENVIBE_REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../:/workspace
+
+  live:
+    image: node:20-bookworm
+    working_dir: /workspace/services/openvibe-live
+    command: sh -lc "npm install && npm start"
+    environment:
+      PORT: 4600
+      OPENVIBE_PERSISTENCE_MODE: sqlite
+      OPENVIBE_REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../:/workspace
+
+  media:
+    image: node:20-bookworm
+    working_dir: /workspace/services/openvibe-media
+    command: sh -lc "npm install && npm start"
+    environment:
+      PORT: 4500
+      OPENVIBE_PERSISTENCE_MODE: sqlite
+      OPENVIBE_REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../:/workspace
+
+  chat:
+    image: node:20-bookworm
+    working_dir: /workspace/services/openvibe-chat
+    command: sh -lc "npm install && npm start"
+    environment:
+      PORT: 4800
+      OPENVIBE_PERSISTENCE_MODE: sqlite
+      OPENVIBE_REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../:/workspace
+
+  community:
+    image: node:20-bookworm
+    working_dir: /workspace/services/openvibe-community
+    command: sh -lc "npm install && npm start"
+    environment:
+      PORT: 4900
+      OPENVIBE_PERSISTENCE_MODE: sqlite
+      OPENVIBE_REDIS_URL: redis://redis:6379
+    volumes:
+      - ../../:/workspace
+
+volumes:
+  postgres-data:
