@@ -1,17 +1,5 @@
 # First, analyze and interconnect the two GitHub repositories at https://GitHub.com/HoboStreamer/HoboStreamer.com and https://GitHub.com/HoboStreamer/HoboApp which run the platforms https://HoboStreamer.com/ and https://Hobo.Tools/ and https://Hobo.Quest/ use this as grounding to understand the conversation below where we are going to overhaul and migrate these platforms into a modular community-focused moddable platform across many domains called OpenVibe:
 
-Hello, are you able to hear me?
-
-Yeah, I hear you. What’s up?
-
-Can you still hear me?
-
-Yep, still here.
-
-Do you have the same context of this current conversation?
-
-Yeah, I’ve got the full context of everything we’ve been working through in this conversation.
-
 Can you give me a quick recap about Hobo Tools, Hobo Streamer, and Hobo Quest and what they are?
 
 Yeah—quick, straight overview:
@@ -1700,14 +1688,14 @@ If you want the next step, I can:
 
 That’s the part that will either go smooth or completely wreck things if done wrong.
 
-So, reconsider, we're going to use OpenVOD.network as kind of the SSO slash login, you know, whatever kind of system that you use for logging in and then, you know, having that session on other websites type shit. Kind of like how we're using the hobo tools right now. So, kind of plan that out.
+So, reconsider, we're going to use openvibe.network as kind of the SSO slash login, you know, whatever kind of system that you use for logging in and then, you know, having that session on other websites type shit. Kind of like how we're using the hobo tools right now. So, kind of plan that out.
 
 Good—this is the right place to be deliberate, because SSO is the one thing that will either make your whole ecosystem feel seamless or completely broken.
 
-You’re basically turning openvod.network into your identity provider (IdP).
+You’re basically turning openvibe.network into your identity provider (IdP).
 1. WHAT YOU’RE BUILDING (clean definition)
 
-openvod.network = Identity Authority
+openvibe.network = Identity Authority
 
 It should own:
 
@@ -1743,7 +1731,7 @@ Everything else:
     Only one service is allowed to decide “who the user is”
 
 That is:
-→ openvod.network
+→ openvibe.network
 
 No other service:
 
@@ -1774,11 +1762,11 @@ Flow:
 
     redirect:
 
-https://openvod.network/login?redirect=https://openvibe.live
+https://openvibe.network/login?redirect=https://openvibe.live
 
     user logs in
 
-    openvod.network:
+    openvibe.network:
 
         creates session
 
@@ -1798,7 +1786,7 @@ Returning visit (already logged in)
 
     openvibe.live checks token
 
-    if expired → silent refresh via openvod.network
+    if expired → silent refresh via openvibe.network
 
     no UI interruption
 
@@ -1826,7 +1814,7 @@ JWT contents (example)
   "teams": ["team1", "team2"],
   "iat": 1710000000,
   "exp": 1710000600,
-  "iss": "https://openvod.network"
+  "iss": "https://openvibe.network"
 }
 
 Verification (other services)
@@ -1835,7 +1823,7 @@ Every service:
 
     fetches public key from:
 
-https://openvod.network/api/.well-known/jwks
+https://openvibe.network/api/.well-known/jwks
 
     verifies token locally
 
@@ -1845,7 +1833,7 @@ https://openvod.network/api/.well-known/jwks
 
 Cookies WILL NOT work across:
 
-    openvod.network
+    openvibe.network
 
     openvibe.live
 
@@ -1868,7 +1856,7 @@ Use hidden iframe or background check:
 
     openvibe.live loads:
 
-https://openvod.network/api/session
+https://openvibe.network/api/session
 
     if valid:
 
@@ -1884,7 +1872,7 @@ When user logs out:
 
     call:
 
-openvod.network/logout
+openvibe.network/logout
 
     invalidate:
 
@@ -1897,7 +1885,7 @@ openvod.network/logout
     via event system or polling
 
 8. REPO + SERVICE PLACEMENT
-openvod.network (NEW CORE SERVICE)
+openvibe.network (NEW CORE SERVICE)
 
 This replaces your current hobo.tools auth role.
 
@@ -1934,7 +1922,7 @@ They:
 
 All services must trust:
 
-iss = https://openvod.network
+iss = https://openvibe.network
 
 Reject anything else.
 10. SECURITY REQUIREMENTS (don’t half-ass this)
@@ -1974,7 +1962,7 @@ So this is NOT a rewrite.
 Migration plan (clean)
 Phase 1
 
-    spin up openvod.network
+    spin up openvibe.network
 
     mirror existing auth
 
@@ -1988,11 +1976,11 @@ Phase 3
 
         hobo.tools
 
-        openvod.network
+        openvibe.network
 
 Phase 4
 
-    switch issuer to openvod.network
+    switch issuer to openvibe.network
 
 Phase 5
 
@@ -2041,14 +2029,14 @@ You’re just:
 
 14. FINAL STRUCTURE
 
-openvod.network  → identity + SSO
+openvibe.network  → identity + SSO
 openvibe.live    → streaming
 openvibe.tools   → utilities
 openvibe.news    → content
 openvibe.games   → games
 
 All of them:
-→ trust openvod.network
+→ trust openvibe.network
 15. BLUNT TRUTH
 
 If you get this right:
@@ -2069,7 +2057,7 @@ If you want next step, I can:
 
     define token schema + rotation strategy
 
-    or map your existing auth code → drop-in OpenVOD implementation
+    or map your existing auth code → drop-in openvibe implementation
 
 That’s where this becomes production-grade instead of “it kinda works.”
 
@@ -2128,7 +2116,7 @@ Everything else is secondary.
 You want this:
 
                 ┌─────────────────────┐
-                │   openvod.network   │
+                │   openvibe.network   │
                 │   (SSO / Identity)  │
                 └─────────┬───────────┘
                           │
@@ -2143,7 +2131,7 @@ You want this:
   Realtime Layer     API Layer        Ingestion Layer
 
 4. RECOMMENDED SERVICE BREAKDOWN (actual modules)
-A. Identity Layer (openvod.network)
+A. Identity Layer (openvibe.network)
 
 Scale strategy:
 
@@ -2372,7 +2360,7 @@ Orchestration (later):
 
 Since you said this is the time:
 DO THIS:
-1. Extract auth into openvod.network
+1. Extract auth into openvibe.network
 
     fully independent
 
@@ -2422,7 +2410,7 @@ If you modularize correctly:
 → you scale all three independently
 14. FINAL ARCHITECTURE SUMMARY
 
-openvod.network → identity (SSO)
+openvibe.network → identity (SSO)
 
 openvibe.live → realtime + streaming
   - WS cluster
@@ -2490,7 +2478,7 @@ That means:
 
 If you violate this → you won’t scale.
 3. SYSTEM BREAKDOWN (FINAL FORM)
-A. Identity Layer (openvod.network)
+A. Identity Layer (openvibe.network)
 
 Responsibilities
 
@@ -2791,7 +2779,7 @@ But:
 
 10. WHAT YOUR FINAL SYSTEM LOOKS LIKE
 
-                [ openvod.network ]
+                [ openvibe.network ]
                         │
                         ▼
                 [ API Gateway ]
@@ -2907,7 +2895,7 @@ HoboApp / hobo-tools
 
 You’re splitting into:
 
-openvod.network      → identity (SSO)
+openvibe.network      → identity (SSO)
 openvibe-live        → realtime + streaming
 openvibe-tools       → utilities
 openvibe-content     → scraping + feeds
@@ -2926,7 +2914,7 @@ You already have working systems. The goal is:
     introduce async layers
 
 4. STEP-BY-STEP EXTRACTION PLAN
-STEP 1 — Extract Identity (from hobo-tools → openvod.network)
+STEP 1 — Extract Identity (from hobo-tools → openvibe.network)
 Move OUT of hobo-tools:
 
     auth routes
@@ -2941,7 +2929,7 @@ Move OUT of hobo-tools:
 
 Into:
 
-openvod.network
+openvibe.network
 
 Keep in hobo-tools:
 
@@ -2960,7 +2948,7 @@ app.use('/api/auth', authRoutes);
 After
 
 // openvibe services trust external auth
-verifyTokenFrom(openvod.network)
+verifyTokenFrom(openvibe.network)
 
 STEP 2 — Split WebSocket Chat (CRITICAL)
 
@@ -3193,7 +3181,7 @@ content → content service
 2. Introduce Redis pub/sub
 
 (unlocks horizontal scaling)
-3. Extract auth to openvod.network
+3. Extract auth to openvibe.network
 
 (foundational)
 4. Add job queue
@@ -3511,7 +3499,7 @@ openvibe-content
 
         content.new
 
-openvod.network
+openvibe.network
 
     produces:
 
@@ -4083,7 +4071,7 @@ KEEP (move to openvibe.network)
 
 REMOVE / SPLIT
 
-    auth → goes to openvod.network (identity)
+    auth → goes to openvibe.network (identity)
 
     tools → goes to openvibe-tools
 
@@ -4118,7 +4106,7 @@ Protected by:
 
     role = admin
 
-    token from openvod.network
+    token from openvibe.network
 
 5. ADMIN FEATURES (build these early)
 A. Event System Dashboard
@@ -4289,7 +4277,7 @@ Phase 3
 
 Phase 4
 
-    remove auth logic (moved to openvod.network)
+    remove auth logic (moved to openvibe.network)
 
 Phase 5
 
@@ -4338,7 +4326,7 @@ Once this is stable:
 
 15. FINAL ARCHITECTURE (CONTROL PLANE)
 
-                openvod.network
+                openvibe.network
                       │
                       ▼
             openvibe.network (control plane)
@@ -4683,7 +4671,7 @@ That:
 
 18. FINAL ARCHITECTURE
 
-                openvod.network (SSO)
+                openvibe.network (SSO)
                         │
                         ▼
             openvibe.network (control plane)
@@ -4727,7 +4715,7 @@ Good—now you’re thinking in the right direction:
 
 What you want is a Service Integration Framework on top of your:
 
-    openvod.network (identity)
+    openvibe.network (identity)
 
     events.openvibe.network (event system)
 
@@ -4838,7 +4826,7 @@ Authorization: Bearer SERVICE_TOKEN
 
 Issued by
 
-openvod.network
+openvibe.network
 
 6. EVENT INTEGRATION (this is the real glue)
 
@@ -5018,7 +5006,7 @@ Why
 
 15. NETWORK LAYOUT (final mental model)
 
-                  openvod.network
+                  openvibe.network
                         │
                         ▼
               openvibe.network (control plane)
@@ -5088,7 +5076,7 @@ I’m going to lay this out as:
 
     what the phone service actually is
 
-    how it plugs into openvod.network (identity)
+    how it plugs into openvibe.network (identity)
 
     how it plugs into events.openvibe.network
 
@@ -5144,7 +5132,7 @@ Responsibilities:
 
     manage phone-related state
 
-3. HOW IT CONNECTS TO IDENTITY (openvod.network)
+3. HOW IT CONNECTS TO IDENTITY (openvibe.network)
 Rule:
 
     Phone numbers are attributes of users, not separate identities.
@@ -5166,10 +5154,10 @@ User → openvibe.live
     → openvibe-phone sends OTP
       → user enters OTP
         → openvibe-phone verifies
-          → calls openvod.network API
+          → calls openvibe.network API
             → attaches phone to user
 
-API contract (openvod.network)
+API contract (openvibe.network)
 
 POST /api/users/{id}/phone
 
@@ -5226,7 +5214,7 @@ A. Identity data (central)
 
 Stored in:
 
-openvod.network DB
+openvibe.network DB
 
     phone number
 
@@ -5381,7 +5369,7 @@ Phase 3
 
 14. FINAL ARCHITECTURE ADDITION
 
-openvod.network (identity)
+openvibe.network (identity)
         │
         ▼
 events.openvibe.network
@@ -5426,7 +5414,7 @@ Alright—now you’re stepping into telecom-grade architecture, not just web ap
 
 We’ll design it so it plugs cleanly into:
 
-    openvod.network (identity)
+    openvibe.network (identity)
 
     events.openvibe.network (event backbone)
 
@@ -5466,7 +5454,7 @@ openvibe-phone (new service)
 It integrates like this:
 
 openvibe-phone
-   ↔ openvod.network (user identity)
+   ↔ openvibe.network (user identity)
    ↔ events.openvibe.network (events)
    ↔ openvibe-live (chat / UI)
    ↔ openvibe-tools (notifications/admin)
@@ -5591,7 +5579,7 @@ network_stats
 
 Use:
 
-openvod.network → source of truth
+openvibe.network → source of truth
 
 Phone service:
 
@@ -5601,7 +5589,7 @@ Phone service:
 
 Example
 
-const user = verifyJWT(token); // from openvod.network
+const user = verifyJWT(token); // from openvibe.network
 
 9. PRESENCE SYSTEM
 
@@ -6052,7 +6040,7 @@ analytics + UI updates
 
 19. FINAL ARCHITECTURE
 
-openvod.network
+openvibe.network
   ├── identity
   ├── user_modules (modular data)
   ├── permissions
@@ -6668,7 +6656,7 @@ Reanalyze this entire conversation about the migration and the open vibe in gene
 
 Alright—this is the full consolidation. No more isolated pieces. This is the actual migration blueprint from Hobo → OpenVibe, integrating:
 
-    identity (openvod.network)
+    identity (openvibe.network)
 
     control plane (openvibe.network)
 
@@ -6685,7 +6673,7 @@ This is structured so you can execute without breaking everything.
 
 You are building:
 
-                 openvod.network
+                 openvibe.network
                  (identity / SSO)
                          │
                          ▼
@@ -6716,7 +6704,7 @@ Target
 Current	New System
 HoboStreamer	openvibe-live
 hobo-tools	openvibe.network
-auth (hobo-tools)	openvod.network
+auth (hobo-tools)	openvibe.network
 HoboQuest	openvibe-games
 misc tools	openvibe-tools
 3. MIGRATION STRATEGY (CRITICAL)
@@ -6788,10 +6776,10 @@ openvibe.network → modular user data
 
 PHASE 3 — AUTH EXTRACTION
 
-Move auth from hobo-tools → openvod.network
+Move auth from hobo-tools → openvibe.network
 Requirements:
 
-    JWT issuer = openvod.network
+    JWT issuer = openvibe.network
 
     services verify tokens (no DB lookup)
 
@@ -7650,7 +7638,7 @@ attached to user
 
 Users authenticate via:
 
-openvod.network
+openvibe.network
 
 Result
 
@@ -8188,7 +8176,7 @@ Everything falls into 5 layers:
 4. Platform Services
 5. Shared Infrastructure Systems
 
-2. LAYER 1 — IDENTITY (openvod.network)
+2. LAYER 1 — IDENTITY (openvibe.network)
 
 This is the root of everything.
 Owns:
@@ -8213,7 +8201,7 @@ Does NOT own:
 
 Critical rule
 
-    Every request everywhere = authenticated via openvod.network
+    Every request everywhere = authenticated via openvibe.network
 
 3. LAYER 2 — CONTROL PLANE (openvibe.network)
 
@@ -8276,7 +8264,7 @@ openvibe.media     → media platform
 
 Each service:
 
-    authenticates via openvod
+    authenticates via openvibe
 
     emits events
 
@@ -8500,7 +8488,7 @@ Phase 1
 
 Phase 2
 
-    extract auth → openvod.network
+    extract auth → openvibe.network
 
     integrate services with events
 
@@ -8613,7 +8601,7 @@ Everything else is just an implementation detail.
 
 This is the complete stack with real responsibilities separated correctly
 
-                openvod.network
+                openvibe.network
                 (identity / SSO)
                         │
                         ▼
@@ -8639,7 +8627,7 @@ openvibe.media (shared media system)
 2. CORE PRINCIPLES (EVERYTHING FOLLOWS THESE)
 1. Identity is centralized
 
-    only openvod.network defines users
+    only openvibe.network defines users
 
 2. Data is modular
 
@@ -8913,7 +8901,7 @@ Replace:
 
 PHASE 2 — IDENTITY SPLIT
 
-    move auth → openvod.network
+    move auth → openvibe.network
 
     services verify tokens
 
@@ -9569,7 +9557,7 @@ Startup dependency order
 
 1. Redis (events backbone)
 2. Postgres (core data)
-3. openvod.network (identity)
+3. openvibe.network (identity)
 4. openvibe.network (control plane)
 5. events.openvibe.network
 6. media + billing
@@ -9647,7 +9635,7 @@ token-based SSO (redirect + exchange)
 Flow
 
 user → openvibe.live
-      → redirect → openvod.network
+      → redirect → openvibe.network
       → returns token
       → stored per domain
 
@@ -9869,7 +9857,7 @@ Mitigations
 
 User
  ↓
-openvod.network (identity)
+openvibe.network (identity)
  ↓
 openvibe.network (control plane)
  ├── user_modules
@@ -10284,7 +10272,7 @@ Event fanout + idempotency per consumer.
 60. IDP (IDENTITY PROVIDER) LOCK-IN RISK
 Problem
 
-If openvod fails → everything fails.
+If openvibe fails → everything fails.
 Mitigation
 
     cache JWT validation keys
@@ -11578,7 +11566,7 @@ exponential backoff
 138. PLATFORM “STATE OF TRUTH” RULES
 
 Lock these in:
-Identity → openvod
+Identity → openvibe
 User data → user_modules
 Money → billing ledger
 Media → media system
@@ -11606,7 +11594,7 @@ Because:
 
 User
  ↓
-Identity (openvod)
+Identity (openvibe)
  ↓
 Platform Kernel (openvibe.network)
  ├── user_modules
