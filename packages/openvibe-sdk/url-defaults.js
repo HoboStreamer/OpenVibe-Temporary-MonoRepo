@@ -16,6 +16,16 @@ const SERVICE_DEFAULTS = Object.freeze({
     billing:   { envKey: 'OPENVIBE_BILLING_URL', productionOrigin: 'https://billing.openvibe.network', port: 5000 },
     ai:        { envKey: 'OPENVIBE_AI_URL', productionOrigin: 'https://ai.openvibe.network', port: 5100 },
     games:     { envKey: 'OPENVIBE_GAMES_URL', productionOrigin: 'https://openvibe.games', port: 5200 },
+    workers:   { envKey: 'OPENVIBE_WORKERS_URL', productionOrigin: 'https://workers.openvibe.network', port: 5300 },
+    realtime:  { envKey: 'OPENVIBE_REALTIME_URL', productionOrigin: 'https://realtime.openvibe.network', port: 5400 },
+    codes:     { envKey: 'OPENVIBE_CODES_URL', productionOrigin: 'https://openvibe.codes', port: 5500 },
+    blog:      { envKey: 'OPENVIBE_BLOG_URL', productionOrigin: 'https://openvibe.blog', port: 5500 },
+    wiki:      { envKey: 'OPENVIBE_WIKI_URL', productionOrigin: 'https://openvibe.wiki', port: 5500 },
+    news:      { envKey: 'OPENVIBE_NEWS_URL', productionOrigin: 'https://openvibe.news', port: 5500 },
+    reviews:   { envKey: 'OPENVIBE_REVIEWS_URL', productionOrigin: 'https://openvibe.reviews', port: 5500 },
+    deals:     { envKey: 'OPENVIBE_DEALS_URL', productionOrigin: 'https://openvibe.deals', port: 5500 },
+    coupons:   { envKey: 'OPENVIBE_COUPONS_URL', productionOrigin: 'https://openvibe.coupons', port: 5500 },
+    trade:     { envKey: 'OPENVIBE_TRADE_URL', productionOrigin: 'https://openvibe.trade', port: 5500 },
 });
 
 function trimUrl(value) {

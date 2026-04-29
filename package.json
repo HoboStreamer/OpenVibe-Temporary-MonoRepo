@@ -11,7 +11,7 @@
   "scripts": {
     "check": "node scripts/check-syntax.js",
     "test": "node scripts/run-tests.js",
-    "readiness": "node scripts/readiness/check-scalable-runtime.js --offline",
+    "readiness": "node scripts/readiness/generate-production-readiness-report.js --offline --dry-run --skip-external",
     "smoke:browser": "node scripts/staging/browser-smoke.js"
   },
   "engines": {

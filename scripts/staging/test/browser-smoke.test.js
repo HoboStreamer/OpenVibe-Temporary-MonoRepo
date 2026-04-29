@@ -97,6 +97,38 @@ function makeHtmlServer(title, options = {}) {
     });
 }
 
+function makeContentServer() {
+    return http.createServer((req, res) => {
+        const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+        if (req.url === '/health') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                service: 'openvibe-content',
+                surfaces: [
+                    { surface: 'codes', implemented: true },
+                    { surface: 'blog', implemented: true },
+                    { surface: 'wiki', implemented: true },
+                    { surface: 'news', implemented: false },
+                ],
+            }));
+            return;
+        }
+        const htmlByHost = {
+            'openvibe.codes.localhost': '<title>openvibe.codes — native docs and platform notes</title>',
+            'openvibe.blog.localhost': '<title>openvibe.blog — build notes from the native platform cutover</title>',
+            'openvibe.wiki.localhost': '<title>openvibe.wiki — platform glossary and migration index</title>',
+        };
+        if (htmlByHost[host]) {
+            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+            res.end(`<!doctype html><html><head>${htmlByHost[host]}</head><body><h1>${host}</h1></body></html>`);
+            return;
+        }
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+    });
+}
+
 async function withServers(factory, callback) {
     const servers = factory();
     try {
@@ -117,6 +149,9 @@ async function testGreenSmokeReport() {
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
         media: makeHtmlServer('OpenVibe Media'),
+        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        games: makeHtmlServer('OpenVibe Games'),
+        content: makeContentServer(),
     }), async (servers) => {
         const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-browser-smoke-'));
         const outFile = path.join(tmpDir, 'browser-smoke-report.json');
@@ -126,13 +161,16 @@ async function testGreenSmokeReport() {
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
             mediaUrl: urlFor(servers.media),
+            aiUrl: urlFor(servers.ai),
+            gamesUrl: urlFor(servers.games),
+            contentUrl: urlFor(servers.content),
             outFile,
             expectLocalhost: true,
         });
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 16);
+        assert.strictEqual(report.checks.length, 24);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -144,6 +182,9 @@ async function testDetectsProductionLeakInLocalMode() {
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
         media: makeHtmlServer('OpenVibe Media'),
+        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        games: makeHtmlServer('OpenVibe Games'),
+        content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({
             networkUrl: urlFor(servers.network),
@@ -151,6 +192,9 @@ async function testDetectsProductionLeakInLocalMode() {
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
             mediaUrl: urlFor(servers.media),
+            aiUrl: urlFor(servers.ai),
+            gamesUrl: urlFor(servers.games),
+            contentUrl: urlFor(servers.content),
             expectLocalhost: true,
         });
 
@@ -178,6 +222,9 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
             },
         }),
         media: makeHtmlServer('OpenVibe Media'),
+        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        games: makeHtmlServer('OpenVibe Games'),
+        content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({
             networkUrl: urlFor(servers.network),
@@ -185,6 +232,9 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
             mediaUrl: urlFor(servers.media),
+            aiUrl: urlFor(servers.ai),
+            gamesUrl: urlFor(servers.games),
+            contentUrl: urlFor(servers.content),
             expectLocalhost: true,
         });
 

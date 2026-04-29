@@ -15,6 +15,9 @@ const DEFAULT_URLS = Object.freeze({
     chatUrl: 'http://127.0.0.1:4800',
     communityUrl: 'http://127.0.0.1:4900',
     mediaUrl: 'http://127.0.0.1:4500',
+    aiUrl: 'http://127.0.0.1:5100',
+    gamesUrl: 'http://127.0.0.1:5200',
+    contentUrl: 'http://127.0.0.1:5500',
 });
 const FALSEY = new Set(['0', 'false', 'no', 'off', '']);
 const FORBIDDEN_LOCAL_PRODUCTION_ORIGINS = Object.freeze([
@@ -24,6 +27,11 @@ const FORBIDDEN_LOCAL_PRODUCTION_ORIGINS = Object.freeze([
     'https://openvibe.community',
     'https://openvibe.media',
     'https://openvibe.tools',
+    'https://ai.openvibe.network',
+    'https://openvibe.games',
+    'https://openvibe.codes',
+    'https://openvibe.blog',
+    'https://openvibe.wiki',
     'https://openre.stream',
     'https://hobo.tools',
 ]);
@@ -176,6 +184,79 @@ const SURFACE_CHECKS = Object.freeze([
         validate(body) {
             return classifyPersistenceBody('openvibe-media', body);
         },
+    },
+    {
+        id: 'ai-shell',
+        type: 'html',
+        baseKey: 'aiUrl',
+        host: 'ai.openvibe.network.localhost',
+        path: '/',
+        marker: 'OpenVibe AI — ai.openvibe.network',
+    },
+    {
+        id: 'ai-health',
+        type: 'json',
+        baseKey: 'aiUrl',
+        host: 'ai.openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-ai', body);
+        },
+    },
+    {
+        id: 'games-shell',
+        type: 'html',
+        baseKey: 'gamesUrl',
+        host: 'openvibe.games.localhost',
+        path: '/',
+        marker: 'OpenVibe Games',
+    },
+    {
+        id: 'games-health',
+        type: 'json',
+        baseKey: 'gamesUrl',
+        host: 'openvibe.games.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-games', body);
+        },
+    },
+    {
+        id: 'content-health',
+        type: 'json',
+        baseKey: 'contentUrl',
+        host: 'openvibe.codes.localhost',
+        path: '/health',
+        validate(body) {
+            if (!body || typeof body !== 'object') return 'content health did not return a JSON object';
+            if (body.service !== 'openvibe-content') return 'content health omitted openvibe-content service marker';
+            if (!Array.isArray(body.surfaces) || !body.surfaces.length) return 'content health omitted surface status';
+            return null;
+        },
+    },
+    {
+        id: 'codes-shell',
+        type: 'html',
+        baseKey: 'contentUrl',
+        host: 'openvibe.codes.localhost',
+        path: '/',
+        marker: 'openvibe.codes — native docs and platform notes',
+    },
+    {
+        id: 'blog-shell',
+        type: 'html',
+        baseKey: 'contentUrl',
+        host: 'openvibe.blog.localhost',
+        path: '/',
+        marker: 'openvibe.blog — build notes from the native platform cutover',
+    },
+    {
+        id: 'wiki-shell',
+        type: 'html',
+        baseKey: 'contentUrl',
+        host: 'openvibe.wiki.localhost',
+        path: '/',
+        marker: 'openvibe.wiki — platform glossary and migration index',
     },
 ]);
 
@@ -387,6 +468,9 @@ async function runBrowserSmoke(options = {}) {
             chat_url: resolved.chatUrl,
             community_url: resolved.communityUrl,
             media_url: resolved.mediaUrl,
+            ai_url: resolved.aiUrl,
+            games_url: resolved.gamesUrl,
+            content_url: resolved.contentUrl,
             expect_localhost: !!resolved.expectLocalhost,
             only: selected ? Array.from(selected) : [],
         },
@@ -409,6 +493,9 @@ async function main() {
         chatUrl: args.chatUrl || DEFAULT_URLS.chatUrl,
         communityUrl: args.communityUrl || DEFAULT_URLS.communityUrl,
         mediaUrl: args.mediaUrl || DEFAULT_URLS.mediaUrl,
+        aiUrl: args.aiUrl || DEFAULT_URLS.aiUrl,
+        gamesUrl: args.gamesUrl || DEFAULT_URLS.gamesUrl,
+        contentUrl: args.contentUrl || DEFAULT_URLS.contentUrl,
         expectLocalhost: readFlag(args.expectLocalhost, undefined),
         only: args.only || null,
         outFile: path.resolve(args.out || DEFAULT_OUT),

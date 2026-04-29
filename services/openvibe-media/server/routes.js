@@ -58,6 +58,8 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
     function applyPlaybackSizeGuard(media) {
         const decision = validatePublicPlaybackSize(media, {
             publicPlaybackMaxBytes: storage.config && storage.config.publicPlaybackMaxBytes,
+            targetPublicObjectBytes: storage.config && storage.config.targetPublicObjectBytes,
+            warnPublicObjectBytes: storage.config && storage.config.warnPublicObjectBytes,
         });
         if (!decision.ok) {
             storageModel.recordSizeViolation({

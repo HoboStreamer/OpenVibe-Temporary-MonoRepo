@@ -133,6 +133,8 @@ openvibe/
 | OpenVibe AI | `services/openvibe-ai` | 5100 | `http://localhost:5100` | AI provider routing, workflows, SEO and search seam | local SQLite bootstrap | `docs/openvibe/ai-service.md` |
 | OpenVibe Games | `services/openvibe-games` | 5200 | `http://localhost:5200` | Game progression, inventory, canvas, cosmetics | local SQLite bootstrap | `docs/openvibe/phase-8.md` |
 | OpenVibe Workers | `services/openvibe-workers` | 5300 | `http://localhost:5300` | Distributed worker control plane, queue registry, and async job host | Redis-backed target / registry-only locally until Redis is configured | `context/PHASE_10_SCALING.md` |
+| OpenVibe Realtime | `services/openvibe-realtime` | 5400 | `http://localhost:5400`, `http://realtime.openvibe.network.localhost:5400` | Socket.IO namespaces, presence, and room fanout bridge | single-node locally / Redis-backed target | `context/PHASE_10_SCALING.md` |
+| OpenVibe Content | `services/openvibe-content` | 5500 | `http://openvibe.codes.localhost:5500`, `http://openvibe.blog.localhost:5500`, `http://openvibe.wiki.localhost:5500` | Public content runtime for codes/blog/wiki plus truthful noindex placeholders for deferred hosts | static-first host runtime | `docs/openvibe/production-readiness-reporting.md` |
 
 > Some surfaces require the Host header to resolve local names such as
 > `openvibe.network.localhost`. Use `curl -H 'Host: openvibe.network.localhost'`
@@ -183,6 +185,8 @@ Recommended startup order for end-to-end flows:
 9. `services/openvibe-ai`
 10. `services/openvibe-games`
 11. `services/openvibe-workers`
+12. `services/openvibe-realtime`
+13. `services/openvibe-content`
 
 Not every service must run for every task. Cross-service demos and migration
 rehearsals need more of the stack.
@@ -221,6 +225,15 @@ Service URL env vars:
 - `OPENVIBE_AI_URL`
 - `OPENVIBE_GAMES_URL`
 - `OPENVIBE_WORKERS_URL`
+- `OPENVIBE_REALTIME_URL`
+- `OPENVIBE_CODES_URL`
+- `OPENVIBE_BLOG_URL`
+- `OPENVIBE_WIKI_URL`
+- `OPENVIBE_NEWS_URL`
+- `OPENVIBE_REVIEWS_URL`
+- `OPENVIBE_DEALS_URL`
+- `OPENVIBE_COUPONS_URL`
+- `OPENVIBE_TRADE_URL`
 
 Media storage env vars:
 
@@ -306,6 +319,12 @@ Validation commands:
 - `npm run check`
 - `npm test`
 - `npm run readiness`
+- `node scripts/readiness/check-storage-providers.js --offline --dry-run --skip-external`
+- `node scripts/readiness/check-queue-health.js --offline --dry-run --skip-external`
+- `node scripts/readiness/check-media-pipeline.js --offline --dry-run --skip-external`
+- `node scripts/readiness/check-realtime-socketio.js --offline --dry-run --skip-external`
+- `node scripts/readiness/check-nginx-config.js`
+- `node scripts/readiness/check-cloudflare-assumptions.js --offline --dry-run --skip-external`
 - `node scripts/migrate-hobo/test/production-fetch.test.js`
 - `node scripts/staging/test/browser-smoke.test.js`
 - `node scripts/cutover/run-cutover-rehearsal.js --skip-staging`
@@ -421,21 +440,21 @@ Native OpenVibe surfaces in this repo:
 - `openvibe.billing`
 - `ai.openvibe.network`
 - `openvibe.games`
-
-AI/content product seams available in the backend:
-
-- `openvibe.wiki`
+- `realtime.openvibe.network`
+- `openvibe.codes`
 - `openvibe.blog`
+- `openvibe.wiki`
+
+Deferred noindex/draft public content hosts (truthful placeholders exist, but
+full public publishing is not launched yet):
+
 - `openvibe.news`
 - `openvibe.reviews`
 - `openvibe.deals`
 - `openvibe.coupons`
 - `openvibe.trade`
-- `openvibe.codes`
 
-These are backend workflow seams and do not imply every public SSR host is
-fully shipped yet. `openvibe.trade` must retain non-financial-advice
-handling and review gating.
+`openvibe.trade` must retain non-financial-advice handling and review gating.
 
 ## Operator safety rules
 

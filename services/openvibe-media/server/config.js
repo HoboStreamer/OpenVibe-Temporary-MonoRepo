@@ -9,6 +9,10 @@ const {
     resolvePublicOrigin,
 } = require('@openvibe/sdk/url-defaults');
 
+const PUBLIC_MEDIA_OBJECT_MAX_BYTES = 500 * 1024 * 1024;
+const TARGET_PUBLIC_OBJECT_MAX_BYTES = 256 * 1024 * 1024;
+const WARN_PUBLIC_OBJECT_BYTES = 384 * 1024 * 1024;
+
 const port = parseInt(process.env.PORT, 10) || 4500;
 const hotRoot = process.env.OPENVIBE_MEDIA_HOT_ROOT
     || process.env.STORAGE_ROOT
@@ -60,7 +64,9 @@ module.exports = {
         scratchMaxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_SCRATCH_MAX_BYTES, 16 * 1024 * 1024),
         multipartThresholdBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_MULTIPART_THRESHOLD_BYTES, 32 * 1024 * 1024),
         directUploadMaxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_DIRECT_UPLOAD_MAX_BYTES, 256 * 1024 * 1024),
-        publicPlaybackMaxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES, 512 * 1024 * 1024),
+        publicPlaybackMaxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES, PUBLIC_MEDIA_OBJECT_MAX_BYTES),
+        targetPublicObjectBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_TARGET_PUBLIC_OBJECT_BYTES, TARGET_PUBLIC_OBJECT_MAX_BYTES),
+        warnPublicObjectBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_WARN_PUBLIC_OBJECT_BYTES, WARN_PUBLIC_OBJECT_BYTES),
         signedUrlTtlSeconds: numberFromEnv(process.env.OPENVIBE_MEDIA_SIGNED_URL_TTL_SECONDS, 900),
         local: {
             root: hotRoot,
@@ -143,4 +149,8 @@ module.exports = {
         'wiki.assets':            { max_storage_bytes: 5   * 1024 * 1024 * 1024, max_upload_bytes: 25 * 1024 * 1024,          max_file_count: 100000,  allowed_mime_prefixes: ['image/', 'video/'], allowed_types: ['image', 'attachment'] },
         'blog.assets':            { max_storage_bytes: 5   * 1024 * 1024 * 1024, max_upload_bytes: 25 * 1024 * 1024,          max_file_count: 100000,  allowed_mime_prefixes: ['image/'], allowed_types: ['image'] },
     },
+
+    PUBLIC_MEDIA_OBJECT_MAX_BYTES,
+    TARGET_PUBLIC_OBJECT_MAX_BYTES,
+    WARN_PUBLIC_OBJECT_BYTES,
 };

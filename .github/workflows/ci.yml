@@ -28,4 +28,4 @@ jobs:
         run: npm test
 
       - name: Offline scalable readiness
-        run: node scripts/readiness/check-scalable-runtime.js --offline
+        run: npm run readiness
