@@ -8,6 +8,16 @@ const path = require('path');
 
 const { runBrowserSmoke } = require('../browser-smoke');
 
+function buildHealthyPersistenceDescriptor() {
+    return {
+        mode: 'postgres',
+        requested_mode: 'postgres',
+        effective_mode: 'postgres',
+        adapter_status: 'implemented',
+        legacy_compat_mode: false,
+    };
+}
+
 function listen(server) {
     return new Promise((resolve) => {
         server.listen(0, '127.0.0.1', () => resolve(server));
@@ -29,8 +39,14 @@ function urlFor(server) {
 
 function makeNetworkServer(options = {}) {
     const leakProductionOrigin = !!options.leakProductionOrigin;
+    const persistence = options.persistence || buildHealthyPersistenceDescriptor();
     return http.createServer((req, res) => {
         const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+        if (req.url === '/health') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, service: 'openvibe-network', persistence }));
+            return;
+        }
         if (host === 'auth.openvibe.network.localhost' && req.url === '/.well-known/openid-configuration') {
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({
@@ -68,8 +84,14 @@ function makeNetworkServer(options = {}) {
     });
 }
 
-function makeHtmlServer(title) {
-    return http.createServer((_req, res) => {
+function makeHtmlServer(title, options = {}) {
+    const persistence = options.persistence || buildHealthyPersistenceDescriptor();
+    return http.createServer((req, res) => {
+        if (req.url === '/health') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, persistence }));
+            return;
+        }
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         res.end(`<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`);
     });
@@ -110,7 +132,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 11);
+        assert.strictEqual(report.checks.length, 16);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -140,9 +162,44 @@ async function testDetectsProductionLeakInLocalMode() {
     });
 }
 
+async function testDetectsRuntimeFallbackInHealthCheck() {
+    await withServers(() => ({
+        network: makeNetworkServer(),
+        live: makeHtmlServer('openvibe.live — native fallback shell'),
+        chat: makeHtmlServer('OpenVibe Chat'),
+        community: makeHtmlServer('OpenVibe Community', {
+            persistence: {
+                mode: 'postgres',
+                requested_mode: 'postgres',
+                effective_mode: 'sqlite-fallback',
+                adapter_status: 'not-implemented',
+                legacy_compat_mode: false,
+                warning: 'Requested persistence mode \u0027postgres\u0027 does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.',
+            },
+        }),
+        media: makeHtmlServer('OpenVibe Media'),
+    }), async (servers) => {
+        const report = await runBrowserSmoke({
+            networkUrl: urlFor(servers.network),
+            liveUrl: urlFor(servers.live),
+            chatUrl: urlFor(servers.chat),
+            communityUrl: urlFor(servers.community),
+            mediaUrl: urlFor(servers.media),
+            expectLocalhost: true,
+        });
+
+        assert.strictEqual(report.gate, 'red');
+        const communityHealth = report.checks.find((entry) => entry.id === 'community-health');
+        assert.ok(communityHealth, 'expected community-health check');
+        assert.strictEqual(communityHealth.status, 'red');
+        assert.ok(communityHealth.detail.includes('runtime adapter'));
+    });
+}
+
 async function main() {
     await testGreenSmokeReport();
     await testDetectsProductionLeakInLocalMode();
+    await testDetectsRuntimeFallbackInHealthCheck();
     console.log('browser smoke test passed');
 }
 

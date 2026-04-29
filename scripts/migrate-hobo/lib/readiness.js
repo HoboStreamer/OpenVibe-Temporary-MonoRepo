@@ -106,6 +106,31 @@ function parseJsonBody(body, fallback) {
     }
 }
 
+function classifyPersistenceDescriptor(descriptor) {
+    if (!descriptor || !descriptor.mode) {
+        return { status: 'yellow', detail: 'persistence metadata missing' };
+    }
+
+    const requestedMode = descriptor.requested_mode || descriptor.mode;
+    const effectiveMode = descriptor.effective_mode || descriptor.mode;
+    const adapterStatus = descriptor.adapter_status || (requestedMode === 'sqlite' ? 'local-bootstrap' : 'unknown');
+    const summary = `requested=${requestedMode}, effective=${effectiveMode}, adapter_status=${adapterStatus}`;
+
+    if (descriptor.legacy_compat_mode === true) {
+        return { status: 'yellow', detail: `${summary}, legacy compat mode is enabled` };
+    }
+    if (requestedMode !== 'sqlite' && adapterStatus !== 'implemented') {
+        return { status: 'red', detail: descriptor.warning || `${summary}, runtime Postgres adapter is not implemented` };
+    }
+    if (requestedMode === 'sqlite' || descriptor.local_bootstrap_only) {
+        return { status: 'yellow', detail: descriptor.warning || `${summary}, sqlite bootstrap mode is local/dev only` };
+    }
+    if (descriptor.readiness === 'red') {
+        return { status: 'red', detail: descriptor.warning || summary };
+    }
+    return { status: 'green', detail: summary };
+}
+
 function buildDatasetChecks(dbs, importReport, mediaBackfillReport, stagingLoadReport) {
     const checks = [];
     const persistenceDescriptors = stagingLoadReport && stagingLoadReport.service_persistence || {};
@@ -222,13 +247,21 @@ function buildDatasetChecks(dbs, importReport, mediaBackfillReport, stagingLoadR
         const descriptor = persistenceDescriptors[service];
         return !descriptor || !descriptor.mode;
     });
+    const persistenceStatuses = requiredPersistenceServices
+        .filter((service) => persistenceDescriptors[service] && persistenceDescriptors[service].mode)
+        .map((service) => ({
+            service,
+            classification: classifyPersistenceDescriptor(persistenceDescriptors[service]),
+        }));
+    const redPersistenceServices = persistenceStatuses.filter((entry) => entry.classification.status === 'red');
+    const yellowPersistenceServices = persistenceStatuses.filter((entry) => entry.classification.status === 'yellow');
     pushCheck(checks, {
         name: 'staging-persistence-descriptors',
-        status: missingPersistence.length === 0
-            ? 'green'
-            : (Object.keys(persistenceDescriptors).length === 0 ? 'yellow' : 'red'),
+        status: missingPersistence.length > 0
+            ? (Object.keys(persistenceDescriptors).length === 0 ? 'yellow' : 'red')
+            : (redPersistenceServices.length > 0 ? 'red' : (yellowPersistenceServices.length > 0 ? 'yellow' : 'green')),
         detail: missingPersistence.length === 0
-            ? requiredPersistenceServices.map((service) => `${service}=${persistenceDescriptors[service].mode}`).join(', ')
+            ? persistenceStatuses.map((entry) => `${entry.service}: ${entry.classification.detail}`).join('; ')
             : (Object.keys(persistenceDescriptors).length === 0
                 ? 'staging-load-report predates persistence descriptors; rerun load-staging-openvibe to refresh the audit artifact'
                 : `missing persistence descriptors for ${missingPersistence.join(', ')}`),
@@ -260,10 +293,7 @@ async function buildRouteChecks(options) {
                 if (!body.persistence || !body.persistence.mode) {
                     return { status: 'yellow', detail: 'openvibe-network /health responded without persistence metadata' };
                 }
-                if (body.persistence.legacy_compat_mode === true) {
-                    return { status: 'yellow', detail: `openvibe-network /health reports persistence=${body.persistence.mode} but legacy compat mode is enabled` };
-                }
-                return { status: 'green', detail: `openvibe-network /health responded with persistence=${body.persistence.mode}` };
+                return classifyPersistenceDescriptor(body.persistence);
             },
         },
         {
@@ -349,7 +379,7 @@ async function buildRouteChecks(options) {
                 }
                 const body = parseJsonBody(result.body, {});
                 return body.persistence && body.persistence.mode
-                    ? { status: 'green', detail: `openvibe-events /health responded with persistence=${body.persistence.mode}` }
+                    ? classifyPersistenceDescriptor(body.persistence)
                     : { status: 'yellow', detail: 'openvibe-events /health responded without persistence metadata' };
             },
         },
@@ -362,7 +392,7 @@ async function buildRouteChecks(options) {
                 }
                 const body = parseJsonBody(result.body, {});
                 return body.persistence && body.persistence.mode
-                    ? { status: 'green', detail: `openvibe-media /health responded with persistence=${body.persistence.mode}` }
+                    ? classifyPersistenceDescriptor(body.persistence)
                     : { status: 'yellow', detail: 'openvibe-media /health responded without persistence metadata' };
             },
         },
@@ -383,7 +413,7 @@ async function buildRouteChecks(options) {
                 }
                 const body = parseJsonBody(result.body, {});
                 return body.persistence && body.persistence.mode
-                    ? { status: 'green', detail: `openvibe-live /health responded with persistence=${body.persistence.mode}` }
+                    ? classifyPersistenceDescriptor(body.persistence)
                     : { status: 'yellow', detail: 'openvibe-live /health responded without persistence metadata' };
             },
         },
@@ -489,5 +519,6 @@ async function buildReadinessReport(options) {
 
 module.exports = {
     buildReadinessReport,
+    classifyPersistenceDescriptor,
     requestUrl,
 };

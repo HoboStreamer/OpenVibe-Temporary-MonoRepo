@@ -30,6 +30,16 @@ const FORBIDDEN_LOCAL_PRODUCTION_ORIGINS = Object.freeze([
 
 const SURFACE_CHECKS = Object.freeze([
     {
+        id: 'network-health',
+        type: 'json',
+        baseKey: 'networkUrl',
+        host: 'openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-network', body);
+        },
+    },
+    {
         id: 'network-shell',
         type: 'html',
         baseKey: 'networkUrl',
@@ -104,12 +114,32 @@ const SURFACE_CHECKS = Object.freeze([
         marker: 'openvibe.live — native fallback shell',
     },
     {
+        id: 'live-health',
+        type: 'json',
+        baseKey: 'liveUrl',
+        host: 'openvibe.live.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-live', body);
+        },
+    },
+    {
         id: 'chat-shell',
         type: 'html',
         baseKey: 'chatUrl',
         host: 'openvibe.chat.localhost',
         path: '/',
         marker: 'OpenVibe Chat',
+    },
+    {
+        id: 'chat-health',
+        type: 'json',
+        baseKey: 'chatUrl',
+        host: 'openvibe.chat.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-chat', body);
+        },
     },
     {
         id: 'community-shell',
@@ -120,12 +150,32 @@ const SURFACE_CHECKS = Object.freeze([
         marker: 'OpenVibe Community',
     },
     {
+        id: 'community-health',
+        type: 'json',
+        baseKey: 'communityUrl',
+        host: 'openvibe.community.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-community', body);
+        },
+    },
+    {
         id: 'media-shell',
         type: 'html',
         baseKey: 'mediaUrl',
         host: 'openvibe.media.localhost',
         path: '/',
         marker: 'OpenVibe Media',
+    },
+    {
+        id: 'media-health',
+        type: 'json',
+        baseKey: 'mediaUrl',
+        host: 'openvibe.media.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-media', body);
+        },
     },
 ]);
 
@@ -151,6 +201,32 @@ function isLocalUrl(rawUrl) {
     } catch {
         return false;
     }
+}
+
+function classifyPersistenceBody(serviceName, body) {
+    if (!body || typeof body !== 'object') {
+        return { status: 'red', detail: `${serviceName} health did not return a JSON object` };
+    }
+    if (!body.persistence || !body.persistence.mode) {
+        return { status: 'yellow', detail: `${serviceName} health omitted persistence metadata` };
+    }
+
+    const descriptor = body.persistence;
+    const requestedMode = descriptor.requested_mode || descriptor.mode;
+    const effectiveMode = descriptor.effective_mode || descriptor.mode;
+    const adapterStatus = descriptor.adapter_status || (requestedMode === 'sqlite' ? 'local-bootstrap' : 'unknown');
+    const summary = `${serviceName} requested=${requestedMode}, effective=${effectiveMode}, adapter_status=${adapterStatus}`;
+
+    if (descriptor.legacy_compat_mode === true) {
+        return { status: 'yellow', detail: `${summary}, legacy compat mode enabled` };
+    }
+    if (requestedMode !== 'sqlite' && adapterStatus !== 'implemented') {
+        return { status: 'red', detail: descriptor.warning || `${summary}, runtime Postgres adapter is not implemented` };
+    }
+    if (requestedMode === 'sqlite' || descriptor.local_bootstrap_only) {
+        return { status: 'yellow', detail: descriptor.warning || `${summary}, sqlite bootstrap remains local/dev only` };
+    }
+    return { status: 'green', detail: summary };
 }
 
 function requestUrl(targetUrl, options = {}) {
@@ -251,6 +327,9 @@ function evaluateJsonCheck(check, response) {
         return { status: 'red', detail: `invalid JSON response: ${error.message}` };
     }
     const validationError = typeof check.validate === 'function' ? check.validate(body) : null;
+    if (validationError && typeof validationError === 'object') {
+        return Object.assign({ parsedBody: body }, validationError);
+    }
     return validationError
         ? { status: 'red', detail: validationError }
         : { status: 'green', detail: 'JSON endpoint responded with the expected shape', parsedBody: body };
@@ -354,6 +433,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+    classifyPersistenceBody,
     requestUrl,
     runBrowserSmoke,
     SURFACE_CHECKS,

@@ -2,7 +2,7 @@
   "name": "openvibe",
   "private": true,
   "version": "0.1.0",
-  "description": "OpenVibe platform kernel monorepo (Phase 1 + Phase 2 extraction).",
+  "description": "OpenVibe native platform kernel and product monorepo.",
   "license": "MIT",
   "workspaces": [
     "packages/*",

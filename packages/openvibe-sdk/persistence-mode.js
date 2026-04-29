@@ -6,6 +6,49 @@
 // Compat mode is exposed so readiness/audit can reason about legacy bridges
 // consistently during migration work.
 
+function envPrefixForService(serviceName) {
+    return `OPENVIBE_${String(serviceName).toUpperCase().replace(/-/g, '_')}`;
+}
+
+function readBoolean(value) {
+    const raw = String(value == null ? '' : value).trim().toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+function readServiceDatabaseUrl(serviceName) {
+    const prefix = envPrefixForService(serviceName);
+    return process.env[`${prefix}_DATABASE_URL`]
+        || process.env.OPENVIBE_DATABASE_URL
+        || process.env.OPENVIBE_STAGING_DATABASE_URL
+        || '';
+}
+
+function isPostgresRuntimeImplemented(serviceName, options) {
+    if (options && typeof options.postgresRuntimeImplemented === 'boolean') {
+        return options.postgresRuntimeImplemented;
+    }
+
+    const prefix = envPrefixForService(serviceName);
+    const explicit = process.env[`${prefix}_POSTGRES_RUNTIME_IMPLEMENTED`];
+    if (explicit != null && explicit !== '') {
+        return readBoolean(explicit);
+    }
+
+    const shared = process.env.OPENVIBE_POSTGRES_RUNTIME_IMPLEMENTED_SERVICES;
+    if (!shared) return false;
+
+    const requested = new Set(
+        String(shared)
+            .split(/[\s,]+/g)
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean),
+    );
+    const normalizedServiceName = String(serviceName).trim().toLowerCase();
+    return requested.has('all')
+        || requested.has(normalizedServiceName)
+        || requested.has(normalizedServiceName.replace(/-/g, '_'));
+}
+
 function readMode(envKey) {
     const raw = process.env[envKey] || process.env.OPENVIBE_PERSISTENCE_MODE || 'sqlite';
     const mode = String(raw).trim().toLowerCase();
@@ -27,36 +70,73 @@ function isLocalLikeEnv() {
     return value === 'local' || value === 'development' || value === 'dev' || value === 'test';
 }
 
-function describePersistence(serviceName, dbPath) {
-    const envKey = `OPENVIBE_${serviceName.toUpperCase().replace(/-/g, '_')}_PERSISTENCE_MODE`;
-    const mode = readMode(envKey);
-    const databaseUrl = process.env[`OPENVIBE_${serviceName.toUpperCase().replace(/-/g, '_')}_DATABASE_URL`]
-        || process.env.OPENVIBE_DATABASE_URL
-        || process.env.OPENVIBE_STAGING_DATABASE_URL
-        || '';
+function describePersistence(serviceName, dbPath, options) {
+    const envKey = `${envPrefixForService(serviceName)}_PERSISTENCE_MODE`;
+    const requestedMode = readMode(envKey);
+    const databaseUrl = readServiceDatabaseUrl(serviceName);
+    const localLikeEnv = isLocalLikeEnv();
+    const postgresRuntimeImplemented = isPostgresRuntimeImplemented(serviceName, options);
+
+    let effectiveMode = 'sqlite';
+    let adapterStatus = 'local-bootstrap';
+    let readiness = localLikeEnv ? 'green' : 'yellow';
+    let warning = null;
+
+    if (requestedMode === 'sqlite') {
+        effectiveMode = 'sqlite';
+        adapterStatus = localLikeEnv ? 'local-bootstrap' : 'dev-only-bootstrap';
+        readiness = localLikeEnv ? 'green' : 'yellow';
+        if (!localLikeEnv) {
+            warning = 'SQLite bootstrap mode is active outside local/dev; staging/prod should use a real Postgres runtime adapter.';
+        }
+    } else if (postgresRuntimeImplemented) {
+        effectiveMode = 'postgres';
+        adapterStatus = 'implemented';
+        readiness = databaseUrl ? 'green' : 'red';
+        if (!databaseUrl) {
+            warning = `Requested persistence mode '${requestedMode}' is marked implemented, but no database URL is configured.`;
+        }
+    } else {
+        effectiveMode = 'sqlite-fallback';
+        adapterStatus = 'not-implemented';
+        readiness = 'red';
+        warning = `Requested persistence mode '${requestedMode}' does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.`;
+    }
+
     return {
         service: serviceName,
-        mode,
+        mode: requestedMode,
+        requested_mode: requestedMode,
+        effective_mode: effectiveMode,
+        adapter_status: adapterStatus,
+        readiness,
+        warning,
         database_url_configured: !!databaseUrl,
         sqlite_path: dbPath,
+        local_bootstrap_only: requestedMode === 'sqlite',
+        postgres_runtime_implemented: postgresRuntimeImplemented,
         legacy_compat_mode: isLegacyCompatEnabled(),
     };
 }
 
-function warnIfUnsupported(serviceName, dbPath) {
-    const desc = describePersistence(serviceName, dbPath);
+function warnIfUnsupported(serviceName, dbPath, options) {
+    const desc = describePersistence(serviceName, dbPath, options);
     if (desc.mode !== 'sqlite' && !desc.database_url_configured) {
         throw new Error(
             `[${serviceName}] persistence mode '${desc.mode}' requires OPENVIBE_DATABASE_URL or OPENVIBE_STAGING_DATABASE_URL.`,
         );
     }
-    if (!isLocalLikeEnv() && desc.mode === 'sqlite') {
+    if (desc.mode !== 'sqlite' && desc.adapter_status !== 'implemented') {
         console.warn(
-            `[${serviceName}] sqlite mode is intended for local/dev bootstrap only; staging/prod should use OPENVIBE_PERSISTENCE_MODE=postgres.`,
+            `[${serviceName}] ${desc.warning} /health and readiness artifacts will report adapter_status='${desc.adapter_status}' until a native Postgres adapter lands.`,
+        );
+    } else if (!isLocalLikeEnv() && desc.mode === 'sqlite') {
+        console.warn(
+            `[${serviceName}] sqlite mode is intended for local/dev bootstrap only; staging/prod should use OPENVIBE_PERSISTENCE_MODE=postgres with a real runtime adapter.`,
         );
     } else if (desc.mode === 'postgres' || desc.mode === 'staging') {
         console.warn(
-            `[${serviceName}] persistence mode '${desc.mode}' selected. Ensure the canonical Postgres staging loaders have hydrated the target before serving traffic.`,
+            `[${serviceName}] persistence mode '${desc.mode}' selected with adapter_status='${desc.adapter_status}'. Ensure the canonical Postgres staging loaders have hydrated the target before serving traffic.`,
         );
     }
     return desc;
@@ -64,8 +144,11 @@ function warnIfUnsupported(serviceName, dbPath) {
 
 module.exports = {
     describePersistence,
+    envPrefixForService,
     isLegacyCompatEnabled,
     isLocalLikeEnv,
+    isPostgresRuntimeImplemented,
     readMode,
+    readServiceDatabaseUrl,
     warnIfUnsupported,
 };
