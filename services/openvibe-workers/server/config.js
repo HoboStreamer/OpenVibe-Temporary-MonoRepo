@@ -22,6 +22,14 @@ function trimUrl(value) {
     return String(value || '').trim().replace(/\/$/, '');
 }
 
+function normalizeBackendMode(value) {
+    const normalized = String(value || 'auto').trim().toLowerCase();
+    if (normalized === 'http' || normalized === 'native' || normalized === 'auto') {
+        return normalized;
+    }
+    return 'auto';
+}
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 module.exports = {
@@ -35,8 +43,10 @@ module.exports = {
     heartbeatIntervalMs: parseInt(process.env.OPENVIBE_WORKER_HEARTBEAT_INTERVAL_MS, 10) || 10000,
     heartbeatTtlSeconds: parseInt(process.env.OPENVIBE_WORKER_HEARTBEAT_TTL_SECONDS, 10) || 30,
     concurrency: parseInt(readArg('--concurrency') || process.env.OPENVIBE_WORKER_CONCURRENCY, 10) || 2,
+    workerBackendMode: normalizeBackendMode(process.env.OPENVIBE_WORKER_BACKEND_MODE || 'auto'),
     enableProcessors: String(process.env.OPENVIBE_WORKER_ENABLE_PROCESSORS || 'false').toLowerCase() === 'true',
     queueFilter: parseQueueFilter(readArg('--worker') || process.env.OPENVIBE_WORKER_QUEUES || ''),
+    eventsUrl: trimUrl(process.env.OPENVIBE_EVENTS_URL || 'http://127.0.0.1:4400'),
     mediaUrl: trimUrl(process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || 'http://127.0.0.1:4500'),
     aiUrl: trimUrl(process.env.OPENVIBE_AI_INTERNAL_URL || process.env.OPENVIBE_AI_URL || 'http://127.0.0.1:5100'),
     billingUrl: trimUrl(process.env.OPENVIBE_BILLING_INTERNAL_URL || process.env.OPENVIBE_BILLING_URL || 'http://127.0.0.1:5000'),

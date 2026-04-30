@@ -235,6 +235,8 @@ function createWorkerHost(options) {
             processor_enabled: !!processors[job.name],
             processor_available: !!(descriptors[job.name] && descriptors[job.name].available),
             processor_dependency: descriptors[job.name] && descriptors[job.name].dependency || null,
+            processor_backend: descriptors[job.name] && descriptors[job.name].backend || null,
+            processor_configured_backend_mode: descriptors[job.name] && descriptors[job.name].configured_backend_mode || null,
         }));
     }
 
@@ -273,6 +275,8 @@ function createWorkerHost(options) {
                 return Object.assign({}, entry, {
                     available: !!(descriptor && descriptor.available),
                     dependency: descriptor && descriptor.dependency || null,
+                    backend: descriptor && descriptor.backend || null,
+                    configured_backend_mode: descriptor && descriptor.configured_backend_mode || null,
                 });
             });
         const processorSummary = processorItems.reduce((summary, item) => {

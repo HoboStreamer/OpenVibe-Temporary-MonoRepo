@@ -18,6 +18,39 @@ function buildHealthyPersistenceDescriptor() {
     };
 }
 
+function buildReadinessPayload(service, checks) {
+    const summary = { green: 0, yellow: 0, red: 0 };
+    for (const check of checks) {
+        summary[check.status] += 1;
+    }
+    return {
+        ok: summary.red === 0,
+        ready: summary.red === 0 && summary.yellow === 0,
+        status: summary.red > 0 ? 'red' : summary.yellow > 0 ? 'yellow' : 'green',
+        service,
+        summary,
+        checks,
+    };
+}
+
+function buildWorkersReadyPayload() {
+    return buildReadinessPayload('openvibe-workers', [
+        { name: 'redis_url_configured', status: 'green' },
+        { name: 'processors_enabled', status: 'green' },
+        { name: 'worker_runtime_started', status: 'green' },
+        { name: 'worker_heartbeat', status: 'green' },
+        { name: 'processor_dependencies', status: 'green' },
+    ]);
+}
+
+function buildRealtimeReadyPayload() {
+    return buildReadinessPayload('openvibe-realtime', [
+        { name: 'redis_adapter', status: 'green' },
+        { name: 'event_bridge', status: 'green' },
+        { name: 'internal_key_overridden', status: 'yellow' },
+    ]);
+}
+
 function listen(server) {
     return new Promise((resolve) => {
         server.listen(0, '127.0.0.1', () => resolve(server));
@@ -97,11 +130,16 @@ function makeHtmlServer(title, options = {}) {
     });
 }
 
-function makeHealthServer(payload) {
+function makeHealthServer(payload, readyPayload) {
     return http.createServer((req, res) => {
         if (req.url === '/health') {
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify(payload));
+            return;
+        }
+        if (req.url === '/ready' && readyPayload) {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(readyPayload));
             return;
         }
         res.writeHead(404, { 'content-type': 'text/plain' });
@@ -166,8 +204,8 @@ async function testGreenSmokeReport() {
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
-        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
-        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),
         content: makeContentServer(),
     }), async (servers) => {
         const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-browser-smoke-'));
@@ -192,7 +230,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 31);
+        assert.strictEqual(report.checks.length, 33);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -209,8 +247,8 @@ async function testDetectsProductionLeakInLocalMode() {
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
-        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
-        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),
         content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({
@@ -259,8 +297,8 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
-        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
-        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),
         content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({

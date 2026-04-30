@@ -36,6 +36,7 @@ async function main() {
         serviceId: 'openvibe-workers',
         internalKey: 'test-internal',
         requestTimeoutMs: 250,
+        workerBackendMode: 'auto',
         mediaUrl: '',
         contentUrl: '',
         billingUrl: '',
@@ -46,9 +47,13 @@ async function main() {
 
     const catalog = createProcessorCatalog(config);
     const described = describeProcessorCatalog(config);
+    const httpDescribed = describeProcessorCatalog(Object.assign({}, config, { workerBackendMode: 'http' }));
 
-    assert.strictEqual(described['clips.materialize'].available, false);
-    assert.strictEqual(described['clips.materialize'].dependency.status, 'missing-config');
+    assert.strictEqual(described['clips.materialize'].available, true);
+    assert.strictEqual(described['clips.materialize'].backend, 'native');
+    assert.strictEqual(described['search.reindex'].backend, 'native');
+    assert.strictEqual(httpDescribed['clips.materialize'].available, false);
+    assert.strictEqual(httpDescribed['clips.materialize'].dependency.status, 'missing-config');
     assert.strictEqual(described['migration.bundle-verify'].available, true);
 
     const bundleResult = await catalog['migration.bundle-verify'].run({ data: {} });
@@ -82,6 +87,7 @@ async function main() {
         throw new Error(`unexpected worker processor URL: ${url}`);
     }, async () => {
         const httpCatalog = createProcessorCatalog(Object.assign({}, config, {
+            workerBackendMode: 'http',
             contentUrl: 'http://127.0.0.1:5500',
             billingUrl: 'http://127.0.0.1:5001',
             networkUrl: 'http://127.0.0.1:4100',
@@ -140,6 +146,32 @@ async function main() {
         assert.strictEqual(notificationRequest.body.audience, 'all');
         assert.strictEqual(notificationRequest.body.source, 'openvibe-workers');
     });
+
+    const originalContentDb = process.env.OPENVIBE_CONTENT_DB_PATH;
+    const originalPersistenceMode = process.env.OPENVIBE_PERSISTENCE_MODE;
+    const nativeContentDb = path.join(tmp, 'openvibe-content-native.db');
+    process.env.OPENVIBE_CONTENT_DB_PATH = nativeContentDb;
+    process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+    try {
+        const nativeCatalog = createProcessorCatalog(Object.assign({}, config, {
+            workerBackendMode: 'native',
+        }));
+        const nativeSearchResult = await nativeCatalog['search.reindex'].run({
+            data: {
+                surface: 'codes',
+                payload: { depth: 'delta' },
+            },
+        });
+        assert.strictEqual(nativeSearchResult.ok, true);
+        assert.strictEqual(nativeSearchResult.queued, true);
+        assert.strictEqual(nativeSearchResult.requested_by_service, 'openvibe-workers');
+        assert.strictEqual(nativeSearchResult.counts.jobs, 1);
+    } finally {
+        if (originalContentDb === undefined) delete process.env.OPENVIBE_CONTENT_DB_PATH;
+        else process.env.OPENVIBE_CONTENT_DB_PATH = originalContentDb;
+        if (originalPersistenceMode === undefined) delete process.env.OPENVIBE_PERSISTENCE_MODE;
+        else process.env.OPENVIBE_PERSISTENCE_MODE = originalPersistenceMode;
+    }
 
     fs.rmSync(tmp, { recursive: true, force: true });
     console.log('openvibe-workers processors test OK');

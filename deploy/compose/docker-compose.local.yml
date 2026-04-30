@@ -345,12 +345,14 @@ services:
       OPENVIBE_DATABASE_URL: postgresql://openvibe:openvibe@postgres:5432/openvibe
       OPENVIBE_STAGING_DATABASE_URL: postgresql://openvibe:openvibe@postgres:5432/openvibe
       OPENVIBE_REDIS_URL: redis://redis:6379/0
+      OPENVIBE_EVENTS_URL: http://events:4400
       OPENVIBE_MEDIA_URL: http://media:4500
       OPENVIBE_AI_URL: http://ai:5100
       OPENVIBE_BILLING_INTERNAL_URL: http://billing:5000
       OPENVIBE_CONTENT_INTERNAL_URL: http://content:5500
       OPENVIBE_NETWORK_INTERNAL_URL: http://network:4100
       OPENVIBE_MIGRATION_BUNDLE_DIR: /workspace/data/migrations/hobo-production-staging/openvibe-target
+      OPENVIBE_WORKER_BACKEND_MODE: auto
       OPENVIBE_WORKER_ENABLE_PROCESSORS: 'true'
     ports:
       - '5300:5300'

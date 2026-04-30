@@ -202,6 +202,8 @@ async function checkLocalProdStack(options = {}) {
     const mediaBlock = compose.services.media || '';
     const workersEnabled = /OPENVIBE_WORKER_ENABLE_PROCESSORS:\s*['"]?true['"]?/i.test(workersBlock);
     const mediaUsesWorkers = /OPENVIBE_MEDIA_USE_WORKERS:\s*['"]?true['"]?/i.test(mediaBlock);
+    const workerBackendModeMatch = /OPENVIBE_WORKER_BACKEND_MODE:\s*['"]?(auto|native|http)['"]?/i.exec(workersBlock);
+    const workerBackendMode = workerBackendModeMatch ? workerBackendModeMatch[1].toLowerCase() : 'auto';
     checks.push(createCheck(
         'worker_pipeline_enabled',
         workersEnabled && mediaUsesWorkers ? 'green' : 'red',
@@ -214,11 +216,22 @@ async function checkLocalProdStack(options = {}) {
         },
     ));
 
+    checks.push(createCheck(
+        'worker_backend_mode',
+        workerBackendMode === 'http' ? 'yellow' : 'green',
+        workerBackendMode === 'http'
+            ? 'Workers are pinned to HTTP compatibility mode instead of queue-native auto/native mode.'
+            : null,
+        { worker_backend_mode: workerBackendMode },
+    ));
+
+    const workerUsesNativeBackends = workerBackendMode === 'auto' || workerBackendMode === 'native';
     const workerDependencyMatrix = [
         { env: 'OPENVIBE_MEDIA_URL', pattern: /OPENVIBE_MEDIA_(INTERNAL_)?URL:\s*http:\/\//, critical: true },
-        { env: 'OPENVIBE_BILLING_INTERNAL_URL', pattern: /OPENVIBE_BILLING_INTERNAL_URL:\s*http:\/\//, critical: false },
-        { env: 'OPENVIBE_CONTENT_INTERNAL_URL', pattern: /OPENVIBE_CONTENT_INTERNAL_URL:\s*http:\/\//, critical: false },
-        { env: 'OPENVIBE_NETWORK_INTERNAL_URL', pattern: /OPENVIBE_NETWORK_INTERNAL_URL:\s*http:\/\//, critical: false },
+        { env: 'OPENVIBE_EVENTS_URL', pattern: /OPENVIBE_EVENTS_URL:\s*http:\/\//, critical: false },
+        { env: 'OPENVIBE_BILLING_INTERNAL_URL', pattern: /OPENVIBE_BILLING_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
+        { env: 'OPENVIBE_CONTENT_INTERNAL_URL', pattern: /OPENVIBE_CONTENT_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
+        { env: 'OPENVIBE_NETWORK_INTERNAL_URL', pattern: /OPENVIBE_NETWORK_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
         { env: 'OPENVIBE_MIGRATION_BUNDLE_DIR', pattern: /OPENVIBE_MIGRATION_BUNDLE_DIR:\s*\//, critical: false },
     ];
     const missingCriticalWorkerDeps = workerDependencyMatrix.filter((item) => item.critical && !item.pattern.test(workersBlock)).map((item) => item.env);
@@ -328,6 +341,8 @@ async function checkLocalProdStack(options = {}) {
                 case 'postgres_urls_configured':
                 case 'redis_runtime_configured':
                 case 'worker_pipeline_enabled':
+                case 'worker_backend_mode':
+                case 'worker_internal_dependencies':
                 case 'nginx_localhost_gateway':
                     return ['deploy/compose/docker-compose.local.yml'];
                 case 'active_stack_probe':

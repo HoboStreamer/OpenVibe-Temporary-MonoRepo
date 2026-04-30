@@ -10,6 +10,7 @@ const { checkScalableRuntime } = require('./check-scalable-runtime');
 const { checkStorageProviders } = require('./check-storage-providers');
 const { checkQueueHealth } = require('./check-queue-health');
 const { checkRealtimeSocketIo } = require('./check-realtime-socketio');
+const { checkSchemaDrift } = require('./check-schema-drift');
 const { checkMediaPipeline } = require('./check-media-pipeline');
 const { checkNginxConfig } = require('./check-nginx-config');
 const { checkCloudflareAssumptions } = require('./check-cloudflare-assumptions');
@@ -239,6 +240,7 @@ async function generateProductionReadinessReport(options = {}) {
     const storageProviders = await checkStorageProviders(options);
     const queueHealth = await checkQueueHealth(options);
     const realtimeSocketIo = await checkRealtimeSocketIo(options);
+    const schemaDrift = await checkSchemaDrift(options);
     const mediaPipeline = await checkMediaPipeline(options);
     const nginxConfig = await checkNginxConfig(options);
     const cloudflareAssumptions = await checkCloudflareAssumptions(options);
@@ -256,6 +258,7 @@ async function generateProductionReadinessReport(options = {}) {
         section('migration_readiness', migrationReadiness),
         section('postgres_readiness', postgresReadiness),
         section('storage_providers', storageProviders),
+        section('schema_drift', schemaDrift),
         section('queue_health', queueHealth),
         section('media_pipeline', mediaPipeline),
         section('ai_seo_source_search', aiSeoSourceSearch),
@@ -278,6 +281,7 @@ async function generateProductionReadinessReport(options = {}) {
         local_prod_stack: localProdStack,
         migration_readiness: migrationReadiness,
         postgres_readiness: postgresReadiness,
+        schema_drift: schemaDrift,
         redis_readiness: {
             gate: queueHealth.worker_config && queueHealth.worker_config.redis_url_configured ? 'green' : (String(process.env.OPENVIBE_ENV || process.env.NODE_ENV || 'local').toLowerCase() === 'production' ? 'red' : 'yellow'),
             configured: queueHealth.worker_config && queueHealth.worker_config.redis_url_configured,

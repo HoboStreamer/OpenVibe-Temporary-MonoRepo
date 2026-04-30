@@ -9,48 +9,179 @@
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
-        <h1>OpenVibe Media</h1>
-        <p>Shared media object store for every OpenVibe service. Hot SQLite + cold S3-compatible tier.</p>
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <div class="ov-kicker" id="hero-kicker">Media runtime</div>
+                <h1 id="hero-title">OpenVibe Media</h1>
+                <p>Shared upload, playback, and storage control surface for the whole OpenVibe network. Browse the current catalog, inspect quota context, and sanity-check runtime readiness without leaving the shell.</p>
+                <div class="ov-chip-row">
+                    <span class="ov-chip primary" id="storage-chip">Hot + archive tiers</span>
+                    <span class="ov-chip soft" id="quota-chip">Owner-aware quota inspection</span>
+                    <span class="ov-chip" id="refresh-chip">No refresh yet</span>
+                </div>
+                <div class="ov-cta-row">
+                    <a class="ov-btn ov-btn-primary" href="#upload-panel" id="upload-link">Upload media</a>
+                    <button class="ov-btn" type="button" id="refresh-btn">Refresh catalog</button>
+                    <a class="ov-btn ov-btn-ghost" href="/ready" id="ready-link">/ready</a>
+                </div>
+            </div>
+
+            <section class="ov-panel" aria-labelledby="snapshot-heading">
+                <div class="ov-section-head">
+                    <div>
+                        <h2 id="snapshot-heading">Runtime snapshot</h2>
+                        <p class="ov-section-sub">Fast counts from the current listing plus the quota context derived from the query string.</p>
+                    </div>
+                </div>
+                <div class="ov-stat-strip">
+                    <div class="ov-stat">
+                        <div class="n" id="stat-count">0</div>
+                        <div class="l">objects</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="stat-hot">0</div>
+                        <div class="l">hot tier</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="stat-archive">0</div>
+                        <div class="l">archive / cold</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="stat-bytes">0 B</div>
+                        <div class="l">visible bytes</div>
+                    </div>
+                </div>
+                <div class="ov-chip-row" style="margin-top:1rem">
+                    <span class="ov-chip" id="quota-context-chip">Quota context not set</span>
+                    <span class="ov-chip" id="list-summary-chip">catalog idle</span>
+                </div>
+            </section>
+        </div>
     </section>
 
-    <section class="ov-section">
-        <h2>Upload</h2>
-        <form id="upload-form" class="ov-card" style="gap:.5rem">
-            <input class="ov-input" type="file" name="file" required />
-            <input class="ov-input" name="kind" placeholder="kind (e.g. avatar, clip, paste-image)" value="generic" />
-            <button class="ov-btn ov-btn-primary" type="submit">Upload</button>
-            <div class="desc" id="up-status"></div>
-        </form>
-    </section>
+    <div class="ov-split-grid ov-section">
+        <section class="ov-card" id="upload-panel">
+            <div class="ov-card-top">
+                <div>
+                    <h2 id="upload-heading">Upload lane</h2>
+                    <div class="desc">Create an upload token, send bytes, then finalize the object in one operator-friendly flow.</div>
+                </div>
+                <span class="ov-tag" id="upload-mode-tag">sign-in required</span>
+            </div>
+            <form id="upload-form" style="margin-top:1rem">
+                <div class="ov-form-grid">
+                    <label class="ov-field">
+                        <span>File</span>
+                        <input class="ov-input" type="file" name="file" required />
+                        <small>Accepted handling depends on the downstream media pipeline.</small>
+                    </label>
+                    <label class="ov-field">
+                        <span>Kind</span>
+                        <input class="ov-input" name="kind" placeholder="avatar, clip, paste-image…" value="generic" />
+                        <small>Used for storage semantics and downstream policy checks.</small>
+                    </label>
+                </div>
+                <div class="ov-action-row">
+                    <button class="ov-btn ov-btn-primary" type="submit" id="submit-upload-btn">Upload object</button>
+                    <button class="ov-btn ov-btn-ghost" type="button" id="clear-upload-btn">Clear form</button>
+                </div>
+                <div class="ov-banner" id="up-status" style="margin-top:1rem">Choose a file and submit to start the upload flow.</div>
+            </form>
+        </section>
+
+        <section class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2 id="probe-heading">Runtime probes</h2>
+                    <p class="ov-section-sub">Inspect the public media diagnostics in-place. Very glamorous, extremely useful.</p>
+                </div>
+            </div>
+            <div class="ov-toolbar" style="margin-bottom:1rem">
+                <button class="ov-btn" type="button" id="probe-health-btn">/health</button>
+                <button class="ov-btn" type="button" id="probe-ready-btn">/ready</button>
+                <button class="ov-btn ov-btn-ghost" type="button" id="probe-media-btn">/api/v1/media</button>
+            </div>
+            <pre id="runtime-json" class="ov-code-scroll">click a probe…</pre>
+        </section>
+    </div>
 
     <section class="ov-section">
-        <h2>Recent objects</h2>
-        <table class="ov-table">
-            <thead><tr><th>id</th><th>kind</th><th>size</th><th>tier</th><th>created</th></tr></thead>
-            <tbody id="objects"><tr><td colspan="5" class="desc">loading…</td></tr></tbody>
-        </table>
+        <div class="ov-section-head">
+            <div>
+                <h2 id="catalog-heading">Recent objects</h2>
+                <div class="ov-section-sub">Latest visible objects from the current operator context.</div>
+            </div>
+            <span class="ov-chip" id="catalog-chip">waiting for refresh</span>
+        </div>
+        <div class="ov-table-wrap">
+            <table class="ov-table">
+                <thead>
+                    <tr>
+                        <th>id</th>
+                        <th>kind</th>
+                        <th>size</th>
+                        <th>tier</th>
+                        <th>created</th>
+                    </tr>
+                </thead>
+                <tbody id="objects"><tr><td colspan="5" class="desc">loading…</td></tr></tbody>
+            </table>
+        </div>
     </section>
 
-    <section class="ov-section">
-        <h2>Quotas</h2>
-        <pre id="quota">loading…</pre>
-    </section>
+    <div class="ov-split-grid ov-section">
+        <section class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2 id="quota-heading">Quota inspector</h2>
+                    <p class="ov-section-sub">Pass <code>?namespace=...&owner_type=...&owner_id=...</code> to inspect a specific owner context.</p>
+                </div>
+                <button class="ov-btn ov-btn-ghost" type="button" id="quota-refresh-btn">Reload quota</button>
+            </div>
+            <pre id="quota" class="ov-code-scroll">loading…</pre>
+        </section>
+
+        <section class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2 id="notes-heading">Storage notes</h2>
+                    <p class="ov-section-sub">A quick reminder of what this surface is exercising right now.</p>
+                </div>
+            </div>
+            <ul>
+                <li>Uploads bootstrap through the public media API and only succeed when the caller has valid auth.</li>
+                <li>Quota inspection is intentionally owner-scoped so the shell does not guess identity context and lie about limits.</li>
+                <li>Recent objects come from the same shared store used by clips, avatars, paste attachments, and migration backfill.</li>
+            </ul>
+        </section>
+    </div>
 </main>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
+    const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
+    const state = { items: [] };
+
     document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
     document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
 
+    function withIcon(name, label) {
+        return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
+    }
+
     function formatBytes(n) {
-        if (!n) return '0';
-        const u = ['B','KB','MB','GB','TB'];
-        let i = 0; let v = Number(n);
-        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-        return v.toFixed(v < 10 ? 1 : 0) + ' ' + u[i];
+        if (!n) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let index = 0;
+        let value = Number(n);
+        while (value >= 1024 && index < units.length - 1) {
+            value /= 1024;
+            index += 1;
+        }
+        return `${value.toFixed(value < 10 && index > 0 ? 1 : 0)} ${units[index]}`;
     }
 
     function quotaQueryString() {
@@ -66,58 +197,184 @@
         }).toString();
     }
 
-    async function refresh() {
-        try {
-            const d = await fetch('/api/v1/media').then(r => r.json());
-            const items = d.items || [];
-            const tbody = document.getElementById('objects');
-            tbody.innerHTML = items.length
-                ? items.map(o => `<tr><td><code>${OpenVibe.escapeHtml(o.id)}</code></td><td>${OpenVibe.escapeHtml(o.kind || '')}</td><td>${formatBytes(o.size_bytes)}</td><td>${OpenVibe.escapeHtml(o.tier || 'hot')}</td><td>${OpenVibe.escapeHtml(o.created_at || '')}</td></tr>`).join('')
-                : '<tr><td colspan="5" class="desc">no media yet</td></tr>';
-        } catch (e) {
-            document.getElementById('objects').innerHTML = `<tr><td colspan="5">listing requires auth (status ${e.status||'?'})</td></tr>`;
-        }
+    function setBanner(id, type, message) {
+        const node = document.getElementById(id);
+        node.className = `ov-banner${type ? ` ${type}` : ''}`;
+        node.textContent = message;
+    }
 
+    function decorateStaticCopy() {
+        document.getElementById('hero-kicker').innerHTML = withIcon('content', 'Media runtime');
+        document.getElementById('hero-title').innerHTML = withIcon('content', 'OpenVibe Media');
+        document.getElementById('storage-chip').innerHTML = withIcon('success', 'Hot + archive tiers');
+        document.getElementById('quota-chip').innerHTML = withIcon('info', 'Owner-aware quota inspection');
+        document.getElementById('refresh-chip').innerHTML = withIcon('clock', 'No refresh yet');
+        document.getElementById('upload-link').innerHTML = withIcon('launch', 'Upload media');
+        document.getElementById('refresh-btn').innerHTML = withIcon('runtime', 'Refresh catalog');
+        document.getElementById('ready-link').innerHTML = withIcon('health', '/ready');
+        document.getElementById('upload-heading').innerHTML = withIcon('launch', 'Upload lane');
+        document.getElementById('upload-mode-tag').innerHTML = withIcon('info', 'sign-in required');
+        document.getElementById('submit-upload-btn').innerHTML = withIcon('launch', 'Upload object');
+        document.getElementById('clear-upload-btn').innerHTML = withIcon('tools', 'Clear form');
+        document.getElementById('probe-heading').innerHTML = withIcon('health', 'Runtime probes');
+        document.getElementById('probe-health-btn').innerHTML = withIcon('health', '/health');
+        document.getElementById('probe-ready-btn').innerHTML = withIcon('runtime', '/ready');
+        document.getElementById('probe-media-btn').innerHTML = withIcon('content', '/api/v1/media');
+        document.getElementById('catalog-heading').innerHTML = withIcon('search', 'Recent objects');
+        document.getElementById('quota-heading').innerHTML = withIcon('admin', 'Quota inspector');
+        document.getElementById('quota-refresh-btn').innerHTML = withIcon('runtime', 'Reload quota');
+        document.getElementById('notes-heading').innerHTML = withIcon('docs', 'Storage notes');
+    }
+
+    function updateSnapshot(items) {
+        const totalBytes = items.reduce((sum, item) => sum + Number(item.size_bytes || 0), 0);
+        const hotCount = items.filter((item) => (item.tier || 'hot') === 'hot').length;
+        const archiveCount = items.length - hotCount;
+        document.getElementById('stat-count').textContent = String(items.length);
+        document.getElementById('stat-hot').textContent = String(hotCount);
+        document.getElementById('stat-archive').textContent = String(archiveCount);
+        document.getElementById('stat-bytes').textContent = formatBytes(totalBytes);
+        document.getElementById('catalog-chip').textContent = items.length
+            ? `${items.length} visible object${items.length === 1 ? '' : 's'}`
+            : 'no visible objects';
+        document.getElementById('list-summary-chip').textContent = items.length
+            ? `catalog loaded • ${formatBytes(totalBytes)}`
+            : 'catalog empty';
+    }
+
+    function renderObjects(items) {
+        const tbody = document.getElementById('objects');
+        tbody.innerHTML = items.length
+            ? items.map((item) => `
+                <tr>
+                    <td><code>${OpenVibe.escapeHtml(item.id)}</code></td>
+                    <td>${OpenVibe.escapeHtml(item.kind || '')}</td>
+                    <td>${formatBytes(item.size_bytes)}</td>
+                    <td>${OpenVibe.escapeHtml(item.tier || 'hot')}</td>
+                    <td>${OpenVibe.escapeHtml(item.created_at || '')}</td>
+                </tr>
+            `).join('')
+            : '<tr><td colspan="5" class="desc">no media yet</td></tr>';
+    }
+
+    async function fetchJson(path, options) {
+        const response = await fetch(path, options);
+        const text = await response.text();
+        let body = null;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = { raw: text };
+        }
+        if (!response.ok) {
+            const error = new Error(`status ${response.status}`);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+        }
+        return body;
+    }
+
+    async function loadProbe(path) {
+        const target = document.getElementById('runtime-json');
+        target.textContent = 'loading…';
+        try {
+            const body = await fetchJson(path);
+            target.textContent = JSON.stringify(body, null, 2);
+        } catch (error) {
+            target.textContent = JSON.stringify({ error: error.message, status: error.status || 0, body: error.body || null }, null, 2);
+        }
+    }
+
+    async function refreshQuota() {
         const quota = document.getElementById('quota');
-        const quotaQuery = quotaQueryString();
-        if (!quotaQuery) {
+        const query = quotaQueryString();
+        if (!query) {
+            document.getElementById('quota-context-chip').innerHTML = withIcon('info', 'Add namespace + owner query params to inspect quota');
             quota.textContent = '(add ?namespace=...&owner_type=...&owner_id=... to inspect quota usage for a specific owner context)';
             return;
         }
 
+        document.getElementById('quota-context-chip').innerHTML = withIcon('success', `context active • ${query}`);
         try {
-            const q = await fetch(`/api/v1/quota?${quotaQuery}`).then(async (r) => {
-                if (!r.ok) throw new Error(`quota ${r.status}`);
-                return r.json();
-            });
-            quota.textContent = JSON.stringify(q, null, 2);
-        } catch {
-            quota.textContent = '(quota inspection requires a valid namespace / owner context)';
+            const body = await fetchJson(`/api/v1/quota?${query}`);
+            quota.textContent = JSON.stringify(body, null, 2);
+        } catch (error) {
+            quota.textContent = JSON.stringify({ error: error.message, status: error.status || 0, body: error.body || null }, null, 2);
         }
     }
-    refresh();
 
-    document.getElementById('upload-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const file = fd.get('file');
-        const kind = fd.get('kind');
-        const status = document.getElementById('up-status');
+    async function refresh() {
         try {
-            const init = await fetch('/api/v1/media/upload/init', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind, filename: file.name, content_type: file.type, size_bytes: file.size }),
-            }).then(async r => { if (!r.ok) throw new Error(`init ${r.status}`); return r.json(); });
-            const upFd = new FormData(); upFd.append('file', file);
-            const up = await fetch(`/api/v1/media/${encodeURIComponent(init.id)}/upload`, { method: 'PUT', body: upFd });
-            if (!up.ok) throw new Error(`upload ${up.status}`);
-            await fetch(`/api/v1/media/${encodeURIComponent(init.id)}/upload/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-            status.textContent = `uploaded as ${init.id}`;
-            refresh();
-        } catch (err) {
-            status.textContent = `failed: ${err.message} (sign in required)`;
+            const body = await fetchJson('/api/v1/media');
+            state.items = Array.isArray(body && body.items) ? body.items : [];
+            renderObjects(state.items);
+            updateSnapshot(state.items);
+        } catch (error) {
+            state.items = [];
+            document.getElementById('objects').innerHTML = `<tr><td colspan="5">listing requires auth (status ${error.status || '?'})</td></tr>`;
+            updateSnapshot([]);
+            document.getElementById('catalog-chip').textContent = `listing unavailable • status ${error.status || '?'}`;
+            document.getElementById('list-summary-chip').textContent = 'catalog unavailable';
+        }
+
+        document.getElementById('refresh-chip').innerHTML = withIcon('clock', `Refreshed ${new Date().toLocaleTimeString()}`);
+        await refreshQuota();
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', refresh);
+    document.getElementById('probe-health-btn').addEventListener('click', () => loadProbe('/health'));
+    document.getElementById('probe-ready-btn').addEventListener('click', () => loadProbe('/ready'));
+    document.getElementById('probe-media-btn').addEventListener('click', () => loadProbe('/api/v1/media'));
+    document.getElementById('quota-refresh-btn').addEventListener('click', refreshQuota);
+    document.getElementById('clear-upload-btn').addEventListener('click', () => {
+        document.getElementById('upload-form').reset();
+        setBanner('up-status', '', 'Form cleared. Choose a file and submit to start the upload flow.');
+    });
+
+    document.getElementById('upload-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const file = formData.get('file');
+        const kind = formData.get('kind');
+
+        if (!file || !file.name) {
+            setBanner('up-status', 'warn', 'Pick a file before uploading.');
+            return;
+        }
+
+        try {
+            setBanner('up-status', '', 'Creating upload slot…');
+            const init = await fetchJson('/api/v1/media/upload/init', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    kind,
+                    filename: file.name,
+                    content_type: file.type,
+                    size_bytes: file.size,
+                }),
+            });
+            const uploadBody = new FormData();
+            uploadBody.append('file', file);
+            await fetchJson(`/api/v1/media/${encodeURIComponent(init.id)}/upload`, {
+                method: 'PUT',
+                body: uploadBody,
+            });
+            await fetchJson(`/api/v1/media/${encodeURIComponent(init.id)}/upload/complete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            setBanner('up-status', 'ok', `Uploaded ${file.name} as ${init.id}`);
+            await refresh();
+        } catch (error) {
+            setBanner('up-status', 'warn', `Upload failed: ${error.message} (sign in required)`);
         }
     });
+
+    decorateStaticCopy();
+    await refresh();
 })();
 </script>
 </body>

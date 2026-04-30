@@ -7,6 +7,7 @@ const path = require('path');
 const { createLogger, parseArgs } = require('./lib/common');
 const { exportSource } = require('./lib/exporter');
 const { importCanonicalBundle } = require('./lib/importer');
+const { resolveLegacyArtifactSummary } = require('./lib/legacy-source-roots');
 const { validateBundle } = require('./lib/validator');
 const { fetchProductionArtifacts } = require('./lib/production-fetch');
 const { resolveFetchCliOptions } = require('./lib/production-fetch-options');
@@ -18,32 +19,18 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_WORKDIR = path.join(ROOT, 'data', 'migrations', 'hobo-production-staging');
 const DEFAULT_HOT_ROOT = path.join(ROOT, 'services', 'openvibe-media', 'data', 'storage', 'hot');
 
-function productionSourceDb(sourceDir, serviceName, fileName) {
-    return path.join(sourceDir, 'production-source', serviceName, 'data', fileName);
+function artifactSummary(sourceDir, args) {
+    return resolveLegacyArtifactSummary({ sourceDir, args });
 }
 
-function productionSourceRoot(sourceDir, serviceName) {
-    return path.join(sourceDir, 'production-source', serviceName);
-}
-
-function artifactSummary(sourceDir) {
-    return {
-        hobostreamer_db: productionSourceDb(sourceDir, 'hobostreamer', 'hobostreamer.db'),
-        hobotools_db: productionSourceDb(sourceDir, 'hobotools', 'hobo-tools.db'),
-        hoboquest_db: productionSourceDb(sourceDir, 'hoboquest', 'hobo-quest.db'),
-        hobostreamer_root: productionSourceRoot(sourceDir, 'hobostreamer'),
-        hobotools_root: productionSourceRoot(sourceDir, 'hobotools'),
-        hoboquest_root: productionSourceRoot(sourceDir, 'hoboquest'),
-    };
-}
-
-function requireSourceArtifacts(sourceDir) {
-    const summary = artifactSummary(sourceDir);
+function requireSourceArtifacts(sourceDir, args) {
+    const summary = artifactSummary(sourceDir, args);
     const missing = [];
-    if (!fs.existsSync(summary.hobostreamer_db)) missing.push(summary.hobostreamer_db);
-    if (!fs.existsSync(summary.hobotools_db)) missing.push(summary.hobotools_db);
+    if (!summary.hobostreamer_db || !fs.existsSync(summary.hobostreamer_db)) missing.push(summary.hobostreamer_db || 'hobostreamer db');
+    if (!summary.hobotools_db || !fs.existsSync(summary.hobotools_db)) missing.push(summary.hobotools_db || 'hobotools db');
+    if (!summary.hobostreamer_root || !fs.existsSync(summary.hobostreamer_root)) missing.push(summary.hobostreamer_root || 'hobostreamer root');
     if (missing.length) {
-        throw new Error(`Missing fetched production artifacts: ${missing.join(', ')}`);
+        throw new Error(`Missing legacy source inputs: ${missing.join(', ')}. Provide --legacy-source-root or per-source --hobostreamer-root/--hobotools-root/--hoboquest-root overrides when production-source artifacts are unavailable.`);
     }
     return summary;
 }
@@ -78,7 +65,7 @@ async function main() {
         }
     }
 
-    const artifacts = requireSourceArtifacts(sourceDir);
+    const artifacts = requireSourceArtifacts(sourceDir, args);
 
     logger.info('Exporting read-only HoboStreamer snapshot into NDJSON tables');
     await exportSource({
@@ -102,7 +89,7 @@ async function main() {
         logger,
     });
 
-    if (fs.existsSync(artifacts.hoboquest_db)) {
+    if (artifacts.hoboquest_db && fs.existsSync(artifacts.hoboquest_db)) {
         logger.info('Exporting read-only HoboQuest snapshot into NDJSON tables');
         await exportSource({
             sourceName: 'hoboquest',

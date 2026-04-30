@@ -207,7 +207,7 @@ const SCHEMA_SQL = `
         CREATE INDEX IF NOT EXISTS idx_billing_audit_actor ON billing_audit(actor_type, actor_id);
 
         CREATE TABLE IF NOT EXISTS billing_economy_state (
-            id          INTEGER PRIMARY KEY CHECK (id = 1),
+            id          BIGINT PRIMARY KEY CHECK (id = 1),
             frozen      INTEGER NOT NULL DEFAULT 0,
             reason      TEXT,
             updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,

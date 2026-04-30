@@ -82,24 +82,64 @@ Explicit canonical import exclusions include:
 
 Run from the monorepo root.
 
+### Legacy source root resolution
+
+The export, backfill, and staging-cutover scripts now share the same legacy
+source resolver. Unless you pass an explicit `--legacy-root` / `--db`, the
+resolver searches in this order:
+
+1. explicit CLI overrides
+  - `--legacy-root <dir>`
+  - `--db <sqlite-file>`
+2. shared root override
+  - `--legacy-source-root <dir>`
+  - `OPENVIBE_LEGACY_SOURCE_ROOT`
+3. per-source env overrides
+  - `OPENVIBE_HOBOSTREAMER_ROOT`, `OPENVIBE_HOBOSTREAMER_DB_PATH`
+  - `OPENVIBE_HOBOTOOLS_ROOT`, `OPENVIBE_HOBOTOOLS_DB_PATH`
+  - `OPENVIBE_HOBOQUEST_ROOT`, `OPENVIBE_HOBOQUEST_DB_PATH`
+4. fetched migration artifacts under
+  `data/migrations/<bundle>/production-source/<source>`
+5. repo-local compatibility checkouts under `HoboReposToMigrateFrom`
+6. parent-root layouts such as `/opt/openvibe/HoboStreamer.com` and
+  `/opt/openvibe/HoboApp/hobo-tools`
+
+That means a staging rehearsal can still resolve legacy inputs when the fetched
+`production-source/*` tree is incomplete, as long as a compatible checkout is
+available through one of the fallback locations above.
+
 ### 1. Export HoboStreamer
 
 Optional flags:
 - `--db <path>` override the legacy SQLite path
 - `--out <dir>` output root for export artifacts
+- `--legacy-source-root <dir>` shared parent/root override used before repo and parent-root fallbacks
 - `--legacy-root <dir>` root folder used to resolve local media paths
 - `--batch-size <n>` export chunk size
 - `--dry-run` count and inspect without writing files
 
+Environment fallbacks:
+- `OPENVIBE_LEGACY_SOURCE_ROOT`
+- `OPENVIBE_HOBOSTREAMER_ROOT`
+- `OPENVIBE_HOBOSTREAMER_DB_PATH`
+
 ### 2. Export hobo-tools
 
 Same flags as above.
+
+Source-specific environment fallbacks:
+- `OPENVIBE_HOBOTOOLS_ROOT`
+- `OPENVIBE_HOBOTOOLS_DB_PATH`
 
 ### 3. Export HoboQuest
 
 Same flags as above. The default legacy root resolves to
 `HoboReposToMigrateFrom/HoboApp/hobo-quest` and the default SQLite file is
 `data/hobo-quest.db`.
+
+Source-specific environment fallbacks:
+- `OPENVIBE_HOBOQUEST_ROOT`
+- `OPENVIBE_HOBOQUEST_DB_PATH`
 
 ### 4. Build the canonical OpenVibe bundle
 
@@ -192,6 +232,19 @@ warnings, and planned/executed commands.
 
 `node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging`
 
+Useful override flags:
+
+- `--legacy-source-root <dir>` shared parent directory for fallback legacy
+  checkouts when `production-source/*` is absent or incomplete
+- `--hobostreamer-root <dir>`, `--hobotools-root <dir>`, `--hoboquest-root <dir>`
+  explicit source checkout overrides
+- `--hobostreamer-db <file>`, `--hobotools-db <file>`, `--hoboquest-db <file>`
+  explicit SQLite overrides
+
+Example with a parent-root fallback layout:
+
+`node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging --legacy-source-root /opt/openvibe`
+
 ### Load an already-built canonical bundle into the current staging DBs
 
 `node scripts/migrate-hobo/load-staging-openvibe.js --bundle ./data/migrations/hobo-production-staging/openvibe-target`
@@ -199,6 +252,11 @@ warnings, and planned/executed commands.
 ### Backfill hot media storage only
 
 `node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --hot-root ./services/openvibe-media/data/storage/hot`
+
+If the bundle was prepared without a colocated `production-source/hobostreamer`
+tree, pass the shared fallback root explicitly:
+
+`node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --legacy-source-root /opt/openvibe --hot-root ./services/openvibe-media/data/storage/hot`
 
 ## Output layout
 

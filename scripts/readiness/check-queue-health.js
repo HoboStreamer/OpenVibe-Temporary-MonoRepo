@@ -56,16 +56,46 @@ function implementedQueueCategories(jobs) {
     return Array.from(categories).sort();
 }
 
+async function fetchJson(url) {
+    try {
+        const response = await fetch(url, {
+            headers: {
+                accept: 'application/json',
+                'x-internal-key': config.internalKey,
+                'x-openvibe-service': 'openvibe-readiness',
+            },
+        });
+        const text = await response.text();
+        return {
+            ok: response.ok,
+            status: response.status,
+            body: text ? JSON.parse(text) : null,
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            status: 0,
+            error: error.message,
+            body: null,
+        };
+    }
+}
+
 async function checkQueueHealth(options = {}) {
     const offline = !!options.offline || !!options.skipExternal || !!options.dryRun;
     const jobs = registry.listJobs();
     const queues = registry.listQueues();
-    const readiness = buildWorkerReadiness(config, null);
+    const workersUrl = options.workersUrl || process.env.OPENVIBE_WORKERS_URL || 'http://127.0.0.1:5300';
+    const liveReadiness = !offline ? await fetchJson(`${workersUrl.replace(/\/$/, '')}/ready`) : null;
+    const liveRuntime = !offline ? await fetchJson(`${workersUrl.replace(/\/$/, '')}/api/v1/runtime`) : null;
+    const readiness = liveReadiness && liveReadiness.ok && liveReadiness.body && Array.isArray(liveReadiness.body.checks)
+        ? liveReadiness.body
+        : buildWorkerReadiness(config, null);
     const checks = [];
 
     for (const check of readiness.checks || []) {
         let status = check.status || (check.ok ? 'green' : 'red');
-        if (check.name === 'redis_url_configured' && !config.redisUrl && isLocalLikeEnv()) {
+        if ((offline || !(liveReadiness && liveReadiness.ok)) && check.name === 'redis_url_configured' && !config.redisUrl && isLocalLikeEnv()) {
             status = 'yellow';
         }
         checks.push(buildCheck(check.name, status, check.details, check.message));
@@ -112,9 +142,12 @@ async function checkQueueHealth(options = {}) {
         worker_config: {
             redis_url_configured: !!config.redisUrl,
             enable_processors: !!config.enableProcessors,
+            worker_backend_mode: config.workerBackendMode || 'auto',
             queue_filter: config.queueFilter,
             concurrency: config.concurrency,
         },
+        live_runtime: liveRuntime && liveRuntime.ok ? liveRuntime.body : null,
+        live_runtime_source: !offline && liveReadiness && liveReadiness.ok ? 'worker-service' : 'static-config',
         registry: { jobs, queues },
         checks,
     };

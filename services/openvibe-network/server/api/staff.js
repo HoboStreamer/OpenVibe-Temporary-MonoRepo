@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const audit = require('../audit');
+const { broadcastInternalNotification } = require('../notifications/broadcast');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
@@ -392,20 +393,7 @@ function buildRouter(deps) {
         if (!serviceActor) {
             return res.status(403).json({ error: 'internal service actor required' });
         }
-        const payload = Object.assign({
-            title: req.body && req.body.title || '',
-            audience: req.body && req.body.audience || 'all',
-            body: req.body && req.body.body || '',
-        }, req.body || {});
-        recordAudit({ actor: serviceActor, action: 'internal.notifications.broadcast', target: null, detail: payload });
-        res.status(202).json({
-            ok: true,
-            queued: true,
-            delivered: false,
-            delivery_mode: 'audit-recorded',
-            requested_by_service: serviceActor.id,
-            broadcast: payload,
-        });
+        res.status(202).json(broadcastInternalNotification({ recordAudit }, req.body || {}, serviceActor));
     });
 
     return r;

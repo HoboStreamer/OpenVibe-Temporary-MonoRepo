@@ -8,59 +8,7 @@ const {
     createLegacyPersistenceRuntime,
     getSchemaVersion,
 } = require('..');
-
-const SERVICES = [
-    {
-        name: 'openvibe-network',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-network/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-network/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-events',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-events/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-events/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-media',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-media/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-media/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-live',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-live/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-live/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openre-stream',
-        modulePath: path.resolve(__dirname, '../../../services/openre-stream/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openre-stream/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-chat',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-chat/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-chat/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-community',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-community/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-community/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-billing',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-billing/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-billing/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-ai',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-ai/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-ai/server/migrations/postgres/001_init.sql'),
-    },
-    {
-        name: 'openvibe-games',
-        modulePath: path.resolve(__dirname, '../../../services/openvibe-games/server/db.js'),
-        migrationPath: path.resolve(__dirname, '../../../services/openvibe-games/server/migrations/postgres/001_init.sql'),
-    },
-];
+const { SCHEMA_SERVICES, compareServiceSchema } = require('../schema-drift');
 
 function makePool() {
     return {
@@ -81,7 +29,7 @@ function migrationFilesExistAndAvoidObviousSqliteOnlyTokens() {
         /DATETIME\s+DEFAULT\s+CURRENT_TIMESTAMP/i,
     ];
 
-    for (const service of SERVICES) {
+    for (const service of SCHEMA_SERVICES) {
         assert.ok(fs.existsSync(service.migrationPath), `expected migration file for ${service.name}`);
         const source = fs.readFileSync(service.migrationPath, 'utf8');
         assert.ok(source.trim().length > 0, `expected non-empty migration file for ${service.name}`);
@@ -92,7 +40,7 @@ function migrationFilesExistAndAvoidObviousSqliteOnlyTokens() {
 }
 
 async function adaptersReportCheckedInMigrationSource() {
-    for (const service of SERVICES) {
+    for (const service of SCHEMA_SERVICES) {
         const dbModule = require(service.modulePath);
         assert.strictEqual(dbModule.POSTGRES_MIGRATIONS_DIR, path.dirname(service.migrationPath));
         const version = await getSchemaVersion(service.name, {
@@ -101,6 +49,17 @@ async function adaptersReportCheckedInMigrationSource() {
         });
         assert.strictEqual(version.migration_source, 'checked-in', `expected checked-in migration source for ${service.name}`);
         assert.ok(version.migration_count >= 1, `expected at least one migration for ${service.name}`);
+    }
+}
+
+function schemaSqlMatchesCheckedInMigrations() {
+    for (const service of SCHEMA_SERVICES) {
+        const result = compareServiceSchema(service);
+        assert.strictEqual(
+            result.status,
+            'green',
+            `expected ${service.name} schema SQL to match checked-in Postgres migrations (missing_in_migrations=${result.missing_in_migrations.length}, missing_in_schema=${result.missing_in_schema.length})`,
+        );
     }
 }
 
@@ -189,6 +148,7 @@ function sqliteModeStillWorks() {
 async function main() {
     migrationFilesExistAndAvoidObviousSqliteOnlyTokens();
     await adaptersReportCheckedInMigrationSource();
+    schemaSqlMatchesCheckedInMigrations();
     postgresModeWithoutDatabaseUrlThrowsClearly();
     sqliteModeStillWorks();
     console.log('openvibe-persistence postgres migrations test OK');

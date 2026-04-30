@@ -9,35 +9,140 @@
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero" style="padding-top:2rem;padding-bottom:1rem">
-        <h1>OpenVibe Community</h1>
-        <p>Spaces, threads, pastes, and comments — long-form home of the OpenVibe network.</p>
-        <div class="ov-cta-row">
-            <a class="ov-btn ov-btn-primary" href="#new-paste">New paste</a>
-            <a class="ov-btn" href="#threads">Browse threads</a>
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <div class="ov-kicker" id="community-kicker">Community runtime</div>
+                <h1 id="community-title">OpenVibe Community</h1>
+                <p>Spaces, threads, pastes, and comments — the long-form home of the OpenVibe network. This shell now surfaces live counts, faster navigation, and clearer empty/auth states for day-to-day validation.</p>
+                <div class="ov-chip-row">
+                    <span class="ov-chip primary" id="community-domain-chip">Spaces · threads · pastes</span>
+                    <span class="ov-chip soft" id="community-refresh-chip">No refresh yet</span>
+                    <span class="ov-chip" id="community-status-chip">catalog idle</span>
+                </div>
+                <div class="ov-cta-row">
+                    <a class="ov-btn ov-btn-primary" href="#new-paste" id="new-paste-link">New paste</a>
+                    <button class="ov-btn" type="button" id="refresh-community-btn">Refresh feed</button>
+                    <a class="ov-btn ov-btn-ghost" href="/ready" id="community-ready-link">/ready</a>
+                </div>
+            </div>
+
+            <section class="ov-panel">
+                <div class="ov-section-head">
+                    <div>
+                        <h2 id="community-snapshot-heading">Network snapshot</h2>
+                        <p class="ov-section-sub">Current counts from the public community listing surfaces.</p>
+                    </div>
+                </div>
+                <div class="ov-stat-strip">
+                    <div class="ov-stat">
+                        <div class="n" id="thread-count">0</div>
+                        <div class="l">threads</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="paste-count">0</div>
+                        <div class="l">pastes</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="space-count">0</div>
+                        <div class="l">spaces</div>
+                    </div>
+                    <div class="ov-stat">
+                        <div class="n" id="featured-space">—</div>
+                        <div class="l">featured space</div>
+                    </div>
+                </div>
+            </section>
         </div>
     </section>
 
-    <div class="ov-tabs">
-        <div class="ov-tab active" data-tab="threads">Threads</div>
-        <div class="ov-tab" data-tab="pastes">Pastes</div>
-        <div class="ov-tab" data-tab="spaces">Spaces</div>
+    <div class="ov-tabs" role="tablist" aria-label="Community sections">
+        <button class="ov-tab active" type="button" data-tab="threads" role="tab" aria-selected="true" id="tab-btn-threads">Threads</button>
+        <button class="ov-tab" type="button" data-tab="pastes" role="tab" aria-selected="false" id="tab-btn-pastes">Pastes</button>
+        <button class="ov-tab" type="button" data-tab="spaces" role="tab" aria-selected="false" id="tab-btn-spaces">Spaces</button>
     </div>
 
-    <section id="tab-threads">
+    <div class="ov-split-grid ov-section">
+        <section class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2 id="highlights-heading">Operator highlights</h2>
+                    <p class="ov-section-sub">Quick, human-readable hints about what the current public community surface is returning.</p>
+                </div>
+            </div>
+            <div class="ov-grid" id="community-highlights"></div>
+        </section>
+
+        <section class="ov-panel">
+            <div class="ov-section-head">
+                <div>
+                    <h2 id="community-probes-heading">Runtime probes</h2>
+                    <p class="ov-section-sub">Use the public service diagnostics without leaving the page.</p>
+                </div>
+            </div>
+            <div class="ov-toolbar" style="margin-bottom:1rem">
+                <button class="ov-btn" type="button" id="community-health-btn">/health</button>
+                <button class="ov-btn" type="button" id="community-ready-btn">/ready</button>
+                <button class="ov-btn ov-btn-ghost" type="button" id="community-threads-btn">threads API</button>
+            </div>
+            <pre id="community-probe-output" class="ov-code-scroll">click a probe…</pre>
+        </section>
+    </div>
+
+    <section id="tab-threads" class="ov-section">
+        <div class="ov-section-head">
+            <div>
+                <h2 id="threads-heading">Threads</h2>
+                <div class="ov-section-sub">Long-form discussion posts and network-native commentary.</div>
+            </div>
+        </div>
         <div class="ov-grid" id="threads-grid"></div>
     </section>
-    <section id="tab-pastes" hidden>
+
+    <section id="tab-pastes" class="ov-section" hidden>
+        <div class="ov-section-head">
+            <div>
+                <h2 id="pastes-heading">Pastes</h2>
+                <div class="ov-section-sub">Share snippets, notes, logs, and migration receipts with less chaos and more structure.</div>
+            </div>
+        </div>
         <div class="ov-grid" id="pastes-grid"></div>
-        <h3 id="new-paste" style="margin-top:2rem">Create a paste</h3>
-        <form id="paste-form" class="ov-card" style="gap:.5rem">
-            <input class="ov-input" name="title" placeholder="Title" />
-            <textarea class="ov-input" name="body" rows="6" placeholder="Paste body…"></textarea>
-            <button class="ov-btn ov-btn-primary" type="submit">Create paste</button>
-            <div class="desc" id="paste-status"></div>
-        </form>
+
+        <section class="ov-card" id="new-paste" style="margin-top:1.25rem">
+            <div class="ov-card-top">
+                <div>
+                    <h2 id="create-paste-heading">Create a paste</h2>
+                    <div class="desc">Post a short note or snippet into the current community runtime.</div>
+                </div>
+                <span class="ov-tag" id="paste-mode-tag">sign-in required</span>
+            </div>
+            <form id="paste-form" style="margin-top:1rem">
+                <div class="ov-form-grid">
+                    <label class="ov-field">
+                        <span>Title</span>
+                        <input class="ov-input" name="title" placeholder="Release notes, migration idea, operator memo…" />
+                    </label>
+                </div>
+                <label class="ov-field" style="margin-top:0.85rem">
+                    <span>Body</span>
+                    <textarea class="ov-textarea" name="body" rows="6" placeholder="Paste body…"></textarea>
+                </label>
+                <div class="ov-action-row">
+                    <button class="ov-btn ov-btn-primary" type="submit" id="paste-submit-btn">Create paste</button>
+                    <button class="ov-btn ov-btn-ghost" type="button" id="paste-reset-btn">Reset</button>
+                </div>
+                <div class="ov-banner" id="paste-status" style="margin-top:1rem">Sign in to create a new paste.</div>
+            </form>
+        </section>
     </section>
-    <section id="tab-spaces" hidden>
+
+    <section id="tab-spaces" class="ov-section" hidden>
+        <div class="ov-section-head">
+            <div>
+                <h2 id="spaces-heading">Spaces</h2>
+                <div class="ov-section-sub">Namespace hubs that group threads, identity, and discovery across the network.</div>
+            </div>
+        </div>
         <div class="ov-grid" id="spaces-grid"></div>
     </section>
 </main>
@@ -46,51 +151,248 @@
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
+    const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
+    const tabs = ['threads', 'pastes', 'spaces'];
+    const state = { threads: [], pastes: [], spaces: [] };
+
     document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
     document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    document.querySelectorAll('.ov-tab').forEach(t => t.addEventListener('click', () => {
-        document.querySelectorAll('.ov-tab').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        ['threads','pastes','spaces'].forEach(k => document.getElementById('tab-' + k).hidden = k !== t.dataset.tab);
-    }));
 
-    async function load(path) {
-        try { const d = await fetch(path).then(r => r.json()); return d.items || []; }
-        catch { return []; }
+    function withIcon(name, label) {
+        return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
     }
-    function emptyMsg(what) { return `<div class="ov-banner">No ${what} yet. Sign in to create the first.</div>`; }
 
-    const threads = await load('/api/community/threads');
-    document.getElementById('threads-grid').innerHTML = threads.length
-        ? threads.map(t => `<a class="ov-card" href="/t/${OpenVibe.escapeHtml(t.slug || t.id)}"><div class="title">${OpenVibe.escapeHtml(t.title || t.slug || t.id)}</div><div class="desc">${OpenVibe.escapeHtml(t.excerpt || '')}</div><div class="meta"><span class="ov-tag">${OpenVibe.escapeHtml(t.space_slug || 'general')}</span></div></a>`).join('')
-        : emptyMsg('threads');
+    function setActiveTab(tabName) {
+        tabs.forEach((tab) => {
+            const button = document.getElementById(`tab-btn-${tab}`);
+            button.classList.toggle('active', tab === tabName);
+            button.setAttribute('aria-selected', tab === tabName ? 'true' : 'false');
+            document.getElementById(`tab-${tab}`).hidden = tab !== tabName;
+        });
+    }
 
-    const pastes = await load('/api/community/pastes');
-    document.getElementById('pastes-grid').innerHTML = pastes.length
-        ? pastes.map(p => `<a class="ov-card" href="/p/${OpenVibe.escapeHtml(p.slug)}"><div class="title">${OpenVibe.escapeHtml(p.title || p.slug)}</div><div class="desc">${OpenVibe.escapeHtml((p.body||'').slice(0,140))}</div><div class="meta"><span class="ov-tag">${OpenVibe.escapeHtml(p.language || 'text')}</span></div></a>`).join('')
-        : emptyMsg('pastes');
+    function excerpt(value, length) {
+        const text = String(value || '').trim();
+        if (!text) return 'No excerpt yet.';
+        return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+    }
 
-    const spaces = await load('/api/community/spaces');
-    document.getElementById('spaces-grid').innerHTML = spaces.length
-        ? spaces.map(s => `<a class="ov-card" href="/s/${OpenVibe.escapeHtml(s.slug)}"><div class="title">${OpenVibe.escapeHtml(s.name || s.slug)}</div><div class="desc">${OpenVibe.escapeHtml(s.description || '')}</div></a>`).join('')
-        : emptyMsg('spaces');
+    function decorateStaticCopy() {
+        document.getElementById('community-kicker').innerHTML = withIcon('community', 'Community runtime');
+        document.getElementById('community-title').innerHTML = withIcon('community', 'OpenVibe Community');
+        document.getElementById('community-domain-chip').innerHTML = withIcon('success', 'Spaces · threads · pastes');
+        document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', 'No refresh yet');
+        document.getElementById('community-status-chip').innerHTML = withIcon('info', 'catalog idle');
+        document.getElementById('new-paste-link').innerHTML = withIcon('launch', 'New paste');
+        document.getElementById('refresh-community-btn').innerHTML = withIcon('runtime', 'Refresh feed');
+        document.getElementById('community-ready-link').innerHTML = withIcon('health', '/ready');
+        document.getElementById('community-snapshot-heading').innerHTML = withIcon('search', 'Network snapshot');
+        document.getElementById('highlights-heading').innerHTML = withIcon('info', 'Operator highlights');
+        document.getElementById('community-probes-heading').innerHTML = withIcon('health', 'Runtime probes');
+        document.getElementById('community-health-btn').innerHTML = withIcon('health', '/health');
+        document.getElementById('community-ready-btn').innerHTML = withIcon('runtime', '/ready');
+        document.getElementById('community-threads-btn').innerHTML = withIcon('content', 'threads API');
+        document.getElementById('threads-heading').innerHTML = withIcon('community', 'Threads');
+        document.getElementById('pastes-heading').innerHTML = withIcon('content', 'Pastes');
+        document.getElementById('create-paste-heading').innerHTML = withIcon('launch', 'Create a paste');
+        document.getElementById('paste-mode-tag').innerHTML = withIcon('info', 'sign-in required');
+        document.getElementById('paste-submit-btn').innerHTML = withIcon('launch', 'Create paste');
+        document.getElementById('paste-reset-btn').innerHTML = withIcon('tools', 'Reset');
+        document.getElementById('spaces-heading').innerHTML = withIcon('network', 'Spaces');
+    }
 
-    document.getElementById('paste-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
+    async function fetchJson(path, options) {
+        const response = await fetch(path, options);
+        const text = await response.text();
+        let body = null;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = { raw: text };
+        }
+        if (!response.ok) {
+            const error = new Error(`status ${response.status}`);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+        }
+        return body;
+    }
+
+    async function loadItems(path) {
+        try {
+            const body = await fetchJson(path);
+            return Array.isArray(body && body.items) ? body.items : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function emptyMessage(what) {
+        return `<div class="ov-empty">No ${what} yet. Sign in to create the first.</div>`;
+    }
+
+    function renderThreads(items) {
+        document.getElementById('threads-grid').innerHTML = items.length
+            ? items.map((thread) => `
+                <a class="ov-card" href="/t/${OpenVibe.escapeHtml(thread.slug || thread.id)}">
+                    <div class="ov-card-top">
+                        <div>
+                            <div class="ov-service-title">${OpenVibe.escapeHtml(thread.title || thread.slug || thread.id)}</div>
+                            <div class="desc">${OpenVibe.escapeHtml(excerpt(thread.excerpt || thread.body, 160))}</div>
+                        </div>
+                        <span class="ov-tag">${OpenVibe.escapeHtml(thread.space_slug || 'general')}</span>
+                    </div>
+                </a>
+            `).join('')
+            : emptyMessage('threads');
+    }
+
+    function renderPastes(items) {
+        document.getElementById('pastes-grid').innerHTML = items.length
+            ? items.map((paste) => `
+                <a class="ov-card" href="/p/${OpenVibe.escapeHtml(paste.slug || paste.id || '')}">
+                    <div class="ov-card-top">
+                        <div>
+                            <div class="ov-service-title">${OpenVibe.escapeHtml(paste.title || paste.slug || paste.id || 'untitled')}</div>
+                            <div class="desc">${OpenVibe.escapeHtml(excerpt(paste.body, 140))}</div>
+                        </div>
+                        <span class="ov-tag">${OpenVibe.escapeHtml(paste.language || 'text')}</span>
+                    </div>
+                </a>
+            `).join('')
+            : emptyMessage('pastes');
+    }
+
+    function renderSpaces(items) {
+        document.getElementById('spaces-grid').innerHTML = items.length
+            ? items.map((space) => `
+                <a class="ov-card" href="/s/${OpenVibe.escapeHtml(space.slug || space.id)}">
+                    <div class="ov-card-top">
+                        <div>
+                            <div class="ov-service-title">${OpenVibe.escapeHtml(space.name || space.slug || space.id)}</div>
+                            <div class="desc">${OpenVibe.escapeHtml(excerpt(space.description, 160))}</div>
+                        </div>
+                    </div>
+                </a>
+            `).join('')
+            : emptyMessage('spaces');
+    }
+
+    function renderHighlights() {
+        const cards = [
+            {
+                title: 'Top space',
+                detail: state.spaces[0] ? (state.spaces[0].name || state.spaces[0].slug || state.spaces[0].id) : 'No spaces published yet',
+                chip: state.spaces.length ? 'space registry visible' : 'waiting for data',
+            },
+            {
+                title: 'Latest thread',
+                detail: state.threads[0] ? (state.threads[0].title || state.threads[0].slug || state.threads[0].id) : 'No threads published yet',
+                chip: state.threads.length ? 'discussion lane active' : 'empty thread feed',
+            },
+            {
+                title: 'Paste surface',
+                detail: state.pastes.length ? `${state.pastes.length} paste item${state.pastes.length === 1 ? '' : 's'} visible` : 'No pastes visible yet',
+                chip: 'public API snapshot',
+            },
+        ];
+
+        document.getElementById('community-highlights').innerHTML = cards.map((card) => `
+            <div class="ov-card">
+                <div class="ov-card-top">
+                    <div>
+                        <div class="ov-service-title">${OpenVibe.escapeHtml(card.title)}</div>
+                        <div class="desc">${OpenVibe.escapeHtml(card.detail)}</div>
+                    </div>
+                    <span class="ov-tag">${OpenVibe.escapeHtml(card.chip)}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function updateStats() {
+        document.getElementById('thread-count').textContent = String(state.threads.length);
+        document.getElementById('paste-count').textContent = String(state.pastes.length);
+        document.getElementById('space-count').textContent = String(state.spaces.length);
+        document.getElementById('featured-space').textContent = state.spaces[0]
+            ? String(state.spaces[0].slug || state.spaces[0].name || state.spaces[0].id)
+            : '—';
+        document.getElementById('community-status-chip').innerHTML = withIcon(
+            state.threads.length || state.pastes.length || state.spaces.length ? 'success' : 'info',
+            state.threads.length || state.pastes.length || state.spaces.length
+                ? `${state.threads.length + state.pastes.length + state.spaces.length} total visible records`
+                : 'public lists are empty'
+        );
+    }
+
+    async function refreshCommunity() {
+        const [threads, pastes, spaces] = await Promise.all([
+            loadItems('/api/community/threads'),
+            loadItems('/api/community/pastes'),
+            loadItems('/api/community/spaces'),
+        ]);
+
+        state.threads = threads;
+        state.pastes = pastes;
+        state.spaces = spaces;
+
+        renderThreads(threads);
+        renderPastes(pastes);
+        renderSpaces(spaces);
+        renderHighlights();
+        updateStats();
+        document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', `Refreshed ${new Date().toLocaleTimeString()}`);
+    }
+
+    async function loadProbe(path) {
+        const output = document.getElementById('community-probe-output');
+        output.textContent = 'loading…';
+        try {
+            const body = await fetchJson(path);
+            output.textContent = JSON.stringify(body, null, 2);
+        } catch (error) {
+            output.textContent = JSON.stringify({ error: error.message, status: error.status || 0, body: error.body || null }, null, 2);
+        }
+    }
+
+    tabs.forEach((tab) => {
+        document.getElementById(`tab-btn-${tab}`).addEventListener('click', () => setActiveTab(tab));
+    });
+
+    document.getElementById('refresh-community-btn').addEventListener('click', refreshCommunity);
+    document.getElementById('community-health-btn').addEventListener('click', () => loadProbe('/health'));
+    document.getElementById('community-ready-btn').addEventListener('click', () => loadProbe('/ready'));
+    document.getElementById('community-threads-btn').addEventListener('click', () => loadProbe('/api/community/threads'));
+    document.getElementById('paste-reset-btn').addEventListener('click', () => {
+        document.getElementById('paste-form').reset();
+        document.getElementById('paste-status').textContent = 'Sign in to create a new paste.';
+    });
+
+    document.getElementById('paste-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
         const status = document.getElementById('paste-status');
         try {
-            const res = await fetch('/api/community/pastes', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: fd.get('title'), body: fd.get('body') }),
+            await fetchJson('/api/community/pastes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: formData.get('title'),
+                    body: formData.get('body'),
+                }),
             });
-            if (!res.ok) throw new Error(`status ${res.status}`);
-            status.textContent = 'created!';
-            setTimeout(() => location.reload(), 600);
-        } catch (err) {
-            status.textContent = `failed: ${err.message} (sign in required)`;
+            status.textContent = 'Paste created.';
+            setActiveTab('pastes');
+            await refreshCommunity();
+        } catch (error) {
+            status.textContent = `failed: ${error.message} (sign in required)`;
         }
     });
+
+    decorateStaticCopy();
+    setActiveTab('threads');
+    await refreshCommunity();
 })();
 </script>
 </body>

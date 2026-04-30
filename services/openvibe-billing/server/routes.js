@@ -13,6 +13,7 @@ const model = require('./model');
 const policy = require('./policy');
 const ledger = require('./ledger');
 const providers = require('./providers');
+const { reconcileWalletSnapshots } = require('./reconciler');
 const {
     BILLING_EVENT_TYPES, TIPS_EVENT_TYPES, VIP_EVENT_TYPES,
     BILLING_TARGET_TYPES, TIP_INTERACTION_TYPES,
@@ -342,57 +343,10 @@ function buildRouter({ eventBus }) {
         if (!req.serviceActor) {
             return res.status(403).json({ error: 'internal service actor required' });
         }
-        const body = req.body || {};
-        const repair = body.repair !== false;
-        const limit = Math.min(Math.max(parseInt(body.limit, 10) || 100, 1), 500);
-        const wallets = model.listWallets({
-            wallet_type: body.wallet_type,
-            status: body.status || 'active',
-            limit,
-        }).filter((wallet) => {
-            if (body.owner_type && wallet.owner_type !== body.owner_type) return false;
-            if (body.owner_id && String(wallet.owner_id) !== String(body.owner_id)) return false;
-            if (body.currency && String(wallet.currency) !== String(body.currency)) return false;
-            return true;
-        });
-
-        let mismatchCount = 0;
-        let repairedCount = 0;
-        const mismatches = [];
-        for (const wallet of wallets) {
-            const snapshot = model.getSnapshot(wallet.id);
-            const recomputed = model.recomputeBalanceFromLedger(wallet.id);
-            const walletBalance = Number(wallet.balance_minor || 0);
-            const snapshotBalance = snapshot ? Number(snapshot.balance_minor || 0) : null;
-            const mismatch = walletBalance !== recomputed.balance || (snapshot && snapshotBalance !== recomputed.balance);
-            if (!mismatch) continue;
-            mismatchCount += 1;
-            if (repair) {
-                model.setSnapshot(wallet.id, recomputed.balance, recomputed.last_ledger_id);
-                repairedCount += 1;
-            }
-            mismatches.push({
-                wallet_id: wallet.id,
-                owner_type: wallet.owner_type,
-                owner_id: wallet.owner_id,
-                currency: wallet.currency,
-                wallet_balance_minor: walletBalance,
-                snapshot_balance_minor: snapshotBalance,
-                recomputed_balance_minor: recomputed.balance,
-                last_ledger_id: recomputed.last_ledger_id,
-            });
-        }
-
-        res.json({
-            ok: true,
-            requested_by_service: serviceActorId(req) || 'unknown-service',
-            repair_applied: repair,
-            wallet_count: wallets.length,
-            mismatch_count: mismatchCount,
-            repaired_count: repairedCount,
-            economy: model.getEconomyState(),
-            mismatches,
-        });
+        res.json(reconcileWalletSnapshots({
+            model,
+            requestedByService: serviceActorId(req) || 'unknown-service',
+        }, req.body || {}));
     });
 
     return r;

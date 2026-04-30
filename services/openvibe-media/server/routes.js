@@ -17,18 +17,14 @@ const quotas = require('./quotas');
 const processing = require('./processing');
 const storageModel = require('./storage-model');
 const vodModel = require('./vod-model');
+const { materializeClipProject: sharedMaterializeClipProject } = require('./clip-materializer');
+const { reconcileLifecycle: sharedReconcileLifecycle } = require('./lifecycle-reconciler');
+const { createPlaybackPayloadBuilder, inferLocationRoleForStorage } = require('./playback');
 const { resolvePlayback } = require('./playback-resolver');
 const { validatePublicPlaybackSize } = require('./size-validator');
 const namespaces = require('@openvibe/contracts/media-namespaces');
 const { MEDIA_EVENT_TYPES } = require('@openvibe/contracts/media-events');
 const { asyncRoute } = require('@openvibe/runtime');
-
-function inferLocationRoleForStorage(storage, providerName) {
-    if (!storage) return 'canonical';
-    if (providerName === storage.hotProviderName) return 'hot';
-    if (providerName === storage.assetOriginProviderName) return 'asset-origin';
-    return 'canonical';
-}
 
 function buildRouter({ storage, eventBus, internalKey, authClient }) {
     const r = express.Router();
@@ -105,19 +101,7 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         }
     }
 
-    async function buildPlaybackPayload(media, options) {
-        const locations = storageModel.listLocations(media.id);
-        if (!locations.length && media.storage_key) {
-            locations.push({
-                provider_name: media.storage_provider,
-                role: inferLocationRoleForStorage(storage, media.storage_provider),
-                storage_key: media.storage_key,
-                public_url: media.public_url,
-                signed_url_required: media.visibility !== 'public',
-            });
-        }
-        return resolvePlayback(media, locations, storage, options || {});
-    }
+    const buildPlaybackPayload = createPlaybackPayloadBuilder({ storage, storageModel, resolvePlayback });
 
     function safeJson(value, fallbackValue) {
         try {
@@ -344,206 +328,24 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
     }
 
     async function materializeClipProject(clip, actor, mode) {
-        const sourceMedia = clip && clip.source_media_id ? model.getById(clip.source_media_id) : null;
-        if (!sourceMedia) {
-            const failedExport = clipModel.createClipExport({
-                clipId: clip.id,
-                status: 'failed',
-                error: 'source media unavailable',
-            });
-            const updatedClip = clipModel.updateClip(clip.id, {
-                status: 'import_hold',
-                metadata: {
-                    last_materialization_error: 'source media unavailable',
-                    materialization_mode: mode,
-                },
-            });
-            return {
-                ok: false,
-                status: 409,
-                clip: updatedClip,
-                export: failedExport,
-                error: 'source media unavailable',
-            };
-        }
-
-        if (clip.playback_media_id) {
-            const existingMedia = model.getById(clip.playback_media_id);
-            if (existingMedia) {
-                return {
-                    ok: true,
-                    created: false,
-                    clip,
-                    media: existingMedia,
-                    export: clipModel.getLatestClipExport(clip.id),
-                    playback: await buildPlaybackPayload(existingMedia, { preferHot: true }),
-                };
-            }
-        }
-
-        const createdMedia = model.create({
-            owner_type: clip.owner_user_id ? 'user' : (actor.actor_type === 'service' ? 'service' : 'user'),
-            owner_id: clip.owner_user_id || actor.actor_id || 'openvibe-workers',
-            namespace: 'live.clips',
-            type: 'clip',
-            status: 'ready',
-            visibility: sourceMedia.visibility,
-            storage_tier: sourceMedia.storage_tier,
-            storage_provider: sourceMedia.storage_provider,
-            storage_key: sourceMedia.storage_key,
-            public_url: sourceMedia.public_url,
-            cdn_url: sourceMedia.cdn_url,
-            size_bytes: sourceMedia.size_bytes,
-            mime_type: sourceMedia.mime_type,
-            sha256: sourceMedia.sha256,
-            metadata: Object.assign({}, sourceMedia.metadata || {}, {
-                clip_source_stream_id: clip.source_stream_id,
-                clip_source_media_id: sourceMedia.id,
-                clip_range: {
-                    start_ms: clip.start_ms,
-                    end_ms: clip.end_ms,
-                },
-                materialization_mode: mode,
-                virtual_materialization: true,
-            }),
-            actor_type: actor.actor_type,
-            actor_id: actor.actor_id,
-        });
-
-        const sourceLocations = storageModel.listLocations(sourceMedia.id);
-        if (sourceLocations.length) {
-            for (const location of sourceLocations) {
-                storageModel.recordLocation({
-                    mediaId: createdMedia.id,
-                    providerName: location.provider_name,
-                    role: location.role,
-                    storageKey: location.storage_key,
-                    publicUrl: location.public_url,
-                    signedUrlRequired: location.signed_url_required,
-                    checksumSha256: location.checksum_sha256,
-                    sizeBytes: location.size_bytes,
-                    metadata: Object.assign({}, location.metadata || {}, {
-                        derived_from_media_id: sourceMedia.id,
-                        virtual_materialization: true,
-                    }),
-                });
-            }
-        } else if (sourceMedia.storage_key) {
-            storageModel.recordLocation({
-                mediaId: createdMedia.id,
-                providerName: sourceMedia.storage_provider,
-                role: inferLocationRoleForStorage(storage, sourceMedia.storage_provider),
-                storageKey: sourceMedia.storage_key,
-                publicUrl: sourceMedia.public_url,
-                signedUrlRequired: sourceMedia.visibility !== 'public',
-                checksumSha256: sourceMedia.sha256,
-                sizeBytes: sourceMedia.size_bytes,
-                metadata: {
-                    derived_from_media_id: sourceMedia.id,
-                    virtual_materialization: true,
-                },
-            });
-        }
-
-        const exportRow = clipModel.createClipExport({
-            clipId: clip.id,
-            status: 'ready',
-            mediaId: createdMedia.id,
-        });
-        const updatedClip = clipModel.updateClip(clip.id, {
-            status: 'ready',
-            playback_media_id: createdMedia.id,
-            metadata: {
-                materialization_mode: mode,
-                materialized_at: new Date().toISOString(),
-            },
-        });
-        const playback = await buildPlaybackPayload(createdMedia, { preferHot: true });
-        eventBus.publishMediaEvent(MEDIA_EVENT_TYPES.READY, createdMedia, {
-            actor_type: actor.actor_type,
-            actor_id: actor.actor_id,
-            clip_id: clip.id,
-        });
-        return {
-            ok: true,
-            created: true,
-            clip: updatedClip,
-            media: createdMedia,
-            export: exportRow,
-            playback,
-        };
+        return sharedMaterializeClipProject({
+            clipModel,
+            model,
+            storageModel,
+            buildPlaybackPayload,
+            storage,
+            eventBus,
+            mediaEventTypes: MEDIA_EVENT_TYPES,
+        }, clip, actor, mode);
     }
 
     function reconcileLifecycle(body) {
-        const input = body || {};
-        const filters = ['deleted_at IS NULL'];
-        const args = [];
-        if (input.namespace) {
-            filters.push('namespace = ?');
-            args.push(String(input.namespace));
-        }
-        if (input.owner_type) {
-            filters.push('owner_type = ?');
-            args.push(String(input.owner_type));
-        }
-        if (input.owner_id) {
-            filters.push('owner_id = ?');
-            args.push(String(input.owner_id));
-        }
-        const limit = Math.min(Math.max(Number(input.limit) || 100, 1), 500);
-        const mediaRows = db.get().prepare(`
-            SELECT id, owner_type, owner_id, namespace, storage_key, status, visibility, size_bytes
-            FROM media_objects
-            WHERE ${filters.join(' AND ')}
-            ORDER BY updated_at DESC
-            LIMIT ?
-        `).all(...args, limit);
-
-        const groups = new Map();
-        let missingLocationCount = 0;
-        for (const media of mediaRows) {
-            const groupKey = `${media.owner_type}:${media.owner_id}:${media.namespace}`;
-            if (!groups.has(groupKey)) {
-                groups.set(groupKey, {
-                    owner_type: media.owner_type,
-                    owner_id: media.owner_id,
-                    namespace: media.namespace,
-                });
-            }
-            const hasLocation = !media.storage_key
-                || storageModel.listLocations(media.id).some((location) => location.status === 'active');
-            if (!hasLocation) missingLocationCount += 1;
-        }
-
-        const usageRows = Array.from(groups.values()).map((group) => {
-            const recomputed = quotas.recomputeUsage(group.owner_type, group.owner_id, group.namespace);
-            return Object.assign({}, group, recomputed);
-        });
-
-        const orphanedLocationCount = db.get().prepare(`
-            SELECT COUNT(*) AS count
-            FROM media_object_locations AS locations
-            LEFT JOIN media_objects AS media ON media.id = locations.media_id
-            WHERE media.id IS NULL OR media.deleted_at IS NOT NULL
-        `).get().count;
-        const sizeViolationCount = db.get().prepare(`SELECT COUNT(*) AS count FROM media_size_violations`).get().count;
-
-        return {
-            ok: true,
-            media_count: mediaRows.length,
-            reconciled_group_count: usageRows.length,
-            missing_location_count: missingLocationCount,
-            orphaned_location_count: orphanedLocationCount,
-            size_violation_count: sizeViolationCount,
-            usage_rows: usageRows,
-            filters: {
-                namespace: input.namespace || null,
-                owner_type: input.owner_type || null,
-                owner_id: input.owner_id || null,
-                limit,
-            },
-            processing: processing.describeProcessingMode(),
-        };
+        return sharedReconcileLifecycle({
+            database: db.get(),
+            quotas,
+            processing,
+            storageModel,
+        }, body);
     }
 
     function validateUploadInitBody(body) {
@@ -819,7 +621,7 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         });
 
         ensureLocation(updated, completed, {
-            role: inferLocationRole(session.provider_name),
+            role: inferLocationRoleForStorage(storage, session.provider_name),
             metadata: { upload_id: session.id },
         });
         storageModel.updateUploadSession(session.id, {
@@ -899,7 +701,7 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             size_bytes: wrote.sizeBytes,
             sha256: wrote.sha256,
         });
-        ensureLocation(updated, wrote, { role: inferLocationRole(updated.storage_provider) });
+        ensureLocation(updated, wrote, { role: inferLocationRoleForStorage(storage, updated.storage_provider) });
         res.json({ media: updated });
     }));
 

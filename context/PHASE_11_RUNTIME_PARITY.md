@@ -1,6 +1,6 @@
 # Phase 11 — runtime parity tracker
 
-Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwright E2E + local Font Awesome Pro + Docker-backed validation + browser parity fixes)
+Last audited: 2026-04-30 (Phase 14 queue-native backends + legacy source roots + schema drift formalization + distributed readiness truthfulness + media/community shell polish)
 
 ## Implemented
 
@@ -59,6 +59,44 @@ Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwr
   - `services/openvibe-workers/server/processors.js`
   - `services/openvibe-workers/test/processor-http.test.js`
   - `services/openvibe-workers/test/processors.test.js`
+- Legacy source-root resolution and artifact fallback support are now implemented for the Hobo export / backfill / cutover flows:
+  - `scripts/migrate-hobo/lib/legacy-source-roots.js`
+  - `scripts/migrate-hobo/export-hobostreamer.js`
+  - `scripts/migrate-hobo/export-hobotools.js`
+  - `scripts/migrate-hobo/export-hoboquest.js`
+  - `scripts/migrate-hobo/backfill-media.js`
+  - `scripts/migrate-hobo/staging-cutover-rehearsal.js`
+  - `scripts/migrate-hobo/test/legacy-source-roots.test.js`
+- Queue-native direct-module worker backends are now implemented for the first five downstream jobs:
+  - `services/openvibe-workers/server/backends/runtime-bootstrap.js`
+  - `services/openvibe-workers/server/backends/index.js`
+  - `services/openvibe-workers/server/config.js`
+  - `services/openvibe-workers/server/processors.js`
+  - `services/openvibe-workers/server/processor-runtime.js`
+  - `services/openvibe-workers/test/processors.test.js`
+  - `services/openvibe-workers/test/native-billing.test.js`
+  - `services/openvibe-workers/test/native-notifications.test.js`
+- Shared downstream service seams now back both the HTTP routes and the native worker backends:
+  - `services/openvibe-media/server/playback.js`
+  - `services/openvibe-media/server/clip-materializer.js`
+  - `services/openvibe-media/server/lifecycle-reconciler.js`
+  - `services/openvibe-content/server/search-indexer.js`
+  - `services/openvibe-billing/server/reconciler.js`
+  - `services/openvibe-network/server/notifications/broadcast.js`
+- Schema drift is now formalized and verified in-code instead of relying on duplicate SQL staying manually aligned:
+  - `packages/openvibe-persistence/schema-drift.js`
+  - `scripts/readiness/check-schema-drift.js`
+  - `packages/openvibe-persistence/test/postgres-migrations.test.js`
+  - `services/openvibe-billing/server/db.js`
+- Browser smoke and local-prod readiness now treat distributed workers / realtime as first-class readiness surfaces:
+  - `scripts/staging/browser-smoke.js`
+  - `scripts/staging/test/browser-smoke.test.js`
+  - `scripts/readiness/check-local-prod-stack.js`
+  - `scripts/readiness/check-queue-health.js`
+  - `deploy/compose/docker-compose.local.yml`
+- Media and community now have deeper surface-specific operator shells instead of only shared baseline chrome:
+  - `services/openvibe-media/public/index.html`
+  - `services/openvibe-community/public/index.html`
 - Admin runtime status aggregation and operator visibility are now implemented:
   - `services/openvibe-network/server/config.js`
   - `services/openvibe-network/server/api/staff.js`
@@ -172,34 +210,31 @@ Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwr
   - `services/openvibe-billing/server/db.js`
   - `services/openvibe-ai/server/db.js`
   - `services/openvibe-games/server/db.js`
-- Workers now call real internal HTTP seams for clips/lifecycle/search/billing/notifications, but they still proxy through synchronous service-owned APIs instead of deeper queue-native downstream pipelines:
+- The schema duplication above is now formalized by a green drift checker, but the services still have not converged on a single canonical bootstrap source:
+  - `packages/openvibe-persistence/schema-drift.js`
+  - `scripts/readiness/check-schema-drift.js`
+- The first five worker jobs now execute natively, but several jobs still rely on their older adapters:
   - `services/openvibe-workers/server/processor-http.js`
   - `services/openvibe-workers/server/processors.js`
-- Realtime bridge now works, but without Redis it truthfully degrades to HTTP polling fallback and remains yellow in readiness:
+  - remaining adapter-backed jobs include `media.thumbnail`, `media.metadata`, `ai.*`, analytics, and `migration.bundle-verify`
+- Realtime bridge now works, and with Redis configured in local-prod it goes green; without Redis it still truthfully degrades to fallback behavior in less-complete environments:
   - `services/openvibe-realtime/server/event-bridge.js`
   - `scripts/readiness/check-realtime-socketio.js`
-- Worker heartbeat/runtime visibility is now surfaced, but workers still remain yellow unless Redis-backed distributed mode and processors are configured in the target environment:
+- Worker heartbeat/runtime visibility is now surfaced, and the Docker-backed local-prod stack is green with `worker_backend_mode=auto`; other environments still need the same Redis + processors configuration to reach that state:
   - `services/openvibe-workers/server/runtime.js`
   - `services/openvibe-network/public/admin.html`
-- Browser smoke and local-prod stack commands now exist and were verified against Docker on this Linux host, but the offline readiness entrypoint still marks the live stack probe yellow because it intentionally skips an active compose probe in offline mode:
+- Browser smoke and local-prod stack commands now verify 33 checks including `workers-ready` and `realtime-ready`, but the offline readiness entrypoint still marks the live stack probe yellow because it intentionally skips an active compose probe in offline mode:
   - `scripts/dev/start-production-like-stack.sh`
   - `scripts/dev/wait-for-stack.js`
   - `scripts/readiness/check-local-prod-stack.js`
   - `scripts/readiness/generate-production-readiness-report.js`
-- Icon assets are mounted across the main UI-facing services, but some untouched pages still need deeper surface-specific polish beyond the shared nav/card treatment.
+- Icon assets are mounted across the main UI-facing services, and `media` / `community` now have richer shells, but some untouched pages still need deeper surface-specific polish beyond the shared nav/card treatment.
 
 ## Still missing
 
-- Dedicated queue-native downstream backends behind the current HTTP worker adapters are still missing for:
-  - `clips.materialize`
-  - `lifecycle.reconcile`
-  - `search.reindex`
-  - `billing.reconcile`
-  - `notifications.broadcast`
-- Legacy grounding trees requested in the implementation prompt are not present in this checkout:
-  - missing `/opt/openvibe/HoboStreamer.com`
-  - missing `/opt/openvibe/HoboApp`
-  - missing `/opt/openvibe/OpenVibe-Temporary-MonoRepo/HoboReposToMigrateFrom`
+- Native backends are still missing for the remaining processor families outside the first five landed jobs.
+- Full schema deduplication is still missing even though drift is now enforced.
+- Actual legacy Hobo source trees remain environment-specific inputs and are still not vendored into this checkout; the runtime now resolves them when they exist instead of assuming a single hard-coded layout.
 
 ## Tests to pass
 
@@ -208,6 +243,7 @@ Required existing commands after each runtime-parity tranche:
 - `npm install`
 - `npm run check`
 - `npm test`
+- `npm run readiness:schema-drift`
 - `npm run readiness`
 - `npm run smoke:browser`
 - `npm run smoke:browser:playwright`
@@ -227,24 +263,26 @@ When Docker is available on the host, also run the local stack lifecycle command
 - `npm run stack:local:wait`
 - `npm run stack:local:stop`
 
-Validated on 2026-04-30 for this Phase 13 tranche (repo-wide syntax/tests and full Playwright rerun after the browser parity fixes; stack/readiness commands verified earlier the same day):
+Validated on 2026-04-30 for this Phase 14 tranche (repo-wide validation, new readiness truthfulness, and Docker-backed browser verification after the queue-native / legacy-root / schema-drift slice):
 
-- `npm run check` ✅ — `[check] 279 files, 0 failures`
-- `npm test` ✅ — `[test] 55 files, 55 pass, 0 fail`
+- `npm run check` ✅
+- `npm test` ✅
+- `npm run readiness:schema-drift` ✅ — `data/readiness/schema-drift-report.json` reported `gate=green`, `green=10 yellow=0 red=0`
+- `npm run readiness` ✅ — `data/readiness/openvibe-production-readiness-report.json` reported `gate=yellow`, `green=9 yellow=6 red=0`; offline mode still truthfully skips the live local-stack probe and leaves that single local-prod probe yellow instead of pretending it ran
+- `npm run stack:local:stop -- --volumes` ✅ — the compose stack and volumes shut down cleanly before the verification cycle
 - `npm run stack:local:start` ✅ — Docker Compose started the full local production-like stack from `deploy/compose/docker-compose.local.yml`
-- `npm run stack:local:wait` ✅ — `data/readiness/local-prod-stack-wait-report.json` reported `gate=green`, `green=31 yellow=0 red=0`, `attempts=3`, `elapsed_ms=12301`
-- `npm run smoke:browser` ✅ — HTTP/browser smoke reached `gate=green`, `green=31 yellow=0 red=0`
-- `npm run smoke:browser:playwright` ✅ — `data/readiness/browser-smoke-playwright-report.json` now reports `gate=green`, `green=31 yellow=0 red=0`, `screenshot_count=16`; `admin-shell` remains green with runtime-tab assertions and the previously noisy `tools-shell`, `media-shell`, and `games-shell` checks are now green with empty browser diagnostics
-- `npm run readiness:local-prod` ✅ — `data/readiness/local-prod-stack-report.json` reported `gate=green`, `green=10 yellow=0 red=0`; the active stack probe converged in 1 attempt with `green=31 yellow=0 red=0`
-- `npm run readiness` ✅ — `data/readiness/openvibe-production-readiness-report.json` reported `gate=yellow`, `green=7 yellow=7 red=0`; the offline aggregate now folds in `local_prod_stack` and `browser_smoke_playwright` truthfully instead of pretending the live probe ran inside offline mode
-- `npm run stack:local:stop` ✅ — the compose stack shut down cleanly and removed the local-prod containers and network
+- `npm run stack:local:wait` ✅ — `data/readiness/local-prod-stack-wait-report.json` reported `gate=green`, `green=33 yellow=0 red=0`, `attempts=4`, `elapsed_ms=17600`
+- `npm run smoke:browser` ✅ — HTTP/browser smoke reached `gate=green`, `green=33 yellow=0 red=0`; the matrix now includes `workers-ready` and `realtime-ready`
+- `npm run smoke:browser:playwright` ✅ — `data/readiness/browser-smoke-playwright-report.json` reported `gate=green`, `green=33 yellow=0 red=0`, `screenshot_count=16`; the refreshed `community-shell` and `media-shell` remained green with clean browser diagnostics
+- `npm run readiness:local-prod` ✅ — `data/readiness/local-prod-stack-report.json` reported `gate=green`, `green=11 yellow=0 red=0`; `worker_backend_mode=auto` was verified explicitly and the active stack probe converged in 1 attempt with `green=33 yellow=0 red=0`
 
 Notes from the verified Docker-backed run:
 
 - Docker is available and working in this Linux environment; the earlier “Docker is not installed” note is obsolete.
 - `admin.openvibe.network.localhost:4100/` now renders the distributed runtime panels and worker processor matrix expected by Playwright.
-- The previously noisy browser/runtime parity issues were resolved in the checked-in code and revalidated in both scripted and interactive browser flows: `media-shell` no longer issues a default quota request without owner context, `games-shell` now resolves the registry through the network surface and no longer 500s on `/api/games/canvas/state` under Postgres, and `tools-shell` now captures screenshots without leaving a warning behind.
-- The offline aggregate can still remain yellow even when the live Docker-backed stack is green, because offline readiness intentionally skips live/external probes; that remaining yellow is now separate from the Playwright/browser parity tranche.
+- The distributed readiness slice is now exercised directly: `workers-ready` and `realtime-ready` both went green in `stack:local:wait`, `smoke:browser`, `smoke:browser:playwright`, and `readiness:local-prod`.
+- The refreshed `media` and `community` shells rendered correctly in both automated Playwright screenshots and a live rendered browser spot-check, including the new probes, counters, and tabbed/operator affordances.
+- The offline aggregate can still remain yellow even when the live Docker-backed stack is green, because offline readiness intentionally skips live/external probes; that remaining yellow is now separate from the distributed-readiness and browser parity tranche.
 
 ## Files changed
 

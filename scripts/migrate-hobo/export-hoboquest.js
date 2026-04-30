@@ -5,21 +5,35 @@ const path = require('path');
 
 const { createLogger, parseArgs, toInt } = require('./lib/common');
 const { exportSource } = require('./lib/exporter');
+const { resolveLegacySource } = require('./lib/legacy-source-roots');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const LEGACY_ROOT = path.resolve(ROOT, 'HoboReposToMigrateFrom', 'HoboApp', 'hobo-quest');
-const DEFAULT_DB = path.join(LEGACY_ROOT, 'data', 'hobo-quest.db');
 const DEFAULT_OUT = path.join(ROOT, 'data', 'migrations', 'hobo-cutover');
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     const logger = createLogger('export-hoboquest');
+    const source = resolveLegacySource('hoboquest', {
+        explicitRoot: args.legacyRoot,
+        explicitDbPath: args.db,
+        sharedRoot: args.legacySourceRoot || args.sharedLegacyRoot,
+    });
 
-    const dbPath = path.resolve(args.db || DEFAULT_DB);
+    if (!source.dbPath) {
+        throw new Error('Unable to resolve HoboQuest SQLite path. Provide --db or --legacy-source-root/--legacy-root.');
+    }
+    if (!source.legacyRoot) {
+        throw new Error('Unable to resolve HoboQuest legacy root. Provide --legacy-root or --legacy-source-root.');
+    }
+
+    const dbPath = path.resolve(source.dbPath);
     const outDir = path.resolve(args.out || DEFAULT_OUT);
-    const legacyRoot = path.resolve(args.legacyRoot || LEGACY_ROOT);
+    const legacyRoot = path.resolve(source.legacyRoot);
     const batchSize = toInt(args.batchSize, 500);
     const dryRun = !!args.dryRun;
+
+    logger.info(`Resolved legacy root: ${legacyRoot}`);
+    logger.info(`Resolved SQLite path: ${dbPath}`);
 
     const manifest = await exportSource({
         sourceName: 'hoboquest',

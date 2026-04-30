@@ -283,6 +283,22 @@ const SURFACE_CHECKS = Object.freeze([
         },
     },
     {
+        id: 'workers-ready',
+        type: 'json',
+        baseKey: 'workersUrl',
+        host: 'workers.openvibe.network.localhost',
+        path: '/ready',
+        validate(body) {
+            return validateRuntimeReadinessBody('openvibe-workers', body, [
+                'redis_url_configured',
+                'processors_enabled',
+                'worker_runtime_started',
+                'worker_heartbeat',
+                'processor_dependencies',
+            ]);
+        },
+    },
+    {
         id: 'realtime-health',
         type: 'json',
         baseKey: 'realtimeUrl',
@@ -290,6 +306,19 @@ const SURFACE_CHECKS = Object.freeze([
         path: '/health',
         validate(body) {
             return validateRuntimeHealthBody('openvibe-realtime', body);
+        },
+    },
+    {
+        id: 'realtime-ready',
+        type: 'json',
+        baseKey: 'realtimeUrl',
+        host: 'realtime.openvibe.network.localhost',
+        path: '/ready',
+        validate(body) {
+            return validateRuntimeReadinessBody('openvibe-realtime', body, [
+                'redis_adapter',
+                'event_bridge',
+            ]);
         },
     },
     {
@@ -389,6 +418,42 @@ function validateRuntimeHealthBody(serviceName, body) {
         return { status: 'red', detail: `${serviceName} health omitted service marker (${body.service || 'missing'})` };
     }
     return { status: 'green', detail: `${serviceName} health responded with expected service marker` };
+}
+
+function validateRuntimeReadinessBody(serviceName, body, requiredChecks) {
+    if (!body || typeof body !== 'object') {
+        return { status: 'red', detail: `${serviceName} readiness did not return a JSON object` };
+    }
+    if (body.service !== serviceName) {
+        return { status: 'red', detail: `${serviceName} readiness omitted service marker (${body.service || 'missing'})` };
+    }
+    if (!Array.isArray(body.checks)) {
+        return { status: 'red', detail: `${serviceName} readiness omitted checks[]` };
+    }
+
+    const checkMap = new Map(body.checks.map((check) => [check && check.name, check]));
+    const missingChecks = [];
+    const failingChecks = [];
+
+    for (const checkName of requiredChecks || []) {
+        const check = checkMap.get(checkName);
+        if (!check) {
+            missingChecks.push(checkName);
+            continue;
+        }
+        if (check.status !== 'green') {
+            failingChecks.push(`${checkName}:${check.status}`);
+        }
+    }
+
+    if (missingChecks.length) {
+        return { status: 'red', detail: `${serviceName} readiness omitted required checks: ${missingChecks.join(', ')}` };
+    }
+    if (failingChecks.length) {
+        return { status: 'red', detail: `${serviceName} readiness is not green for: ${failingChecks.join(', ')}` };
+    }
+
+    return { status: 'green', detail: `${serviceName} readiness passed required distributed checks` };
 }
 
 function requestUrl(targetUrl, options = {}) {
@@ -623,4 +688,5 @@ module.exports = {
     SURFACE_CHECKS,
     splitSelection,
     validateRuntimeHealthBody,
+    validateRuntimeReadinessBody,
 };

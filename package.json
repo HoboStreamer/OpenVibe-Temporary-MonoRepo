@@ -13,6 +13,7 @@
     "test": "node scripts/run-tests.js",
     "icons:install:local": "node scripts/dev/install-fontawesome-pro-local.js",
     "readiness": "node scripts/readiness/generate-production-readiness-report.js --offline --dry-run --skip-external",
+    "readiness:schema-drift": "node scripts/readiness/check-schema-drift.js",
     "readiness:local-prod": "node scripts/readiness/check-local-prod-stack.js",
     "smoke:browser": "node scripts/staging/browser-smoke.js",
     "smoke:browser:playwright": "node scripts/staging/browser-smoke-playwright.js",

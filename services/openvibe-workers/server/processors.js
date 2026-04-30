@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const { createNativeBackendCatalog } = require('./backends');
 const { dependencyFromHttp, postProcessorJson } = require('./processor-http');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -175,6 +176,111 @@ function compactObject(value) {
     return out;
 }
 
+function normalizeWorkerBackendMode(value) {
+    const normalized = String(value || 'auto').trim().toLowerCase();
+    if (normalized === 'http' || normalized === 'native' || normalized === 'auto') {
+        return normalized;
+    }
+    return 'auto';
+}
+
+function buildClipMaterializePayload(data) {
+    return compactObject({
+        clip_id: toStringValue(data.clip_id || data.clipId),
+        mode: toStringValue(data.mode) || 'worker-materialize',
+        reason: toStringValue(data.reason) || 'worker.clips.materialize',
+        request_id: toStringValue(data.request_id || data.requestId),
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildLifecycleReconcilePayload(data) {
+    return compactObject({
+        media_id: toStringValue(data.media_id || data.mediaId),
+        media_ids: toStringArray(data.media_ids || data.mediaIds),
+        repair: data.repair == null ? undefined : toBooleanValue(data.repair, true),
+        dry_run: data.dry_run == null && data.dryRun == null ? undefined : toBooleanValue(data.dry_run != null ? data.dry_run : data.dryRun, false),
+        reason: toStringValue(data.reason) || 'worker.lifecycle.reconcile',
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildSearchReindexPayload(data) {
+    return compactObject({
+        job_type: toStringValue(data.job_type || data.jobType) || 'search.reindex',
+        surface: toStringValue(data.surface),
+        source_id: toStringValue(data.source_id || data.sourceId),
+        item_id: toStringValue(data.item_id || data.itemId),
+        state: toStringValue(data.state),
+        scheduled_at: toStringValue(data.scheduled_at || data.scheduledAt),
+        payload: compactObject(Object.assign({}, normalizeObject(data.payload), {
+            reason: toStringValue(data.reason) || 'worker.search.reindex',
+            trigger: toStringValue(data.trigger),
+            correlation_id: toStringValue(data.correlation_id || data.correlationId),
+        })),
+    });
+}
+
+function buildBillingReconcilePayload(data) {
+    return compactObject({
+        repair: toBooleanValue(data.repair, true),
+        limit: toIntegerValue(data.limit, 100, 1, 500),
+        wallet_type: toStringValue(data.wallet_type || data.walletType),
+        status: toStringValue(data.status),
+        owner_type: toStringValue(data.owner_type || data.ownerType),
+        owner_id: toStringValue(data.owner_id || data.ownerId),
+        currency: toStringValue(data.currency),
+        reason: toStringValue(data.reason) || 'worker.billing.reconcile',
+    });
+}
+
+function buildNotificationBroadcastPayload(data, defaultSource) {
+    return compactObject({
+        title: toStringValue(data.title || data.subject) || 'OpenVibe broadcast',
+        audience: toStringValue(data.audience || data.channel) || 'all',
+        body: data.body == null ? String(data.message || '') : String(data.body),
+        severity: toStringValue(data.severity),
+        source: toStringValue(data.source) || defaultSource,
+        metadata: normalizeObject(data.metadata),
+        reason: toStringValue(data.reason) || 'worker.notifications.broadcast',
+    });
+}
+
+function selectPairedBackend(name, configuredMode, httpDependency, nativeDefinition, buildPayload, config, validate) {
+    const httpDefinition = {
+        dependency: httpDependency,
+        async run(payload) {
+            return postProcessorJson({ name, dependency: httpDependency }, payload, config, { validate });
+        },
+    };
+    const selectedBackend = configuredMode === 'http'
+        ? 'http'
+        : configuredMode === 'native'
+            ? 'native'
+            : nativeDefinition && nativeDefinition.dependency && nativeDefinition.dependency.available
+                ? 'native'
+                : 'http';
+    const activeDefinition = selectedBackend === 'native' ? nativeDefinition : httpDefinition;
+    const fallbackBackend = nativeDefinition
+        ? (selectedBackend === 'native' ? 'http' : 'native')
+        : null;
+
+    return {
+        name,
+        dependency: Object.assign({}, activeDefinition.dependency, {
+            selected_backend: selectedBackend,
+            configured_backend_mode: configuredMode,
+            fallback_backend: fallbackBackend,
+        }),
+        backend: selectedBackend,
+        configured_backend_mode: configuredMode,
+        async run(job) {
+            ensureDependency(this);
+            return activeDefinition.run(buildPayload(job.data || {}));
+        },
+    };
+}
+
 function validateOkResponse(body) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return 'response body must be a JSON object';
@@ -250,6 +356,8 @@ async function verifyMigrationBundle(config, payload) {
 }
 
 function createProcessorCatalog(config) {
+    const backendMode = normalizeWorkerBackendMode(config.workerBackendMode || 'auto');
+    const nativeCatalog = createNativeBackendCatalog(config);
     const mediaProcessing = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/processing/run', {
         expects: 'tracked media-processing result',
     });
@@ -322,18 +430,15 @@ function createProcessorCatalog(config) {
             },
         },
         'clips.materialize': {
-            name: 'clips.materialize',
-            dependency: mediaMaterialize,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, compactObject({
-                    clip_id: toStringValue(data.clip_id || data.clipId),
-                    mode: toStringValue(data.mode) || 'worker-materialize',
-                    reason: toStringValue(data.reason) || 'worker.clips.materialize',
-                    request_id: toStringValue(data.request_id || data.requestId),
-                    payload: normalizeObject(data.payload),
-                }), validateOkResponse);
-            },
+            ...selectPairedBackend(
+                'clips.materialize',
+                backendMode,
+                mediaMaterialize,
+                nativeCatalog['clips.materialize'],
+                buildClipMaterializePayload,
+                config,
+                validateOkResponse,
+            ),
         },
         'analytics.audio-features': {
             name: 'analytics.audio-features',
@@ -350,56 +455,37 @@ function createProcessorCatalog(config) {
             },
         },
         'lifecycle.reconcile': {
-            name: 'lifecycle.reconcile',
-            dependency: mediaLifecycle,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, compactObject({
-                    media_id: toStringValue(data.media_id || data.mediaId),
-                    media_ids: toStringArray(data.media_ids || data.mediaIds),
-                    repair: data.repair == null ? undefined : toBooleanValue(data.repair, true),
-                    dry_run: data.dry_run == null && data.dryRun == null ? undefined : toBooleanValue(data.dry_run != null ? data.dry_run : data.dryRun, false),
-                    reason: toStringValue(data.reason) || 'worker.lifecycle.reconcile',
-                    payload: normalizeObject(data.payload),
-                }), validateOkResponse);
-            },
+            ...selectPairedBackend(
+                'lifecycle.reconcile',
+                backendMode,
+                mediaLifecycle,
+                nativeCatalog['lifecycle.reconcile'],
+                buildLifecycleReconcilePayload,
+                config,
+                validateOkResponse,
+            ),
         },
         'search.reindex': {
-            name: 'search.reindex',
-            dependency: contentSearch,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, compactObject({
-                    job_type: toStringValue(data.job_type || data.jobType) || 'search.reindex',
-                    surface: toStringValue(data.surface),
-                    source_id: toStringValue(data.source_id || data.sourceId),
-                    item_id: toStringValue(data.item_id || data.itemId),
-                    state: toStringValue(data.state),
-                    scheduled_at: toStringValue(data.scheduled_at || data.scheduledAt),
-                    payload: compactObject(Object.assign({}, normalizeObject(data.payload), {
-                        reason: toStringValue(data.reason) || 'worker.search.reindex',
-                        trigger: toStringValue(data.trigger),
-                        correlation_id: toStringValue(data.correlation_id || data.correlationId),
-                    })),
-                }), validateQueuedResponse);
-            },
+            ...selectPairedBackend(
+                'search.reindex',
+                backendMode,
+                contentSearch,
+                nativeCatalog['search.reindex'],
+                buildSearchReindexPayload,
+                config,
+                validateQueuedResponse,
+            ),
         },
         'billing.reconcile': {
-            name: 'billing.reconcile',
-            dependency: billingReconcile,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, compactObject({
-                    repair: toBooleanValue(data.repair, true),
-                    limit: toIntegerValue(data.limit, 100, 1, 500),
-                    wallet_type: toStringValue(data.wallet_type || data.walletType),
-                    status: toStringValue(data.status),
-                    owner_type: toStringValue(data.owner_type || data.ownerType),
-                    owner_id: toStringValue(data.owner_id || data.ownerId),
-                    currency: toStringValue(data.currency),
-                    reason: toStringValue(data.reason) || 'worker.billing.reconcile',
-                }), validateBillingResponse);
-            },
+            ...selectPairedBackend(
+                'billing.reconcile',
+                backendMode,
+                billingReconcile,
+                nativeCatalog['billing.reconcile'],
+                buildBillingReconcilePayload,
+                config,
+                validateBillingResponse,
+            ),
         },
         'migration.bundle-verify': {
             name: 'migration.bundle-verify',
@@ -410,20 +496,15 @@ function createProcessorCatalog(config) {
             },
         },
         'notifications.broadcast': {
-            name: 'notifications.broadcast',
-            dependency: networkBroadcast,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, compactObject({
-                    title: toStringValue(data.title || data.subject) || 'OpenVibe broadcast',
-                    audience: toStringValue(data.audience || data.channel) || 'all',
-                    body: data.body == null ? String(data.message || '') : String(data.body),
-                    severity: toStringValue(data.severity),
-                    source: toStringValue(data.source) || 'openvibe-workers',
-                    metadata: normalizeObject(data.metadata),
-                    reason: toStringValue(data.reason) || 'worker.notifications.broadcast',
-                }), validateQueuedResponse);
-            },
+            ...selectPairedBackend(
+                'notifications.broadcast',
+                backendMode,
+                networkBroadcast,
+                nativeCatalog['notifications.broadcast'],
+                (data) => buildNotificationBroadcastPayload(data, config.serviceId || 'openvibe-workers'),
+                config,
+                validateQueuedResponse,
+            ),
         },
     };
 }
@@ -434,6 +515,8 @@ function describeProcessorCatalog(config) {
         name,
         dependency: Object.assign({}, definition.dependency),
         available: !!(definition.dependency && definition.dependency.available),
+        backend: definition.backend || null,
+        configured_backend_mode: definition.configured_backend_mode || null,
     }]));
 }
 

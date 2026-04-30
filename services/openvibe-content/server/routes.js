@@ -2,6 +2,7 @@
 
 const express = require('express');
 
+const { queueSearchReindex } = require('./search-indexer');
 const {
     hostStatuses,
     renderRequest,
@@ -81,28 +82,12 @@ function buildRouter({ config, contentStore }) {
         if (!req.serviceActor) {
             return res.status(403).json({ error: 'internal service actor required' });
         }
-        const body = req.body || {};
         const serviceId = serviceActorId(req) || config.serviceId;
-        const job = await contentStore.queueJob({
-            job_type: String(body.job_type || 'search.reindex'),
-            surface: body.surface ? String(body.surface) : null,
-            source_id: body.source_id ? String(body.source_id) : null,
-            item_id: body.item_id ? String(body.item_id) : null,
-            state: String(body.state || 'queued'),
-            scheduled_at: body.scheduled_at ? String(body.scheduled_at) : null,
-            payload: Object.assign({}, body.payload || {}, {
-                reason: body.reason || 'worker.search.reindex',
-                requested_by_service: serviceId,
-                requested_at: new Date().toISOString(),
-            }),
-        });
-        res.status(202).json({
-            ok: true,
-            queued: true,
-            requested_by_service: serviceId,
-            job,
-            counts: await contentStore.getCounts(),
-        });
+        const result = await queueSearchReindex({
+            contentStore,
+            requestedByService: serviceId,
+        }, req.body || {});
+        res.status(202).json(result);
     }));
 
     router.get('*', (req, res) => {
