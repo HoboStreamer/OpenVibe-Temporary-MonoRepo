@@ -116,6 +116,11 @@ function describePersistence(serviceName, dbPath, options) {
         local_bootstrap_only: requestedMode === 'sqlite',
         postgres_runtime_implemented: postgresRuntimeImplemented,
         legacy_compat_mode: isLegacyCompatEnabled(),
+        migration_source: options && options.bootstrap && options.bootstrap.migration_source || null,
+        bootstrap_source: options && options.bootstrap && options.bootstrap.bootstrap_source || null,
+        schema_sql_reconciled: !!(options && options.bootstrap && options.bootstrap.schema_sql_reconciled),
+        has_checked_in_migrations: !!(options && options.bootstrap && options.bootstrap.has_checked_in_migrations),
+        uses_legacy_bootstrap_sql: !!(options && options.bootstrap && options.bootstrap.uses_legacy_bootstrap_sql),
     };
 }
 

@@ -55,6 +55,22 @@ async function main() {
     assert.strictEqual(httpDescribed['clips.materialize'].available, false);
     assert.strictEqual(httpDescribed['clips.materialize'].dependency.status, 'missing-config');
     assert.strictEqual(described['migration.bundle-verify'].available, true);
+    // Phase 15: media + ai + analytics + migration now expose native catalog metadata.
+    assert.strictEqual(described['media.thumbnail'].backend, 'native');
+    assert.strictEqual(described['media.metadata'].backend, 'native');
+    assert.strictEqual(described['ai.transcript'].backend, 'native');
+    assert.strictEqual(described['ai.scene-detect'].backend, 'native');
+    assert.strictEqual(described['analytics.audio-features'].backend, 'native');
+    assert.strictEqual(described['analytics.motion-detect'].backend, 'native');
+    assert.strictEqual(described['migration.bundle-verify'].backend, 'native');
+    assert.strictEqual(described['media.thumbnail'].dependency.fallback_backend, 'http');
+    assert.strictEqual(described['ai.transcript'].dependency.fallback_backend, 'script');
+    assert.strictEqual(described['analytics.audio-features'].dependency.fallback_backend, 'script');
+    assert.strictEqual(described['migration.bundle-verify'].dependency.fallback_backend, null);
+    // http mode degrades media to http (still describes the http dependency).
+    assert.strictEqual(httpDescribed['media.thumbnail'].backend, 'http');
+    assert.strictEqual(httpDescribed['ai.transcript'].backend, 'script');
+    assert.strictEqual(httpDescribed['analytics.audio-features'].backend, 'script');
 
     const bundleResult = await catalog['migration.bundle-verify'].run({ data: {} });
     assert.strictEqual(bundleResult.ok, true);

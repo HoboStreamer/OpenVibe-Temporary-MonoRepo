@@ -63,6 +63,15 @@ async function main() {
         assert.ok(trade.body.includes('Non-financial-advice policy for trade pages'));
         assert.ok(trade.body.includes('noindex,nofollow'));
 
+        const host = await request(server, 'openvibe.host.localhost', '/');
+        assert.strictEqual(host.status, 200);
+        assert.ok(host.body.includes('openvibe.host'));
+        assert.ok(host.body.includes('noindex,nofollow'));
+
+        const hostDraft = await request(server, 'openvibe.host.localhost', '/drafts/hosting-policy');
+        assert.strictEqual(hostDraft.status, 200);
+        assert.ok(hostDraft.body.includes('Hobo hosting policy draft'));
+
         const sitemap = await request(server, 'openvibe.codes.localhost', '/sitemap.xml');
         assert.strictEqual(sitemap.status, 200);
         assert.ok(String(sitemap.headers['content-type']).includes('application/xml'));

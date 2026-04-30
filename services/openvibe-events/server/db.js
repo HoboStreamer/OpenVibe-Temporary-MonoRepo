@@ -14,6 +14,7 @@
 const path = require('path');
 const {
     createLegacyPersistenceRuntime,
+    describeBootstrapSource,
     createLegacyPostgresStore,
     createLegacySqliteStore,
 } = require('@openvibe/persistence');
@@ -104,6 +105,7 @@ function createPostgresStore(options) {
 const sqliteStore = createSqliteStore({ sqlitePath: defaultSqlitePath() });
 const runtime = createLegacyPersistenceRuntime({
     serviceName: SERVICE_NAME,
+    bootstrap: describeBootstrapSource(SERVICE_NAME, { usesLegacyBootstrapSql: true }),
     defaultSqlitePath,
     sqlite: sqliteStore,
     createPostgres({ databaseUrl }) {

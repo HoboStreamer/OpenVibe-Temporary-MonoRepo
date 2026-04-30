@@ -13,6 +13,7 @@ const CONTENT_HOSTS = Object.freeze({
     deals: ['openvibe.deals'],
     coupons: ['openvibe.coupons'],
     trade: ['openvibe.trade'],
+    host: ['openvibe.host'],
 });
 
 function detectSurface(host, surfaces) {

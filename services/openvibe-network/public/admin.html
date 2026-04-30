@@ -313,11 +313,17 @@
                     <tbody>${((remoteServices.workers && remoteServices.workers.queues && remoteServices.workers.queues.items) || []).map((queue) => `<tr><td><code>${OpenVibe.escapeHtml(queue.queue_name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(String(queue.waiting || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.active || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.completed || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.failed || 0))}</td><td>${queue.worker_running ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag warn">no</span>'}</td></tr>`).join('') || '<tr><td colspan="6">No queue data returned.</td></tr>'}</tbody>
                 </table>
             </div>
-            <div class="ov-section-head" style="margin-top:1rem;"><div><h3>Worker processor matrix</h3><p class="ov-section-sub">Configured processors, queue assignments, last-known status, and dependency reachability.</p></div></div>
+            <div class="ov-section-head" style="margin-top:1rem;"><div><h3>Worker processor matrix</h3><p class="ov-section-sub">Configured processors, queue assignments, selected backend, mode, last-known status, and dependency reachability.</p></div></div>
             <div class="ov-table-wrap" style="margin-top:1rem;" data-runtime-panel="worker-processor-matrix">
                 <table class="ov-table">
-                    <thead><tr><th>processor</th><th>queue</th><th>critical</th><th>available</th><th>last status</th><th>dependency</th></tr></thead>
-                    <tbody>${((remoteServices.workers && remoteServices.workers.runtime && remoteServices.workers.runtime.processors) || []).map((processor) => `<tr><td><code>${OpenVibe.escapeHtml(processor.name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(processor.queue || '—')}</td><td>${processor.critical ? '<span class="ov-tag warn">yes</span>' : '<span class="ov-tag soft">no</span>'}</td><td>${processor.available ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag danger">no</span>'}</td><td>${OpenVibe.escapeHtml(processor.last_status || 'idle')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(processor.dependency || {}), null, 0))}</code></td></tr>`).join('') || '<tr><td colspan="6">No worker processor data returned.</td></tr>'}</tbody>
+                    <thead><tr><th>processor</th><th>queue</th><th>critical</th><th>backend</th><th>mode</th><th>fallback</th><th>available</th><th>last status</th><th>last error</th><th>dependency</th></tr></thead>
+                    <tbody>${((remoteServices.workers && remoteServices.workers.runtime && remoteServices.workers.runtime.processors) || []).map((processor) => {
+                        const dep = processor.dependency || {};
+                        const backend = processor.backend || dep.selected_backend || '—';
+                        const mode = processor.configured_backend_mode || dep.configured_backend_mode || '—';
+                        const fallback = dep.fallback_backend || '—';
+                        return `<tr><td><code>${OpenVibe.escapeHtml(processor.name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(processor.queue || '—')}</td><td>${processor.critical ? '<span class="ov-tag warn">yes</span>' : '<span class="ov-tag soft">no</span>'}</td><td><code>${OpenVibe.escapeHtml(backend)}</code></td><td><code>${OpenVibe.escapeHtml(mode)}</code></td><td><code>${OpenVibe.escapeHtml(fallback)}</code></td><td>${processor.available ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag danger">no</span>'}</td><td>${OpenVibe.escapeHtml(processor.last_status || 'idle')}</td><td>${OpenVibe.escapeHtml(processor.last_error || '—')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(dep), null, 0))}</code></td></tr>`;
+                    }).join('') || '<tr><td colspan="10">No worker processor data returned.</td></tr>'}</tbody>
                 </table>
             </div>
         </div>`

@@ -184,6 +184,83 @@ function normalizeWorkerBackendMode(value) {
     return 'auto';
 }
 
+function buildMediaProcessingPayload(data, defaultKind) {
+    return compactObject({
+        local_job_id: toStringValue(data.local_job_id || data.localJobId),
+        media_id: toStringValue(data.media_id || data.mediaId),
+        kind: toStringValue(data.kind) || defaultKind,
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildAiTranscriptPayload(data) {
+    return compactObject({
+        media_id: toStringValue(data.media_id || data.mediaId),
+        media_url: toStringValue(data.media_url || data.mediaUrl),
+        language: toStringValue(data.language),
+        duration_seconds: data.duration_seconds == null && data.durationSeconds == null
+            ? undefined
+            : Number(data.duration_seconds != null ? data.duration_seconds : data.durationSeconds),
+        segment_count: data.segment_count == null && data.segmentCount == null
+            ? undefined
+            : Number(data.segment_count != null ? data.segment_count : data.segmentCount),
+        transcript_seed: toStringValue(data.transcript_seed || data.transcriptSeed),
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildAiSceneDetectPayload(data) {
+    return compactObject({
+        media_id: toStringValue(data.media_id || data.mediaId),
+        duration_seconds: data.duration_seconds == null && data.durationSeconds == null
+            ? undefined
+            : Number(data.duration_seconds != null ? data.duration_seconds : data.durationSeconds),
+        scene_count: data.scene_count == null && data.sceneCount == null
+            ? undefined
+            : Number(data.scene_count != null ? data.scene_count : data.sceneCount),
+        scene_seed: toStringValue(data.scene_seed || data.sceneSeed),
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildAnalyticsAudioPayload(data) {
+    return compactObject({
+        media_id: toStringValue(data.media_id || data.mediaId),
+        duration_seconds: data.duration_seconds == null && data.durationSeconds == null
+            ? undefined
+            : Number(data.duration_seconds != null ? data.duration_seconds : data.durationSeconds),
+        segment_count: data.segment_count == null && data.segmentCount == null
+            ? undefined
+            : Number(data.segment_count != null ? data.segment_count : data.segmentCount),
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildAnalyticsMotionPayload(data) {
+    return compactObject({
+        media_id: toStringValue(data.media_id || data.mediaId),
+        duration_seconds: data.duration_seconds == null && data.durationSeconds == null
+            ? undefined
+            : Number(data.duration_seconds != null ? data.duration_seconds : data.durationSeconds),
+        sample_count: data.sample_count == null && data.sampleCount == null
+            ? undefined
+            : Number(data.sample_count != null ? data.sample_count : data.sampleCount),
+        motion_threshold: data.motion_threshold == null && data.motionThreshold == null
+            ? undefined
+            : Number(data.motion_threshold != null ? data.motion_threshold : data.motionThreshold),
+        payload: normalizeObject(data.payload),
+    });
+}
+
+function buildMigrationBundlePayload(data) {
+    return compactObject({
+        bundle_dir: toStringValue(data.bundle_dir || data.bundleDir),
+        validation_summary_path: toStringValue(data.validation_summary_path || data.validationSummaryPath),
+        readiness_report_path: toStringValue(data.readiness_report_path || data.readinessReportPath),
+        cutover_report_path: toStringValue(data.cutover_report_path || data.cutoverReportPath),
+    });
+}
+
 function buildClipMaterializePayload(data) {
     return compactObject({
         clip_id: toStringValue(data.clip_id || data.clipId),
@@ -253,16 +330,61 @@ function selectPairedBackend(name, configuredMode, httpDependency, nativeDefinit
             return postProcessorJson({ name, dependency: httpDependency }, payload, config, { validate });
         },
     };
-    const selectedBackend = configuredMode === 'http'
-        ? 'http'
-        : configuredMode === 'native'
-            ? 'native'
-            : nativeDefinition && nativeDefinition.dependency && nativeDefinition.dependency.available
-                ? 'native'
-                : 'http';
-    const activeDefinition = selectedBackend === 'native' ? nativeDefinition : httpDefinition;
-    const fallbackBackend = nativeDefinition
-        ? (selectedBackend === 'native' ? 'http' : 'native')
+    return selectBackendVariant({
+        name,
+        configuredMode,
+        nativeDefinition,
+        fallbackDefinition: httpDefinition,
+        fallbackKind: 'http',
+        buildPayload,
+    });
+}
+
+function selectScriptPairedBackend(name, configuredMode, scriptName, nativeDefinition, buildPayload, config) {
+    const scriptDependency = dependencyFromScript(path.join(__dirname, '..', 'python', scriptName));
+    const scriptDefinition = {
+        dependency: scriptDependency,
+        async run(payload) {
+            ensureDependency({ name, dependency: scriptDependency });
+            return runPythonScript(config, scriptName, payload);
+        },
+    };
+    return selectBackendVariant({
+        name,
+        configuredMode,
+        nativeDefinition,
+        fallbackDefinition: scriptDefinition,
+        fallbackKind: 'script',
+        buildPayload,
+    });
+}
+
+function selectNativeOnlyBackend(name, nativeDefinition, buildPayload) {
+    return selectBackendVariant({
+        name,
+        configuredMode: 'native',
+        nativeDefinition,
+        fallbackDefinition: null,
+        fallbackKind: null,
+        buildPayload,
+    });
+}
+
+function selectBackendVariant({ name, configuredMode, nativeDefinition, fallbackDefinition, fallbackKind, buildPayload }) {
+    const nativeAvailable = !!(nativeDefinition && nativeDefinition.dependency && nativeDefinition.dependency.available);
+    const fallbackAvailable = !!(fallbackDefinition && fallbackDefinition.dependency && fallbackDefinition.dependency.available);
+    let selectedBackend;
+    if (configuredMode === 'native' || !fallbackDefinition) {
+        selectedBackend = 'native';
+    } else if (configuredMode === 'http' || configuredMode === fallbackKind) {
+        // explicit non-native mode: prefer the legacy fallback (http or script).
+        selectedBackend = fallbackKind;
+    } else {
+        selectedBackend = nativeAvailable ? 'native' : (fallbackAvailable ? fallbackKind : 'native');
+    }
+    const activeDefinition = selectedBackend === 'native' ? nativeDefinition : fallbackDefinition;
+    const fallbackBackend = fallbackDefinition
+        ? (selectedBackend === 'native' ? fallbackKind : 'native')
         : null;
 
     return {
@@ -376,7 +498,6 @@ function createProcessorCatalog(config) {
     const networkBroadcast = dependencyFromHttp('network', config.networkUrl, '/api/v1/internal/notifications/broadcast', {
         expects: 'queued notification broadcast',
     });
-    const migrationBundle = dependencyFromArtifacts(config.migrationBundleDir || DEFAULT_MIGRATION_BUNDLE_DIR);
 
     function runHttp(definition, body, validate) {
         ensureDependency(definition);
@@ -390,44 +511,46 @@ function createProcessorCatalog(config) {
 
     return {
         'media.thumbnail': {
-            name: 'media.thumbnail',
-            dependency: mediaProcessing,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, {
-                    local_job_id: toStringValue(data.local_job_id || data.localJobId),
-                    media_id: toStringValue(data.media_id || data.mediaId),
-                    kind: toStringValue(data.kind) || 'video_thumbnail',
-                    payload: normalizeObject(data.payload),
-                }, validateMediaProcessingResponse);
-            },
+            ...selectPairedBackend(
+                'media.thumbnail',
+                backendMode,
+                mediaProcessing,
+                nativeCatalog['media.thumbnail'],
+                (data) => buildMediaProcessingPayload(data, 'video_thumbnail'),
+                config,
+                validateMediaProcessingResponse,
+            ),
         },
         'media.metadata': {
-            name: 'media.metadata',
-            dependency: mediaProcessing,
-            async run(job) {
-                const data = job.data || {};
-                return runHttp(this, {
-                    local_job_id: toStringValue(data.local_job_id || data.localJobId),
-                    media_id: toStringValue(data.media_id || data.mediaId),
-                    kind: toStringValue(data.kind) || 'vod_metadata',
-                    payload: normalizeObject(data.payload),
-                }, validateMediaProcessingResponse);
-            },
+            ...selectPairedBackend(
+                'media.metadata',
+                backendMode,
+                mediaProcessing,
+                nativeCatalog['media.metadata'],
+                (data) => buildMediaProcessingPayload(data, 'vod_metadata'),
+                config,
+                validateMediaProcessingResponse,
+            ),
         },
         'ai.transcript': {
-            name: 'ai.transcript',
-            dependency: dependencyFromScript(path.join(__dirname, '..', 'python', 'transcribe.py')),
-            async run(job) {
-                return runScript(this, 'transcribe.py', job.data || {});
-            },
+            ...selectScriptPairedBackend(
+                'ai.transcript',
+                backendMode,
+                'transcribe.py',
+                nativeCatalog['ai.transcript'],
+                buildAiTranscriptPayload,
+                config,
+            ),
         },
         'ai.scene-detect': {
-            name: 'ai.scene-detect',
-            dependency: dependencyFromScript(path.join(__dirname, '..', 'python', 'scene_detect.py')),
-            async run(job) {
-                return runScript(this, 'scene_detect.py', job.data || {});
-            },
+            ...selectScriptPairedBackend(
+                'ai.scene-detect',
+                backendMode,
+                'scene_detect.py',
+                nativeCatalog['ai.scene-detect'],
+                buildAiSceneDetectPayload,
+                config,
+            ),
         },
         'clips.materialize': {
             ...selectPairedBackend(
@@ -441,18 +564,24 @@ function createProcessorCatalog(config) {
             ),
         },
         'analytics.audio-features': {
-            name: 'analytics.audio-features',
-            dependency: dependencyFromScript(path.join(__dirname, '..', 'python', 'extract_audio_features.py')),
-            async run(job) {
-                return runScript(this, 'extract_audio_features.py', job.data || {});
-            },
+            ...selectScriptPairedBackend(
+                'analytics.audio-features',
+                backendMode,
+                'extract_audio_features.py',
+                nativeCatalog['analytics.audio-features'],
+                buildAnalyticsAudioPayload,
+                config,
+            ),
         },
         'analytics.motion-detect': {
-            name: 'analytics.motion-detect',
-            dependency: dependencyFromScript(path.join(__dirname, '..', 'python', 'detect_motion.py')),
-            async run(job) {
-                return runScript(this, 'detect_motion.py', job.data || {});
-            },
+            ...selectScriptPairedBackend(
+                'analytics.motion-detect',
+                backendMode,
+                'detect_motion.py',
+                nativeCatalog['analytics.motion-detect'],
+                buildAnalyticsMotionPayload,
+                config,
+            ),
         },
         'lifecycle.reconcile': {
             ...selectPairedBackend(
@@ -488,12 +617,11 @@ function createProcessorCatalog(config) {
             ),
         },
         'migration.bundle-verify': {
-            name: 'migration.bundle-verify',
-            dependency: migrationBundle,
-            async run(job) {
-                ensureDependency(this);
-                return verifyMigrationBundle(config, job.data || {});
-            },
+            ...selectNativeOnlyBackend(
+                'migration.bundle-verify',
+                nativeCatalog['migration.bundle-verify'],
+                buildMigrationBundlePayload,
+            ),
         },
         'notifications.broadcast': {
             ...selectPairedBackend(

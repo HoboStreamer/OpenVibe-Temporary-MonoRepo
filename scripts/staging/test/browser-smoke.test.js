@@ -119,14 +119,17 @@ function makeNetworkServer(options = {}) {
 
 function makeHtmlServer(title, options = {}) {
     const persistence = options.persistence || buildHealthyPersistenceDescriptor();
+    const hostMap = options.hostMap || null;
     return http.createServer((req, res) => {
         if (req.url === '/health') {
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ ok: true, persistence }));
             return;
         }
+        const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+        const effectiveTitle = (hostMap && hostMap[host]) || title;
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(`<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`);
+        res.end(`<!doctype html><html><head><title>${effectiveTitle}</title></head><body><h1>${effectiveTitle}</h1></body></html>`);
     });
 }
 
@@ -168,6 +171,12 @@ function makeContentServer() {
             'openvibe.codes.localhost': '<title>openvibe.codes — native docs and platform notes</title>',
             'openvibe.blog.localhost': '<title>openvibe.blog — build notes from the native platform cutover</title>',
             'openvibe.wiki.localhost': '<title>openvibe.wiki — platform glossary and migration index</title>',
+            'openvibe.news.localhost': '<title>openvibe.news</title>',
+            'openvibe.reviews.localhost': '<title>openvibe.reviews</title>',
+            'openvibe.deals.localhost': '<title>openvibe.deals</title>',
+            'openvibe.coupons.localhost': '<title>openvibe.coupons</title>',
+            'openvibe.trade.localhost': '<title>openvibe.trade</title>',
+            'openvibe.host.localhost': '<title>openvibe.host</title>',
         };
         if (htmlByHost[host]) {
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -200,7 +209,7 @@ async function testGreenSmokeReport() {
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
-        billing: makeHtmlServer('OpenVibe Billing'),
+        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
@@ -230,7 +239,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 33);
+        assert.strictEqual(report.checks.length, 41);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -243,7 +252,7 @@ async function testDetectsProductionLeakInLocalMode() {
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
-        billing: makeHtmlServer('OpenVibe Billing'),
+        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
@@ -293,7 +302,7 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
                 warning: 'Requested persistence mode \u0027postgres\u0027 does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.',
             },
         }),
-        billing: makeHtmlServer('OpenVibe Billing'),
+        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),

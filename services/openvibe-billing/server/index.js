@@ -13,6 +13,7 @@ const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter, buildTipsRouter, buildVipRouter } = require('./routes');
 const { serviceActorMiddleware } = require('./middleware');
+const { attachBillingHostShell } = require('./host-shell');
 
 function buildApp() {
     db.init(config.db.path);
@@ -55,6 +56,7 @@ function buildApp() {
     runtime.attach(app);
 
     attachIconAssets(app, { routePrefix: '/assets' });
+    attachBillingHostShell(app);
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     const svcMw = serviceActorMiddleware(config.internalKey);

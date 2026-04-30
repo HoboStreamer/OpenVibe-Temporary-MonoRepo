@@ -44,6 +44,7 @@ module.exports = {
         deals: resolvePublicOrigin({ surface: 'deals' }),
         coupons: resolvePublicOrigin({ surface: 'coupons' }),
         trade: resolvePublicOrigin({ surface: 'trade' }),
+        host: resolvePublicOrigin({ surface: 'host' }),
     },
     PUBLIC_MEDIA_OBJECT_MAX_BYTES,
     TARGET_PUBLIC_OBJECT_MAX_BYTES,

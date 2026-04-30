@@ -9,4 +9,5 @@ module.exports = {
     ...require('./sql-compat'),
     ...require('./migrations'),
     ...require('./repository-factory'),
+    ...require('./canonical-bootstrap'),
 };

@@ -36,6 +36,7 @@ function navItems(config) {
         { id: 'deals', label: 'Deals', href: `${config.surfaces.deals}/` },
         { id: 'coupons', label: 'Coupons', href: `${config.surfaces.coupons}/` },
         { id: 'trade', label: 'Trade', href: `${config.surfaces.trade}/` },
+        { id: 'host', label: 'Host', href: `${config.surfaces.host}/` },
     ];
 }
 
@@ -52,8 +53,8 @@ function buildSurfaceCatalog(config) {
             kind: 'WebSite',
             implemented: true,
             indexable: true,
-            heroTitle: 'Native docs for the OpenVibe platform',
-            heroText: `OpenVibe now ships native routing, media policy, and truthful readiness reports. Public media objects hard-stop at ${formatBytes(limits.publicMediaObjectMaxBytes)} with a ${formatBytes(limits.targetPublicObjectBytes)} target and ${formatBytes(limits.warnPublicObjectBytes)} warning threshold.`,
+            heroTitle: 'Native docs for the OpenVibe network',
+            heroText: `Plain-English docs for an open, community-first platform. No marketing layer, no investor talking points — just how the runtime actually works. Public media objects hard-stop at ${formatBytes(limits.publicMediaObjectMaxBytes)} with a ${formatBytes(limits.targetPublicObjectBytes)} target and ${formatBytes(limits.warnPublicObjectBytes)} warning threshold.`,
             entries: [
                 {
                     path: '/docs/host-routing-truth',
@@ -91,8 +92,8 @@ function buildSurfaceCatalog(config) {
             kind: 'Blog',
             implemented: true,
             indexable: true,
-            heroTitle: 'Shipping notes from the native OpenVibe cutover',
-            heroText: 'This public runtime is intentionally static-first and honest: wave-one hosts are real, deferred hosts stay marked draft/noindex until their backend seams are ready.',
+            heroTitle: 'Build notes from a community-first platform',
+            heroText: 'Honest dev notes from a no-investor, no-ad-network, no-startup-cosplay open platform. Wave-one hosts are real; deferred hosts stay marked draft/noindex until their backend seams are ready. Built in the open, kept boring on purpose.',
             entries: [
                 {
                     path: '/posts/native-runtime-before-polish',
@@ -129,8 +130,8 @@ function buildSurfaceCatalog(config) {
             kind: 'WebSite',
             implemented: true,
             indexable: true,
-            heroTitle: 'Reference pages for the OpenVibe platform',
-            heroText: 'Wave one keeps the wiki focused on core platform vocabulary, the canonical bundle shape, and readiness gate semantics.',
+            heroTitle: 'Reference pages for the OpenVibe network',
+            heroText: 'Plain-language vocabulary for the platform — no jargon walls, no premium tier behind a paywall. Wave one keeps the wiki focused on core concepts, the canonical bundle shape, and readiness gate semantics so anyone can fork it and run their own.',
             entries: [
                 {
                     path: '/concepts/openvibe-target-bundle',
@@ -298,6 +299,35 @@ function buildSurfaceCatalog(config) {
                         'This surface is for informational market context only and must never present itself as financial advice.',
                         'The draft runtime exists so operators can validate host routing, metadata, and disclaimer handling before any public launch.',
                         'That means no performance promises, no fake analyst voices, and no indexable pages until review gates are complete.',
+                    ],
+                },
+            ],
+        },
+        host: {
+            id: 'host',
+            host: 'openvibe.host',
+            origin: config.surfaces.host,
+            label: 'openvibe.host',
+            title: 'openvibe.host — draft creator hosting surface',
+            description: 'Draft hosting surface for hobo creators who want a homepage, not a brand deal.',
+            kind: 'WebSite',
+            implemented: true,
+            indexable: false,
+            readiness: 'yellow',
+            deferReason: 'Hosting pages stay noindex until profile claim flow, abuse handling, and quota policy are reviewed.',
+            heroTitle: 'Host your hobo corner of the internet',
+            heroText: 'A staged hosting shell so creators can park a profile without renting a brand-friendly platform. No clout grading, no algorithm. Just a place that loads.',
+            entries: [
+                {
+                    path: '/drafts/hosting-policy',
+                    title: 'Hobo hosting policy draft',
+                    summary: 'Why openvibe.host stays noindex until profile claim, abuse handling, and quota policy are reviewed.',
+                    publishedAt: '2026-04-30T12:00:00.000Z',
+                    kind: 'Article',
+                    sections: [
+                        'openvibe.host is a creator hosting surface, not an influencer marketplace. The runtime exists so operators can validate routing and policy before launch.',
+                        'No follower counts, no monetization gates, no fake creator tiers. Just a hobo corner of the internet that loads when the rest of the internet rents itself out.',
+                        'Pages stay noindex until profile claim flow, abuse handling, and quota policy are reviewed and exercised end to end.',
                     ],
                 },
             ],

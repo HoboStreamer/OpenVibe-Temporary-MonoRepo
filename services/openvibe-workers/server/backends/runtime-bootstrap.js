@@ -4,6 +4,7 @@ let mediaRuntimePromise = null;
 let billingRuntimePromise = null;
 let contentRuntimePromise = null;
 let networkRuntimePromise = null;
+let aiRuntimePromise = null;
 
 function memoizeRuntime(getterName, currentPromise, factory) {
     if (currentPromise) return currentPromise;
@@ -12,12 +13,14 @@ function memoizeRuntime(getterName, currentPromise, factory) {
         if (getterName === 'billing') billingRuntimePromise = null;
         if (getterName === 'content') contentRuntimePromise = null;
         if (getterName === 'network') networkRuntimePromise = null;
+        if (getterName === 'ai') aiRuntimePromise = null;
         throw error;
     });
     if (getterName === 'media') mediaRuntimePromise = nextPromise;
     if (getterName === 'billing') billingRuntimePromise = nextPromise;
     if (getterName === 'content') contentRuntimePromise = nextPromise;
     if (getterName === 'network') networkRuntimePromise = nextPromise;
+    if (getterName === 'ai') aiRuntimePromise = nextPromise;
     return nextPromise;
 }
 
@@ -108,9 +111,31 @@ function ensureNetworkRuntime() {
     });
 }
 
+function ensureAiRuntime() {
+    return memoizeRuntime('ai', aiRuntimePromise, () => {
+        const config = require('../../../openvibe-ai/server/config');
+        const db = require('../../../openvibe-ai/server/db');
+        const seeds = require('../../../openvibe-ai/server/seeds');
+        const { buildEventBus } = require('../../../openvibe-ai/server/events');
+        const runner = require('../../../openvibe-ai/server/runner');
+
+        db.init(config.db.path);
+        seeds.seedAll();
+        const eventBus = buildEventBus(config);
+
+        return {
+            config,
+            db,
+            eventBus,
+            executeRun: runner.executeRun,
+        };
+    });
+}
+
 module.exports = {
     ensureBillingRuntime,
     ensureContentRuntime,
     ensureMediaRuntime,
     ensureNetworkRuntime,
+    ensureAiRuntime,
 };

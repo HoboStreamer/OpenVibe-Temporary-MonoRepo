@@ -145,6 +145,7 @@ function createLegacyPersistenceRuntime(options) {
         const sqlitePath = dbPath || opts.defaultSqlitePath();
         return describePersistence(opts.serviceName, sqlitePath, {
             postgresRuntimeImplemented: true,
+            bootstrap: opts.bootstrap || null,
         });
     }
 

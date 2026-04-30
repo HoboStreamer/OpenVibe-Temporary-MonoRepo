@@ -26,6 +26,9 @@ const SERVICE_DEFAULTS = Object.freeze({
     deals:     { envKey: 'OPENVIBE_DEALS_URL', productionOrigin: 'https://openvibe.deals', port: 5500 },
     coupons:   { envKey: 'OPENVIBE_COUPONS_URL', productionOrigin: 'https://openvibe.coupons', port: 5500 },
     trade:     { envKey: 'OPENVIBE_TRADE_URL', productionOrigin: 'https://openvibe.trade', port: 5500 },
+    host:      { envKey: 'OPENVIBE_HOST_URL', productionOrigin: 'https://openvibe.host', port: 5500 },
+    tips:      { envKey: 'OPENVIBE_TIPS_URL', productionOrigin: 'https://openvibe.tips', port: 5000 },
+    vip:       { envKey: 'OPENVIBE_VIP_URL', productionOrigin: 'https://openvibe.vip', port: 5000 },
 });
 
 function trimUrl(value) {

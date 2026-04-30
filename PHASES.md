@@ -18,6 +18,9 @@ current execution track.
 | 8 | OpenVibe runtime independence + Hobo migration | 🚧 in progress | `scripts/migrate-hobo/`, `scripts/cutover/`, native OpenVibe surfaces, `docs/openvibe/phase-8.md` |
 | 9 | Hard-cut hardening + cutover parity | 🚧 in progress | `context/PHASE_9.md`, `scripts/migrate-hobo/`, cutover/reporting/browser parity work |
 | 10 | Scalable runtime foundation / deploy / readiness | 🚧 in progress | `context/PHASE_10_SCALING.md`, `packages/openvibe-runtime`, `packages/openvibe-observability`, `deploy/`, `scripts/readiness/` |
+| 11 | Runtime parity bring-up | ✅ implemented | `context/PHASE_11_RUNTIME_PARITY.md` |
+| 14 | Queue-native + legacy roots | ✅ implemented | `context/PHASE_14_QUEUE_NATIVE_AND_LEGACY_ROOTS.md` |
+| 15 | Native processors, public hosts, canonical bootstrap | ✅ implemented | `context/PHASE_15_NATIVE_PROCESSORS_AND_PRODUCT_POLISH.md` |
 
 > Note: the checked-in SQLite services remain useful for local bring-up, but
 > the requested hard-cut target is PostgreSQL-backed native OpenVibe runtime

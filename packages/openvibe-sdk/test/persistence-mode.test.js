@@ -82,4 +82,30 @@ const persistence = require('../persistence-mode');
     delete process.env.OPENVIBE_LEGACY_COMPAT_MODE;
 })();
 
+(function bootstrapDescriptorMerges() {
+    const desc = persistence.describePersistence('openvibe-network', '/tmp/x.db', {
+        bootstrap: {
+            migration_source: 'checked-in',
+            bootstrap_source: 'canonical-migrations',
+            schema_sql_reconciled: true,
+            has_checked_in_migrations: true,
+            uses_legacy_bootstrap_sql: false,
+        },
+    });
+    assert.strictEqual(desc.migration_source, 'checked-in');
+    assert.strictEqual(desc.bootstrap_source, 'canonical-migrations');
+    assert.strictEqual(desc.schema_sql_reconciled, true);
+    assert.strictEqual(desc.has_checked_in_migrations, true);
+    assert.strictEqual(desc.uses_legacy_bootstrap_sql, false);
+})();
+
+(function bootstrapDescriptorDefaultsWhenAbsent() {
+    const desc = persistence.describePersistence('openvibe-network', '/tmp/x.db');
+    assert.strictEqual(desc.migration_source, null);
+    assert.strictEqual(desc.bootstrap_source, null);
+    assert.strictEqual(desc.schema_sql_reconciled, false);
+    assert.strictEqual(desc.has_checked_in_migrations, false);
+    assert.strictEqual(desc.uses_legacy_bootstrap_sql, false);
+})();
+
 console.log('persistence-mode: OK');
