@@ -1,17 +1,108 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { icon: renderFontAwesomeIcon } = require('@fortawesome/fontawesome-svg-core');
 const freeSolidIcons = require('@fortawesome/free-solid-svg-icons');
 
-function optionalRequire(moduleId) {
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const LOCAL_PRO_INSTALL_ROOT = path.join(REPO_ROOT, 'compat', 'fontawesome-pro-local');
+const LOCAL_PRO_INSTALL_METADATA_PATH = path.join(LOCAL_PRO_INSTALL_ROOT, 'install.json');
+const PRO_STYLE_PACKAGE_NAMES = Object.freeze({
+    solid: '@fortawesome/pro-solid-svg-icons',
+});
+
+function readJsonIfExists(filePath) {
     try {
-        return require(moduleId);
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
     } catch {
         return null;
     }
 }
 
-const proSolidIcons = optionalRequire('@fortawesome/pro-solid-svg-icons');
+function normalizeProStyle(value) {
+    const normalized = String(value || 'solid').trim().toLowerCase();
+    if (!normalized || normalized === 'pro-solid') return 'solid';
+    return normalized;
+}
+
+function packageSegments(packageName) {
+    return String(packageName || '')
+        .split('/')
+        .filter(Boolean);
+}
+
+function buildLocalModuleCandidates(style) {
+    const packageName = PRO_STYLE_PACKAGE_NAMES[style];
+    if (!packageName) return [];
+
+    const envPath = String(process.env.FONTAWESOME_PRO_LOCAL_PATH || '').trim();
+    const packagePath = packageSegments(packageName);
+    const candidates = [];
+
+    if (envPath) {
+        const resolved = path.resolve(envPath);
+        candidates.push(resolved);
+        candidates.push(path.join(resolved, 'node_modules', ...packagePath));
+        candidates.push(path.join(resolved, ...packagePath));
+    }
+
+    candidates.push(path.join(LOCAL_PRO_INSTALL_ROOT, 'node_modules', ...packagePath));
+    return [...new Set(candidates)];
+}
+
+function resolveOptionalModule(style) {
+    const packageName = PRO_STYLE_PACKAGE_NAMES[style];
+    const candidatePaths = buildLocalModuleCandidates(style);
+
+    if (packageName) {
+        try {
+            return {
+                module: require(packageName),
+                source: packageName,
+                resolution: 'package',
+                candidatePaths,
+            };
+        } catch {
+            // fall through to local candidate paths
+        }
+    }
+
+    for (const candidate of candidatePaths) {
+        try {
+            return {
+                module: require(candidate),
+                source: candidate,
+                resolution: 'local-path',
+                candidatePaths,
+            };
+        } catch {
+            const indexPath = path.join(candidate, 'index.js');
+            if (!fs.existsSync(indexPath)) continue;
+            try {
+                return {
+                    module: require(indexPath),
+                    source: indexPath,
+                    resolution: 'local-path',
+                    candidatePaths,
+                };
+            } catch {
+                // keep trying
+            }
+        }
+    }
+
+    return {
+        module: null,
+        source: null,
+        resolution: packageName ? 'unresolved' : 'unsupported-style',
+        candidatePaths,
+    };
+}
+
+const requestedProStyle = normalizeProStyle(process.env.FONTAWESOME_PRO_STYLE || 'solid');
+const proSolidRuntime = resolveOptionalModule(requestedProStyle);
+const proSolidIcons = requestedProStyle === 'solid' ? proSolidRuntime.module : null;
 
 const CATALOG = Object.freeze({
     network: { label: 'Network', pro: ['faGlobe'], free: ['faGlobe', 'faEarthAmericas'] },
@@ -175,12 +266,41 @@ function buildBrowserBundle() {
     return `(function(global){\n'use strict';\nvar manifest=${JSON.stringify(manifest)};\nvar stylesheet=${JSON.stringify(stylesheet)};\nfunction ensureStyle(){if(!global.document||global.document.getElementById('openvibe-icons-style'))return;var style=global.document.createElement('style');style.id='openvibe-icons-style';style.textContent=stylesheet;global.document.head.appendChild(style);}\nfunction attrs(text){return String(text==null?'':text).replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}\nfunction icon(name, options){ensureStyle();var opts=options||{};var entry=manifest[name]||manifest[String(name||'').trim()]||{label:String(name||'icon'),svg:'<span class=\\"ov-icon-fallback\\">•</span>'};var decorative=opts.decorative!==false;var label=opts.label||entry.label||String(name||'icon');var className=opts.className||'ov-icon';var title=opts.title?(' title="'+attrs(opts.title)+'"'):'';var aria=decorative?' aria-hidden="true"':' role="img" aria-label="'+attrs(label)+'"';var style=opts.style?(' style="'+attrs(opts.style)+'"'):'';return '<span class="'+attrs(className)+'"'+aria+title+style+'>'+entry.svg+'</span>'; }\nfunction label(name){var entry=manifest[name]||manifest[String(name||'').trim()];return entry&&entry.label?entry.label:String(name||'icon');}\nfunction svg(name){var entry=manifest[name]||manifest[String(name||'').trim()];return entry&&entry.svg?entry.svg:'';}\nglobal.OpenVibeIcons={manifest:manifest,icon:icon,label:label,svg:svg,list:function(){return Object.keys(manifest).sort();},ensureStyle:ensureStyle};\nensureStyle();\n}(window));\n`;
 }
 
+function describeIconRuntime() {
+    const installMetadata = readJsonIfExists(LOCAL_PRO_INSTALL_METADATA_PATH);
+    const style = normalizeProStyle(process.env.FONTAWESOME_PRO_STYLE || installMetadata && installMetadata.style || 'solid');
+    const packageName = PRO_STYLE_PACKAGE_NAMES[style] || null;
+    const runtime = resolveOptionalModule(style);
+
+    return {
+        free: {
+            enabled: true,
+            source: '@fortawesome/free-solid-svg-icons',
+        },
+        pro: {
+            enabled: !!runtime.module,
+            style,
+            style_supported: !!packageName,
+            package_name: packageName,
+            source: runtime.source,
+            resolution: runtime.resolution,
+            candidate_paths: runtime.candidatePaths,
+            local_install_path: String(process.env.FONTAWESOME_PRO_LOCAL_PATH || '').trim() || null,
+            zip_path: String(process.env.FONTAWESOME_PRO_ZIP || '').trim() || null,
+            version_hint: String(process.env.FONTAWESOME_PRO_VERSION_HINT || installMetadata && installMetadata.version_hint || '').trim() || null,
+            install_metadata: installMetadata,
+        },
+    };
+}
+
 module.exports = {
     CATALOG,
     buildBrowserBundle,
     buildManifest,
     buildStyleSheet,
+    describeIconRuntime,
     iconSvg,
+    normalizeProStyle,
     renderIcon,
     resolveIconDefinition,
 };

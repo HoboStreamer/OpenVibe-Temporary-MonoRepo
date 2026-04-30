@@ -1,6 +1,6 @@
 # Phase 11 — runtime parity tracker
 
-Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack update)
+Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwright E2E + local Font Awesome Pro + Docker-backed validation)
 
 ## Implemented
 
@@ -54,6 +54,11 @@ Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack 
   - `services/openvibe-workers/test/workers-smoke.test.js`
   - `packages/openvibe-queue/bullmq.js`
   - `packages/openvibe-queue/test/queue.test.js`
+- Worker HTTP processor adapters, payload normalization, and downstream response validation are now implemented:
+  - `services/openvibe-workers/server/processor-http.js`
+  - `services/openvibe-workers/server/processors.js`
+  - `services/openvibe-workers/test/processor-http.test.js`
+  - `services/openvibe-workers/test/processors.test.js`
 - Admin runtime status aggregation and operator visibility are now implemented:
   - `services/openvibe-network/server/config.js`
   - `services/openvibe-network/server/api/staff.js`
@@ -64,6 +69,14 @@ Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack 
   - `packages/openvibe-icons/index.js`
   - `packages/openvibe-icons/express.js`
   - `.npmrc.example`
+- Local/offline Font Awesome Pro install and runtime discovery are now implemented:
+  - `.env.example`
+  - `.gitignore`
+  - `package.json`
+  - `packages/openvibe-icons/index.js`
+  - `packages/openvibe-icons/test/icons.test.js`
+  - `scripts/dev/install-fontawesome-pro-local.js`
+  - `scripts/dev/test/install-fontawesome-pro-local.test.js`
 - Content service DB-backed runtime foundation is now implemented:
   - `services/openvibe-content/server/db/index.js`
   - `services/openvibe-content/server/db/sqlite.js`
@@ -126,6 +139,12 @@ Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack 
   - `scripts/readiness/check-local-prod-stack.js`
   - `deploy/compose/docker-compose.local.yml`
   - `.github/workflows/ci.yml`
+- Playwright smoke now captures screenshots plus browser/icon diagnostics and asserts the admin runtime contract:
+  - `scripts/staging/browser-smoke-playwright.js`
+  - `scripts/staging/test/browser-smoke-playwright.test.js`
+  - `services/openvibe-network/public/admin.html`
+  - `docs/openvibe/production-readiness-reporting.md`
+  - `.github/workflows/ci.yml`
 
 ## Partially implemented
 
@@ -141,7 +160,8 @@ Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack 
   - `services/openvibe-billing/server/db.js`
   - `services/openvibe-ai/server/db.js`
   - `services/openvibe-games/server/db.js`
-- Workers expose queue/runtime scaffolding, but major jobs still use placeholder behavior in:
+- Workers now call real internal HTTP seams for clips/lifecycle/search/billing/notifications, but they still proxy through synchronous service-owned APIs instead of deeper queue-native downstream pipelines:
+  - `services/openvibe-workers/server/processor-http.js`
   - `services/openvibe-workers/server/processors.js`
 - Realtime bridge now works, but without Redis it truthfully degrades to HTTP polling fallback and remains yellow in readiness:
   - `services/openvibe-realtime/server/event-bridge.js`
@@ -149,21 +169,21 @@ Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack 
 - Worker heartbeat/runtime visibility is now surfaced, but workers still remain yellow unless Redis-backed distributed mode and processors are configured in the target environment:
   - `services/openvibe-workers/server/runtime.js`
   - `services/openvibe-network/public/admin.html`
-- Browser smoke and local-prod stack commands now exist, but fully automated stack startup still depends on host Docker availability and active validation may require port overrides when unrelated local processes already occupy defaults:
+- Browser smoke and local-prod stack commands now exist and were verified against Docker on this Linux host, but the offline readiness entrypoint still marks the live stack probe yellow because it intentionally skips an active compose probe in offline mode:
   - `scripts/dev/start-production-like-stack.sh`
   - `scripts/dev/wait-for-stack.js`
   - `scripts/readiness/check-local-prod-stack.js`
+  - `scripts/readiness/generate-production-readiness-report.js`
 - Icon assets are mounted across the main UI-facing services, but some untouched pages still need deeper surface-specific polish beyond the shared nav/card treatment.
 
 ## Still missing
 
 - Dedicated `server/migrations/postgres/` trees for the converted legacy services (beyond content) are not checked in yet; bootstrap currently happens from in-code schema strings plus compat translation.
-- Full non-placeholder worker processor implementations are still missing for:
+- Dedicated queue-native downstream backends behind the current HTTP worker adapters are still missing for:
   - `clips.materialize`
   - `lifecycle.reconcile`
   - `search.reindex`
   - `billing.reconcile`
-  - `migration.bundle-verify`
   - `notifications.broadcast`
 - Legacy grounding trees requested in the implementation prompt are not present in this checkout:
   - missing `/opt/openvibe/HoboStreamer.com`
@@ -196,22 +216,31 @@ When Docker is available on the host, also run the local stack lifecycle command
 - `npm run stack:local:wait`
 - `npm run stack:local:stop`
 
-Validated on 2026-04-30 for this tranche:
+Validated on 2026-04-30 for this Phase 13 tranche:
 
-- `npm install` ✅ — added 2 packages, audited 370 packages, 0 vulnerabilities
-- `npm run check` ✅ — `[check] 271 files, 0 failures`
-- `npm test` ✅ — `[test] 48 files, 48 pass, 0 fail`
-- `npm run readiness` ✅ — artifact written to `data/readiness/openvibe-production-readiness-report.json` with `gate=yellow`, summary `green=6 yellow=8 red=0`; now includes `local_prod_stack` and `browser_smoke_playwright` sections
-- `npm run smoke:browser -- --billing-url=http://127.0.0.1:5001` ✅ — `gate=yellow`, summary `green=21 yellow=10 red=0`; remaining yellow checks are truthful SQLite-bootstrap warnings from locally running services
-- `npm run smoke:browser:playwright -- --network-url=http://127.0.0.1:4110 --billing-url=http://127.0.0.1:5001` ✅ — `gate=yellow`, summary `green=21 yellow=10 red=0`; browser-driven validation passed after sanitizing legacy Hobo URLs out of admin runtime detail rendering
-- `npm run readiness:local-prod -- --network-url=http://127.0.0.1:4110 --billing-url=http://127.0.0.1:5001 --timeout-ms=10000 --interval-ms=1000` ✅ — `gate=yellow`; the active stack probe reached steady state in one attempt with `green=21 yellow=10 red=0`
-- `npm run stack:local:start` ⚠️ blocked in this Linux session because Docker is not installed; compose-backed startup remains environment-dependent
-- Integrated browser validation ✅ on the focused validation stack (`network:4110`, `billing:5001`, `events:4400`, `openre-stream:4700`, `workers:5300`, `realtime:5400`, `content:5500`):
-  - `admin.openvibe.network.localhost:4110/` loaded in the integrated browser and rendered the operator shell with current-code runtime tabs
-  - DOM inspection confirmed the previous `https://hobo.tools` leak from readiness/detail rendering was removed in the current `4110` network instance
-  - the same live stack backed the successful HTTP and Playwright smoke passes above
+- `npm run check` ✅ — `[check] 279 files, 0 failures`
+- `npm test` ✅ — `[test] 55 files, 55 pass, 0 fail`
+- `npm run stack:local:start` ✅ — Docker Compose started the full local production-like stack from `deploy/compose/docker-compose.local.yml`
+- `npm run stack:local:wait` ✅ — `data/readiness/local-prod-stack-wait-report.json` reported `gate=green`, `green=31 yellow=0 red=0`, `attempts=3`, `elapsed_ms=12301`
+- `npm run smoke:browser` ✅ — HTTP/browser smoke reached `gate=green`, `green=31 yellow=0 red=0`
+- `npm run smoke:browser:playwright` ✅ — `data/readiness/browser-smoke-playwright-report.json` reported `gate=yellow`, `green=29 yellow=2 red=0`; `admin-shell` is now green with runtime-tab assertions, while `media-shell` and `games-shell` remain truthful yellow on browser diagnostics and `tools-shell` recorded a non-gating screenshot-capture warning
+- `npm run readiness:local-prod` ✅ — `data/readiness/local-prod-stack-report.json` reported `gate=green`, `green=10 yellow=0 red=0`; the active stack probe converged in 1 attempt with `green=31 yellow=0 red=0`
+- `npm run readiness` ✅ — `data/readiness/openvibe-production-readiness-report.json` reported `gate=yellow`, `green=7 yellow=7 red=0`; the offline aggregate now folds in `local_prod_stack` and `browser_smoke_playwright` truthfully instead of pretending the live probe ran inside offline mode
+- `npm run stack:local:stop` ✅ — the compose stack shut down cleanly and removed the local-prod containers and network
+
+Notes from the verified Docker-backed run:
+
+- Docker is available and working in this Linux environment; the earlier “Docker is not installed” note is obsolete.
+- `admin.openvibe.network.localhost:4100/` now renders the distributed runtime panels and worker processor matrix expected by Playwright.
+- The remaining non-red caveats are diagnostic yellows, not hidden failures: the explicit local-prod run is green, while the offline aggregate remains yellow because it intentionally skips a live stack probe and because Playwright still records two browser-diagnostic warnings.
 
 ## Files changed
+
+- `.env.example` / `.npmrc.example` / `.gitignore` / `package.json` — documented the local/offline Font Awesome Pro workflow, corrected the local billing URL example, ignored compat install artifacts, and added `npm run icons:install:local`.
+- `packages/openvibe-icons/index.js` / `packages/openvibe-icons/test/icons.test.js` — added optional Pro runtime discovery, local compat-path resolution, and runtime introspection coverage.
+- `scripts/dev/install-fontawesome-pro-local.js` / `scripts/dev/test/install-fontawesome-pro-local.test.js` — added a fully local installer path for Font Awesome Pro packages without requiring a private npm registry during local validation.
+- `services/openvibe-workers/server/processor-http.js` / `services/openvibe-workers/server/processors.js` / `services/openvibe-workers/test/processor-http.test.js` / `services/openvibe-workers/test/processors.test.js` — added shared worker HTTP helpers, normalized processor payloads, and downstream response validation coverage.
+- `scripts/staging/browser-smoke-playwright.js` / `scripts/staging/test/browser-smoke-playwright.test.js` / `services/openvibe-network/public/admin.html` / `.github/workflows/ci.yml` / `docs/openvibe/production-readiness-reporting.md` — added runtime-tab UI assertions, screenshots, browser diagnostics, artifact uploads, and reporting/docs updates for the Playwright flow.
 
 - `package.json` / `package-lock.json` — added the `playwright` dev dependency plus runtime-parity scripts for `smoke:browser:playwright`, `stack:local:*`, and `readiness:local-prod`.
 - `packages/openvibe-persistence/{compat.js,legacy-runtime.js,pg-sync-worker.js,sql-compat.js}` plus `packages/openvibe-persistence/test/sql-compat.test.js` — added the sync-compatible Postgres bridge and SQL translation layer for legacy DB modules.
@@ -250,9 +279,9 @@ Validated on 2026-04-30 for this tranche:
 - `packages/openvibe-icons/package.json` — added a shared icon workspace package with free-solid defaults and optional Pro compatibility.
 - `packages/openvibe-icons/index.js` — added the shared icon catalog plus server/browser rendering helpers.
 - `packages/openvibe-icons/express.js` — added Express helpers for serving icon JS/CSS assets.
-- `.npmrc.example` — documented the private Font Awesome registry token wiring without committing secrets.
-- `.gitignore` — now ignores local `.npmrc` auth files.
-- `.env` — now includes a placeholder `FONTAWESOME_PACKAGE_TOKEN=` entry.
+- `.npmrc.example` — documents both the private Font Awesome registry token path and the fully local/offline install alternative.
+- `.gitignore` — now ignores local Font Awesome Pro compat install artifacts.
+- `.env.example` — documents the Font Awesome token plus local/offline Pro install variables without changing the user's live `.env`.
 - `services/openvibe-content/server/db/index.js` — added persistence-mode-aware content store selection.
 - `services/openvibe-content/server/db/sqlite.js` — added the SQLite content store implementation.
 - `services/openvibe-content/server/db/postgres.js` — added the Postgres content store implementation and migrations bootstrap.

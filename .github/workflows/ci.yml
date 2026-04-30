@@ -51,3 +51,14 @@ jobs:
       - name: Stop local production-like stack
         if: always()
         run: npm run stack:local:stop
+
+      - name: Upload readiness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvibe-readiness-artifacts
+          if-no-files-found: warn
+          path: |
+            data/readiness/**/*.json
+            data/readiness/playwright/**/*.png
+            data/migrations/browser-smoke-report.json

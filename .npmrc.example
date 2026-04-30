@@ -1,6 +1,8 @@
 # Optional Font Awesome Pro registry configuration.
 # Copy this file to .npmrc and ensure FONTAWESOME_PACKAGE_TOKEN is set in your shell or .env.
 # Do NOT commit the resulting .npmrc with a real token.
+# For a fully local/offline workflow, run `npm run icons:install:local` and set
+# FONTAWESOME_PRO_LOCAL_PATH or FONTAWESOME_PRO_ZIP instead of using the private registry.
 
 @fortawesome:registry=https://npm.fontawesome.com/
 //npm.fontawesome.com/:_authToken=${FONTAWESOME_PACKAGE_TOKEN}

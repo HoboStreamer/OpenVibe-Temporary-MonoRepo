@@ -15,6 +15,9 @@ Running `npm run readiness` now writes:
 
 - `data/readiness/openvibe-production-readiness-report.json`
 - `data/readiness/scalable-runtime-report.json`
+- `data/readiness/local-prod-stack-report.json` when `npm run readiness:local-prod` is run
+- `data/readiness/browser-smoke-playwright-report.json` when `npm run smoke:browser:playwright` is run
+- `data/readiness/playwright/*.png` when Playwright browser smoke captures per-surface screenshots
 - `data/migrations/runtime-readiness-report.json` (legacy compatibility path)
 
 This artifact is intentionally machine-readable so future cutover and deploy
@@ -34,6 +37,11 @@ If `data/migrations/browser-smoke-report.json` exists, browser smoke status is
 folded into the final report as well; otherwise browser smoke is marked yellow
 with an explicit instruction to run `npm run smoke:browser`.
 
+If `data/readiness/browser-smoke-playwright-report.json` exists, the aggregate
+report also folds in the Playwright-driven browser status so screenshots,
+console/page diagnostics, and targeted UI assertions are visible alongside the
+plain HTTP browser smoke.
+
 ## Gate semantics
 
 - `green` — required repo/runtime scaffolding is present
@@ -49,5 +57,17 @@ with an explicit instruction to run `npm run smoke:browser`.
 - live Redis connection and queue lag checks against a configured Redis URL
 - richer realtime event-bridge and authorization probes beyond the expanded
    production-shaped namespace map
-- broader browser smoke selectors, screenshots, and same-origin critical-link
-   validation once the full stack is running locally in CI/staging
+- deeper browser smoke selectors and same-origin critical-link validation once
+  the full stack is running locally in CI/staging
+
+## CI artifact flow
+
+The default CI workflow now uploads the machine-readable readiness artifacts and
+the Playwright screenshots after every validation run:
+
+- `data/readiness/**/*.json`
+- `data/readiness/playwright/**/*.png`
+- `data/migrations/browser-smoke-report.json`
+
+That keeps red/yellow gates inspectable instead of turning them into a game of
+guess-the-missing-panel.

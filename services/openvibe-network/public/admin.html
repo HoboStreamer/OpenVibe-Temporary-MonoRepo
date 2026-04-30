@@ -289,7 +289,7 @@
             <div class="ov-section-head"><div><h2>Metrics preview</h2><p class="ov-section-sub">First 42 non-empty lines from the Prometheus scrape output so operators can spot obvious regressions without leaving the console.</p></div></div>
             <pre class="ov-code-scroll">${OpenVibe.escapeHtml(metricsPreview || '# metrics endpoint returned no data')}</pre>
         </div>
-        <div class="ov-section" style="margin-top:1rem;">
+        <div class="ov-section" style="margin-top:1rem;" data-runtime-panel="distributed-runtime-status">
             <div class="ov-section-head"><div><h2>Distributed runtime status</h2><p class="ov-section-sub">Worker heartbeat, queues, events fanout, and realtime bridge state pulled from the running services.</p></div></div>
             <div class="ov-grid">
                 ${renderRemoteServiceCard('openvibe-events', remoteServices.events)}
@@ -306,10 +306,18 @@
                     <pre class="ov-code-scroll">${OpenVibe.escapeHtml(JSON.stringify(remoteServices.realtime && remoteServices.realtime.bridge || {}, null, 2))}</pre>
                 </article>
             </div>
-            <div class="ov-table-wrap" style="margin-top:1rem;">
+            <div class="ov-section-head" style="margin-top:1rem;"><div><h3>Worker queue activity</h3><p class="ov-section-sub">Live queue depth, active jobs, and worker presence from the distributed runtime.</p></div></div>
+            <div class="ov-table-wrap" style="margin-top:1rem;" data-runtime-panel="worker-queue-activity">
                 <table class="ov-table">
                     <thead><tr><th>queue</th><th>waiting</th><th>active</th><th>completed</th><th>failed</th><th>worker running</th></tr></thead>
                     <tbody>${((remoteServices.workers && remoteServices.workers.queues && remoteServices.workers.queues.items) || []).map((queue) => `<tr><td><code>${OpenVibe.escapeHtml(queue.queue_name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(String(queue.waiting || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.active || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.completed || 0))}</td><td>${OpenVibe.escapeHtml(String(queue.failed || 0))}</td><td>${queue.worker_running ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag warn">no</span>'}</td></tr>`).join('') || '<tr><td colspan="6">No queue data returned.</td></tr>'}</tbody>
+                </table>
+            </div>
+            <div class="ov-section-head" style="margin-top:1rem;"><div><h3>Worker processor matrix</h3><p class="ov-section-sub">Configured processors, queue assignments, last-known status, and dependency reachability.</p></div></div>
+            <div class="ov-table-wrap" style="margin-top:1rem;" data-runtime-panel="worker-processor-matrix">
+                <table class="ov-table">
+                    <thead><tr><th>processor</th><th>queue</th><th>critical</th><th>available</th><th>last status</th><th>dependency</th></tr></thead>
+                    <tbody>${((remoteServices.workers && remoteServices.workers.runtime && remoteServices.workers.runtime.processors) || []).map((processor) => `<tr><td><code>${OpenVibe.escapeHtml(processor.name || 'unknown')}</code></td><td>${OpenVibe.escapeHtml(processor.queue || '—')}</td><td>${processor.critical ? '<span class="ov-tag warn">yes</span>' : '<span class="ov-tag soft">no</span>'}</td><td>${processor.available ? '<span class="ov-tag ok">yes</span>' : '<span class="ov-tag danger">no</span>'}</td><td>${OpenVibe.escapeHtml(processor.last_status || 'idle')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(processor.dependency || {}), null, 0))}</code></td></tr>`).join('') || '<tr><td colspan="6">No worker processor data returned.</td></tr>'}</tbody>
                 </table>
             </div>
         </div>`

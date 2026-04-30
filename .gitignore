@@ -44,6 +44,9 @@ data/migrations/
 **/*.cer
 **/*.p12
 **/*.pfx
+compat/fontawesome-pro-local/node_modules/
+compat/fontawesome-pro-local/install.json
+compat/fontawesome-pro-local/.tmp/
 
 # Editor / environment
 **/.vscode/

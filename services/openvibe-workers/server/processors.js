@@ -4,33 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const { dependencyFromHttp, postProcessorJson } = require('./processor-http');
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const DEFAULT_MIGRATION_BUNDLE_DIR = path.join(REPO_ROOT, 'data', 'migrations', 'hobo-production-staging', 'openvibe-target');
 const DEFAULT_CUTOVER_REPORT_PATH = path.join(REPO_ROOT, 'data', 'migrations', 'cutover-report.json');
-
-function trimUrl(value) {
-    return String(value || '').trim().replace(/\/$/, '');
-}
-
-function buildInternalHeaders(config, extraHeaders) {
-    return Object.assign({
-        'x-internal-key': config.internalKey,
-        'x-openvibe-service': config.serviceId || 'openvibe-workers',
-    }, extraHeaders || {});
-}
-
-function dependencyFromHttp(service, baseUrl, endpointPath) {
-    const url = trimUrl(baseUrl);
-    return {
-        type: 'http',
-        service,
-        url: url ? `${url}${endpointPath}` : null,
-        configured: !!url,
-        status: url ? 'configured' : 'missing-config',
-        message: url ? null : `${service} URL is not configured`,
-        available: !!url,
-    };
-}
 
 function dependencyFromScript(scriptPath) {
     const exists = fs.existsSync(scriptPath);
@@ -115,36 +93,6 @@ function deriveBundleGate(result) {
     return 'green';
 }
 
-async function postJson(url, body, headers, timeoutMs) {
-    if (typeof fetch !== 'function') {
-        return { ok: false, skipped: true, reason: 'global fetch unavailable' };
-    }
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    let timer = null;
-    if (controller && timeoutMs > 0) {
-        timer = setTimeout(() => controller.abort(), timeoutMs);
-        if (typeof timer.unref === 'function') timer.unref();
-    }
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: Object.assign({ 'content-type': 'application/json' }, headers || {}),
-        body: JSON.stringify(body || {}),
-        signal: controller ? controller.signal : undefined,
-    });
-    if (timer) clearTimeout(timer);
-    let data = null;
-    try { data = await response.json(); } catch {}
-    if (!response.ok) {
-        return {
-            ok: false,
-            status: response.status,
-            error: data && data.error || `http_${response.status}`,
-            body: data,
-        };
-    }
-    return data || { ok: true };
-}
-
 function runPythonScript(config, scriptName, payload) {
     const scriptPath = path.join(__dirname, '..', 'python', scriptName);
     if (!fs.existsSync(scriptPath)) {
@@ -176,6 +124,92 @@ function runPythonScript(config, scriptName, payload) {
         child.stdin.write(JSON.stringify(payload || {}));
         child.stdin.end();
     });
+}
+
+function toStringValue(value) {
+    if (value == null) return undefined;
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : undefined;
+}
+
+function toBooleanValue(value, fallbackValue) {
+    if (value == null) return fallbackValue;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    }
+    return !!value;
+}
+
+function toIntegerValue(value, fallbackValue, minValue, maxValue) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallbackValue;
+    return Math.min(Math.max(parsed, minValue), maxValue);
+}
+
+function toStringArray(value) {
+    if (!Array.isArray(value)) return undefined;
+    const items = value.map((item) => toStringValue(item)).filter(Boolean);
+    return items.length ? items : undefined;
+}
+
+function normalizeObject(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const out = {};
+    for (const [key, innerValue] of Object.entries(value)) {
+        if (innerValue !== undefined) {
+            out[key] = innerValue;
+        }
+    }
+    return Object.keys(out).length ? out : undefined;
+}
+
+function compactObject(value) {
+    const out = {};
+    for (const [key, innerValue] of Object.entries(value || {})) {
+        if (innerValue !== undefined) {
+            out[key] = innerValue;
+        }
+    }
+    return out;
+}
+
+function validateOkResponse(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return 'response body must be a JSON object';
+    }
+    if (body.ok === false) {
+        return body.error || 'endpoint returned ok=false';
+    }
+    return null;
+}
+
+function validateQueuedResponse(body) {
+    const error = validateOkResponse(body);
+    if (error) return error;
+    if (body.queued !== true) {
+        return 'response omitted queued=true';
+    }
+    return null;
+}
+
+function validateMediaProcessingResponse(body) {
+    const error = validateOkResponse(body);
+    if (error) return error;
+    if (!body.result) {
+        return 'response omitted processing result';
+    }
+    return null;
+}
+
+function validateBillingResponse(body) {
+    const error = validateOkResponse(body);
+    if (error) return error;
+    if (typeof body.mismatch_count !== 'number') {
+        return 'response omitted mismatch_count';
+    }
+    return null;
 }
 
 async function verifyMigrationBundle(config, payload) {
@@ -216,17 +250,29 @@ async function verifyMigrationBundle(config, payload) {
 }
 
 function createProcessorCatalog(config) {
-    const mediaProcessing = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/processing/run');
-    const mediaMaterialize = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/clips/materialize');
-    const mediaLifecycle = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/lifecycle/reconcile');
-    const contentSearch = dependencyFromHttp('content', config.contentUrl, '/api/v1/internal/search/reindex');
-    const billingReconcile = dependencyFromHttp('billing', config.billingUrl, '/api/billing/internal/reconcile');
-    const networkBroadcast = dependencyFromHttp('network', config.networkUrl, '/api/v1/internal/notifications/broadcast');
+    const mediaProcessing = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/processing/run', {
+        expects: 'tracked media-processing result',
+    });
+    const mediaMaterialize = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/clips/materialize', {
+        expects: 'materialized clip result',
+    });
+    const mediaLifecycle = dependencyFromHttp('media', config.mediaUrl, '/api/v1/internal/lifecycle/reconcile', {
+        expects: 'lifecycle reconciliation summary',
+    });
+    const contentSearch = dependencyFromHttp('content', config.contentUrl, '/api/v1/internal/search/reindex', {
+        expects: 'queued search reindex job',
+    });
+    const billingReconcile = dependencyFromHttp('billing', config.billingUrl, '/api/billing/internal/reconcile', {
+        expects: 'billing mismatch reconciliation summary',
+    });
+    const networkBroadcast = dependencyFromHttp('network', config.networkUrl, '/api/v1/internal/notifications/broadcast', {
+        expects: 'queued notification broadcast',
+    });
     const migrationBundle = dependencyFromArtifacts(config.migrationBundleDir || DEFAULT_MIGRATION_BUNDLE_DIR);
 
-    function runHttp(definition, body) {
+    function runHttp(definition, body, validate) {
         ensureDependency(definition);
-        return postJson(definition.dependency.url, body, buildInternalHeaders(config), config.requestTimeoutMs);
+        return postProcessorJson(definition, body, config, { validate });
     }
 
     function runScript(definition, scriptName, payload) {
@@ -239,24 +285,26 @@ function createProcessorCatalog(config) {
             name: 'media.thumbnail',
             dependency: mediaProcessing,
             async run(job) {
+                const data = job.data || {};
                 return runHttp(this, {
-                    local_job_id: job.data && job.data.local_job_id,
-                    media_id: job.data && job.data.media_id || null,
-                    kind: job.data && job.data.kind || 'video_thumbnail',
-                    payload: job.data && job.data.payload || {},
-                });
+                    local_job_id: toStringValue(data.local_job_id || data.localJobId),
+                    media_id: toStringValue(data.media_id || data.mediaId),
+                    kind: toStringValue(data.kind) || 'video_thumbnail',
+                    payload: normalizeObject(data.payload),
+                }, validateMediaProcessingResponse);
             },
         },
         'media.metadata': {
             name: 'media.metadata',
             dependency: mediaProcessing,
             async run(job) {
+                const data = job.data || {};
                 return runHttp(this, {
-                    local_job_id: job.data && job.data.local_job_id,
-                    media_id: job.data && job.data.media_id || null,
-                    kind: job.data && job.data.kind || 'vod_metadata',
-                    payload: job.data && job.data.payload || {},
-                });
+                    local_job_id: toStringValue(data.local_job_id || data.localJobId),
+                    media_id: toStringValue(data.media_id || data.mediaId),
+                    kind: toStringValue(data.kind) || 'vod_metadata',
+                    payload: normalizeObject(data.payload),
+                }, validateMediaProcessingResponse);
             },
         },
         'ai.transcript': {
@@ -278,10 +326,13 @@ function createProcessorCatalog(config) {
             dependency: mediaMaterialize,
             async run(job) {
                 const data = job.data || {};
-                return runHttp(this, {
-                    clip_id: data.clip_id || data.clipId,
-                    mode: data.mode || 'worker-materialize',
-                });
+                return runHttp(this, compactObject({
+                    clip_id: toStringValue(data.clip_id || data.clipId),
+                    mode: toStringValue(data.mode) || 'worker-materialize',
+                    reason: toStringValue(data.reason) || 'worker.clips.materialize',
+                    request_id: toStringValue(data.request_id || data.requestId),
+                    payload: normalizeObject(data.payload),
+                }), validateOkResponse);
             },
         },
         'analytics.audio-features': {
@@ -302,21 +353,52 @@ function createProcessorCatalog(config) {
             name: 'lifecycle.reconcile',
             dependency: mediaLifecycle,
             async run(job) {
-                return runHttp(this, job.data || {});
+                const data = job.data || {};
+                return runHttp(this, compactObject({
+                    media_id: toStringValue(data.media_id || data.mediaId),
+                    media_ids: toStringArray(data.media_ids || data.mediaIds),
+                    repair: data.repair == null ? undefined : toBooleanValue(data.repair, true),
+                    dry_run: data.dry_run == null && data.dryRun == null ? undefined : toBooleanValue(data.dry_run != null ? data.dry_run : data.dryRun, false),
+                    reason: toStringValue(data.reason) || 'worker.lifecycle.reconcile',
+                    payload: normalizeObject(data.payload),
+                }), validateOkResponse);
             },
         },
         'search.reindex': {
             name: 'search.reindex',
             dependency: contentSearch,
             async run(job) {
-                return runHttp(this, job.data || {});
+                const data = job.data || {};
+                return runHttp(this, compactObject({
+                    job_type: toStringValue(data.job_type || data.jobType) || 'search.reindex',
+                    surface: toStringValue(data.surface),
+                    source_id: toStringValue(data.source_id || data.sourceId),
+                    item_id: toStringValue(data.item_id || data.itemId),
+                    state: toStringValue(data.state),
+                    scheduled_at: toStringValue(data.scheduled_at || data.scheduledAt),
+                    payload: compactObject(Object.assign({}, normalizeObject(data.payload), {
+                        reason: toStringValue(data.reason) || 'worker.search.reindex',
+                        trigger: toStringValue(data.trigger),
+                        correlation_id: toStringValue(data.correlation_id || data.correlationId),
+                    })),
+                }), validateQueuedResponse);
             },
         },
         'billing.reconcile': {
             name: 'billing.reconcile',
             dependency: billingReconcile,
             async run(job) {
-                return runHttp(this, job.data || {});
+                const data = job.data || {};
+                return runHttp(this, compactObject({
+                    repair: toBooleanValue(data.repair, true),
+                    limit: toIntegerValue(data.limit, 100, 1, 500),
+                    wallet_type: toStringValue(data.wallet_type || data.walletType),
+                    status: toStringValue(data.status),
+                    owner_type: toStringValue(data.owner_type || data.ownerType),
+                    owner_id: toStringValue(data.owner_id || data.ownerId),
+                    currency: toStringValue(data.currency),
+                    reason: toStringValue(data.reason) || 'worker.billing.reconcile',
+                }), validateBillingResponse);
             },
         },
         'migration.bundle-verify': {
@@ -331,7 +413,16 @@ function createProcessorCatalog(config) {
             name: 'notifications.broadcast',
             dependency: networkBroadcast,
             async run(job) {
-                return runHttp(this, job.data || {});
+                const data = job.data || {};
+                return runHttp(this, compactObject({
+                    title: toStringValue(data.title || data.subject) || 'OpenVibe broadcast',
+                    audience: toStringValue(data.audience || data.channel) || 'all',
+                    body: data.body == null ? String(data.message || '') : String(data.body),
+                    severity: toStringValue(data.severity),
+                    source: toStringValue(data.source) || 'openvibe-workers',
+                    metadata: normalizeObject(data.metadata),
+                    reason: toStringValue(data.reason) || 'worker.notifications.broadcast',
+                }), validateQueuedResponse);
             },
         },
     };

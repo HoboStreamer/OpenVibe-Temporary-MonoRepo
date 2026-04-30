@@ -22,8 +22,16 @@ const {
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_OUT = path.join(ROOT, 'data', 'readiness', 'browser-smoke-playwright-report.json');
+const DEFAULT_SCREENSHOT_DIR = path.join(ROOT, 'data', 'readiness', 'playwright');
 const FALSEY = new Set(['0', 'false', 'no', 'off', '']);
 const DEFAULT_PAGE_TIMEOUT_MS = 15000;
+const ADMIN_RUNTIME_SELECTORS = Object.freeze({
+    tabButton: '#admin-tabs .ov-tab[data-tab="runtime"]',
+    visiblePanel: '#tab-runtime:not([hidden])',
+    distributedRuntimeStatus: '#tab-runtime [data-runtime-panel="distributed-runtime-status"]',
+    workerProcessorMatrix: '#tab-runtime [data-runtime-panel="worker-processor-matrix"]',
+    workerProcessorTableHead: '#tab-runtime [data-runtime-panel="worker-processor-matrix"] thead',
+});
 
 function readFlag(value, fallbackValue) {
     if (value == null) return fallbackValue;
@@ -44,6 +52,129 @@ function toBrowserNavigationUrl(targetUrl, host) {
     const browserUrl = new URL(targetUrl);
     browserUrl.hostname = host;
     return browserUrl.toString();
+}
+
+function toArtifactPath(filePath) {
+    return path.relative(ROOT, filePath).split(path.sep).join('/');
+}
+
+function buildScreenshotPath(checkId, screenshotDir) {
+    const dir = path.resolve(screenshotDir || DEFAULT_SCREENSHOT_DIR);
+    const fileName = String(checkId || 'check')
+        .trim()
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'check';
+    return path.join(dir, `${fileName}.png`);
+}
+
+function shouldIgnoreRequestFailure(url) {
+    return /^data:/i.test(url)
+        || /\/favicon\.ico(?:$|\?)/i.test(url);
+}
+
+function createPageDiagnostics(page) {
+    const diagnostics = {
+        consoleErrors: [],
+        pageErrors: [],
+        failedRequests: [],
+    };
+
+    page.on('console', (message) => {
+        if (message.type() === 'error') {
+            diagnostics.consoleErrors.push(message.text());
+        }
+    });
+    page.on('pageerror', (error) => {
+        diagnostics.pageErrors.push(error && error.message || String(error));
+    });
+    page.on('requestfailed', (request) => {
+        if (shouldIgnoreRequestFailure(request.url())) return;
+        const failure = request.failure();
+        diagnostics.failedRequests.push({
+            method: request.method(),
+            url: request.url(),
+            error: failure && failure.errorText || 'request failed',
+        });
+    });
+
+    return diagnostics;
+}
+
+async function inspectIconRuntime(page) {
+    return page.evaluate(() => {
+        const scriptUrls = Array.from(document.scripts || [])
+            .map((script) => script.src || '')
+            .filter(Boolean);
+        const iconScriptPresent = scriptUrls.some((src) => /openvibe-icons\.js(?:$|\?)/.test(src));
+        const iconStylePresent = Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).some((node) => {
+            const href = node.href || '';
+            return /openvibe-icons\.css(?:$|\?)/.test(href) || node.id === 'openvibe-icons-style';
+        });
+        const iconElementCount = document.querySelectorAll('.ov-icon,.ov-icon-fallback,.icon-inline svg,.icon-inline .ov-icon').length;
+        return {
+            icon_script_present: iconScriptPresent,
+            icon_style_present: iconStylePresent,
+            openvibe_icons_ready: !!window.OpenVibeIcons && typeof window.OpenVibeIcons.icon === 'function',
+            icon_element_count: iconElementCount,
+        };
+    });
+}
+
+async function runUiAssertions(page, plan, options) {
+    const timeout = Math.min(options.pageTimeoutMs, 5000);
+
+    switch (plan.id) {
+        case 'admin-shell': {
+            await page.click(ADMIN_RUNTIME_SELECTORS.tabButton);
+            await page.waitForSelector(ADMIN_RUNTIME_SELECTORS.visiblePanel, { timeout });
+            await page.waitForSelector(ADMIN_RUNTIME_SELECTORS.distributedRuntimeStatus, { timeout });
+            await page.waitForSelector(ADMIN_RUNTIME_SELECTORS.workerProcessorMatrix, { timeout });
+            const runtimeText = await page.locator(ADMIN_RUNTIME_SELECTORS.visiblePanel).innerText();
+            const processorHeaderText = await page.locator(ADMIN_RUNTIME_SELECTORS.workerProcessorTableHead).innerText().catch(() => '');
+            if (!/Distributed runtime status/.test(runtimeText)
+                || !/Worker processor matrix/.test(runtimeText)
+                || !/processor/i.test(processorHeaderText)
+                || !/dependency/i.test(processorHeaderText)) {
+                return {
+                    status: 'red',
+                    detail: 'runtime tab did not render the expected distributed-runtime panels',
+                };
+            }
+            return {
+                status: 'green',
+                detail: 'admin runtime tab rendered the distributed runtime panels',
+            };
+        }
+        case 'ai-shell': {
+            await page.click('button[data-icon="health"]');
+            await page.waitForFunction(() => {
+                const target = document.getElementById('status');
+                return !!target && !/click a button/i.test(target.textContent || '') && /\{/.test(target.textContent || '');
+            }, null, { timeout });
+            return {
+                status: 'green',
+                detail: 'AI runtime status interaction returned live JSON',
+            };
+        }
+        case 'billing-shell': {
+            const panelCount = await page.locator('.panel').count();
+            if (panelCount < 3) {
+                return {
+                    status: 'red',
+                    detail: `expected at least 3 billing panels but found ${panelCount}`,
+                };
+            }
+            return {
+                status: 'green',
+                detail: 'billing shell rendered the expected panel set',
+            };
+        }
+        default:
+            return {
+                status: 'green',
+                detail: 'no extra UI assertion required for this shell',
+            };
+    }
 }
 
 function buildPlaywrightPlan(options = {}) {
@@ -84,6 +215,7 @@ async function runHtmlAttempt(browser, plan, options, strategy) {
 
     try {
         const page = await context.newPage();
+        const diagnostics = createPageDiagnostics(page);
         const response = await page.goto(targetUrl, {
             timeout: options.pageTimeoutMs,
             waitUntil: 'domcontentloaded',
@@ -149,15 +281,82 @@ async function runHtmlAttempt(browser, plan, options, strategy) {
             };
         }
 
+        const iconRuntime = await inspectIconRuntime(page);
+        if (iconRuntime.icon_script_present && !iconRuntime.openvibe_icons_ready) {
+            return {
+                status: 'red',
+                detail: 'page included openvibe-icons.js but did not expose window.OpenVibeIcons',
+                forbiddenOrigins: [],
+                httpStatus: status,
+                durationMs: Date.now() - startedAt,
+                navigationUrl: targetUrl,
+                strategy,
+                title,
+                iconRuntime,
+                consoleErrors: diagnostics.consoleErrors,
+                pageErrors: diagnostics.pageErrors,
+                failedRequests: diagnostics.failedRequests,
+            };
+        }
+
+        const uiAssertions = await runUiAssertions(page, plan, options);
+        if (uiAssertions.status === 'red') {
+            return {
+                status: 'red',
+                detail: uiAssertions.detail,
+                forbiddenOrigins: [],
+                httpStatus: status,
+                durationMs: Date.now() - startedAt,
+                navigationUrl: targetUrl,
+                strategy,
+                title,
+                iconRuntime,
+                uiAssertions,
+                consoleErrors: diagnostics.consoleErrors,
+                pageErrors: diagnostics.pageErrors,
+                failedRequests: diagnostics.failedRequests,
+            };
+        }
+
+        let screenshotPath = null;
+        let screenshotError = null;
+        try {
+            const targetScreenshot = buildScreenshotPath(plan.id, options.screenshotDir);
+            ensureDir(path.dirname(targetScreenshot));
+            await page.screenshot({ path: targetScreenshot, fullPage: true });
+            screenshotPath = toArtifactPath(targetScreenshot);
+        } catch (error) {
+            screenshotError = error.message;
+        }
+
+        const diagnosticSignals = diagnostics.consoleErrors.length || diagnostics.pageErrors.length || diagnostics.failedRequests.length;
+        const detailParts = [`HTML responded with expected marker: ${plan.marker}`];
+        if (uiAssertions.detail && uiAssertions.detail !== 'no extra UI assertion required for this shell') {
+            detailParts.push(uiAssertions.detail);
+        }
+        if (diagnosticSignals) {
+            detailParts.push(`browser diagnostics: console=${diagnostics.consoleErrors.length}, page=${diagnostics.pageErrors.length}, request=${diagnostics.failedRequests.length}`);
+        }
+        if (screenshotError) {
+            detailParts.push(`screenshot capture failed: ${screenshotError}`);
+        }
+
         return {
-            status: 'green',
-            detail: `HTML responded with expected marker: ${plan.marker}`,
+            status: diagnosticSignals ? 'yellow' : uiAssertions.status,
+            detail: detailParts.join('; '),
             forbiddenOrigins: [],
             httpStatus: status,
             durationMs: Date.now() - startedAt,
             navigationUrl: targetUrl,
             strategy,
             title,
+            iconRuntime,
+            uiAssertions,
+            screenshotPath,
+            screenshotError,
+            consoleErrors: diagnostics.consoleErrors,
+            pageErrors: diagnostics.pageErrors,
+            failedRequests: diagnostics.failedRequests,
         };
     } catch (error) {
         return {
@@ -204,6 +403,7 @@ async function runBrowserSmokePlaywright(options = {}) {
         resolved.expectLocalhost = Object.keys(DEFAULT_URLS).some((key) => isLocalUrl(resolved[key]));
     }
     resolved.pageTimeoutMs = toInt(resolved.pageTimeoutMs, DEFAULT_PAGE_TIMEOUT_MS);
+    resolved.screenshotDir = path.resolve(resolved.screenshotDir || DEFAULT_SCREENSHOT_DIR);
 
     const plan = buildPlaywrightPlan(resolved);
     const htmlChecks = plan.checks.filter((check) => check.type === 'html');
@@ -251,6 +451,13 @@ async function runBrowserSmokePlaywright(options = {}) {
                 forbidden_origins: evaluation.forbiddenOrigins || [],
                 strategy: evaluation.strategy || 'playwright',
                 page_title: evaluation.title || '',
+                console_errors: evaluation.consoleErrors || [],
+                page_errors: evaluation.pageErrors || [],
+                failed_requests: evaluation.failedRequests || [],
+                icon_runtime: evaluation.iconRuntime || null,
+                ui_assertions: evaluation.uiAssertions || null,
+                screenshot_path: evaluation.screenshotPath || null,
+                screenshot_error: evaluation.screenshotError || null,
             });
         }
 
@@ -281,7 +488,12 @@ async function runBrowserSmokePlaywright(options = {}) {
                 expect_localhost: !!resolved.expectLocalhost,
                 headless: readFlag(resolved.headless, true),
                 page_timeout_ms: resolved.pageTimeoutMs,
+                screenshot_dir: toArtifactPath(resolved.screenshotDir),
                 only: plan.selected,
+            },
+            artifacts: {
+                screenshot_dir: toArtifactPath(resolved.screenshotDir),
+                screenshot_count: checks.filter((check) => !!check.screenshot_path).length,
             },
             checks,
         };
@@ -318,6 +530,7 @@ async function main() {
         expectLocalhost: readFlag(args.expectLocalhost, undefined),
         headless: readFlag(args.headless, true),
         pageTimeoutMs: toInt(args.pageTimeoutMs, DEFAULT_PAGE_TIMEOUT_MS),
+        screenshotDir: args.screenshotDir || DEFAULT_SCREENSHOT_DIR,
         only: args.only || null,
         outFile: path.resolve(args.out || DEFAULT_OUT),
     });
@@ -341,7 +554,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+    ADMIN_RUNTIME_SELECTORS,
+    buildScreenshotPath,
     buildPlaywrightPlan,
+    DEFAULT_SCREENSHOT_DIR,
     runBrowserSmokePlaywright,
     toBrowserNavigationUrl,
 };
