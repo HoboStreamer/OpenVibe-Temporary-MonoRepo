@@ -1,6 +1,6 @@
 # Phase 11 — runtime parity tracker
 
-Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwright E2E + local Font Awesome Pro + Docker-backed validation)
+Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwright E2E + local Font Awesome Pro + Docker-backed validation + browser parity fixes)
 
 ## Implemented
 
@@ -119,6 +119,18 @@ Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwr
   - `services/openvibe-ai/public/index.html`
   - `services/openvibe-billing/public/index.html`
   - `services/openvibe-content/server/ssr.js`
+- Browser/runtime parity fixes for the previously noisy `media`, `games`, and `tools` surfaces are now implemented:
+  - `services/openvibe-media/public/index.html`
+  - `services/openvibe-media/public/assets/openvibe.js`
+  - `services/openvibe-games/public/assets/openvibe.js`
+  - `services/openvibe-games/server/model.js`
+  - `services/openvibe-chat/public/assets/openvibe.js`
+  - `services/openvibe-community/public/assets/openvibe.js`
+  - `services/openvibe-live/public/assets/openvibe.js`
+  - `packages/openvibe-persistence/sql-compat.js`
+  - `packages/openvibe-persistence/test/sql-compat.test.js`
+  - `scripts/staging/browser-smoke-playwright.js`
+  - `scripts/staging/test/browser-smoke-playwright.test.js`
 - Offline readiness/report scripts already exist:
   - `scripts/readiness/check-scalable-runtime.js`
   - `scripts/readiness/check-queue-health.js`
@@ -148,7 +160,7 @@ Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwr
 
 ## Partially implemented
 
-- Postgres compatibility/runtime selection is now wired into the legacy DB-backed services, but most converted services still rely on in-code `SCHEMA_SQL` bootstrap rather than checked-in `server/migrations/postgres/` trees:
+- Postgres compatibility/runtime selection is now wired into the legacy DB-backed services, and checked-in `server/migrations/postgres/001_init.sql` trees exist for the converted services. The remaining transitional duplication is that many services still keep in-code `SCHEMA_SQL` bootstrap strings alongside those checked-in migrations for SQLite/local bootstrap and compat coverage:
   - `packages/openvibe-persistence/legacy-runtime.js`
   - `services/openvibe-network/server/db.js`
   - `services/openvibe-events/server/db.js`
@@ -178,7 +190,6 @@ Last audited: 2026-04-30 (Phase 13 runtime hardening + truthful workers + Playwr
 
 ## Still missing
 
-- Dedicated `server/migrations/postgres/` trees for the converted legacy services (beyond content) are not checked in yet; bootstrap currently happens from in-code schema strings plus compat translation.
 - Dedicated queue-native downstream backends behind the current HTTP worker adapters are still missing for:
   - `clips.materialize`
   - `lifecycle.reconcile`
@@ -216,14 +227,14 @@ When Docker is available on the host, also run the local stack lifecycle command
 - `npm run stack:local:wait`
 - `npm run stack:local:stop`
 
-Validated on 2026-04-30 for this Phase 13 tranche:
+Validated on 2026-04-30 for this Phase 13 tranche (repo-wide syntax/tests and full Playwright rerun after the browser parity fixes; stack/readiness commands verified earlier the same day):
 
 - `npm run check` ✅ — `[check] 279 files, 0 failures`
 - `npm test` ✅ — `[test] 55 files, 55 pass, 0 fail`
 - `npm run stack:local:start` ✅ — Docker Compose started the full local production-like stack from `deploy/compose/docker-compose.local.yml`
 - `npm run stack:local:wait` ✅ — `data/readiness/local-prod-stack-wait-report.json` reported `gate=green`, `green=31 yellow=0 red=0`, `attempts=3`, `elapsed_ms=12301`
 - `npm run smoke:browser` ✅ — HTTP/browser smoke reached `gate=green`, `green=31 yellow=0 red=0`
-- `npm run smoke:browser:playwright` ✅ — `data/readiness/browser-smoke-playwright-report.json` reported `gate=yellow`, `green=29 yellow=2 red=0`; `admin-shell` is now green with runtime-tab assertions, while `media-shell` and `games-shell` remain truthful yellow on browser diagnostics and `tools-shell` recorded a non-gating screenshot-capture warning
+- `npm run smoke:browser:playwright` ✅ — `data/readiness/browser-smoke-playwright-report.json` now reports `gate=green`, `green=31 yellow=0 red=0`, `screenshot_count=16`; `admin-shell` remains green with runtime-tab assertions and the previously noisy `tools-shell`, `media-shell`, and `games-shell` checks are now green with empty browser diagnostics
 - `npm run readiness:local-prod` ✅ — `data/readiness/local-prod-stack-report.json` reported `gate=green`, `green=10 yellow=0 red=0`; the active stack probe converged in 1 attempt with `green=31 yellow=0 red=0`
 - `npm run readiness` ✅ — `data/readiness/openvibe-production-readiness-report.json` reported `gate=yellow`, `green=7 yellow=7 red=0`; the offline aggregate now folds in `local_prod_stack` and `browser_smoke_playwright` truthfully instead of pretending the live probe ran inside offline mode
 - `npm run stack:local:stop` ✅ — the compose stack shut down cleanly and removed the local-prod containers and network
@@ -232,7 +243,8 @@ Notes from the verified Docker-backed run:
 
 - Docker is available and working in this Linux environment; the earlier “Docker is not installed” note is obsolete.
 - `admin.openvibe.network.localhost:4100/` now renders the distributed runtime panels and worker processor matrix expected by Playwright.
-- The remaining non-red caveats are diagnostic yellows, not hidden failures: the explicit local-prod run is green, while the offline aggregate remains yellow because it intentionally skips a live stack probe and because Playwright still records two browser-diagnostic warnings.
+- The previously noisy browser/runtime parity issues were resolved in the checked-in code and revalidated in both scripted and interactive browser flows: `media-shell` no longer issues a default quota request without owner context, `games-shell` now resolves the registry through the network surface and no longer 500s on `/api/games/canvas/state` under Postgres, and `tools-shell` now captures screenshots without leaving a warning behind.
+- The offline aggregate can still remain yellow even when the live Docker-backed stack is green, because offline readiness intentionally skips live/external probes; that remaining yellow is now separate from the Playwright/browser parity tranche.
 
 ## Files changed
 
@@ -241,6 +253,8 @@ Notes from the verified Docker-backed run:
 - `scripts/dev/install-fontawesome-pro-local.js` / `scripts/dev/test/install-fontawesome-pro-local.test.js` — added a fully local installer path for Font Awesome Pro packages without requiring a private npm registry during local validation.
 - `services/openvibe-workers/server/processor-http.js` / `services/openvibe-workers/server/processors.js` / `services/openvibe-workers/test/processor-http.test.js` / `services/openvibe-workers/test/processors.test.js` — added shared worker HTTP helpers, normalized processor payloads, and downstream response validation coverage.
 - `scripts/staging/browser-smoke-playwright.js` / `scripts/staging/test/browser-smoke-playwright.test.js` / `services/openvibe-network/public/admin.html` / `.github/workflows/ci.yml` / `docs/openvibe/production-readiness-reporting.md` — added runtime-tab UI assertions, screenshots, browser diagnostics, artifact uploads, and reporting/docs updates for the Playwright flow.
+- `services/openvibe-media/public/index.html` / `services/openvibe-{chat,community,live,media,games}/public/assets/openvibe.js` — resolved service-shell registry links through the network control plane and stopped the media shell from issuing an unconditional quota request without owner context.
+- `services/openvibe-games/server/model.js` / `packages/openvibe-persistence/sql-compat.js` / `packages/openvibe-persistence/test/sql-compat.test.js` — fixed the Postgres-compatible canvas cooldown/state path and added regression coverage for SQLite `datetime(...)` translation in the sync Postgres compat worker.
 
 - `package.json` / `package-lock.json` — added the `playwright` dev dependency plus runtime-parity scripts for `smoke:browser:playwright`, `stack:local:*`, and `readiness:local-prod`.
 - `packages/openvibe-persistence/{compat.js,legacy-runtime.js,pg-sync-worker.js,sql-compat.js}` plus `packages/openvibe-persistence/test/sql-compat.test.js` — added the sync-compatible Postgres bridge and SQL translation layer for legacy DB modules.

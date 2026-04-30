@@ -66,8 +66,12 @@
         return cfg.origin;
     }
 
-    async function api(pathname, opts) {
-        const res = await fetch(`${API_BASE}${pathname}`, Object.assign({
+    function resolveRegistryUrl() {
+        return `${resolveSurfaceUrl('network')}/api/v1/services`;
+    }
+
+    async function requestJson(url, opts, label) {
+        const res = await fetch(url, Object.assign({
             credentials: 'include',
             headers: { 'Accept': 'application/json' },
         }, opts || {}));
@@ -75,7 +79,7 @@
         let body = null;
         try { body = text ? JSON.parse(text) : null; } catch { body = text; }
         if (!res.ok) {
-            const err = new Error(`api ${pathname} failed: ${res.status}`);
+            const err = new Error(`${label || url} failed: ${res.status}`);
             err.status = res.status;
             err.body = body;
             throw err;
@@ -83,9 +87,13 @@
         return body;
     }
 
+    async function api(pathname, opts) {
+        return requestJson(`${API_BASE}${pathname}`, opts, `api ${pathname}`);
+    }
+
     async function loadServices() {
         try {
-            const data = await api('/services');
+            const data = await requestJson(resolveRegistryUrl(), null, 'registry api');
             return Array.isArray(data && data.items) ? data.items : [];
         } catch (e) {
             console.warn('[openvibe] failed to load services:', e.message);
@@ -185,7 +193,7 @@
             { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
             { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
-            { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
+            { key: 'docs', href: resolveRegistryUrl(), label: 'Registry API', icon: 'docs' },
         ];
         return `
             <header class="ov-nav"><div class="ov-nav-inner">
@@ -200,7 +208,7 @@
         return `<footer class="ov-footer">
             OpenVibe is open source and community-run. ·
             <a href="https://github.com/openvibe">GitHub</a> ·
-            <a href="/api/v1/services">Registry</a> ·
+            <a href="${escapeHtml(resolveRegistryUrl())}">Registry</a> ·
             <a href="${escapeHtml(resolveSurfaceUrl('auth'))}/.well-known/openid-configuration">OIDC</a> ·
             <a href="/health">Health</a>
         </footer>`;
@@ -249,6 +257,7 @@
         mergedServices,
         navbar,
         renderServiceCards,
+        resolveRegistryUrl,
         resolveServiceUrl,
         resolveSurfaceUrl,
         serviceIconName,

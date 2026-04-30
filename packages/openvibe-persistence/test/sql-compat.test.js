@@ -46,12 +46,28 @@ function testFunctionTranslation() {
     assert.ok(sql.includes('CURRENT_TIMESTAMP'));
 }
 
+function testDatetimeFunctionTranslation() {
+    const sql = translateSqliteToPostgres(`
+        SELECT datetime(last_login_at) AS last_login_at,
+               datetime(expires_at) > datetime('now') AS active,
+               datetime('now', '+' || ? || ' seconds') AS retry_at
+          FROM auth_sessions
+         LIMIT ?
+    `, { mode: 'all' });
+    assert.ok(!sql.includes('TIMESTAMPTZ('));
+    assert.ok(sql.includes('last_login_at AS last_login_at'));
+    assert.ok(sql.includes('expires_at) > CURRENT_TIMESTAMP') || sql.includes('expires_at > CURRENT_TIMESTAMP'));
+    assert.ok(sql.includes("CURRENT_TIMESTAMP + (('+' || $1 || ' seconds')::interval)"));
+    assert.ok(sql.includes('LIMIT $2'));
+}
+
 function main() {
     testSplitStatements();
     testParameterReplacement();
     testSchemaNormalization();
     testQueryTranslation();
     testFunctionTranslation();
+    testDatetimeFunctionTranslation();
     testAlterTableTranslation();
     console.log('openvibe-persistence sql compat tests OK');
 }

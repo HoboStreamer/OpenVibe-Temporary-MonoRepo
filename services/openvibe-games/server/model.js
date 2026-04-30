@@ -83,8 +83,24 @@ function toFloat(value, fallback) {
     return Number.isFinite(n) ? n : fallback;
 }
 
+function normalizeTimestamp(value) {
+    if (!value) return null;
+    if (value instanceof Date) {
+        return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+    }
+    const raw = String(value);
+    const normalized = raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`;
+    const stamp = Date.parse(normalized);
+    return Number.isFinite(stamp) ? new Date(stamp).toISOString() : null;
+}
+
 function nowIso() {
     return new Date().toISOString();
+}
+
+function isoMinutesAgo(minutes) {
+    const amount = Number(minutes) || 0;
+    return new Date(Date.now() - (amount * 60 * 1000)).toISOString();
 }
 
 function todayKey() {
@@ -749,6 +765,33 @@ function getCanvasOverride(userId) {
     return getDb().prepare('SELECT * FROM canvas_user_overrides WHERE user_id = ?').get(String(userId));
 }
 
+function buildCanvasActorFilter(actor, ipAddress) {
+    const userId = actor && actor.type === 'user' && actor.id ? String(actor.id) : null;
+    const ip = ipAddress ? String(ipAddress) : null;
+    if (userId && ip) {
+        return {
+            clause: '(user_id = ? OR ip_address = ?)',
+            params: [userId, ip],
+        };
+    }
+    if (userId) {
+        return {
+            clause: 'user_id = ?',
+            params: [userId],
+        };
+    }
+    if (ip) {
+        return {
+            clause: 'ip_address = ?',
+            params: [ip],
+        };
+    }
+    return {
+        clause: null,
+        params: [],
+    };
+}
+
 function getCanvasCooldown(actor, ipAddress) {
     const settings = getCanvasSettings();
     const userId = actor && actor.type === 'user' ? String(actor.id) : null;
@@ -759,26 +802,33 @@ function getCanvasCooldown(actor, ipAddress) {
     const placementsPerMinute = override && override.placements_per_minute != null
         ? Number(override.placements_per_minute)
         : Number(settings.placements_per_minute || DEFAULT_PLACEMENTS_PER_MINUTE);
-    const lastPlacement = getDb().prepare(`
-        SELECT created_at FROM canvas_actions
-        WHERE action_type = 'place'
-          AND ((user_id = ? AND ? IS NOT NULL) OR ip_address = ?)
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
-    `).get(userId, userId, ipAddress || null);
-    const placementsLastMinute = getDb().prepare(`
-        SELECT COUNT(*) AS c FROM canvas_actions
-        WHERE action_type = 'place'
-          AND created_at > datetime('now', '-1 minute')
-          AND ((user_id = ? AND ? IS NOT NULL) OR ip_address = ?)
-    `).get(userId, userId, ipAddress || null).c;
-    const nextPlacementAt = lastPlacement
-        ? new Date(new Date(lastPlacement.created_at.replace(' ', 'T') + 'Z').getTime() + (cooldownSeconds * 1000)).toISOString()
+    const actorFilter = buildCanvasActorFilter(actor, ipAddress);
+    const recentCutoff = isoMinutesAgo(1);
+    const lastPlacement = actorFilter.clause
+        ? getDb().prepare(`
+            SELECT created_at FROM canvas_actions
+            WHERE action_type = 'place'
+              AND ${actorFilter.clause}
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        `).get(...actorFilter.params)
+        : null;
+    const placementsLastMinute = actorFilter.clause
+        ? getDb().prepare(`
+            SELECT COUNT(*) AS c FROM canvas_actions
+            WHERE action_type = 'place'
+              AND created_at > ?
+              AND ${actorFilter.clause}
+        `).get(recentCutoff, ...actorFilter.params).c
+        : 0;
+    const lastPlacementAt = normalizeTimestamp(lastPlacement && lastPlacement.created_at);
+    const nextPlacementAt = lastPlacementAt
+        ? new Date(new Date(lastPlacementAt).getTime() + (cooldownSeconds * 1000)).toISOString()
         : null;
     return {
         cooldown_seconds: cooldownSeconds,
         placements_per_minute: placementsPerMinute,
-        last_placement_at: lastPlacement ? lastPlacement.created_at : null,
+        last_placement_at: lastPlacementAt,
         next_placement_at: nextPlacementAt,
         remaining_ms: nextPlacementAt ? Math.max(0, new Date(nextPlacementAt).getTime() - Date.now()) : 0,
         placements_last_minute: Number(placementsLastMinute || 0),
@@ -786,14 +836,15 @@ function getCanvasCooldown(actor, ipAddress) {
 }
 
 function canvasBanFor(actor, ipAddress) {
-    const userId = actor && actor.type === 'user' ? String(actor.id) : null;
+    const actorFilter = buildCanvasActorFilter(actor, ipAddress);
+    if (!actorFilter.clause) return null;
     return getDb().prepare(`
         SELECT * FROM canvas_bans
-        WHERE ((user_id = ? AND ? IS NOT NULL) OR ip_address = ?)
+        WHERE ${actorFilter.clause}
           AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
         ORDER BY created_at DESC, id DESC
         LIMIT 1
-    `).get(userId, userId, ipAddress || null);
+    `).get(...actorFilter.params);
 }
 
 function regionForTile(x, y) {

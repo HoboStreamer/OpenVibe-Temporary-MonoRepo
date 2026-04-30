@@ -9,11 +9,12 @@ const {
     ADMIN_RUNTIME_SELECTORS,
     buildScreenshotPath,
     buildPlaywrightPlan,
+    capturePageScreenshot,
     DEFAULT_SCREENSHOT_DIR,
     toBrowserNavigationUrl,
 } = require('../browser-smoke-playwright');
 
-(function run() {
+(async function run() {
     const selected = buildPlaywrightPlan({
         only: 'network-shell,billing-shell,realtime-health',
     });
@@ -50,6 +51,38 @@ const {
         'admin runtime assertions should target the worker processor matrix container explicitly',
     );
 
+    const screenshotCalls = [];
+    const fallbackCapture = await capturePageScreenshot({
+        screenshot: async (options) => {
+            screenshotCalls.push(options);
+            if (options.fullPage) {
+                throw new Error('full page capture exploded');
+            }
+        },
+    }, path.join(DEFAULT_SCREENSHOT_DIR, 'fallback-test.png'));
+    assert.deepStrictEqual(
+        screenshotCalls,
+        [
+            { path: path.join(DEFAULT_SCREENSHOT_DIR, 'fallback-test.png'), fullPage: true },
+            { path: path.join(DEFAULT_SCREENSHOT_DIR, 'fallback-test.png') },
+        ],
+        'screenshot capture should retry with a viewport screenshot after a full-page failure',
+    );
+    assert.strictEqual(
+        fallbackCapture.screenshotMode,
+        'viewport',
+        'fallback capture should report viewport mode after retrying',
+    );
+    assert.strictEqual(
+        fallbackCapture.screenshotError,
+        null,
+        'successful viewport fallback should not be reported as a hard screenshot error',
+    );
+    assert.ok(
+        /full page capture exploded/.test(fallbackCapture.screenshotWarning || ''),
+        'fallback capture should retain the original full-page error as non-gating metadata',
+    );
+
     const adminHtml = fs.readFileSync(
         path.join(__dirname, '..', '..', '..', 'services', 'openvibe-network', 'public', 'admin.html'),
         'utf8',
@@ -68,4 +101,7 @@ const {
     );
 
     console.log('browser smoke playwright tests OK');
-}());
+}()).catch((error) => {
+    console.error(error);
+    process.exit(1);
+});

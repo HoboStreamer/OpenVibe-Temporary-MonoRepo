@@ -53,6 +53,19 @@
         return v.toFixed(v < 10 ? 1 : 0) + ' ' + u[i];
     }
 
+    function quotaQueryString() {
+        const params = new URLSearchParams(window.location.search || '');
+        const namespace = params.get('namespace');
+        const ownerType = params.get('owner_type');
+        const ownerId = params.get('owner_id');
+        if (!namespace || !ownerType || !ownerId) return null;
+        return new URLSearchParams({
+            namespace,
+            owner_type: ownerType,
+            owner_id: ownerId,
+        }).toString();
+    }
+
     async function refresh() {
         try {
             const d = await fetch('/api/v1/media').then(r => r.json());
@@ -64,10 +77,23 @@
         } catch (e) {
             document.getElementById('objects').innerHTML = `<tr><td colspan="5">listing requires auth (status ${e.status||'?'})</td></tr>`;
         }
+
+        const quota = document.getElementById('quota');
+        const quotaQuery = quotaQueryString();
+        if (!quotaQuery) {
+            quota.textContent = '(add ?namespace=...&owner_type=...&owner_id=... to inspect quota usage for a specific owner context)';
+            return;
+        }
+
         try {
-            const q = await fetch('/api/v1/quota').then(r => r.json());
-            document.getElementById('quota').textContent = JSON.stringify(q, null, 2);
-        } catch { document.getElementById('quota').textContent = '(sign in to view your quota)'; }
+            const q = await fetch(`/api/v1/quota?${quotaQuery}`).then(async (r) => {
+                if (!r.ok) throw new Error(`quota ${r.status}`);
+                return r.json();
+            });
+            quota.textContent = JSON.stringify(q, null, 2);
+        } catch {
+            quota.textContent = '(quota inspection requires a valid namespace / owner context)';
+        }
     }
     refresh();
 

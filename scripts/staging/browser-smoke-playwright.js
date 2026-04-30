@@ -67,6 +67,36 @@ function buildScreenshotPath(checkId, screenshotDir) {
     return path.join(dir, `${fileName}.png`);
 }
 
+async function capturePageScreenshot(page, targetScreenshot) {
+    try {
+        await page.screenshot({ path: targetScreenshot, fullPage: true });
+        return {
+            screenshotPath: toArtifactPath(targetScreenshot),
+            screenshotMode: 'full-page',
+            screenshotError: null,
+            screenshotWarning: null,
+        };
+    } catch (error) {
+        const fullPageError = error && error.message || String(error);
+        try {
+            await page.screenshot({ path: targetScreenshot });
+            return {
+                screenshotPath: toArtifactPath(targetScreenshot),
+                screenshotMode: 'viewport',
+                screenshotError: null,
+                screenshotWarning: fullPageError,
+            };
+        } catch (fallbackError) {
+            return {
+                screenshotPath: null,
+                screenshotMode: null,
+                screenshotError: `full-page: ${fullPageError}; viewport: ${fallbackError && fallbackError.message || String(fallbackError)}`,
+                screenshotWarning: null,
+            };
+        }
+    }
+}
+
 function shouldIgnoreRequestFailure(url) {
     return /^data:/i.test(url)
         || /\/favicon\.ico(?:$|\?)/i.test(url);
@@ -318,16 +348,13 @@ async function runHtmlAttempt(browser, plan, options, strategy) {
             };
         }
 
-        let screenshotPath = null;
-        let screenshotError = null;
-        try {
-            const targetScreenshot = buildScreenshotPath(plan.id, options.screenshotDir);
-            ensureDir(path.dirname(targetScreenshot));
-            await page.screenshot({ path: targetScreenshot, fullPage: true });
-            screenshotPath = toArtifactPath(targetScreenshot);
-        } catch (error) {
-            screenshotError = error.message;
-        }
+        const targetScreenshot = buildScreenshotPath(plan.id, options.screenshotDir);
+        ensureDir(path.dirname(targetScreenshot));
+        const screenshot = await capturePageScreenshot(page, targetScreenshot);
+        const screenshotPath = screenshot.screenshotPath;
+        const screenshotMode = screenshot.screenshotMode;
+        const screenshotError = screenshot.screenshotError;
+        const screenshotWarning = screenshot.screenshotWarning;
 
         const diagnosticSignals = diagnostics.consoleErrors.length || diagnostics.pageErrors.length || diagnostics.failedRequests.length;
         const detailParts = [`HTML responded with expected marker: ${plan.marker}`];
@@ -353,7 +380,9 @@ async function runHtmlAttempt(browser, plan, options, strategy) {
             iconRuntime,
             uiAssertions,
             screenshotPath,
+            screenshotMode,
             screenshotError,
+            screenshotWarning,
             consoleErrors: diagnostics.consoleErrors,
             pageErrors: diagnostics.pageErrors,
             failedRequests: diagnostics.failedRequests,
@@ -457,7 +486,9 @@ async function runBrowserSmokePlaywright(options = {}) {
                 icon_runtime: evaluation.iconRuntime || null,
                 ui_assertions: evaluation.uiAssertions || null,
                 screenshot_path: evaluation.screenshotPath || null,
+                screenshot_mode: evaluation.screenshotMode || null,
                 screenshot_error: evaluation.screenshotError || null,
+                screenshot_warning: evaluation.screenshotWarning || null,
             });
         }
 
@@ -557,6 +588,7 @@ module.exports = {
     ADMIN_RUNTIME_SELECTORS,
     buildScreenshotPath,
     buildPlaywrightPlan,
+    capturePageScreenshot,
     DEFAULT_SCREENSHOT_DIR,
     runBrowserSmokePlaywright,
     toBrowserNavigationUrl,
