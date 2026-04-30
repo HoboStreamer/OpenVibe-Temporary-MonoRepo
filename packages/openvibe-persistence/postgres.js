@@ -129,6 +129,10 @@ function listSqlMigrationFiles(migrationsDir) {
         }));
 }
 
+function migrationSourceForFiles(files) {
+    return Array.isArray(files) && files.length ? 'checked-in' : 'schema_sql_fallback';
+}
+
 function resolveQueryable(target) {
     if (!target || typeof target.query !== 'function') {
         throw new Error('A pg client or pool with a query() method is required');
@@ -305,6 +309,7 @@ async function runMigrations(serviceName, options) {
     const ownsPool = !opts.pool;
     const migrationsDir = resolveMigrationsDir(serviceName, opts);
     const files = listSqlMigrationFiles(migrationsDir);
+    const migrationSource = migrationSourceForFiles(files);
     const appliedNames = [];
 
     try {
@@ -326,6 +331,7 @@ async function runMigrations(serviceName, options) {
         const version = await getSchemaVersion(serviceName, Object.assign({}, opts, { pool, migrationsDir }));
         return Object.assign({}, version, {
             applied_names: appliedNames,
+            migration_source: migrationSource,
         });
     } finally {
         if (ownsPool && pool && typeof pool.end === 'function') {
@@ -340,6 +346,7 @@ async function getSchemaVersion(serviceName, options) {
     const ownsPool = !opts.pool;
     const migrationsDir = resolveMigrationsDir(serviceName, opts);
     const files = listSqlMigrationFiles(migrationsDir);
+    const migrationSource = migrationSourceForFiles(files);
 
     try {
         await ensureMigrationsTable(pool, opts.migrationsTable);
@@ -355,6 +362,8 @@ async function getSchemaVersion(serviceName, options) {
             latest_applied: last ? last.name : null,
             latest_applied_at: last ? last.applied_at : null,
             latest_available: files.length ? files[files.length - 1].name : null,
+            migration_source: migrationSource,
+            has_checked_in_migrations: migrationSource === 'checked-in',
         };
     } finally {
         if (ownsPool && pool && typeof pool.end === 'function') {

@@ -306,6 +306,13 @@ function actorOfReq(req) {
     return { id: u.id, role, capabilities: capabilitiesOf(role) };
 }
 
+function serviceActorOfReq(req) {
+    const serviceId = typeof req.serviceActor === 'string'
+        ? req.serviceActor
+        : req.serviceActor && req.serviceActor.id || null;
+    return serviceId ? { id: serviceId, role: 'service', capabilities: ['broadcast_notifications'] } : null;
+}
+
 function requireCapability(cap) {
     return (req, res, next) => {
         const a = actorOfReq(req);
@@ -378,6 +385,27 @@ function buildRouter(deps) {
     r.post('/admin/broadcast', express.json(), requireCapability('broadcast_notifications'), (req, res) => {
         recordAudit({ actor: req.staffActor, action: 'admin.broadcast', target: null, detail: req.body || {} });
         res.json({ ok: true, queued: true });
+    });
+
+    r.post('/internal/notifications/broadcast', express.json(), (req, res) => {
+        const serviceActor = serviceActorOfReq(req);
+        if (!serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        const payload = Object.assign({
+            title: req.body && req.body.title || '',
+            audience: req.body && req.body.audience || 'all',
+            body: req.body && req.body.body || '',
+        }, req.body || {});
+        recordAudit({ actor: serviceActor, action: 'internal.notifications.broadcast', target: null, detail: payload });
+        res.status(202).json({
+            ok: true,
+            queued: true,
+            delivered: false,
+            delivery_mode: 'audit-recorded',
+            requested_by_service: serviceActor.id,
+            broadcast: payload,
+        });
     });
 
     return r;

@@ -15,7 +15,7 @@ const {
 } = require('../staging/browser-smoke');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_OUT = path.join(ROOT, 'data', 'readiness', 'local-prod-stack-report.json');
+const DEFAULT_OUT = path.join(ROOT, 'data', 'readiness', 'local-prod-stack-wait-report.json');
 const DEFAULT_TIMEOUT_MS = 180000;
 const DEFAULT_INTERVAL_MS = 5000;
 const FALSEY = new Set(['0', 'false', 'no', 'off', '']);

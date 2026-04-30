@@ -155,16 +155,41 @@ function request(server, method, requestPath, body, extraHeaders) {
         const createdClip = JSON.parse(clipResponse.body).clip;
         assert.ok(createdClip.id.startsWith('clip_'));
 
+        const internalMaterializeResponse = await request(server, 'POST', '/api/v1/internal/clips/materialize', {
+            clip_id: createdClip.id,
+            mode: 'worker-materialize',
+        }, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(internalMaterializeResponse.status, 201);
+        const internalMaterialized = JSON.parse(internalMaterializeResponse.body);
+        assert.strictEqual(internalMaterialized.clip.status, 'ready');
+        assert.ok(internalMaterialized.media.id);
+
         const materializeResponse = await request(server, 'POST', `/api/v1/clips/${encodeURIComponent(createdClip.id)}/materialize`, {
             mode: 'virtual-copy',
         }, {
             'x-internal-key': config.internalKey,
             'x-openvibe-service': 'openvibe-workers',
         });
-        assert.strictEqual(materializeResponse.status, 201);
+        assert.strictEqual(materializeResponse.status, 200);
         const materialized = JSON.parse(materializeResponse.body);
         assert.strictEqual(materialized.clip.status, 'ready');
         assert.ok(materialized.media.id);
+
+        const reconcileResponse = await request(server, 'POST', '/api/v1/internal/lifecycle/reconcile', {
+            namespace: 'live.vods',
+            limit: 20,
+        }, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(reconcileResponse.status, 200);
+        const reconcile = JSON.parse(reconcileResponse.body);
+        assert.strictEqual(reconcile.ok, true);
+        assert.strictEqual(reconcile.requested_by_service, 'openvibe-workers');
+        assert.ok(reconcile.reconciled_group_count >= 1);
 
         const clipPlaybackResponse = await request(server, 'GET', `/api/v1/clips/${encodeURIComponent(createdClip.id)}/playback`);
         assert.strictEqual(clipPlaybackResponse.status, 200);

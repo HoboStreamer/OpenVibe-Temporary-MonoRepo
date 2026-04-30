@@ -10,6 +10,7 @@ const {
 } = require('@openvibe/persistence');
 
 const SERVICE_NAME = 'openvibe-chat';
+const POSTGRES_MIGRATIONS_DIR = path.resolve(__dirname, 'migrations', 'postgres');
 const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS chat_rooms (
             id                  TEXT PRIMARY KEY,
@@ -185,6 +186,7 @@ function createPostgresStore(options) {
     return createLegacyPostgresStore({
         serviceName: SERVICE_NAME,
         databaseUrl: opts.databaseUrl,
+        migrationsDir: opts.migrationsDir || POSTGRES_MIGRATIONS_DIR,
         schemaSql: SCHEMA_SQL,
         afterInit: applyLegacyBootstrap,
     });
@@ -202,6 +204,7 @@ const runtime = createLegacyPersistenceRuntime({
 
 module.exports = Object.assign({}, runtime, {
     SERVICE_NAME,
+    POSTGRES_MIGRATIONS_DIR,
     SCHEMA_SQL,
     LEGACY_BOOTSTRAP_SQL,
     defaultSqlitePath,

@@ -107,12 +107,25 @@ function createLegacyPostgresStore(options) {
         },
         describePersistence(baseDescriptor) {
             const status = database.getStatus();
+            const migrations = status.migrations || {
+                migrations_dir: opts.migrationsDir || null,
+                migration_count: 0,
+                applied_count: 0,
+                pending_count: 0,
+                latest_applied: null,
+                latest_applied_at: null,
+                latest_available: null,
+                migration_source: 'schema_sql_fallback',
+                has_checked_in_migrations: false,
+            };
             return Object.assign({}, baseDescriptor || {}, {
                 adapter: 'postgres',
                 compat_runtime: true,
                 compat_runtime_ready: !!status.ready,
                 compat_runtime_error: status.error || null,
-                compat_runtime_migrations: status.migrations || null,
+                compat_runtime_migrations: migrations,
+                migration_source: migrations.migration_source || 'schema_sql_fallback',
+                schema_sql_reconciled: !!(opts.schemaSql || opts.bootstrapSql),
             });
         },
     };

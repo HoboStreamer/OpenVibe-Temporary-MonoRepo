@@ -29,7 +29,7 @@ const {
 
     assert.strictEqual(
         toBrowserNavigationUrl(`${DEFAULT_URLS.billingUrl}/health`, 'billing.openvibe.network.localhost'),
-        'http://billing.openvibe.network.localhost:5000/health',
+        'http://billing.openvibe.network.localhost:5001/health',
         'browser navigation URLs should swap the hostname while preserving port and path',
     );
 

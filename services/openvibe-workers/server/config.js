@@ -2,6 +2,8 @@
 
 require('dotenv').config();
 
+const path = require('path');
+
 function readArg(flag) {
     const index = process.argv.indexOf(flag);
     if (index === -1) return null;
@@ -16,6 +18,12 @@ function parseQueueFilter(value) {
         .filter(Boolean);
 }
 
+function trimUrl(value) {
+    return String(value || '').trim().replace(/\/$/, '');
+}
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+
 module.exports = {
     port: parseInt(process.env.PORT, 10) || 5300,
     host: process.env.HOST || '0.0.0.0',
@@ -29,7 +37,13 @@ module.exports = {
     concurrency: parseInt(readArg('--concurrency') || process.env.OPENVIBE_WORKER_CONCURRENCY, 10) || 2,
     enableProcessors: String(process.env.OPENVIBE_WORKER_ENABLE_PROCESSORS || 'false').toLowerCase() === 'true',
     queueFilter: parseQueueFilter(readArg('--worker') || process.env.OPENVIBE_WORKER_QUEUES || ''),
-    mediaUrl: process.env.OPENVIBE_MEDIA_URL || 'http://127.0.0.1:4500',
-    aiUrl: process.env.OPENVIBE_AI_URL || 'http://127.0.0.1:5100',
+    mediaUrl: trimUrl(process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || 'http://127.0.0.1:4500'),
+    aiUrl: trimUrl(process.env.OPENVIBE_AI_INTERNAL_URL || process.env.OPENVIBE_AI_URL || 'http://127.0.0.1:5100'),
+    billingUrl: trimUrl(process.env.OPENVIBE_BILLING_INTERNAL_URL || process.env.OPENVIBE_BILLING_URL || 'http://127.0.0.1:5000'),
+    contentUrl: trimUrl(process.env.OPENVIBE_CONTENT_INTERNAL_URL || process.env.OPENVIBE_CONTENT_URL || 'http://127.0.0.1:5500'),
+    networkUrl: trimUrl(process.env.OPENVIBE_NETWORK_INTERNAL_URL || process.env.OPENVIBE_NETWORK_URL || 'http://127.0.0.1:4100'),
+    requestTimeoutMs: parseInt(process.env.OPENVIBE_WORKER_REQUEST_TIMEOUT_MS, 10) || 15000,
+    migrationBundleDir: path.resolve(process.env.OPENVIBE_MIGRATION_BUNDLE_DIR || path.join(REPO_ROOT, 'data', 'migrations', 'hobo-production-staging', 'openvibe-target')),
+    migrationCutoverReportPath: path.resolve(process.env.OPENVIBE_MIGRATION_CUTOVER_REPORT || path.join(REPO_ROOT, 'data', 'migrations', 'cutover-report.json')),
     pythonBin: process.env.OPENVIBE_WORKER_PYTHON_BIN || 'python3',
 };

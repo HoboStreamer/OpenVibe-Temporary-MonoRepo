@@ -17,7 +17,7 @@ const DEFAULT_URLS = Object.freeze({
     restreamUrl: 'http://127.0.0.1:4700',
     chatUrl: 'http://127.0.0.1:4800',
     communityUrl: 'http://127.0.0.1:4900',
-    billingUrl: 'http://127.0.0.1:5000',
+    billingUrl: 'http://127.0.0.1:5001',
     aiUrl: 'http://127.0.0.1:5100',
     gamesUrl: 'http://127.0.0.1:5200',
     workersUrl: 'http://127.0.0.1:5300',

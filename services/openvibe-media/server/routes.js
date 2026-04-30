@@ -40,6 +40,16 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         return { actor_type: a.type, actor_id: a.id };
     }
 
+    function serviceActorMeta(req) {
+        const serviceId = typeof req.serviceActor === 'string'
+            ? req.serviceActor
+            : req.serviceActor && req.serviceActor.id || null;
+        return {
+            actor_type: 'service',
+            actor_id: serviceId || 'openvibe-workers',
+        };
+    }
+
     function chooseStorageProvider(input) {
         return storage.chooseWriteProvider(input || {});
     }
@@ -461,6 +471,78 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             media: createdMedia,
             export: exportRow,
             playback,
+        };
+    }
+
+    function reconcileLifecycle(body) {
+        const input = body || {};
+        const filters = ['deleted_at IS NULL'];
+        const args = [];
+        if (input.namespace) {
+            filters.push('namespace = ?');
+            args.push(String(input.namespace));
+        }
+        if (input.owner_type) {
+            filters.push('owner_type = ?');
+            args.push(String(input.owner_type));
+        }
+        if (input.owner_id) {
+            filters.push('owner_id = ?');
+            args.push(String(input.owner_id));
+        }
+        const limit = Math.min(Math.max(Number(input.limit) || 100, 1), 500);
+        const mediaRows = db.get().prepare(`
+            SELECT id, owner_type, owner_id, namespace, storage_key, status, visibility, size_bytes
+            FROM media_objects
+            WHERE ${filters.join(' AND ')}
+            ORDER BY updated_at DESC
+            LIMIT ?
+        `).all(...args, limit);
+
+        const groups = new Map();
+        let missingLocationCount = 0;
+        for (const media of mediaRows) {
+            const groupKey = `${media.owner_type}:${media.owner_id}:${media.namespace}`;
+            if (!groups.has(groupKey)) {
+                groups.set(groupKey, {
+                    owner_type: media.owner_type,
+                    owner_id: media.owner_id,
+                    namespace: media.namespace,
+                });
+            }
+            const hasLocation = !media.storage_key
+                || storageModel.listLocations(media.id).some((location) => location.status === 'active');
+            if (!hasLocation) missingLocationCount += 1;
+        }
+
+        const usageRows = Array.from(groups.values()).map((group) => {
+            const recomputed = quotas.recomputeUsage(group.owner_type, group.owner_id, group.namespace);
+            return Object.assign({}, group, recomputed);
+        });
+
+        const orphanedLocationCount = db.get().prepare(`
+            SELECT COUNT(*) AS count
+            FROM media_object_locations AS locations
+            LEFT JOIN media_objects AS media ON media.id = locations.media_id
+            WHERE media.id IS NULL OR media.deleted_at IS NOT NULL
+        `).get().count;
+        const sizeViolationCount = db.get().prepare(`SELECT COUNT(*) AS count FROM media_size_violations`).get().count;
+
+        return {
+            ok: true,
+            media_count: mediaRows.length,
+            reconciled_group_count: usageRows.length,
+            missing_location_count: missingLocationCount,
+            orphaned_location_count: orphanedLocationCount,
+            size_violation_count: sizeViolationCount,
+            usage_rows: usageRows,
+            filters: {
+                namespace: input.namespace || null,
+                owner_type: input.owner_type || null,
+                owner_id: input.owner_id || null,
+                limit,
+            },
+            processing: processing.describeProcessingMode(),
         };
     }
 
@@ -1309,6 +1391,33 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             publishMediaEvent: eventBus.publishMediaEvent,
         });
         res.json({ ok: true, result, media: model.getById(body.media_id) });
+    }));
+
+    r.post('/internal/clips/materialize', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
+        if (!req.serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        const body = req.body || {};
+        const clipId = body.clip_id || body.clipId;
+        if (!clipId) {
+            return res.status(400).json({ error: 'clip_id required' });
+        }
+        const clip = clipModel.getClipById(String(clipId));
+        if (!clip) {
+            return res.status(404).json({ error: 'clip not found' });
+        }
+        const result = await materializeClipProject(clip, serviceActorMeta(req), String(body.mode || 'worker-materialize'));
+        if (!result.ok) {
+            return res.status(result.status || 409).json(result);
+        }
+        res.status(result.created ? 201 : 200).json(result);
+    }));
+
+    r.post('/internal/lifecycle/reconcile', express.json({ limit: '64kb' }), asyncRoute(async (req, res) => {
+        if (!req.serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        res.json(Object.assign({ requested_by_service: serviceActorMeta(req).actor_id }, reconcileLifecycle(req.body || {})));
     }));
 
     // ── legacy id lookup (HoboStreamer migration helper) ─────

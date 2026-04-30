@@ -9,6 +9,7 @@ const path = require('path');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-content-api-'));
 process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_CONTENT_DB_PATH = path.join(tmpDir, 'content-api.db');
+process.env.INTERNAL_API_KEY = 'test-internal';
 
 const { buildApp } = require('../server/index');
 
@@ -115,13 +116,32 @@ async function main() {
         const jobBody = JSON.parse(jobResponse.body);
         assert.strictEqual(jobBody.job.job_type, 'content.publish');
 
+        const reindexResponse = await request(server, 'openvibe.codes.localhost', '/api/v1/internal/search/reindex', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-internal-key': 'test-internal',
+                'x-openvibe-service': 'openvibe-workers',
+            },
+            body: JSON.stringify({
+                surface: 'codes',
+                item_id: itemBody.item.id,
+                reason: 'worker.search.reindex',
+            }),
+        });
+        assert.strictEqual(reindexResponse.status, 202);
+        const reindexBody = JSON.parse(reindexResponse.body);
+        assert.strictEqual(reindexBody.queued, true);
+        assert.strictEqual(reindexBody.requested_by_service, 'openvibe-workers');
+        assert.strictEqual(reindexBody.job.job_type, 'search.reindex');
+
         const statusResponse = await request(server, 'openvibe.codes.localhost', '/api/v1/content/status');
         assert.strictEqual(statusResponse.status, 200);
         const statusBody = JSON.parse(statusResponse.body);
         assert.strictEqual(statusBody.persistence.adapter_status, 'local-bootstrap');
         assert.strictEqual(statusBody.counts.sources, 1);
         assert.strictEqual(statusBody.counts.items, 1);
-        assert.strictEqual(statusBody.counts.jobs, 1);
+        assert.strictEqual(statusBody.counts.jobs, 2);
     } finally {
         await close(server);
     }

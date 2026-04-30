@@ -23,6 +23,7 @@ module.exports = {
     host: process.env.HOST || '0.0.0.0',
     nodeEnv: process.env.NODE_ENV || 'development',
     serviceId: 'openvibe-content',
+    internalKey: process.env.INTERNAL_API_KEY || 'change-me-in-production',
     aiUrl: trimUrl(process.env.OPENVIBE_AI_URL || ''),
     networkUrl: trimUrl(process.env.OPENVIBE_NETWORK_URL || ''),
     realtimeUrl: trimUrl(process.env.OPENVIBE_REALTIME_URL || ''),

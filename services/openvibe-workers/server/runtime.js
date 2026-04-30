@@ -3,6 +3,45 @@
 const { summarizeWorkerRegistry } = require('@openvibe/queue');
 const registry = require('./registry');
 
+function buildProcessorDependencyCheck(config, summary) {
+    const processorSummary = summary && summary.processor_summary || null;
+    if (!summary || !summary.processors) {
+        return {
+            name: 'processor_dependencies',
+            status: config.enableProcessors ? 'red' : 'yellow',
+            ok: !config.enableProcessors,
+            critical: !!config.enableProcessors,
+            details: { total: 0, available: 0, unavailable: 0, critical_unavailable: 0 },
+            message: config.enableProcessors ? 'Processor runtime has not produced a processor summary yet.' : 'Processor runtime intentionally disabled.',
+        };
+    }
+    const criticalUnavailable = Number(processorSummary && processorSummary.critical_unavailable || 0);
+    const unavailable = Number(processorSummary && processorSummary.unavailable || 0);
+    return {
+        name: 'processor_dependencies',
+        status: !config.enableProcessors
+            ? 'yellow'
+            : criticalUnavailable > 0
+                ? 'red'
+                : unavailable > 0
+                    ? 'yellow'
+                    : 'green',
+        ok: !config.enableProcessors || criticalUnavailable === 0,
+        critical: !!config.enableProcessors,
+        details: {
+            summary: processorSummary,
+            items: summary.processors,
+        },
+        message: !config.enableProcessors
+            ? 'Worker runtime intentionally disabled.'
+            : criticalUnavailable > 0
+                ? 'One or more critical worker processors are unavailable.'
+                : unavailable > 0
+                    ? 'Optional worker processors are unavailable.'
+                    : null,
+    };
+}
+
 function buildWorkerHealth(config, workerHost) {
     const jobs = registry.listJobs();
     const summary = workerHost && typeof workerHost.summary === 'function' ? workerHost.summary() : null;
@@ -16,6 +55,8 @@ function buildWorkerHealth(config, workerHost) {
             last_heartbeat_at: null,
             error: null,
         },
+        processors: summary && summary.processors || [],
+        processor_summary: summary && summary.processor_summary || null,
         runtime: summary,
     };
 }
@@ -74,10 +115,12 @@ function buildWorkerReadiness(config, workerHost) {
                         ? summary.heartbeat.error.message
                         : null,
             },
+            buildProcessorDependencyCheck(config, summary),
         ],
         extra: {
             queues: registry.listQueues(),
             heartbeat: summary && summary.heartbeat || null,
+            processors: summary && summary.processors || [],
         },
     };
 }

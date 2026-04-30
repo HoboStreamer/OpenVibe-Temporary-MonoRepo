@@ -8,7 +8,7 @@ const {
 } = require('@openvibe/queue');
 const { clearPresence, createRedisClient, heartbeatPresence } = require('@openvibe/redis');
 
-const { createProcessors } = require('./processors');
+const { createProcessorCatalog, createProcessors, describeProcessorCatalog } = require('./processors');
 
 function normalizeQueueFilter(filter) {
     if (!Array.isArray(filter) || !filter.length) return null;
@@ -30,6 +30,7 @@ function createWorkerHost(options) {
     const opts = options || {};
     const config = opts.config || {};
     const registry = opts.registry;
+    const processorCatalog = createProcessorCatalog(config);
     const processors = createProcessors(config);
     const queueFilter = normalizeQueueFilter(config.queueFilter || []);
     const queueBundles = new Map();
@@ -49,12 +50,30 @@ function createWorkerHost(options) {
         },
         last_job_at: null,
         last_error: null,
+        processors: {},
     };
 
     let heartbeatTimer = null;
 
     function allowedQueue(queueName) {
         return !queueFilter || queueFilter.has(queueName);
+    }
+
+    function ensureProcessorState(job) {
+        const descriptor = describeProcessorCatalog(config)[job.name] || processorCatalog[job.name] || null;
+        if (!state.processors[job.name]) {
+            state.processors[job.name] = {
+                name: job.name,
+                queue: job.queue,
+                critical: !!job.critical,
+                description: job.description || null,
+                last_result_at: null,
+                last_duration_ms: null,
+                last_status: descriptor && !descriptor.available ? 'unavailable' : 'idle',
+                last_error: null,
+            };
+        }
+        return state.processors[job.name];
     }
 
     function groupJobsByQueue() {
@@ -124,6 +143,9 @@ function createWorkerHost(options) {
     async function start() {
         state.started = false;
         startHeartbeatLoop();
+        for (const job of typeof registry.listJobs === 'function' ? registry.listJobs() : []) {
+            ensureProcessorState(job);
+        }
         if (!config.enableProcessors || !config.redisUrl) {
             state.started = true;
             return summary();
@@ -139,9 +161,33 @@ function createWorkerHost(options) {
                 processor: async (job) => {
                     const handler = processors[job.name];
                     if (!handler) throw new Error(`No processor registered for ${job.name}`);
-                    const result = await handler(job);
-                    state.last_job_at = new Date().toISOString();
-                    return result;
+                    const processorState = ensureProcessorState(job);
+                    const startedAt = Date.now();
+                    try {
+                        const result = await handler(job);
+                        if (result && result.ok === false) {
+                            const error = new Error(result.error || result.reason || `processor ${job.name} returned an error`);
+                            error.result = result;
+                            throw error;
+                        }
+                        processorState.last_result_at = new Date().toISOString();
+                        processorState.last_duration_ms = Date.now() - startedAt;
+                        processorState.last_status = result && result.skipped ? 'skipped' : 'ok';
+                        processorState.last_error = null;
+                        state.last_job_at = processorState.last_result_at;
+                        return result;
+                    } catch (error) {
+                        processorState.last_result_at = new Date().toISOString();
+                        processorState.last_duration_ms = Date.now() - startedAt;
+                        processorState.last_status = 'failed';
+                        processorState.last_error = {
+                            message: error && error.message || String(error),
+                            at: processorState.last_result_at,
+                            result: error && error.result || null,
+                            dependency: error && error.dependency || null,
+                        };
+                        throw error;
+                    }
                 },
             });
             if (workerBundle.worker) {
@@ -183,9 +229,12 @@ function createWorkerHost(options) {
     }
 
     function listJobs() {
+        const descriptors = describeProcessorCatalog(config);
         const jobs = typeof registry.listJobs === 'function' ? registry.listJobs() : [];
         return jobs.filter((job) => allowedQueue(job.queue)).map((job) => Object.assign({}, job, {
             processor_enabled: !!processors[job.name],
+            processor_available: !!(descriptors[job.name] && descriptors[job.name].available),
+            processor_dependency: descriptors[job.name] && descriptors[job.name].dependency || null,
         }));
     }
 
@@ -215,6 +264,39 @@ function createWorkerHost(options) {
     }
 
     function summary() {
+        const descriptors = describeProcessorCatalog(config);
+        const processorItems = (typeof registry.listJobs === 'function' ? registry.listJobs() : [])
+            .filter((job) => allowedQueue(job.queue))
+            .map((job) => {
+                const entry = ensureProcessorState(job);
+                const descriptor = descriptors[job.name] || null;
+                return Object.assign({}, entry, {
+                    available: !!(descriptor && descriptor.available),
+                    dependency: descriptor && descriptor.dependency || null,
+                });
+            });
+        const processorSummary = processorItems.reduce((summary, item) => {
+            summary.total += 1;
+            if (item.available) summary.available += 1;
+            else {
+                summary.unavailable += 1;
+                if (item.critical) summary.critical_unavailable += 1;
+                else summary.optional_unavailable += 1;
+            }
+            if (item.last_status === 'failed') summary.failed += 1;
+            else if (item.last_status === 'ok') summary.ok += 1;
+            else if (item.last_status === 'skipped') summary.skipped += 1;
+            return summary;
+        }, {
+            total: 0,
+            available: 0,
+            unavailable: 0,
+            critical_unavailable: 0,
+            optional_unavailable: 0,
+            ok: 0,
+            failed: 0,
+            skipped: 0,
+        });
         return {
             started: state.started,
             queue_filter: queueFilter ? Array.from(queueFilter.values()).sort() : [],
@@ -223,6 +305,8 @@ function createWorkerHost(options) {
             heartbeat: Object.assign({}, state.heartbeat),
             last_job_at: state.last_job_at,
             last_error: state.last_error,
+            processors: processorItems,
+            processor_summary: processorSummary,
         };
     }
 

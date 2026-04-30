@@ -14,6 +14,7 @@ const {
 } = require('@openvibe/persistence');
 
 const SERVICE_NAME = 'openvibe-billing';
+const POSTGRES_MIGRATIONS_DIR = path.resolve(__dirname, 'migrations', 'postgres');
 const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS billing_wallets (
             id              TEXT PRIMARY KEY,
@@ -243,6 +244,7 @@ function createPostgresStore(options) {
     return createLegacyPostgresStore({
         serviceName: SERVICE_NAME,
         databaseUrl: opts.databaseUrl,
+        migrationsDir: opts.migrationsDir || POSTGRES_MIGRATIONS_DIR,
         schemaSql: SCHEMA_SQL,
     });
 }
@@ -259,6 +261,7 @@ const runtime = createLegacyPersistenceRuntime({
 
 module.exports = Object.assign({}, runtime, {
     SERVICE_NAME,
+    POSTGRES_MIGRATIONS_DIR,
     SCHEMA_SQL,
     defaultSqlitePath,
     createSqliteStore,

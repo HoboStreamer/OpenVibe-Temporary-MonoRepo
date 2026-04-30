@@ -13,6 +13,7 @@ const config = require('./config');
 const { createContentStore } = require('./db');
 const { attachHostRouter } = require('./host-router');
 const { buildRouter } = require('./routes');
+const { serviceActorMiddleware } = require('./middleware');
 const { hostStatuses } = require('./ssr');
 
 function buildApp() {
@@ -79,6 +80,7 @@ function buildApp() {
     attachHostRouter({ app, config });
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use('/assets', express.static(path.join(__dirname, '..', 'public')));
+    app.use(serviceActorMiddleware(config.internalKey));
     app.use(buildRouter({ config, contentStore }));
 
     app.use((err, _req, res, _next) => {

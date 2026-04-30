@@ -18,6 +18,7 @@ const START_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'start-production-like-st
 const STOP_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'stop-production-like-stack.sh');
 const WAIT_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'wait-for-stack.js');
 const DEFAULT_OUT = path.join(ROOT, 'data', 'readiness', 'local-prod-stack-report.json');
+const DEFAULT_WAIT_OUT = path.join(ROOT, 'data', 'readiness', 'local-prod-stack-wait-report.json');
 const DEFAULT_TIMEOUT_MS = 180000;
 const DEFAULT_INTERVAL_MS = 5000;
 const REQUIRED_SERVICES = Object.freeze([
@@ -213,6 +214,33 @@ async function checkLocalProdStack(options = {}) {
         },
     ));
 
+    const workerDependencyMatrix = [
+        { env: 'OPENVIBE_MEDIA_URL', pattern: /OPENVIBE_MEDIA_(INTERNAL_)?URL:\s*http:\/\//, critical: true },
+        { env: 'OPENVIBE_BILLING_INTERNAL_URL', pattern: /OPENVIBE_BILLING_INTERNAL_URL:\s*http:\/\//, critical: false },
+        { env: 'OPENVIBE_CONTENT_INTERNAL_URL', pattern: /OPENVIBE_CONTENT_INTERNAL_URL:\s*http:\/\//, critical: false },
+        { env: 'OPENVIBE_NETWORK_INTERNAL_URL', pattern: /OPENVIBE_NETWORK_INTERNAL_URL:\s*http:\/\//, critical: false },
+        { env: 'OPENVIBE_MIGRATION_BUNDLE_DIR', pattern: /OPENVIBE_MIGRATION_BUNDLE_DIR:\s*\//, critical: false },
+    ];
+    const missingCriticalWorkerDeps = workerDependencyMatrix.filter((item) => item.critical && !item.pattern.test(workersBlock)).map((item) => item.env);
+    const missingOptionalWorkerDeps = workerDependencyMatrix.filter((item) => !item.critical && !item.pattern.test(workersBlock)).map((item) => item.env);
+    checks.push(createCheck(
+        'worker_internal_dependencies',
+        missingCriticalWorkerDeps.length
+            ? 'red'
+            : missingOptionalWorkerDeps.length
+                ? 'yellow'
+                : 'green',
+        missingCriticalWorkerDeps.length
+            ? `Critical worker dependency env vars are missing: ${missingCriticalWorkerDeps.join(', ')}`
+            : missingOptionalWorkerDeps.length
+                ? `Optional worker dependency env vars are missing: ${missingOptionalWorkerDeps.join(', ')}`
+                : null,
+        {
+            missing_critical: missingCriticalWorkerDeps,
+            missing_optional: missingOptionalWorkerDeps,
+        },
+    ));
+
     const nginxBlock = compose.services.nginx || '';
     checks.push(createCheck(
         'nginx_localhost_gateway',
@@ -282,6 +310,7 @@ async function checkLocalProdStack(options = {}) {
             start: START_SCRIPT,
             stop: STOP_SCRIPT,
             wait: WAIT_SCRIPT,
+            wait_report: DEFAULT_WAIT_OUT,
         },
         checks,
         required_services: REQUIRED_SERVICES,

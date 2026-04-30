@@ -17,6 +17,12 @@ function buildRouter({ config, contentStore }) {
     const router = express.Router();
     router.use(express.json({ limit: '512kb' }));
 
+    function serviceActorId(req) {
+        return typeof req.serviceActor === 'string'
+            ? req.serviceActor
+            : req.serviceActor && req.serviceActor.id || null;
+    }
+
     router.get('/api/v1/content/status', asyncHandler(async (_req, res) => {
         res.json({
             service: config.serviceId,
@@ -69,6 +75,34 @@ function buildRouter({ config, contentStore }) {
     router.post('/api/v1/content/jobs', asyncHandler(async (req, res) => {
         const job = await contentStore.queueJob(req.body || {});
         res.status(201).json({ job });
+    }));
+
+    router.post('/api/v1/internal/search/reindex', asyncHandler(async (req, res) => {
+        if (!req.serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        const body = req.body || {};
+        const serviceId = serviceActorId(req) || config.serviceId;
+        const job = await contentStore.queueJob({
+            job_type: String(body.job_type || 'search.reindex'),
+            surface: body.surface ? String(body.surface) : null,
+            source_id: body.source_id ? String(body.source_id) : null,
+            item_id: body.item_id ? String(body.item_id) : null,
+            state: String(body.state || 'queued'),
+            scheduled_at: body.scheduled_at ? String(body.scheduled_at) : null,
+            payload: Object.assign({}, body.payload || {}, {
+                reason: body.reason || 'worker.search.reindex',
+                requested_by_service: serviceId,
+                requested_at: new Date().toISOString(),
+            }),
+        });
+        res.status(202).json({
+            ok: true,
+            queued: true,
+            requested_by_service: serviceId,
+            job,
+            counts: await contentStore.getCounts(),
+        });
     }));
 
     router.get('*', (req, res) => {
