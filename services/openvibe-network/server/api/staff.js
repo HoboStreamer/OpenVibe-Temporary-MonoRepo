@@ -254,6 +254,16 @@ function unwrapFetch(record) {
 }
 
 async function buildRuntimeStatus(config) {
+    // Phase 16 — pull a small capability summary from @openvibe/contracts so
+    // the admin matrix can render shipped/deferred counts truthfully.
+    let capabilityCatalog = null;
+    try {
+        const { describeProductCapabilityCatalog } = require('@openvibe/contracts/product-capabilities');
+        capabilityCatalog = describeProductCapabilityCatalog();
+    } catch (error) {
+        capabilityCatalog = { error: error.message || 'capability_catalog_unavailable' };
+    }
+
     const [
         eventsHealth,
         eventsReadiness,
@@ -269,6 +279,7 @@ async function buildRuntimeStatus(config) {
         vipProduct,
         aiProduct,
         contentProduct,
+        liveIntegrations,
     ] = await Promise.all([
         fetchJson(`${config.events.url}/health`, config.internalKey),
         fetchJson(`${config.events.url}/ready`, config.internalKey),
@@ -291,6 +302,9 @@ async function buildRuntimeStatus(config) {
             : Promise.resolve(null),
         config.content && config.content.internalUrl
             ? fetchJson(`${config.content.internalUrl}/api/v1/content/product/status`, config.internalKey)
+            : Promise.resolve(null),
+        config.live && config.live.internalUrl
+            ? fetchJson(`${config.live.internalUrl}/api/v1/integrations/product/status`, config.internalKey)
             : Promise.resolve(null),
     ]);
 
@@ -319,7 +333,9 @@ async function buildRuntimeStatus(config) {
             vip: unwrapFetch(vipProduct),
             ai: unwrapFetch(aiProduct),
             content: unwrapFetch(contentProduct),
+            live_integrations: unwrapFetch(liveIntegrations),
         },
+        capabilities: capabilityCatalog,
     };
 }
 

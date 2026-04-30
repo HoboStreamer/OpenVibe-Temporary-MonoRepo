@@ -211,6 +211,37 @@ async function main() {
         assert.strictEqual(productStatus.distribution_by_outcome.delivered, 1);
         assert.strictEqual(productStatus.counts.review_decisions, 1);
         assert.strictEqual(productStatus.counts.distribution_audit, 1);
+        // Phase 16 — per-surface workflow truth.
+        assert.ok(productStatus.items_by_surface, 'product status should include items_by_surface');
+        assert.ok(productStatus.items_by_surface.codes, 'codes surface should be tracked');
+        assert.ok(productStatus.items_by_surface.codes.total >= 2);
+        assert.ok(productStatus.items_by_surface.codes.by_state, 'surface truth should include by_state');
+
+        // Phase 16 — per-surface listing endpoints.
+        const surfacesResponse = await request(server, 'openvibe.codes.localhost', '/api/v1/content/surfaces');
+        assert.strictEqual(surfacesResponse.status, 200);
+        const surfacesBody = JSON.parse(surfacesResponse.body);
+        assert.ok(Array.isArray(surfacesBody.surfaces));
+        assert.ok(surfacesBody.surfaces.includes('codes'));
+
+        const surfaceItems = await request(server, 'openvibe.codes.localhost', '/api/v1/content/surfaces/codes/items');
+        assert.strictEqual(surfaceItems.status, 200);
+        const surfaceItemsBody = JSON.parse(surfaceItems.body);
+        assert.strictEqual(surfaceItemsBody.surface, 'codes');
+        assert.ok(Array.isArray(surfaceItemsBody.items));
+        assert.ok(surfaceItemsBody.items.length >= 2);
+
+        const surfaceStatus = await request(server, 'openvibe.codes.localhost', '/api/v1/content/surfaces/codes/product/status');
+        assert.strictEqual(surfaceStatus.status, 200);
+        const surfaceStatusBody = JSON.parse(surfaceStatus.body);
+        assert.strictEqual(surfaceStatusBody.surface, 'codes');
+        assert.ok(surfaceStatusBody.items.total >= 2);
+
+        // Unknown surface still returns ok with zeroed truth (does not pretend to be green by default).
+        const unknownSurface = await request(server, 'openvibe.codes.localhost', '/api/v1/content/surfaces/does-not-exist/product/status');
+        assert.strictEqual(unknownSurface.status, 200);
+        const unknownBody = JSON.parse(unknownSurface.body);
+        assert.strictEqual(unknownBody.items.total, 0);
     } finally {
         await close(server);
     }

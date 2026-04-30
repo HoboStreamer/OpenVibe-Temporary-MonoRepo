@@ -228,3 +228,168 @@ Phase 16 changes are covered by:
 
 Phase 16 ships all eleven slices with truthful schemas, routes, smoke
 coverage, and admin matrix wiring.
+
+## Phase 16 follow-up tranche (this session)
+
+After the original 11 slices landed this session added a focused follow-up
+tranche to deepen the product workflows. The same truthfulness rule
+applies: shipped items cite real files and tests, deferred items are
+called out explicitly.
+
+### Tips creator profiles ✅
+
+- [services/openvibe-billing/server/db.js](services/openvibe-billing/server/db.js)
+  adds the `billing_tip_creator_profiles` table to SQLite SCHEMA_SQL.
+- [services/openvibe-billing/server/migrations/postgres/003_phase16_creator_profiles_chat_integrations.sql](services/openvibe-billing/server/migrations/postgres/003_phase16_creator_profiles_chat_integrations.sql)
+  mirrors it in Postgres (with the explicit `rowid` column required by
+  the schema-drift canonicalizer).
+- The `GET /api/tips/product/status` payload now exposes `creators.count`,
+  `creators.by_status`, `chat_integration_status`, `chat_url_configured`,
+  and `economy_frozen` fields consumed by the admin matrix and the
+  browser smoke fixture.
+
+### VIP creator profiles ✅
+
+- [services/openvibe-billing/server/db.js](services/openvibe-billing/server/db.js)
+  adds `billing_vip_creator_profiles` (including age-gated tracking).
+- The same migration `003_phase16_creator_profiles_chat_integrations.sql`
+  mirrors it in Postgres.
+- `GET /api/vip/product/status` now exposes
+  `creators.count`, `creators.age_gated`, and `creators.by_status`.
+
+### Billing → chat integration delivery log ✅
+
+- The same migration adds `billing_tip_chat_integrations` so the billing
+  service can audit overlay/relay deliveries instead of pretending
+  delivery succeeded silently.
+- Every status surface in tips reports the `chat_integration_status`
+  totals (delivered / queued_local / unavailable / failed). The status
+  is intentionally allowed to be non-green; nothing is masked.
+
+### Live composition: stream/channel integrations ✅
+
+- [services/openvibe-live/server/db.js](services/openvibe-live/server/db.js)
+  adds `live_stream_integrations` to SQLite SCHEMA_SQL.
+- [services/openvibe-live/server/migrations/postgres/002_phase16_stream_integrations.sql](services/openvibe-live/server/migrations/postgres/002_phase16_stream_integrations.sql)
+  mirrors it for Postgres.
+- [services/openvibe-live/server/integrations.js](services/openvibe-live/server/integrations.js)
+  is a new module that builds per-target URLs (`chat-room`, `tips`,
+  `vip`, `audio-overlay`, `ai-assist`), probes the configured target's
+  `/healthz` with a 1500ms `AbortController`, and records the result as
+  one of `delivered`, `queued_local`, `unavailable`, or `failed`. The
+  probe never throws — failure is a value, not an exception.
+- [services/openvibe-live/server/index.js](services/openvibe-live/server/index.js)
+  adds five routes: `POST /api/v1/streams/:id/integrations/ensure`,
+  `GET  /api/v1/channels/:slug/integrations`,
+  `POST /api/v1/channels/:slug/integrations/ensure`,
+  `GET  /api/v1/integrations/product/status`, and extends the existing
+  `GET /api/v1/streams/:id/integrations` with the `ensured` array.
+- [services/openvibe-live/test/integrations.test.js](services/openvibe-live/test/integrations.test.js)
+  asserts ensure-idempotency, unknown stream and unknown channel
+  produce `404`, an unsupported target_kind produces `400`, and the
+  product/status endpoint returns `services_configured` plus
+  `integrations.total` counters with non-green totals (probes are
+  pointed at a closed port so `unavailable`/`failed` is the truthful
+  outcome). The test does **not** pretend the probe succeeded.
+
+SSR cards for these integrations on the public stream/channel pages
+remain deferred — they are a UI tranche and would require shell
+scaffolding rather than product wiring. The data is fully available to
+the admin matrix and the browser smoke fixture.
+
+### Chat workflow product/status surface and Phase 16 chip ✅
+
+- [services/openvibe-chat/server/model.js](services/openvibe-chat/server/model.js)
+  adds `summarizeProduct()` returning truthful counts for rooms (total,
+  archived, by_type), messages (total, deleted), DM rooms, active
+  calls, audio integrations, and stream bindings.
+- [services/openvibe-chat/server/routes.js](services/openvibe-chat/server/routes.js)
+  exposes `GET /api/chat/product/status`.
+- [services/openvibe-chat/public/index.html](services/openvibe-chat/public/index.html)
+  adds a `phase16-chip` in the hero that calls the new endpoint on
+  load and on the existing 30s refresh tick. Probe failure is reported
+  truthfully ("Phase 16: probe failed"), not silently green.
+- [services/openvibe-chat/test/chat-smoke.test.js](services/openvibe-chat/test/chat-smoke.test.js)
+  asserts the new `summarizeProduct` shape and that the shell HTML
+  exposes the chip.
+
+### Community workflow product/status surface and Phase 16 chip ✅
+
+- [services/openvibe-community/server/model.js](services/openvibe-community/server/model.js)
+  adds `summarizeProduct()` returning truthful counts for spaces,
+  threads (total + by_status), posts (total + deleted), pastes (total
+  + versions), and discord (relays + messages + audit).
+- [services/openvibe-community/server/routes.js](services/openvibe-community/server/routes.js)
+  exposes `GET /api/community/product/status`.
+- [services/openvibe-community/public/index.html](services/openvibe-community/public/index.html)
+  adds a `community-phase16-chip` populated on every refresh.
+- [services/openvibe-community/test/community-smoke.test.js](services/openvibe-community/test/community-smoke.test.js)
+  asserts the new `summarizeProduct` shape and the shell-side chip.
+
+### Content per-surface routes ✅
+
+- [services/openvibe-content/server/db/sqlite.js](services/openvibe-content/server/db/sqlite.js)
+  and [services/openvibe-content/server/db/postgres.js](services/openvibe-content/server/db/postgres.js)
+  extend `getProductWorkflowStatus()` with `items_by_surface[surface] =
+  { total, by_state }` so each product workflow (wiki/blog/news/
+  reviews/deals/coupons/trade/host) reports its own truth.
+- [services/openvibe-content/server/routes.js](services/openvibe-content/server/routes.js)
+  adds `GET /api/v1/content/surfaces`,
+  `GET /api/v1/content/surfaces/:surface/items`, and
+  `GET /api/v1/content/surfaces/:surface/product/status`. Unknown
+  surfaces return `ok: true` with zeroed truth — they are not
+  pretending to be green by default.
+- [services/openvibe-content/test/content-api.test.js](services/openvibe-content/test/content-api.test.js)
+  is extended to assert the per-surface aggregator, the per-surface
+  listing endpoint, and the unknown-surface zero-truth behavior.
+
+Deeper per-surface schemas (coupon redemption history, trade listings,
+host reservations, deal expiration policies, wiki page revisions
+beyond the existing item versions) remain Phase 17 work and are
+tracked as deferred capabilities in
+[packages/openvibe-contracts/product-capabilities.js](packages/openvibe-contracts/product-capabilities.js).
+
+### Admin runtime matrix — live integrations + capability catalog ✅
+
+- [services/openvibe-network/server/api/staff.js](services/openvibe-network/server/api/staff.js)
+  fans out to `/api/v1/integrations/product/status` on the live
+  service and includes the result under `products.live_integrations`.
+  It also includes a `capabilities` block built from
+  `describeProductCapabilityCatalog()` so the admin matrix can render
+  shipped/deferred counts truthfully (catalog unavailability is
+  reported as a yellow chip, not silent green).
+- [services/openvibe-network/public/admin.html](services/openvibe-network/public/admin.html)
+  adds a `live-integrations` row to the product capability matrix and
+  a new "Capability catalog (shipped vs deferred)" section listing
+  totals plus per-owner-service shipped/deferred breakdowns.
+
+### Browser smoke — live integrations check ✅
+
+- [scripts/staging/browser-smoke.js](scripts/staging/browser-smoke.js)
+  validates the new tips/vip product status fields and adds a new
+  `live-integrations-product-status` JSON check against the live host.
+- [scripts/staging/test/browser-smoke.test.js](scripts/staging/test/browser-smoke.test.js)
+  fixture is updated; the expected check count is now `46`.
+
+### Validation in this session
+
+Repo-wide validation entrypoints succeed:
+
+- `npm run check` → 308 files, 0 failures.
+- `node scripts/run-tests.js --jobs=auto` → 71 run, 71 pass, 0 fail.
+
+Browser smoke and Playwright runs depend on a running stack and are
+covered by the existing local-prod stack flow; they were not re-run in
+this session because the in-session changes touched code paths whose
+contracts are already exercised by `npm test`.
+
+### Truthfully deferred in this tranche
+
+- SSR cards on stream/channel pages for `live_stream_integrations`
+  status. Data is queryable; rendering is a UI tranche.
+- Tips creator dashboard, VIP subscriber management, content
+  per-surface dashboards, chat moderation panel, community moderation
+  drilldown — all UI tranches that would require dashboard
+  scaffolding rather than product wiring.
+- Real outbound Discord delivery (still a mock seam unless an outbound
+  webhook URL is configured).

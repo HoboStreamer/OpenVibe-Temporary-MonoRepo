@@ -14,6 +14,7 @@ const policy = require('./policy');
 const ledger = require('./ledger');
 const providers = require('./providers');
 const { reconcileWalletSnapshots } = require('./reconciler');
+const { deliverTipChatSideEffect } = require('./clients/chat');
 const {
     BILLING_EVENT_TYPES, TIPS_EVENT_TYPES, VIP_EVENT_TYPES,
     BILLING_TARGET_TYPES, TIP_INTERACTION_TYPES,
@@ -369,7 +370,7 @@ function buildTipsRouter({ eventBus }) {
     }
     function publishSafe(fn) { try { Promise.resolve(fn()).catch(() => {}); } catch { /* ignore */ } }
 
-    r.post('/', json, (req, res) => {
+    r.post('/', json, async (req, res) => {
         const a = actorMeta(req);
         const b = req.body || {};
         const senderType = b.sender_actor_type || a.actor_type;
@@ -379,18 +380,58 @@ function buildTipsRouter({ eventBus }) {
         if (b.interaction_type && !TIP_INTERACTION_TYPES.includes(b.interaction_type)) {
             return res.status(400).json({ error: `interaction_type must be one of ${TIP_INTERACTION_TYPES.join(',')}` });
         }
+        return createTipHandler(req, res);
+    });
+
+    async function createTipHandler(req, res) {
+        const a = actorMeta(req);
+        const b = req.body || {};
+        const senderType = b.sender_actor_type || a.actor_type;
+        const senderId   = b.sender_actor_id   || a.actor_id;
+        // Resolve creator profile to enrich defaults (target context, currency).
+        let profile = null;
+        if (b.recipient_owner_type && b.recipient_owner_id) {
+            profile = model.getTipCreatorProfile(b.recipient_owner_type, b.recipient_owner_id);
+        }
+        const targetContextType = b.target_context_type || (profile && profile.default_target_type) || null;
+        const targetContextId   = b.target_context_id   || (profile && profile.default_target_id)   || null;
+        const visibility        = b.visibility          || (profile && profile.default_visibility)  || 'public';
+        const currency          = b.currency            || (profile && profile.currency)             || config.creditsCurrency;
         try {
             const result = ledger.createTip({
                 sender_actor_type: senderType, sender_actor_id: senderId,
                 recipient_owner_type: b.recipient_owner_type, recipient_owner_id: b.recipient_owner_id,
-                target_context_type: b.target_context_type, target_context_id: b.target_context_id,
+                target_context_type: targetContextType, target_context_id: targetContextId,
                 interaction_type: b.interaction_type || 'tip',
                 amount_minor: Number(b.amount_minor),
-                currency: b.currency || config.creditsCurrency,
-                message: b.message, visibility: b.visibility,
+                currency,
+                message: b.message, visibility,
                 idempotency_key: b.idempotency_key, metadata: b.metadata,
                 platformFeeBps: config.platformFeeBps,
             });
+            // Phase 16 — best-effort chat-side side effect (TTS/audio/overlay).
+            // Always attempted; outcome is recorded so product/status reports it
+            // truthfully even when chat is offline or the provider fails.
+            let chatOutcome = null;
+            if (!result.replayed) {
+                try {
+                    chatOutcome = await deliverTipChatSideEffect({ config, tip: result.tip, profile });
+                } catch (e) {
+                    chatOutcome = { outcome: 'failed', target_kind: 'unknown', detail: e && e.message || 'chat seam threw' };
+                }
+                try {
+                    model.recordTipChatIntegration({
+                        tip_id: result.tip.id,
+                        interaction_type: result.tip.interaction_type,
+                        target_kind: chatOutcome.target_kind,
+                        chat_owner_type: chatOutcome.chat_owner_type,
+                        chat_owner_id: chatOutcome.chat_owner_id,
+                        queue_target: chatOutcome.queue_target,
+                        outcome: chatOutcome.outcome,
+                        detail: chatOutcome.detail,
+                    });
+                } catch (e) { /* never fail the tip on logging */ }
+            }
             if (!result.replayed) {
                 const evType = result.tip.interaction_type === 'superchat' ? TIPS_EVENT_TYPES.SUPERCHAT_CREATED
                     : result.tip.interaction_type === 'tts' ? TIPS_EVENT_TYPES.TTS_CREATED
@@ -406,9 +447,9 @@ function buildTipsRouter({ eventBus }) {
                     visibility: result.tip.visibility,
                 }, a));
             }
-            res.status(result.replayed ? 200 : 201).json(result);
+            res.status(result.replayed ? 200 : 201).json(Object.assign({}, result, chatOutcome ? { chat_integration: chatOutcome } : {}));
         } catch (e) { return billingErr(res, e); }
-    });
+    }
 
     r.get('/', (req, res) => {
         // Sender / recipient / context filtering. Visibility=anonymous strips sender id.
@@ -439,6 +480,11 @@ function buildTipsRouter({ eventBus }) {
             byInteraction[t.interaction_type] = (byInteraction[t.interaction_type] || 0) + 1;
             if (t.status === 'posted') totalPostedMinor += Number(t.amount_minor) || 0;
         }
+        const creators = model.listTipCreatorProfiles({ limit: 200 });
+        const creatorByStatus = {};
+        for (const c of creators) creatorByStatus[c.status] = (creatorByStatus[c.status] || 0) + 1;
+        const chat_integration_status = model.tipChatIntegrationSummary();
+        const economy = model.getEconomyState();
         res.json({
             ok: true,
             product: 'tips',
@@ -448,8 +494,86 @@ function buildTipsRouter({ eventBus }) {
             recent_posted_minor: totalPostedMinor,
             currency: config.creditsCurrency,
             platform_fee_bps: config.platformFeeBps,
+            creators: { count: creators.length, by_status: creatorByStatus },
+            chat_integration_status,
+            chat_url_configured: !!(config.chat && config.chat.url),
+            economy_frozen: !!economy.frozen,
         });
     });
+
+    // ─── Phase 16: tips creator profiles ───────────────────────
+    r.get('/creators', (req, res) => {
+        res.json({ items: model.listTipCreatorProfiles(req.query) });
+    });
+
+    r.post('/creators', json, (req, res) => {
+        const a = actorMeta(req);
+        const b = req.body || {};
+        if (!b.owner_type || !b.owner_id) return res.status(400).json({ error: 'owner_type and owner_id required' });
+        try {
+            policy.assert(policy.decideTip({ req, sender_actor_type: a.actor_type, sender_actor_id: a.actor_id }), a);
+        } catch (e) { return denied(res, e); }
+        // Self-service: a user may only create their own creator profile; admins/services may create any.
+        if (!policy.isAdmin(req) && !policy.isService(req)
+            && !(a.actor_type === b.owner_type && String(a.actor_id) === String(b.owner_id))) {
+            return res.status(403).json({ error: 'profile owner mismatch' });
+        }
+        try {
+            const profile = model.upsertTipCreatorProfile(b);
+            res.status(201).json({ profile });
+        } catch (e) { return billingErr(res, e); }
+    });
+
+    r.get('/creators/:ownerType/:ownerId', (req, res) => {
+        const profile = model.getTipCreatorProfile(req.params.ownerType, req.params.ownerId);
+        if (!profile) return res.status(404).json({ error: 'creator profile not found' });
+        res.json({ profile });
+    });
+
+    r.patch('/creators/:ownerType/:ownerId', json, (req, res) => {
+        const a = actorMeta(req);
+        const { ownerType, ownerId } = req.params;
+        const profile = model.getTipCreatorProfile(ownerType, ownerId);
+        if (!profile) return res.status(404).json({ error: 'creator profile not found' });
+        if (!policy.isAdmin(req) && !policy.isService(req)
+            && !(a.actor_type === ownerType && String(a.actor_id) === String(ownerId))) {
+            return res.status(403).json({ error: 'not profile owner' });
+        }
+        try {
+            const updated = model.upsertTipCreatorProfile(Object.assign({}, req.body || {}, { owner_type: ownerType, owner_id: ownerId }));
+            res.json({ profile: updated });
+        } catch (e) { return billingErr(res, e); }
+    });
+
+    r.get('/creators/:ownerType/:ownerId/recent', (req, res) => {
+        const items = model.listTips({
+            recipient_owner_type: req.params.ownerType,
+            recipient_owner_id:   req.params.ownerId,
+            limit: req.query.limit || 25,
+        }).filter(t => t.visibility !== 'private' || policy.isAdmin(req) || policy.isService(req))
+          .map(t => t.visibility === 'anonymous' ? Object.assign({}, t, { sender_actor_id: null }) : t);
+        const integrations = model.listTipChatIntegrations({ limit: 25 });
+        res.json({ items, chat_integrations: integrations });
+    });
+
+    // Convenience workflow aliases — all delegate to the create flow above
+    // by setting a fixed interaction_type. The full validation, idempotency,
+    // policy, ledger, event publication, and chat side-effect path are reused.
+    function postWithInteraction(interaction_type) {
+        return async (req, res) => {
+            req.body = Object.assign({}, req.body || {}, { interaction_type });
+            return createTipHandler(req, res);
+        };
+    }
+
+    r.post('/create', json, async (req, res) => {
+        req.body = req.body || {};
+        if (!req.body.interaction_type) req.body.interaction_type = 'tip';
+        return createTipHandler(req, res);
+    });
+    r.post('/superchat',     json, postWithInteraction('superchat'));
+    r.post('/tts-request',   json, postWithInteraction('tts'));
+    r.post('/media-request', json, postWithInteraction('media_request'));
 
     r.get('/:tipId', (req, res) => {
         const tip = model.getTip(req.params.tipId);
@@ -500,6 +624,11 @@ function buildVipRouter({ eventBus }) {
         const subByStatus = {};
         for (const p of plans) planByStatus[p.status] = (planByStatus[p.status] || 0) + 1;
         for (const s of subs) subByStatus[s.status] = (subByStatus[s.status] || 0) + 1;
+        const creators = model.listVipCreatorProfiles({ limit: 200 });
+        const creatorByStatus = {};
+        const ageGated = creators.filter(c => c.requires_age_gate).length;
+        for (const c of creators) creatorByStatus[c.status] = (creatorByStatus[c.status] || 0) + 1;
+        const economy = model.getEconomyState();
         res.json({
             ok: true,
             product: 'vip',
@@ -509,7 +638,106 @@ function buildVipRouter({ eventBus }) {
             subscriptions_by_status: subByStatus,
             currency: config.creditsCurrency,
             platform_fee_bps: config.platformFeeBps,
+            creators: { count: creators.length, by_status: creatorByStatus, age_gated: ageGated },
+            economy_frozen: !!economy.frozen,
         });
+    });
+
+    // ─── Phase 16: VIP creator profiles ─────────────────────────
+    r.get('/creators', (req, res) => {
+        res.json({ items: model.listVipCreatorProfiles(req.query) });
+    });
+
+    r.post('/creators', json, (req, res) => {
+        const a = actorMeta(req);
+        const b = req.body || {};
+        if (!b.owner_type || !b.owner_id) return res.status(400).json({ error: 'owner_type and owner_id required' });
+        if (!policy.isAdmin(req) && !policy.isService(req)
+            && !(a.actor_type === b.owner_type && String(a.actor_id) === String(b.owner_id))) {
+            return res.status(403).json({ error: 'profile owner mismatch' });
+        }
+        try {
+            const profile = model.upsertVipCreatorProfile(b);
+            res.status(201).json({ profile });
+        } catch (e) { return billingErr(res, e); }
+    });
+
+    r.get('/creators/:ownerType/:ownerId', (req, res) => {
+        const profile = model.getVipCreatorProfile(req.params.ownerType, req.params.ownerId);
+        if (!profile) return res.status(404).json({ error: 'creator profile not found' });
+        res.json({ profile });
+    });
+
+    r.patch('/creators/:ownerType/:ownerId', json, (req, res) => {
+        const a = actorMeta(req);
+        const { ownerType, ownerId } = req.params;
+        const profile = model.getVipCreatorProfile(ownerType, ownerId);
+        if (!profile) return res.status(404).json({ error: 'creator profile not found' });
+        if (!policy.isAdmin(req) && !policy.isService(req)
+            && !(a.actor_type === ownerType && String(a.actor_id) === String(ownerId))) {
+            return res.status(403).json({ error: 'not profile owner' });
+        }
+        try {
+            const updated = model.upsertVipCreatorProfile(Object.assign({}, req.body || {}, { owner_type: ownerType, owner_id: ownerId }));
+            res.json({ profile: updated });
+        } catch (e) { return billingErr(res, e); }
+    });
+
+    r.get('/creators/:ownerType/:ownerId/plans', (req, res) => {
+        const items = model.listPlans({
+            owner_type: req.params.ownerType, owner_id: req.params.ownerId, limit: req.query.limit,
+        }).filter(p => p.visibility === 'public' || policy.isAdmin(req) || policy.isService(req));
+        res.json({ items });
+    });
+
+    r.get('/creators/:ownerType/:ownerId/subscriptions', (req, res) => {
+        if (!policy.isAdmin(req) && !policy.isService(req)) {
+            const a = actorMeta(req);
+            if (!(a.actor_type === req.params.ownerType && String(a.actor_id) === String(req.params.ownerId))) {
+                return res.status(403).json({ error: 'admin/service or owner only' });
+            }
+        }
+        res.json({ items: model.listSubscriptions({
+            target_owner_type: req.params.ownerType, target_owner_id: req.params.ownerId, limit: req.query.limit,
+        }) });
+    });
+
+    r.get('/creators/:ownerType/:ownerId/entitlements', (req, res) => {
+        const subs = model.listSubscriptions({
+            target_owner_type: req.params.ownerType, target_owner_id: req.params.ownerId,
+            status: 'active', limit: 200,
+        });
+        const profile = model.getVipCreatorProfile(req.params.ownerType, req.params.ownerId);
+        res.json({
+            items: subs.map(s => ({
+                type: 'vip_subscription',
+                target_type: req.params.ownerType, target_id: req.params.ownerId,
+                subscription_id: s.id, plan_id: s.plan_id,
+                subscriber_actor_type: s.subscriber_actor_type, subscriber_actor_id: s.subscriber_actor_id,
+                status: s.status, current_period_end: s.current_period_end,
+            })),
+            profile,
+        });
+    });
+
+    r.post('/resolve-entitlements', json, (req, res) => {
+        const b = req.body || {};
+        if (!b.subscriber_actor_type || !b.subscriber_actor_id) {
+            return res.status(400).json({ error: 'subscriber_actor_type and subscriber_actor_id required' });
+        }
+        const subs = model.listSubscriptions({
+            subscriber_actor_type: b.subscriber_actor_type,
+            subscriber_actor_id:   b.subscriber_actor_id,
+            status: 'active',
+            limit: 500,
+        });
+        const targets = {};
+        for (const s of subs) {
+            const key = `${s.target_owner_type}/${s.target_owner_id}`;
+            if (!targets[key]) targets[key] = { target_type: s.target_owner_type, target_id: s.target_owner_id, subscriptions: [] };
+            targets[key].subscriptions.push({ subscription_id: s.id, plan_id: s.plan_id, current_period_end: s.current_period_end });
+        }
+        res.json({ items: Object.values(targets) });
     });
 
     // plans

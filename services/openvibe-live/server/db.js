@@ -61,6 +61,28 @@ const SCHEMA_SQL = `
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(source, kind, legacy_id)
         );
+
+        -- Phase 16: per-channel/per-stream Phase-16 product integrations
+        -- (chat-room, tips, vip, audio-overlay, ai-assist). target_kind is the
+        -- product surface; status is 'delivered' | 'queued_local' | 'unavailable'
+        -- | 'failed' from the most recent ensure attempt; target_url is the
+        -- consumer-callable endpoint when known.
+        CREATE TABLE IF NOT EXISTS live_stream_integrations (
+            id              TEXT PRIMARY KEY,
+            owner_kind      TEXT NOT NULL,            -- 'channel' | 'stream'
+            owner_ref       TEXT NOT NULL,            -- channel slug or stream id
+            channel_slug    TEXT,                     -- denormalized for filtering
+            target_kind     TEXT NOT NULL,            -- 'chat-room' | 'tips' | 'vip' | 'audio-overlay' | 'ai-assist'
+            target_url      TEXT,
+            status          TEXT NOT NULL DEFAULT 'unavailable',
+            detail          TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (owner_kind, owner_ref, target_kind)
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_stream_int_channel ON live_stream_integrations(channel_slug);
+        CREATE INDEX IF NOT EXISTS idx_live_stream_int_status ON live_stream_integrations(status, target_kind);
     `;
 
 function defaultSqlitePath() {

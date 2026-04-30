@@ -19,6 +19,7 @@
                     <span class="ov-chip primary" id="community-domain-chip">Spaces · threads · pastes</span>
                     <span class="ov-chip soft" id="community-refresh-chip">No refresh yet</span>
                     <span class="ov-chip" id="community-status-chip">catalog idle</span>
+                    <span class="ov-chip soft" id="community-phase16-chip" title="Phase 16 community workflow truth (spaces · threads · posts)">Phase 16: checking…</span>
                 </div>
                 <div class="ov-cta-row">
                     <a class="ov-btn ov-btn-primary" href="#new-paste" id="new-paste-link">New paste</a>
@@ -326,6 +327,28 @@
         );
     }
 
+    async function refreshPhase16Chip() {
+        const chip = document.getElementById('community-phase16-chip');
+        if (!chip) return;
+        try {
+            const data = await fetchJson('/api/community/product/status');
+            if (!data || data.ok !== true) {
+                chip.className = 'ov-chip warn';
+                chip.innerHTML = withIcon('warn', 'Phase 16: status unavailable');
+                return;
+            }
+            const spaces = (data.spaces && data.spaces.total) || 0;
+            const threads = (data.threads && data.threads.total) || 0;
+            const posts = (data.posts && data.posts.total) || 0;
+            const pastes = (data.pastes && data.pastes.total) || 0;
+            chip.className = 'ov-chip ok';
+            chip.innerHTML = withIcon('success', `Phase 16: ${spaces} spaces · ${threads} threads · ${posts} posts · ${pastes} pastes`);
+        } catch (error) {
+            chip.className = 'ov-chip warn';
+            chip.innerHTML = withIcon('warn', 'Phase 16: probe failed');
+        }
+    }
+
     async function refreshCommunity() {
         const [threads, pastes, spaces] = await Promise.all([
             loadItems('/api/community/threads'),
@@ -342,6 +365,7 @@
         renderSpaces(spaces);
         renderHighlights();
         updateStats();
+        await refreshPhase16Chip();
         document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', `Refreshed ${new Date().toLocaleTimeString()}`);
     }
 

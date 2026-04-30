@@ -147,4 +147,19 @@ assert.strictEqual(summary.totals.deduped, 1);
 assert.strictEqual(summary.totals.imported, 1);
 assert.strictEqual(summary.by_direction.openvibe_to_discord.sent, 1);
 
+// Phase 16 — minimum-viable product/status surface.
+const productStatus = model.summarizeProduct();
+assert.strictEqual(productStatus.ok, true);
+assert.strictEqual(productStatus.product, 'community');
+assert.ok(productStatus.spaces && typeof productStatus.spaces.total === 'number');
+assert.ok(productStatus.threads && typeof productStatus.threads.total === 'number');
+assert.ok(productStatus.posts && typeof productStatus.posts.total === 'number');
+assert.ok(productStatus.pastes && typeof productStatus.pastes.total === 'number');
+assert.ok(productStatus.discord && typeof productStatus.discord.relays === 'number');
+
+const fs2 = require('fs');
+const path2 = require('path');
+const shellHtml = fs2.readFileSync(path2.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+assert.ok(shellHtml.includes('community-phase16-chip'), 'community shell should expose the Phase 16 product/status chip');
+
 console.log('openvibe-community smoke OK');

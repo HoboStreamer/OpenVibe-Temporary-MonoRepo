@@ -563,7 +563,51 @@ function getRelayAuditSummary() {
     return summary;
 }
 
+// Phase 16 — community workflow product/status surface.
+function summarizeProduct() {
+    const conn = db.get();
+    const safeCount = (sql) => {
+        try {
+            const row = conn.prepare(sql).get();
+            return Number((row && (row.c || row.count)) || 0);
+        } catch (error) {
+            return null;
+        }
+    };
+    const threadsByStatus = {};
+    try {
+        for (const row of conn.prepare(`SELECT status, COUNT(*) AS c FROM community_threads GROUP BY status`).all()) {
+            threadsByStatus[row.status || 'unknown'] = Number(row.c || 0);
+        }
+    } catch (error) {
+        // tolerate missing tables in degraded environments
+    }
+    return {
+        ok: true,
+        product: 'community',
+        spaces: { total: safeCount(`SELECT COUNT(*) AS c FROM community_spaces`) },
+        threads: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM community_threads`),
+            by_status: threadsByStatus,
+        },
+        posts: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM community_posts`),
+            deleted: safeCount(`SELECT COUNT(*) AS c FROM community_posts WHERE deleted_at IS NOT NULL`),
+        },
+        pastes: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM community_pastes`),
+            versions: safeCount(`SELECT COUNT(*) AS c FROM community_paste_versions`),
+        },
+        discord: {
+            relays: safeCount(`SELECT COUNT(*) AS c FROM community_discord_relays`),
+            messages: safeCount(`SELECT COUNT(*) AS c FROM community_discord_messages`),
+            audit: safeCount(`SELECT COUNT(*) AS c FROM community_relay_audit`),
+        },
+    };
+}
+
 module.exports = {
+    summarizeProduct,
     newId, slugify,
     // spaces
     createSpace, getSpace, listSpaces, updateSpace, archiveSpace,

@@ -118,6 +118,22 @@ function resolveMigrationsDir(serviceName, options) {
     return candidates[0] || path.resolve(process.cwd(), 'migrations');
 }
 
+function normalizeMigrationsTableSuffix(serviceName) {
+    const normalized = String(serviceName || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 32);
+    return normalized || 'openvibe_service';
+}
+
+function resolveMigrationsTableName(serviceName, options) {
+    const opts = options || {};
+    if (opts.migrationsTable) return String(opts.migrationsTable);
+    return `runtime_schema_migrations_${normalizeMigrationsTableSuffix(serviceName || opts.serviceName)}`;
+}
+
 function listSqlMigrationFiles(migrationsDir) {
     if (!migrationsDir || !fs.existsSync(migrationsDir)) return [];
     return fs.readdirSync(migrationsDir)
@@ -308,14 +324,15 @@ async function runMigrations(serviceName, options) {
     const pool = opts.pool || createPostgresPool(serviceName, opts.env || process.env);
     const ownsPool = !opts.pool;
     const migrationsDir = resolveMigrationsDir(serviceName, opts);
+    const migrationsTable = resolveMigrationsTableName(serviceName, opts);
     const files = listSqlMigrationFiles(migrationsDir);
     const migrationSource = migrationSourceForFiles(files);
     const appliedNames = [];
 
     try {
         await withTransaction(pool, async (client) => {
-            await ensureMigrationsTable(client, opts.migrationsTable);
-            const applied = await listAppliedMigrations(client, opts.migrationsTable);
+            await ensureMigrationsTable(client, migrationsTable);
+            const applied = await listAppliedMigrations(client, migrationsTable);
             const seen = new Set(applied.map((row) => row.name));
 
             for (const file of files) {
@@ -323,7 +340,7 @@ async function runMigrations(serviceName, options) {
                 const sql = fs.readFileSync(file.filePath, 'utf8');
                 if (!sql.trim()) continue;
                 await client.query(sql);
-                await recordMigration(client, file.name, opts.migrationsTable);
+                await recordMigration(client, file.name, migrationsTable);
                 appliedNames.push(file.name);
             }
         }, { isolationLevel: opts.isolationLevel || 'READ COMMITTED' });
@@ -345,17 +362,19 @@ async function getSchemaVersion(serviceName, options) {
     const pool = opts.pool || createPostgresPool(serviceName, opts.env || process.env);
     const ownsPool = !opts.pool;
     const migrationsDir = resolveMigrationsDir(serviceName, opts);
+    const migrationsTable = resolveMigrationsTableName(serviceName, opts);
     const files = listSqlMigrationFiles(migrationsDir);
     const migrationSource = migrationSourceForFiles(files);
 
     try {
-        await ensureMigrationsTable(pool, opts.migrationsTable);
-        const applied = await listAppliedMigrations(pool, opts.migrationsTable);
+        await ensureMigrationsTable(pool, migrationsTable);
+        const applied = await listAppliedMigrations(pool, migrationsTable);
         const appliedNames = new Set(applied.map((row) => row.name));
         const last = applied.length ? applied[applied.length - 1] : null;
         return {
             service: serviceName || null,
             migrations_dir: migrationsDir,
+            migrations_table: migrationsTable,
             migration_count: files.length,
             applied_count: applied.length,
             pending_count: files.filter((file) => !appliedNames.has(file.name)).length,
@@ -399,6 +418,7 @@ module.exports = {
     healthCheck,
     query,
     readReplicaQuery,
+    resolveMigrationsTableName,
     runMigrations,
     withTransaction,
 };

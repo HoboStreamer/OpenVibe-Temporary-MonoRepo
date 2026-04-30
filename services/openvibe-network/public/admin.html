@@ -339,6 +339,7 @@
                             { id: 'vip', body: products.vip, summarize: (b) => `plans=${b && b.plan_count || 0} · subs=${b && b.subscription_count || 0}` },
                             { id: 'ai', body: products.ai, summarize: (b) => `providers=${b && b.providers || 0} · routes=${b && b.routes || 0} · workflows=${b && b.workflows || 0}` },
                             { id: 'content', body: products.content, summarize: (b) => `items=${b && b.counts && b.counts.items || 0} · reviews=${b && b.counts && b.counts.review_decisions || 0} · distribution=${b && b.counts && b.counts.distribution_audit || 0}` },
+                            { id: 'live-integrations', body: products.live_integrations, summarize: (b) => { const t = (b && b.integrations && b.integrations.total) || {}; const sc = (b && b.services_configured) || {}; return `delivered=${t.delivered || 0} · queued=${t.queued_local || 0} · unavailable=${t.unavailable || 0} · failed=${t.failed || 0} · chat=${sc.chat ? 'on' : 'off'} · ai=${sc.ai ? 'on' : 'off'}`; } },
                         ];
                         return rows.map((row) => {
                             const ok = row.body && row.body.ok === true;
@@ -347,6 +348,27 @@
                             const summary = row.body ? row.summarize(row.body) : '—';
                             return `<tr><td><code>${OpenVibe.escapeHtml(row.id)}</code></td><td><span class="ov-tag ${tone}">${OpenVibe.escapeHtml(status)}</span></td><td><code>${OpenVibe.escapeHtml(String(row.body && row.body.product || '—'))}</code></td><td>${OpenVibe.escapeHtml(summary)}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(row.body || {}), null, 0))}</code></td></tr>`;
                         }).join('');
+                    })()}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;" data-runtime-panel="capability-catalog">
+            <div class="ov-section-head"><div><h2>Capability catalog (shipped vs deferred)</h2><p class="ov-section-sub">Truthful Phase 16 readout from <code>@openvibe/contracts</code>. Deferred capabilities are not silently green.</p></div></div>
+            <div class="ov-table-wrap">
+                <table class="ov-table">
+                    <thead><tr><th>owner service</th><th>shipped</th><th>deferred</th><th>total</th></tr></thead>
+                    <tbody>${(function () {
+                        const cat = (runtimeStatus && runtimeStatus.capabilities) || null;
+                        if (!cat || cat.error || !Array.isArray(cat.owners)) {
+                            return `<tr><td colspan="4"><span class="ov-tag warn">capability catalog unavailable</span></td></tr>`;
+                        }
+                        const totalRow = `<tr><td><strong>all products</strong></td><td><span class="ov-tag ok">${cat.implemented_count || 0}</span></td><td><span class="ov-tag ${(cat.deferred_count || 0) > 0 ? 'warn' : 'soft'}">${cat.deferred_count || 0}</span></td><td>${cat.capability_count || 0}</td></tr>`;
+                        const ownerRows = cat.owners.map((owner) => {
+                            const shipped = owner.implemented_count || 0;
+                            const deferred = owner.deferred_count || 0;
+                            return `<tr><td><code>${OpenVibe.escapeHtml(owner.owner_service || '—')}</code></td><td><span class="ov-tag ok">${shipped}</span></td><td><span class="ov-tag ${deferred > 0 ? 'warn' : 'soft'}">${deferred}</span></td><td>${owner.capability_count || 0}</td></tr>`;
+                        }).join('');
+                        return totalRow + ownerRows;
                     })()}</tbody>
                 </table>
             </div>

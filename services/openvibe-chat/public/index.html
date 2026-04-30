@@ -368,6 +368,7 @@ button.chat-search-result {
                     <span class="chat-chip soft" id="session-chip">Checking session…</span>
                     <span class="chat-chip primary" id="unread-chip">Unread DMs: —</span>
                     <span class="chat-chip ok">Public rooms readable without sign-in</span>
+                    <span class="chat-chip soft" id="phase16-chip" title="Phase 16 chat workflow truth (rooms · messages · calls)">Phase 16: checking…</span>
                 </div>
                 <div class="chat-actions" id="hero-actions"></div>
             </div>
@@ -1052,8 +1053,31 @@ button.chat-search-result {
         await validateStoredToken();
     }
 
+    // Phase 16 — refresh the chat product/status chip from the new minimum-viable seam.
+    async function refreshPhase16Chip() {
+        const chip = document.getElementById('phase16-chip');
+        if (!chip) return;
+        try {
+            const data = await chatFetch('/product/status');
+            if (!data || data.ok !== true) {
+                chip.className = 'chat-chip warn';
+                chip.textContent = 'Phase 16: status unavailable';
+                return;
+            }
+            const rooms = (data.rooms && data.rooms.total) || 0;
+            const messages = (data.messages && data.messages.total) || 0;
+            const calls = (data.calls && data.calls.active) || 0;
+            chip.className = 'chat-chip ok';
+            chip.textContent = `Phase 16: ${rooms} rooms · ${messages} msgs · ${calls} calls`;
+        } catch (error) {
+            chip.className = 'chat-chip warn';
+            chip.textContent = 'Phase 16: probe failed';
+        }
+    }
+
     await bootstrapAuth();
     await refreshSidebar();
+    await refreshPhase16Chip();
     renderSearchResults([], 'Search by username or display name to start a DM.');
 
     await openConversation('global', '__global__');
@@ -1061,6 +1085,7 @@ button.chat-search-result {
     window.setInterval(async function () {
         await refreshSidebar();
         await loadActiveConversation({ scroll: false });
+        await refreshPhase16Chip();
     }, 30000);
 })();
 </script>

@@ -225,6 +225,75 @@ const SCHEMA_SQL = `
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (source, kind, legacy_id)
         );
+
+        -- Phase 16: tips creator profile (per-creator tipping configuration).
+        CREATE TABLE IF NOT EXISTS billing_tip_creator_profiles (
+            id                      TEXT PRIMARY KEY,
+            owner_type              TEXT NOT NULL,
+            owner_id                TEXT NOT NULL,
+            public_slug             TEXT,
+            display_name            TEXT NOT NULL,
+            description             TEXT,
+            currency                TEXT NOT NULL,
+            default_target_type     TEXT,
+            default_target_id       TEXT,
+            default_visibility      TEXT NOT NULL DEFAULT 'public',
+            chat_owner_type         TEXT,
+            chat_owner_id           TEXT,
+            tts_target_queue        TEXT,
+            audio_target_queue      TEXT,
+            live_overlay_target     TEXT,
+            moderation_settings_json TEXT NOT NULL DEFAULT '{}',
+            status                  TEXT NOT NULL DEFAULT 'active',
+            metadata_json           TEXT NOT NULL DEFAULT '{}',
+            created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (owner_type, owner_id),
+            UNIQUE (public_slug)
+        );
+        CREATE INDEX IF NOT EXISTS idx_billing_tip_creators_status ON billing_tip_creator_profiles(status);
+
+        -- Phase 16: VIP creator profile (per-creator membership configuration).
+        CREATE TABLE IF NOT EXISTS billing_vip_creator_profiles (
+            id                      TEXT PRIMARY KEY,
+            owner_type              TEXT NOT NULL,
+            owner_id                TEXT NOT NULL,
+            public_slug             TEXT,
+            display_name            TEXT NOT NULL,
+            description             TEXT,
+            content_rating          TEXT NOT NULL DEFAULT 'general',
+            requires_age_gate       INTEGER NOT NULL DEFAULT 0,
+            allowed_gated_content_json TEXT NOT NULL DEFAULT '[]',
+            community_target        TEXT,
+            live_target             TEXT,
+            blog_target             TEXT,
+            wiki_target             TEXT,
+            policy_acknowledged_at  DATETIME,
+            policy_acknowledged_by  TEXT,
+            status                  TEXT NOT NULL DEFAULT 'active',
+            metadata_json           TEXT NOT NULL DEFAULT '{}',
+            created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (owner_type, owner_id),
+            UNIQUE (public_slug)
+        );
+        CREATE INDEX IF NOT EXISTS idx_billing_vip_creators_status ON billing_vip_creator_profiles(status);
+
+        -- Phase 16: chat-integration delivery log for tip-driven side effects.
+        CREATE TABLE IF NOT EXISTS billing_tip_chat_integrations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            tip_id              TEXT NOT NULL,
+            interaction_type    TEXT NOT NULL,
+            target_kind         TEXT NOT NULL,    -- 'tts' | 'audio' | 'overlay'
+            chat_owner_type     TEXT,
+            chat_owner_id       TEXT,
+            queue_target        TEXT,
+            outcome             TEXT NOT NULL,    -- 'delivered' | 'queued_local' | 'unavailable' | 'failed'
+            detail              TEXT,
+            recorded_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_billing_tip_chat_int_tip ON billing_tip_chat_integrations(tip_id);
+        CREATE INDEX IF NOT EXISTS idx_billing_tip_chat_int_outcome ON billing_tip_chat_integrations(outcome, recorded_at);
     `;
 
 function defaultSqlitePath() {

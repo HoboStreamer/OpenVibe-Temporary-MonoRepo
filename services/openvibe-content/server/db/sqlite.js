@@ -467,11 +467,27 @@ function createSqliteContentStore(options) {
         const distributionCounts = db.prepare(`SELECT outcome, COUNT(*) AS n FROM content_distribution_audit GROUP BY outcome`).all();
         const byOutcome = {};
         for (const row of distributionCounts) byOutcome[row.outcome] = Number(row.n);
+        // Phase 16 — per-surface and per-kind item counters so the workflow truth is
+        // surfaced separately for wiki/blog/news/reviews/deals/coupons/trade/host.
+        const surfaceRows = db.prepare(
+            `SELECT surface, state, COUNT(*) AS n FROM content_items GROUP BY surface, state`,
+        ).all();
+        const bySurface = {};
+        const byKind = {};
+        for (const row of surfaceRows) {
+            const surface = row.surface || 'unknown';
+            const state = row.state || 'unknown';
+            const n = Number(row.n || 0);
+            if (!bySurface[surface]) bySurface[surface] = { total: 0, by_state: {} };
+            bySurface[surface].total += n;
+            bySurface[surface].by_state[state] = (bySurface[surface].by_state[state] || 0) + n;
+        }
         return {
             items_by_state: byState,
             decisions_by_type: byDecision,
             distribution_by_outcome: byOutcome,
             counts: await getCounts(),
+            items_by_surface: bySurface,
         };
     }
 

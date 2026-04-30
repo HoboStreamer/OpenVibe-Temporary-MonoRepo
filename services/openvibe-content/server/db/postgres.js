@@ -441,10 +441,11 @@ function createPostgresContentStore(options) {
 
     async function getProductWorkflowStatus() {
         await ensureReady();
-        const [stateRows, decisionRows, distributionRows] = await Promise.all([
+        const [stateRows, decisionRows, distributionRows, surfaceRows] = await Promise.all([
             query(pool, `SELECT state, COUNT(*)::int AS n FROM content_items GROUP BY state`, []),
             query(pool, `SELECT decision, COUNT(*)::int AS n FROM content_review_decisions GROUP BY decision`, []),
             query(pool, `SELECT outcome, COUNT(*)::int AS n FROM content_distribution_audit GROUP BY outcome`, []),
+            query(pool, `SELECT surface, state, COUNT(*)::int AS n FROM content_items GROUP BY surface, state`, []),
         ]);
         const byState = {};
         for (const row of stateRows.rows) byState[row.state] = Number(row.n);
@@ -452,11 +453,23 @@ function createPostgresContentStore(options) {
         for (const row of decisionRows.rows) byDecision[row.decision] = Number(row.n);
         const byOutcome = {};
         for (const row of distributionRows.rows) byOutcome[row.outcome] = Number(row.n);
+        // Phase 16 — per-surface workflow truth.
+        const bySurface = {};
+        const byKind = {};
+        for (const row of surfaceRows.rows) {
+            const surface = row.surface || 'unknown';
+            const state = row.state || 'unknown';
+            const n = Number(row.n || 0);
+            if (!bySurface[surface]) bySurface[surface] = { total: 0, by_state: {} };
+            bySurface[surface].total += n;
+            bySurface[surface].by_state[state] = (bySurface[surface].by_state[state] || 0) + n;
+        }
         return {
             items_by_state: byState,
             decisions_by_type: byDecision,
             distribution_by_outcome: byOutcome,
             counts: await getCounts(),
+            items_by_surface: bySurface,
         };
     }
 

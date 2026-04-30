@@ -389,7 +389,7 @@ function upsertContentSource(s) {
     if (existing) {
         const m = Object.assign({}, existing, s);
         db.get().prepare(`
-            UPDATE content_sources SET source_name=?, source_type=?, category=?, base_url=?,
+            UPDATE ai_content_sources SET source_name=?, source_type=?, category=?, base_url=?,
                 api_base_url=?, auth_mode=?, api_key_env=?, rss_url=?, sitemap_url=?,
                 robots_txt_url=?, rate_limit_per_minute=?, enabled=?, respect_robots=?,
                 requires_review=?, terms_notes=?, sensitive_category=?, default_indexing_status=?,
@@ -408,7 +408,7 @@ function upsertContentSource(s) {
     }
     const id = uid('csrc');
     db.get().prepare(`
-        INSERT INTO content_sources (id, source_key, source_name, source_type, category,
+        INSERT INTO ai_content_sources (id, source_key, source_name, source_type, category,
             base_url, api_base_url, auth_mode, api_key_env, rss_url, sitemap_url,
             robots_txt_url, rate_limit_per_minute, enabled, respect_robots, requires_review,
             terms_notes, sensitive_category, default_indexing_status, metadata_json, created_at, updated_at)
@@ -424,14 +424,14 @@ function upsertContentSource(s) {
         s.default_indexing_status || 'draft', jstr(s.metadata), now(), now());
     return getContentSource(id);
 }
-function getContentSource(id)         { return row(db.get().prepare(`SELECT * FROM content_sources WHERE id=?`).get(id), JSON_FIELDS.csource); }
-function getContentSourceByKey(key)   { return row(db.get().prepare(`SELECT * FROM content_sources WHERE source_key=?`).get(key), JSON_FIELDS.csource); }
+function getContentSource(id)         { return row(db.get().prepare(`SELECT * FROM ai_content_sources WHERE id=?`).get(id), JSON_FIELDS.csource); }
+function getContentSourceByKey(key)   { return row(db.get().prepare(`SELECT * FROM ai_content_sources WHERE source_key=?`).get(key), JSON_FIELDS.csource); }
 function listContentSources(q) {
     q = q || {};
     const where = []; const args = [];
     if (q.category) { where.push('category=?'); args.push(q.category); }
     if (q.enabled != null) { where.push('enabled=?'); args.push(q.enabled ? 1 : 0); }
-    const sql = `SELECT * FROM content_sources ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY source_key ASC`;
+    const sql = `SELECT * FROM ai_content_sources ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY source_key ASC`;
     return db.get().prepare(sql).all(...args).map(r => row(r, JSON_FIELDS.csource));
 }
 
@@ -439,7 +439,7 @@ function listContentSources(q) {
 function createIngestionJob(j) {
     const id = uid('ij');
     db.get().prepare(`
-        INSERT INTO content_ingestion_jobs (id, source_id, job_type, target_product, status,
+        INSERT INTO ai_content_ingestion_jobs (id, source_id, job_type, target_product, status,
             input_json, trace_id, metadata_json, created_at)
         VALUES (?,?,?,?,?,?,?,?,?)
     `).run(id, j.source_id || null, j.job_type, j.target_product || null,
@@ -447,7 +447,7 @@ function createIngestionJob(j) {
         jstr(j.metadata), now());
     return getIngestionJob(id);
 }
-function getIngestionJob(id) { return row(db.get().prepare(`SELECT * FROM content_ingestion_jobs WHERE id=?`).get(id), JSON_FIELDS.ijob); }
+function getIngestionJob(id) { return row(db.get().prepare(`SELECT * FROM ai_content_ingestion_jobs WHERE id=?`).get(id), JSON_FIELDS.ijob); }
 function updateIngestionJob(id, patch) {
     const cur = getIngestionJob(id); if (!cur) return null;
     const fields = []; const args = [];
@@ -459,7 +459,7 @@ function updateIngestionJob(id, patch) {
     }
     if (!fields.length) return cur;
     args.push(id);
-    db.get().prepare(`UPDATE content_ingestion_jobs SET ${fields.join(', ')} WHERE id=?`).run(...args);
+    db.get().prepare(`UPDATE ai_content_ingestion_jobs SET ${fields.join(', ')} WHERE id=?`).run(...args);
     return getIngestionJob(id);
 }
 function listIngestionJobs(q) {
@@ -469,7 +469,7 @@ function listIngestionJobs(q) {
     if (q.source_id)      { where.push('source_id=?'); args.push(q.source_id); }
     if (q.target_product) { where.push('target_product=?'); args.push(q.target_product); }
     const limit = Math.min(parseInt(q.limit, 10) || 200, 1000);
-    const sql = `SELECT * FROM content_ingestion_jobs ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ${limit}`;
+    const sql = `SELECT * FROM ai_content_ingestion_jobs ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ${limit}`;
     return db.get().prepare(sql).all(...args).map(r => row(r, JSON_FIELDS.ijob));
 }
 

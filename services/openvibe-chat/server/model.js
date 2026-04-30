@@ -682,7 +682,54 @@ function deleteAudioIntegration(id) {
     return { ok: true };
 }
 
+// Phase 16 — chat workflow product status surface.
+function summarizeProduct() {
+    const conn = db.get();
+    const safeCount = (sql) => {
+        try {
+            const row = conn.prepare(sql).get();
+            return Number((row && (row.c || row.count)) || 0);
+        } catch (error) {
+            return null;
+        }
+    };
+    const roomsByType = {};
+    try {
+        for (const row of conn.prepare(`SELECT room_type, COUNT(*) AS c FROM chat_rooms GROUP BY room_type`).all()) {
+            roomsByType[row.room_type || 'unknown'] = Number(row.c || 0);
+        }
+    } catch (error) {
+        // table may not exist in degraded environments
+    }
+    return {
+        ok: true,
+        product: 'chat',
+        rooms: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM chat_rooms`),
+            archived: safeCount(`SELECT COUNT(*) AS c FROM chat_rooms WHERE archived_at IS NOT NULL`),
+            by_type: roomsByType,
+        },
+        messages: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM chat_messages`),
+            deleted: safeCount(`SELECT COUNT(*) AS c FROM chat_messages WHERE deleted_at IS NOT NULL`),
+        },
+        dms: {
+            total_rooms: safeCount(`SELECT COUNT(*) AS c FROM chat_rooms WHERE room_type = 'dm'`),
+        },
+        calls: {
+            active: safeCount(`SELECT COUNT(*) AS c FROM chat_call_sessions WHERE status IN ('ringing','active')`),
+        },
+        audio_integrations: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM chat_audio_integrations`),
+        },
+        stream_bindings: {
+            total: safeCount(`SELECT COUNT(*) AS c FROM chat_stream_bindings`),
+        },
+    };
+}
+
 module.exports = {
+    summarizeProduct,
     newId,
     // rooms
     createRoom, getRoom, findRoomByExternal, ensureRoomForExternal, listRooms, archiveRoom,

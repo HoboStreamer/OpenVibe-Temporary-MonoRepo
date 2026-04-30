@@ -19,6 +19,7 @@ const SERVICE_DEFAULTS = Object.freeze({
     workers:   { envKey: 'OPENVIBE_WORKERS_URL', productionOrigin: 'https://workers.openvibe.network', port: 5300 },
     realtime:  { envKey: 'OPENVIBE_REALTIME_URL', productionOrigin: 'https://realtime.openvibe.network', port: 5400 },
     codes:     { envKey: 'OPENVIBE_CODES_URL', productionOrigin: 'https://openvibe.codes', port: 5500 },
+    content:   { envKey: 'OPENVIBE_CONTENT_URL', productionOrigin: 'https://openvibe.codes', port: 5500 },
     blog:      { envKey: 'OPENVIBE_BLOG_URL', productionOrigin: 'https://openvibe.blog', port: 5500 },
     wiki:      { envKey: 'OPENVIBE_WIKI_URL', productionOrigin: 'https://openvibe.wiki', port: 5500 },
     news:      { envKey: 'OPENVIBE_NEWS_URL', productionOrigin: 'https://openvibe.news', port: 5500 },

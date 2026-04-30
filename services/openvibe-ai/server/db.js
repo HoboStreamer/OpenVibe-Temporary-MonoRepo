@@ -263,7 +263,7 @@ const SCHEMA_SQL = `
         CREATE INDEX IF NOT EXISTS idx_seo_content_dupe ON seo_content(canonical_content_hash);
 
         -- Phase 7 source registry (admin-configurable)
-        CREATE TABLE IF NOT EXISTS content_sources (
+        CREATE TABLE IF NOT EXISTS ai_content_sources (
             id              TEXT PRIMARY KEY,
             source_key      TEXT NOT NULL UNIQUE,
             source_name     TEXT NOT NULL,
@@ -287,9 +287,9 @@ const SCHEMA_SQL = `
             created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE INDEX IF NOT EXISTS idx_content_sources_cat ON content_sources(category);
+        CREATE INDEX IF NOT EXISTS idx_ai_content_sources_cat ON ai_content_sources(category);
 
-        CREATE TABLE IF NOT EXISTS content_ingestion_jobs (
+        CREATE TABLE IF NOT EXISTS ai_content_ingestion_jobs (
             id              TEXT PRIMARY KEY,
             source_id       TEXT,
             job_type        TEXT NOT NULL,
@@ -303,9 +303,9 @@ const SCHEMA_SQL = `
             created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
             started_at      DATETIME,
             completed_at    DATETIME,
-            FOREIGN KEY (source_id) REFERENCES content_sources(id) ON DELETE SET NULL
+            FOREIGN KEY (source_id) REFERENCES ai_content_sources(id) ON DELETE SET NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status ON content_ingestion_jobs(status);
+        CREATE INDEX IF NOT EXISTS idx_ai_ingest_jobs_status ON ai_content_ingestion_jobs(status);
 
         -- Phase 7 search index seam (default local SQLite-backed adapter)
         CREATE TABLE IF NOT EXISTS search_documents (

@@ -672,6 +672,15 @@ function buildRouter({ eventBus }) {
         res.json({ ok: true });
     });
 
+    // Phase 16 — minimum-viable product/status surface for chat workflow.
+    r.get('/product/status', (_req, res) => {
+        try {
+            res.json(model.summarizeProduct());
+        } catch (error) {
+            res.status(500).json({ ok: false, error: error.message || 'chat_product_status_failed' });
+        }
+    });
+
     return r;
 }
 

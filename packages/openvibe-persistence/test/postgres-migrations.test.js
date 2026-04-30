@@ -14,7 +14,7 @@ function makePool() {
     return {
         async query(text) {
             const sql = String(text || '').trim();
-            if (/^SELECT name, applied_at FROM runtime_schema_migrations/i.test(sql)) {
+            if (/^SELECT name, applied_at FROM runtime_schema_migrations(?:_[a-z0-9_]+)?/i.test(sql)) {
                 return { rows: [], rowCount: 0 };
             }
             return { rows: [], rowCount: 0 };

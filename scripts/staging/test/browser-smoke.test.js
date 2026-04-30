@@ -20,8 +20,31 @@ function buildHealthyPersistenceDescriptor() {
 
 const BILLING_HOST_MAP = { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' };
 const BILLING_JSON_ROUTES = {
-    '/api/tips/product/status': { ok: true, product: 'tips', sample_size: 0, by_status: {}, by_interaction: {}, recent_posted_minor: 0, currency: 'usd', platform_fee_bps: 100 },
-    '/api/vip/product/status': { ok: true, product: 'vip', plan_count: 0, plans_by_status: {}, subscription_count: 0, subscriptions_by_status: {}, currency: 'usd', platform_fee_bps: 100 },
+    '/api/tips/product/status': {
+        ok: true,
+        product: 'tips',
+        sample_size: 0,
+        by_status: {},
+        by_interaction: {},
+        recent_posted_minor: 0,
+        currency: 'usd',
+        platform_fee_bps: 100,
+        creators: { count: 0, by_status: {} },
+        chat_integration_status: { delivered: 0, queued_local: 0, unavailable: 0, failed: 0 },
+        chat_url_configured: false,
+        economy_frozen: false,
+    },
+    '/api/vip/product/status': {
+        ok: true,
+        product: 'vip',
+        plan_count: 0,
+        plans_by_status: {},
+        subscription_count: 0,
+        subscriptions_by_status: {},
+        currency: 'usd',
+        platform_fee_bps: 100,
+        creators: { count: 0, age_gated: 0, by_status: {} },
+    },
 };
 const AI_JSON_ROUTES = {
     '/api/v1/ai/product/status': { ok: true, product: 'ai', providers: 0, routes: 0, templates: 0, workflows: 0, sources: 0, recent_runs_sample: 0, runs_by_status: {}, search: { documents: 0 } },
@@ -29,6 +52,17 @@ const AI_JSON_ROUTES = {
 
 function billingFixture() { return makeHtmlServer('OpenVibe Billing', { hostMap: BILLING_HOST_MAP, jsonRoutes: BILLING_JSON_ROUTES }); }
 function aiFixture() { return makeHtmlServer('OpenVibe AI — ai.openvibe.network', { jsonRoutes: AI_JSON_ROUTES }); }
+
+const LIVE_JSON_ROUTES = {
+    '/api/v1/integrations/product/status': {
+        services_configured: { chat: false, billing: false, ai: false },
+        integrations: {
+            total: { delivered: 0, queued_local: 0, unavailable: 0, failed: 0 },
+            by_target_kind: {},
+        },
+    },
+};
+function liveFixture() { return makeHtmlServer('openvibe.live — native fallback shell', { jsonRoutes: LIVE_JSON_ROUTES }); }
 
 function buildReadinessPayload(service, checks) {
     const summary = { green: 0, yellow: 0, red: 0 };
@@ -235,7 +269,7 @@ async function testGreenSmokeReport() {
     await withServers(() => ({
         network: makeNetworkServer(),
         events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
-        live: makeHtmlServer('openvibe.live — native fallback shell'),
+        live: liveFixture(),
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
@@ -269,7 +303,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 45);
+        assert.strictEqual(report.checks.length, 46);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -278,7 +312,7 @@ async function testDetectsProductionLeakInLocalMode() {
     await withServers(() => ({
         network: makeNetworkServer({ leakProductionOrigin: true }),
         events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
-        live: makeHtmlServer('openvibe.live — native fallback shell'),
+        live: liveFixture(),
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
@@ -319,7 +353,7 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
     await withServers(() => ({
         network: makeNetworkServer(),
         events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
-        live: makeHtmlServer('openvibe.live — native fallback shell'),
+        live: liveFixture(),
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community', {

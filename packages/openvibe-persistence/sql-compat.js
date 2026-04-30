@@ -95,11 +95,29 @@ function splitSqlStatements(source) {
     let current = '';
     let inSingle = false;
     let inDouble = false;
+    let inLineComment = false;
+    let inBlockComment = false;
 
     for (let index = 0; index < text.length; index += 1) {
         const char = text[index];
         const next = text[index + 1];
         current += char;
+
+        if (inLineComment) {
+            if (char === '\n' || char === '\r') {
+                inLineComment = false;
+            }
+            continue;
+        }
+
+        if (inBlockComment) {
+            if (char === '*' && next === '/') {
+                current += next;
+                index += 1;
+                inBlockComment = false;
+            }
+            continue;
+        }
 
         if (char === '\\' && (inSingle || inDouble) && next) {
             current += next;
@@ -118,6 +136,20 @@ function splitSqlStatements(source) {
         }
         if (!inSingle && char === '"') {
             inDouble = !inDouble;
+            continue;
+        }
+
+        if (!inSingle && !inDouble && char === '-' && next === '-') {
+            current += next;
+            index += 1;
+            inLineComment = true;
+            continue;
+        }
+
+        if (!inSingle && !inDouble && char === '/' && next === '*') {
+            current += next;
+            index += 1;
+            inBlockComment = true;
             continue;
         }
 

@@ -171,8 +171,19 @@ assert.strictEqual(integUpdated.id, integ.id, 'upsert should keep id');
 assert.strictEqual(integUpdated.enabled, false);
 assert.strictEqual(integUpdated.config.board_id, 'demo2');
 
+// Phase 16 — minimum-viable product/status surface.
+const productStatus = model.summarizeProduct();
+assert.strictEqual(productStatus.ok, true);
+assert.strictEqual(productStatus.product, 'chat');
+assert.ok(productStatus.rooms && typeof productStatus.rooms.total === 'number');
+assert.ok(productStatus.messages && typeof productStatus.messages.total === 'number');
+assert.ok(productStatus.calls && typeof productStatus.calls.active === 'number');
+assert.ok(productStatus.audio_integrations && typeof productStatus.audio_integrations.total === 'number');
+assert.ok(productStatus.stream_bindings && typeof productStatus.stream_bindings.total === 'number');
+
 const shellHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert.ok(!shellHtml.includes('https://openvibe.network'), 'chat shell should not embed production network origin literals in inline HTML');
 assert.ok(!shellHtml.includes('https://auth.openvibe.network'), 'chat shell should not embed production auth origin literals in inline HTML');
+assert.ok(shellHtml.includes('phase16-chip'), 'chat shell should expose the Phase 16 product/status chip');
 
 console.log('openvibe-chat smoke OK');

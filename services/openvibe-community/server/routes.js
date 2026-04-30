@@ -484,6 +484,15 @@ function buildRouter({ eventBus, config }) {
         res.status(201).json({ ok: true, outcome, discord_message_id: synthMessageId });
     });
 
+    // Phase 16 — minimum-viable product/status surface for community workflow.
+    r.get('/product/status', (_req, res) => {
+        try {
+            res.json(model.summarizeProduct());
+        } catch (error) {
+            res.status(500).json({ ok: false, error: error.message || 'community_product_status_failed' });
+        }
+    });
+
     return r;
 }
 

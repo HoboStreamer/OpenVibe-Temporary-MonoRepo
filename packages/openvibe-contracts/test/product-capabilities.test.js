@@ -74,8 +74,50 @@ const { CAPABILITIES, CAPABILITY_LIST } = require('../capabilities');
     assert.strictEqual(summary.capability_count, PRODUCT_CAPABILITY_RECORDS.length);
     assert.ok(summary.implemented_count >= 1);
     assert.ok(summary.implemented_count <= summary.capability_count);
+    assert.strictEqual(typeof summary.deferred_count, 'number');
+    assert.strictEqual(summary.deferred_count, summary.capability_count - summary.implemented_count);
     assert.ok(Array.isArray(summary.owners));
     assert.ok(summary.owners.length > 0);
+    for (const owner of summary.owners) {
+        assert.strictEqual(owner.deferred_count, owner.capability_count - owner.implemented_count);
+    }
+})();
+
+(function unimplementedRecordsCarryDeferredReason() {
+    for (const record of PRODUCT_CAPABILITY_RECORDS) {
+        if (!record.implemented) {
+            assert.ok(typeof record.deferred_reason === 'string' && record.deferred_reason.length > 0,
+                `expected deferred_reason for ${record.capability_id}`);
+        } else {
+            assert.ok(record.deferred_reason === null,
+                `implemented capability should have null deferred_reason: ${record.capability_id}`);
+        }
+    }
+})();
+
+(function implementedSetCoversNewlyRoutedSlices() {
+    // Phase 16 truth check: every capability id whose route now exists must be in the implemented set.
+    const required = [
+        CAPABILITIES.CHAT_START_CALL,
+        CAPABILITIES.CHAT_END_CALL,
+        CAPABILITIES.CHAT_TTS_SETTINGS_UPDATE,
+        CAPABILITIES.CHAT_AUDIO_ENQUEUE,
+        CAPABILITIES.COMMUNITY_CREATE_PASTE,
+        CAPABILITIES.COMMUNITY_UPDATE_PASTE,
+        CAPABILITIES.COMMUNITY_DISCORD_RELAY_CONFIGURE,
+        CAPABILITIES.TIPS_REFUND,
+        CAPABILITIES.TIPS_OVERLAY_FEED,
+        CAPABILITIES.VIP_PLAN_CREATE,
+        CAPABILITIES.VIP_SUBSCRIPTION_CREATE,
+        CAPABILITIES.VIP_SUBSCRIPTION_CANCEL,
+        CAPABILITIES.VIP_ENTITLEMENT_CHECK,
+        CAPABILITIES.AI_CLASSIFY,
+        CAPABILITIES.AI_EXTRACT,
+        CAPABILITIES.SEARCH_QUERY,
+    ];
+    for (const id of required) {
+        assert.ok(IMPLEMENTED_CAPABILITY_IDS.has(id), `expected ${id} to be marked implemented`);
+    }
 })();
 
 (function describeRecordIsStable() {

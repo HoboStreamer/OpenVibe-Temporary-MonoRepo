@@ -22,6 +22,15 @@ module.exports = {
     stream:  { url: resolvePublicOrigin({ surface: 'restream' }) },
     media:   { url: resolvePublicOrigin({ surface: 'media' }) },
 
+    // Phase 16: downstream product surfaces consulted by the integrations
+    // model. URLs are nullable; absent URLs result in integrations being
+    // truthfully recorded as 'unavailable'.
+    services: {
+        chat:    process.env.OPENVIBE_CHAT_URL    || null,
+        billing: process.env.OPENVIBE_BILLING_URL || null,
+        ai:      process.env.OPENVIBE_AI_URL      || null,
+    },
+
     subscription: {
         enabled: process.env.LIVE_SUBSCRIBE_STREAM_EVENTS !== 'false',
         callbackUrl: process.env.LIVE_SUBSCRIBE_CALLBACK_URL || null,

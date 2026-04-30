@@ -165,6 +165,27 @@ function buildRouter({ config, contentStore }) {
         res.json(Object.assign({ ok: true, product: 'content' }, await contentStore.getProductWorkflowStatus()));
     }));
 
+    // Phase 16 — per-surface content listing helpers. The full content_items
+    // table already filters by surface+kind+state; these endpoints just expose
+    // that surface dimension explicitly so each product (wiki/blog/news/
+    // reviews/deals/coupons/trade/host) has a stable per-surface route. Deeper
+    // per-surface schemas (e.g. coupon redemption history, trade listings)
+    // remain Phase 17 work and are tracked as deferred capabilities.
+    router.get('/api/v1/content/surfaces', asyncHandler(async (_req, res) => {
+        const status = await contentStore.getProductWorkflowStatus();
+        const surfaces = Object.keys(status.items_by_surface || {}).sort();
+        res.json({ ok: true, surfaces, items_by_surface: status.items_by_surface || {} });
+    }));
+    router.get('/api/v1/content/surfaces/:surface/items', asyncHandler(async (req, res) => {
+        const filters = Object.assign({}, req.query || {}, { surface: req.params.surface });
+        res.json({ ok: true, surface: req.params.surface, items: await contentStore.listItems(filters) });
+    }));
+    router.get('/api/v1/content/surfaces/:surface/product/status', asyncHandler(async (req, res) => {
+        const status = await contentStore.getProductWorkflowStatus();
+        const surfaceTruth = (status.items_by_surface || {})[req.params.surface] || { total: 0, by_state: {}, by_kind: {} };
+        res.json({ ok: true, product: 'content', surface: req.params.surface, items: surfaceTruth });
+    }));
+
     router.get('*', (req, res) => {
         const rendered = renderRequest({
             config,

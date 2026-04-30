@@ -434,6 +434,17 @@ const SURFACE_CHECKS = Object.freeze([
         validate(body) {
             if (!body || body.product !== 'tips') return 'tips product status payload missing product=tips';
             if (body.ok !== true) return 'tips product status not ok';
+            // Phase 16 — these counters/objects must always be present so
+            // the admin runtime matrix can render them truthfully.
+            if (!body.creators || typeof body.creators.count !== 'number') {
+                return 'tips product status missing creators.count';
+            }
+            if (!body.chat_integration_status) {
+                return 'tips product status missing chat_integration_status';
+            }
+            if (typeof body.economy_frozen !== 'boolean') {
+                return 'tips product status missing economy_frozen';
+            }
             return null;
         },
     },
@@ -446,6 +457,33 @@ const SURFACE_CHECKS = Object.freeze([
         validate(body) {
             if (!body || body.product !== 'vip') return 'vip product status payload missing product=vip';
             if (body.ok !== true) return 'vip product status not ok';
+            if (!body.creators || typeof body.creators.count !== 'number') {
+                return 'vip product status missing creators.count';
+            }
+            if (typeof body.creators.age_gated !== 'number') {
+                return 'vip product status missing creators.age_gated';
+            }
+            return null;
+        },
+    },
+    {
+        // Phase 16 — live integrations product status. Verifies the shape of
+        // services_configured and the integrations summary so the admin
+        // matrix has a real signal to render.
+        id: 'live-integrations-product-status',
+        type: 'json',
+        baseKey: 'liveUrl',
+        host: 'openvibe.live.localhost',
+        path: '/api/v1/integrations/product/status',
+        validate(body) {
+            if (!body) return 'live integrations product status empty';
+            if (!body.services_configured || typeof body.services_configured.chat !== 'boolean') {
+                return 'live integrations product status missing services_configured.chat';
+            }
+            if (!body.integrations || !body.integrations.total
+                || typeof body.integrations.total.unavailable !== 'number') {
+                return 'live integrations product status missing integrations.total counters';
+            }
             return null;
         },
     },

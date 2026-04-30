@@ -14,6 +14,18 @@ function testSplitStatements() {
     assert.strictEqual(statements.length, 2);
 }
 
+function testSplitStatementsIgnoresCommentSemicolons() {
+    const statements = splitSqlStatements(`
+        -- Semicolons; inside; comments; should not split.
+        CREATE TABLE demo (id INTEGER PRIMARY KEY AUTOINCREMENT);
+        /* Another; comment; block; */
+        INSERT OR IGNORE INTO demo (id) VALUES (1);
+    `);
+    assert.strictEqual(statements.length, 2);
+    assert.ok(/^-- Semicolons; inside; comments; should not split\./.test(statements[0]));
+    assert.ok(/INSERT OR IGNORE INTO demo/.test(statements[1]));
+}
+
 function testParameterReplacement() {
     const sql = replacePositionalParameters(`SELECT * FROM chat_messages WHERE room_id = ? AND body != '?' LIMIT ?`);
     assert.strictEqual(sql, `SELECT * FROM chat_messages WHERE room_id = $1 AND body != '?' LIMIT $2`);
@@ -63,6 +75,7 @@ function testDatetimeFunctionTranslation() {
 
 function main() {
     testSplitStatements();
+    testSplitStatementsIgnoresCommentSemicolons();
     testParameterReplacement();
     testSchemaNormalization();
     testQueryTranslation();

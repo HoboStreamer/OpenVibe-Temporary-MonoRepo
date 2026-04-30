@@ -565,6 +565,260 @@ function lookupLegacy(source, kind, legacy_id) {
         .get(String(source), String(kind), String(legacy_id)) || null;
 }
 
+// ── tips creator profiles (Phase 16) ───────────────────────
+function hydrateTipCreator(r) {
+    if (!r) return null;
+    return {
+        id: r.id,
+        owner_type: r.owner_type, owner_id: r.owner_id,
+        public_slug: r.public_slug,
+        display_name: r.display_name,
+        description: r.description,
+        currency: r.currency,
+        default_target_type: r.default_target_type, default_target_id: r.default_target_id,
+        default_visibility: r.default_visibility,
+        chat_owner_type: r.chat_owner_type, chat_owner_id: r.chat_owner_id,
+        tts_target_queue: r.tts_target_queue,
+        audio_target_queue: r.audio_target_queue,
+        live_overlay_target: r.live_overlay_target,
+        moderation_settings: safeJson(r.moderation_settings_json, {}),
+        status: r.status,
+        metadata: safeJson(r.metadata_json, {}),
+        created_at: r.created_at, updated_at: r.updated_at,
+    };
+}
+
+function getTipCreatorProfile(ownerType, ownerId) {
+    return hydrateTipCreator(db.get().prepare(
+        `SELECT * FROM billing_tip_creator_profiles WHERE owner_type=? AND owner_id=?`
+    ).get(String(ownerType), String(ownerId)));
+}
+
+function getTipCreatorProfileBySlug(slug) {
+    if (!slug) return null;
+    return hydrateTipCreator(db.get().prepare(
+        `SELECT * FROM billing_tip_creator_profiles WHERE public_slug=?`
+    ).get(String(slug)));
+}
+
+function listTipCreatorProfiles({ status, limit } = {}) {
+    const where = [];
+    const args = [];
+    if (status) { where.push('status=?'); args.push(String(status)); }
+    let sql = `SELECT * FROM billing_tip_creator_profiles`;
+    if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+    sql += ` ORDER BY created_at DESC LIMIT ?`;
+    args.push(Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500));
+    return db.get().prepare(sql).all(...args).map(hydrateTipCreator);
+}
+
+function upsertTipCreatorProfile(input) {
+    const ownerType = String(input.owner_type);
+    const ownerId   = String(input.owner_id);
+    const existing  = getTipCreatorProfile(ownerType, ownerId);
+    if (existing) {
+        const fields = [];
+        const args = [];
+        for (const k of ['public_slug', 'display_name', 'description', 'currency',
+                         'default_target_type', 'default_target_id', 'default_visibility',
+                         'chat_owner_type', 'chat_owner_id',
+                         'tts_target_queue', 'audio_target_queue', 'live_overlay_target', 'status']) {
+            if (input[k] !== undefined) {
+                fields.push(`${k}=?`);
+                args.push(input[k] != null ? String(input[k]) : null);
+            }
+        }
+        if (input.moderation_settings !== undefined) {
+            fields.push(`moderation_settings_json=?`);
+            args.push(JSON.stringify(input.moderation_settings || {}));
+        }
+        if (input.metadata !== undefined) {
+            fields.push(`metadata_json=?`);
+            args.push(JSON.stringify(input.metadata || {}));
+        }
+        if (fields.length) {
+            fields.push(`updated_at=CURRENT_TIMESTAMP`);
+            args.push(existing.id);
+            db.get().prepare(`UPDATE billing_tip_creator_profiles SET ${fields.join(', ')} WHERE id=?`).run(...args);
+        }
+        return getTipCreatorProfile(ownerType, ownerId);
+    }
+    const id = newId('tcr');
+    db.get().prepare(`
+        INSERT INTO billing_tip_creator_profiles (
+            id, owner_type, owner_id, public_slug, display_name, description, currency,
+            default_target_type, default_target_id, default_visibility,
+            chat_owner_type, chat_owner_id,
+            tts_target_queue, audio_target_queue, live_overlay_target,
+            moderation_settings_json, status, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id, ownerType, ownerId,
+        input.public_slug ? String(input.public_slug) : null,
+        String(input.display_name || `${ownerType}/${ownerId}`),
+        input.description ? String(input.description) : null,
+        String(input.currency || 'OVC'),
+        input.default_target_type ? String(input.default_target_type) : null,
+        input.default_target_id != null ? String(input.default_target_id) : null,
+        String(input.default_visibility || 'public'),
+        input.chat_owner_type ? String(input.chat_owner_type) : null,
+        input.chat_owner_id != null ? String(input.chat_owner_id) : null,
+        input.tts_target_queue ? String(input.tts_target_queue) : null,
+        input.audio_target_queue ? String(input.audio_target_queue) : null,
+        input.live_overlay_target ? String(input.live_overlay_target) : null,
+        JSON.stringify(input.moderation_settings || {}),
+        String(input.status || 'active'),
+        JSON.stringify(input.metadata || {}),
+    );
+    return getTipCreatorProfile(ownerType, ownerId);
+}
+
+function recordTipChatIntegration({ tip_id, interaction_type, target_kind,
+                                    chat_owner_type, chat_owner_id, queue_target,
+                                    outcome, detail }) {
+    db.get().prepare(`
+        INSERT INTO billing_tip_chat_integrations
+            (tip_id, interaction_type, target_kind, chat_owner_type, chat_owner_id,
+             queue_target, outcome, detail)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        String(tip_id), String(interaction_type), String(target_kind),
+        chat_owner_type || null, chat_owner_id != null ? String(chat_owner_id) : null,
+        queue_target || null, String(outcome), detail || null,
+    );
+}
+
+function listTipChatIntegrations({ tip_id, outcome, limit } = {}) {
+    const where = [];
+    const args = [];
+    if (tip_id)  { where.push('tip_id=?');  args.push(String(tip_id)); }
+    if (outcome) { where.push('outcome=?'); args.push(String(outcome)); }
+    let sql = `SELECT * FROM billing_tip_chat_integrations`;
+    if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+    sql += ` ORDER BY id DESC LIMIT ?`;
+    args.push(Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200));
+    return db.get().prepare(sql).all(...args);
+}
+
+function tipChatIntegrationSummary() {
+    const rows = db.get().prepare(
+        `SELECT outcome, COUNT(*) AS n FROM billing_tip_chat_integrations GROUP BY outcome`
+    ).all();
+    const out = {};
+    for (const r of rows) out[r.outcome] = r.n;
+    return out;
+}
+
+// ── VIP creator profiles (Phase 16) ────────────────────────
+function hydrateVipCreator(r) {
+    if (!r) return null;
+    return {
+        id: r.id,
+        owner_type: r.owner_type, owner_id: r.owner_id,
+        public_slug: r.public_slug,
+        display_name: r.display_name,
+        description: r.description,
+        content_rating: r.content_rating,
+        requires_age_gate: !!r.requires_age_gate,
+        allowed_gated_content: safeJson(r.allowed_gated_content_json, []),
+        community_target: r.community_target,
+        live_target: r.live_target,
+        blog_target: r.blog_target,
+        wiki_target: r.wiki_target,
+        policy_acknowledged_at: r.policy_acknowledged_at,
+        policy_acknowledged_by: r.policy_acknowledged_by,
+        status: r.status,
+        metadata: safeJson(r.metadata_json, {}),
+        created_at: r.created_at, updated_at: r.updated_at,
+    };
+}
+
+function getVipCreatorProfile(ownerType, ownerId) {
+    return hydrateVipCreator(db.get().prepare(
+        `SELECT * FROM billing_vip_creator_profiles WHERE owner_type=? AND owner_id=?`
+    ).get(String(ownerType), String(ownerId)));
+}
+
+function getVipCreatorProfileBySlug(slug) {
+    if (!slug) return null;
+    return hydrateVipCreator(db.get().prepare(
+        `SELECT * FROM billing_vip_creator_profiles WHERE public_slug=?`
+    ).get(String(slug)));
+}
+
+function listVipCreatorProfiles({ status, limit } = {}) {
+    const where = [];
+    const args = [];
+    if (status) { where.push('status=?'); args.push(String(status)); }
+    let sql = `SELECT * FROM billing_vip_creator_profiles`;
+    if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+    sql += ` ORDER BY created_at DESC LIMIT ?`;
+    args.push(Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500));
+    return db.get().prepare(sql).all(...args).map(hydrateVipCreator);
+}
+
+function upsertVipCreatorProfile(input) {
+    const ownerType = String(input.owner_type);
+    const ownerId   = String(input.owner_id);
+    const existing  = getVipCreatorProfile(ownerType, ownerId);
+    if (existing) {
+        const fields = [];
+        const args = [];
+        for (const k of ['public_slug', 'display_name', 'description', 'content_rating',
+                         'community_target', 'live_target', 'blog_target', 'wiki_target',
+                         'status', 'policy_acknowledged_at', 'policy_acknowledged_by']) {
+            if (input[k] !== undefined) {
+                fields.push(`${k}=?`);
+                args.push(input[k] != null ? String(input[k]) : null);
+            }
+        }
+        if (input.requires_age_gate !== undefined) {
+            fields.push(`requires_age_gate=?`);
+            args.push(input.requires_age_gate ? 1 : 0);
+        }
+        if (input.allowed_gated_content !== undefined) {
+            fields.push(`allowed_gated_content_json=?`);
+            args.push(JSON.stringify(input.allowed_gated_content || []));
+        }
+        if (input.metadata !== undefined) {
+            fields.push(`metadata_json=?`);
+            args.push(JSON.stringify(input.metadata || {}));
+        }
+        if (fields.length) {
+            fields.push(`updated_at=CURRENT_TIMESTAMP`);
+            args.push(existing.id);
+            db.get().prepare(`UPDATE billing_vip_creator_profiles SET ${fields.join(', ')} WHERE id=?`).run(...args);
+        }
+        return getVipCreatorProfile(ownerType, ownerId);
+    }
+    const id = newId('vcr');
+    db.get().prepare(`
+        INSERT INTO billing_vip_creator_profiles (
+            id, owner_type, owner_id, public_slug, display_name, description, content_rating,
+            requires_age_gate, allowed_gated_content_json,
+            community_target, live_target, blog_target, wiki_target,
+            policy_acknowledged_at, policy_acknowledged_by, status, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id, ownerType, ownerId,
+        input.public_slug ? String(input.public_slug) : null,
+        String(input.display_name || `${ownerType}/${ownerId}`),
+        input.description ? String(input.description) : null,
+        String(input.content_rating || 'general'),
+        input.requires_age_gate ? 1 : 0,
+        JSON.stringify(input.allowed_gated_content || []),
+        input.community_target ? String(input.community_target) : null,
+        input.live_target ? String(input.live_target) : null,
+        input.blog_target ? String(input.blog_target) : null,
+        input.wiki_target ? String(input.wiki_target) : null,
+        input.policy_acknowledged_at ? String(input.policy_acknowledged_at) : null,
+        input.policy_acknowledged_by ? String(input.policy_acknowledged_by) : null,
+        String(input.status || 'active'),
+        JSON.stringify(input.metadata || {}),
+    );
+    return getVipCreatorProfile(ownerType, ownerId);
+}
+
 module.exports = {
     newId, nowIso,
 
@@ -592,4 +846,11 @@ module.exports = {
     getEconomyState, setEconomyState,
 
     recordLegacyMap, lookupLegacy,
+
+    // Phase 16 — tips creator profiles + chat integration log
+    getTipCreatorProfile, getTipCreatorProfileBySlug, listTipCreatorProfiles, upsertTipCreatorProfile,
+    recordTipChatIntegration, listTipChatIntegrations, tipChatIntegrationSummary,
+
+    // Phase 16 — VIP creator profiles
+    getVipCreatorProfile, getVipCreatorProfileBySlug, listVipCreatorProfiles, upsertVipCreatorProfile,
 };

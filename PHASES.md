@@ -547,3 +547,47 @@ admin matrix wiring.
     to all four `/product/status` endpoints and admin.html renders a
     `product-capability-matrix` panel under the runtime tab. ✅
 11. **Phase 16 tracker doc** — [context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md](context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md). ✅
+
+### Phase 16 follow-up tranche (this session) ✅
+
+A focused follow-up tranche extends Phase 16 with creator profiles,
+live integrations probing, per-surface content workflows, and chat/
+community workflow status surfaces:
+
+- **Tips/VIP creator profiles + chat integration delivery log** —
+  schema additions in
+  [services/openvibe-billing/server/db.js](services/openvibe-billing/server/db.js)
+  and Postgres parity in
+  [services/openvibe-billing/server/migrations/postgres/003_phase16_creator_profiles_chat_integrations.sql](services/openvibe-billing/server/migrations/postgres/003_phase16_creator_profiles_chat_integrations.sql).
+  Tips/VIP `product/status` payloads now report `creators.*` and
+  (for tips) `chat_integration_status`. ✅
+- **Live composition: per-channel/per-stream integrations table +
+  ensure-probe** — see
+  [services/openvibe-live/server/integrations.js](services/openvibe-live/server/integrations.js)
+  and the new routes in
+  [services/openvibe-live/server/index.js](services/openvibe-live/server/index.js).
+  Probes never silently return green. ✅
+- **Chat + community workflow `summarizeProduct()` and
+  `/product/status` endpoints** plus a Phase 16 chip in each public
+  shell that reports truth (or "probe failed") on every refresh. ✅
+- **Content per-surface routes** — `GET /api/v1/content/surfaces`,
+  `GET /api/v1/content/surfaces/:surface/items`, and
+  `GET /api/v1/content/surfaces/:surface/product/status` in
+  [services/openvibe-content/server/routes.js](services/openvibe-content/server/routes.js).
+  Backed by the per-surface aggregator added to both adapters. ✅
+- **Admin runtime matrix** — extended to include
+  `products.live_integrations` and a "Capability catalog (shipped vs
+  deferred)" section. ✅
+- **Browser smoke** — adds `live-integrations-product-status` and
+  validates the new tips/VIP product fields; fixture check count
+  bumped to 46. ✅
+
+Truthfully deferred from this tranche: SSR cards for live integrations
+on stream/channel pages, creator/subscriber dashboards for tips/VIP,
+deeper per-surface content schemas (coupon redemption history, trade
+listings, host reservations), full chat/community moderation panels,
+real outbound Discord delivery (still a mock seam without an outbound
+webhook URL).
+
+For full file/test citations see
+[context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md](context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md).

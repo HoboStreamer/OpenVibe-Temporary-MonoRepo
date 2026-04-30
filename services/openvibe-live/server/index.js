@@ -13,6 +13,7 @@ const config = require('./config');
 const db = require('./db');
 const model = require('./model');
 const ssr = require('./ssr');
+const integrations = require('./integrations');
 const { applyStreamEvent } = require('./ingestion');
 const { serviceActorMiddleware } = require('./middleware');
 const communityDb = require('../../openvibe-community/server/db');
@@ -402,8 +403,80 @@ function buildApp() {
                     product_status: `${services.ai}/api/v1/ai/product/status`,
                 } : null,
             },
+            ensured: integrations.listIntegrationsForStream(stream.id),
         };
         res.json(desc);
+    });
+
+    // Phase 16 — best-effort ensure for a single integration on a stream.
+    // Body: { target_kind: 'chat-room'|'tips'|'vip'|'audio-overlay'|'ai-assist' }.
+    // Returns 200 with the materialized record (status may be 'unavailable'
+    // when the downstream URL is not configured or the probe fails).
+    app.post('/api/v1/streams/:id/integrations/ensure', json, async (req, res) => {
+        const stream = model.getStreamById(req.params.id);
+        if (!stream) return res.status(404).json({ error: 'not found' });
+        const targetKind = String((req.body && req.body.target_kind) || '');
+        if (!integrations.TARGET_KINDS.has(targetKind)) {
+            return res.status(400).json({ error: 'unsupported target_kind', target_kind: targetKind });
+        }
+        try {
+            const record = await integrations.ensureIntegration({
+                owner_kind: 'stream',
+                owner_ref: stream.id,
+                channel_slug: stream.channel_slug,
+                target_kind: targetKind,
+                services: (config && config.services) || {},
+                metadata: { stream_status: stream.status },
+            });
+            return res.status(200).json({ integration: record });
+        } catch (error) {
+            return res.status(500).json({ error: error.message || 'ensure_failed' });
+        }
+    });
+
+    // Phase 16 — channel-scoped integrations (read + ensure).
+    app.get('/api/v1/channels/:slug/integrations', (req, res) => {
+        const channel = model.getChannelBySlug(req.params.slug);
+        if (!channel) return res.status(404).json({ error: 'not found' });
+        res.json({
+            channel: { slug: channel.slug, id: channel.id },
+            ensured: integrations.listIntegrationsForChannel(channel.slug),
+        });
+    });
+
+    app.post('/api/v1/channels/:slug/integrations/ensure', json, async (req, res) => {
+        const channel = model.getChannelBySlug(req.params.slug);
+        if (!channel) return res.status(404).json({ error: 'not found' });
+        const targetKind = String((req.body && req.body.target_kind) || '');
+        if (!integrations.TARGET_KINDS.has(targetKind)) {
+            return res.status(400).json({ error: 'unsupported target_kind', target_kind: targetKind });
+        }
+        try {
+            const record = await integrations.ensureIntegration({
+                owner_kind: 'channel',
+                owner_ref: channel.slug,
+                channel_slug: channel.slug,
+                target_kind: targetKind,
+                services: (config && config.services) || {},
+                metadata: {},
+            });
+            return res.status(200).json({ integration: record });
+        } catch (error) {
+            return res.status(500).json({ error: error.message || 'ensure_failed' });
+        }
+    });
+
+    // Phase 16 — product status summary for live integrations.
+    app.get('/api/v1/integrations/product/status', (_req, res) => {
+        const services = (config && config.services) || {};
+        res.json({
+            services_configured: {
+                chat: !!services.chat,
+                billing: !!services.billing,
+                ai: !!services.ai,
+            },
+            integrations: integrations.summary(),
+        });
     });
 
     // Service-callable upsert (used by openre-stream → openvibe-live mirror).

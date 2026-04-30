@@ -11,6 +11,7 @@ const {
     createRepositoryFactory,
     getSchemaVersion,
     query,
+    resolveMigrationsTableName,
     runMigrations,
     withTransaction,
 } = require('..');
@@ -99,7 +100,7 @@ const {
         async query(text, values) {
             const sql = String(text).trim();
             state.statements.push(sql);
-            if (/^SELECT name, applied_at FROM runtime_schema_migrations/i.test(sql)) {
+            if (/^SELECT name, applied_at FROM runtime_schema_migrations(?:_[a-z0-9_]+)?/i.test(sql)) {
                 return {
                     rows: state.applied.map((name, index) => ({
                         name,
@@ -108,7 +109,7 @@ const {
                     rowCount: state.applied.length,
                 };
             }
-            if (/^INSERT INTO runtime_schema_migrations/i.test(sql)) {
+            if (/^INSERT INTO runtime_schema_migrations(?:_[a-z0-9_]+)?/i.test(sql)) {
                 state.applied.push(values[0]);
                 return { rows: [], rowCount: 1 };
             }
@@ -126,13 +127,17 @@ const {
     };
 
     const migrationResult = await runMigrations('openvibe-demo', { pool, migrationsDir });
+    const migrationsTable = resolveMigrationsTableName('openvibe-demo');
     assert.strictEqual(migrationResult.applied_count, 2);
     assert.strictEqual(migrationResult.pending_count, 0);
     assert.deepStrictEqual(migrationResult.applied_names, ['001_create_demo.sql', '002_seed_demo.sql']);
+    assert.ok(state.statements.some((sql) => sql.includes(`runtime_schema_migrations_openvibe_demo`)));
+    assert.strictEqual(migrationResult.migrations_table, migrationsTable);
 
     const version = await getSchemaVersion('openvibe-demo', { pool, migrationsDir });
     assert.strictEqual(version.latest_applied, '002_seed_demo.sql');
     assert.strictEqual(version.pending_count, 0);
+    assert.strictEqual(version.migrations_table, migrationsTable);
 
     const ready = await assertSchemaReady('openvibe-demo', { pool, migrationsDir });
     assert.strictEqual(ready.latest_available, '002_seed_demo.sql');
