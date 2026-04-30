@@ -2,6 +2,7 @@
 data/migrations/
 
 # Prevent nested service runtime state and secrets from being tracked.
+**/.package.lock.json
 **/.env
 **/.env.*
 !**/.env.example
@@ -52,3 +53,6 @@ data/migrations/
 **/*~
 **/*.swp
 **/*.swo
+.gitignore
+.gitignore
+.gitignore
