@@ -99,6 +99,14 @@ const {
         adminHtml.includes('Worker processor matrix'),
         'admin runtime UI should expose a visible worker processor matrix heading',
     );
+    assert(
+        adminHtml.includes('data-runtime-panel="product-capability-matrix"'),
+        'admin runtime UI should mark the Phase 16 product capability matrix for Playwright assertions',
+    );
+    assert(
+        adminHtml.includes('Product capability matrix'),
+        'admin runtime UI should expose a visible product capability matrix heading',
+    );
 
     console.log('browser smoke playwright tests OK');
 }()).catch((error) => {

@@ -142,6 +142,75 @@ async function main() {
         assert.strictEqual(statusBody.counts.sources, 1);
         assert.strictEqual(statusBody.counts.items, 1);
         assert.strictEqual(statusBody.counts.jobs, 2);
+
+        // ── Phase 16: review decisions + distribution audit ────────
+        const reviewForbidden = await request(server, 'openvibe.codes.localhost', `/api/v1/content/items/${encodeURIComponent(itemBody.item.id)}/reviews`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision: 'approve' }),
+        });
+        assert.strictEqual(reviewForbidden.status, 403, 'reviews require service actor');
+
+        const draftItemResponse = await request(server, 'openvibe.codes.localhost', '/api/v1/content/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                surface: 'codes',
+                slug: 'draft-needing-review',
+                title: 'Needs review',
+                summary: 'Pending editorial decision',
+                state: 'draft',
+            }),
+        });
+        const draftId = JSON.parse(draftItemResponse.body).item.id;
+
+        const reviewResponse = await request(server, 'openvibe.codes.localhost', `/api/v1/content/items/${encodeURIComponent(draftId)}/reviews`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-internal-key': 'test-internal',
+                'x-openvibe-service': 'openvibe-workers',
+            },
+            body: JSON.stringify({ decision: 'publish', notes: 'looks good' }),
+        });
+        assert.strictEqual(reviewResponse.status, 201);
+        const reviewBody = JSON.parse(reviewResponse.body);
+        assert.strictEqual(reviewBody.decision.decision, 'publish');
+        assert.strictEqual(reviewBody.decision.from_state, 'draft');
+        assert.strictEqual(reviewBody.decision.to_state, 'published');
+
+        const promotedItem = await request(server, 'openvibe.codes.localhost', `/api/v1/content/items/${encodeURIComponent(draftId)}`);
+        const promotedBody = JSON.parse(promotedItem.body);
+        assert.strictEqual(promotedBody.item.state, 'published', 'review decision should promote item');
+        assert.ok(promotedBody.item.published_at, 'published_at should be stamped');
+
+        const reviewListResponse = await request(server, 'openvibe.codes.localhost', `/api/v1/content/items/${encodeURIComponent(draftId)}/reviews`);
+        const reviewListBody = JSON.parse(reviewListResponse.body);
+        assert.strictEqual(reviewListBody.items.length, 1);
+
+        const distributionResponse = await request(server, 'openvibe.codes.localhost', `/api/v1/content/items/${encodeURIComponent(draftId)}/distribution`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-internal-key': 'test-internal',
+                'x-openvibe-service': 'openvibe-workers',
+            },
+            body: JSON.stringify({ channel: 'rss', outcome: 'delivered', metadata: { feed: 'codes/main' } }),
+        });
+        assert.strictEqual(distributionResponse.status, 201);
+        const distributionBody = JSON.parse(distributionResponse.body);
+        assert.strictEqual(distributionBody.entry.outcome, 'delivered');
+        assert.strictEqual(distributionBody.entry.surface, 'codes');
+
+        const productStatusResponse = await request(server, 'openvibe.codes.localhost', '/api/v1/content/product/status');
+        assert.strictEqual(productStatusResponse.status, 200);
+        const productStatus = JSON.parse(productStatusResponse.body);
+        assert.strictEqual(productStatus.product, 'content');
+        assert.ok(productStatus.items_by_state.published >= 2);
+        assert.strictEqual(productStatus.decisions_by_type.publish, 1);
+        assert.strictEqual(productStatus.distribution_by_outcome.delivered, 1);
+        assert.strictEqual(productStatus.counts.review_decisions, 1);
+        assert.strictEqual(productStatus.counts.distribution_audit, 1);
     } finally {
         await close(server);
     }

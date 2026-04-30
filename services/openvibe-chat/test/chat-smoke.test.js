@@ -112,6 +112,65 @@ assert.strictEqual(policy.decideTtsOwnership({ req: svcReq, owner_type: 'user', 
 model.recordLegacyMap({ source: 'hobostreamer', kind: 'message', legacy_id: 'm1', new_id: msg.id });
 assert.strictEqual(model.lookupLegacy('hobostreamer', 'message', 'm1').new_id, msg.id);
 
+// Phase 16 — call participants lifecycle
+const callRoom = model.createRoom({ room_type: 'call', visibility: 'private', title: 'Phase 16 call' });
+const callForJoin = model.createCall({ room_id: callRoom.id, call_type: 'voice', status: 'ringing', started_by_actor_type: 'user', started_by_actor_id: '42' });
+const joined = model.addCallParticipant({ call_id: callForJoin.id, actor_type: 'user', actor_id: '42', role: 'owner' });
+assert.strictEqual(joined.actor_id, '42');
+const joined2 = model.addCallParticipant({ call_id: callForJoin.id, actor_type: 'user', actor_id: '99' });
+assert.strictEqual(joined2.actor_id, '99');
+const activeParticipants = model.listCallParticipants(callForJoin.id);
+assert.strictEqual(activeParticipants.length, 2, 'two active call participants expected');
+const left = model.leaveCallParticipant(callForJoin.id, 'user', '99');
+assert.ok(left.left_at, 'leave should record left_at');
+const remaining = model.listCallParticipants(callForJoin.id);
+assert.strictEqual(remaining.length, 1, 'one active participant remains');
+const allHistorical = model.listCallParticipants(callForJoin.id, { include_left: true });
+assert.strictEqual(allHistorical.length, 2);
+// re-join should clear left_at
+const rejoined = model.addCallParticipant({ call_id: callForJoin.id, actor_type: 'user', actor_id: '99' });
+assert.strictEqual(rejoined.left_at, null);
+
+// Phase 16 — stream-room binding
+const streamRoom = model.ensureRoomForExternal('stream', 'stream-99', { room_type: 'stream', title: 'stream:stream-99', visibility: 'public' });
+const binding = model.upsertStreamBinding({
+    stream_ref_type: 'stream', stream_ref_id: 'stream-99',
+    room_id: streamRoom.id, channel_id: 'channel-7',
+    tts_owner_type: 'user', tts_owner_id: '42',
+    audio_owner_type: 'user', audio_owner_id: '42',
+    metadata: { source: 'phase16-test' },
+});
+assert.strictEqual(binding.room_id, streamRoom.id);
+assert.strictEqual(binding.channel_id, 'channel-7');
+const bindingFetched = model.getStreamBinding('stream', 'stream-99');
+assert.strictEqual(bindingFetched.id, binding.id);
+const bindingRebound = model.upsertStreamBinding({
+    stream_ref_type: 'stream', stream_ref_id: 'stream-99',
+    room_id: streamRoom.id, channel_id: 'channel-8',
+});
+assert.strictEqual(bindingRebound.id, binding.id, 'upsert should be idempotent on (stream_ref_type, stream_ref_id)');
+assert.strictEqual(bindingRebound.channel_id, 'channel-8');
+
+// Phase 16 — audio integrations
+const integ = model.createAudioIntegration({
+    owner_type: 'user', owner_id: '42',
+    provider: '101soundboards', label: 'primary',
+    config: { board_id: 'demo' }, credential_ref: 'env:SB_TOKEN',
+});
+assert.strictEqual(integ.provider, '101soundboards');
+assert.strictEqual(integ.config.board_id, 'demo');
+const integList = model.listAudioIntegrations({ owner_type: 'user', owner_id: '42' });
+assert.strictEqual(integList.length, 1);
+// upsert by (owner, provider, label)
+const integUpdated = model.createAudioIntegration({
+    owner_type: 'user', owner_id: '42',
+    provider: '101soundboards', label: 'primary',
+    enabled: false, config: { board_id: 'demo2' },
+});
+assert.strictEqual(integUpdated.id, integ.id, 'upsert should keep id');
+assert.strictEqual(integUpdated.enabled, false);
+assert.strictEqual(integUpdated.config.board_id, 'demo2');
+
 const shellHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert.ok(!shellHtml.includes('https://openvibe.network'), 'chat shell should not embed production network origin literals in inline HTML');
 assert.ok(!shellHtml.includes('https://auth.openvibe.network'), 'chat shell should not embed production auth origin literals in inline HTML');

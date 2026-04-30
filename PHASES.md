@@ -21,6 +21,7 @@ current execution track.
 | 11 | Runtime parity bring-up | ✅ implemented | `context/PHASE_11_RUNTIME_PARITY.md` |
 | 14 | Queue-native + legacy roots | ✅ implemented | `context/PHASE_14_QUEUE_NATIVE_AND_LEGACY_ROOTS.md` |
 | 15 | Native processors, public hosts, canonical bootstrap | ✅ implemented | `context/PHASE_15_NATIVE_PROCESSORS_AND_PRODUCT_POLISH.md` |
+| 16 | Product workflows (chat call participants, community paste versions + Discord audit, tips/VIP/live status seams) + capability catalog + canonical migration alignment | ✅ shipped slices 1–4, 6–8, 11; slices 5/9/10 truthfully deferred | `context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md` |
 
 > Note: the checked-in SQLite services remain useful for local bring-up, but
 > the requested hard-cut target is PostgreSQL-backed native OpenVibe runtime
@@ -508,3 +509,41 @@ land the shared runtime contract every later tranche depends on.
 8. **Still next** — true Postgres repository adapters, Redis-backed live
    processors, realtime gateway, object-storage-native media flows, DVR/clips, and AI media
    analysis remain follow-on implementation work. ⏳
+
+## Phase 16 — product workflows + canonical runtime polish ✅
+
+Phase 16 is an incremental product runtime tranche layered on the Phase 14/15
+foundations (canonical bootstrap helper, capability registry seed). All
+eleven slices ship with truthful schemas, routes, smoke coverage, and
+admin matrix wiring.
+
+1. **Canonical bootstrap consolidation** — already shipped in Phase 15 via
+   [packages/openvibe-persistence/canonical-bootstrap.js](packages/openvibe-persistence/canonical-bootstrap.js). ✅
+2. **Capability registry seed** — already shipped in Phase 15 via
+   [packages/openvibe-contracts/capabilities.js](packages/openvibe-contracts/capabilities.js)
+   and `seedCapabilityRegistry` in
+   [services/openvibe-network/server/index.js](services/openvibe-network/server/index.js). ✅
+3. **Chat call participants, stream bindings, audio integrations** — new
+   tables, model functions, routes, and event types with
+   [services/openvibe-chat/test/chat-smoke.test.js](services/openvibe-chat/test/chat-smoke.test.js)
+   coverage. ✅
+4. **Community paste version history + Discord relay audit + outbound mock
+   seam** — new tables, model functions, routes, and event types with
+   [services/openvibe-community/test/community-smoke.test.js](services/openvibe-community/test/community-smoke.test.js)
+   coverage. ✅
+5. **Content full DB-backed product workflows** — `content_review_decisions`
+   and `content_distribution_audit` tables (sqlite + postgres mirror),
+   review/distribution routes, and `GET /api/v1/content/product/status`
+   with [services/openvibe-content/test/content-api.test.js](services/openvibe-content/test/content-api.test.js)
+   coverage. ✅
+6. **Tips product status seam** — `GET /api/tips/product/status`. ✅
+7. **VIP product status seam** — `GET /api/vip/product/status`. ✅
+8. **Live stream integrations descriptor** — `GET /api/v1/streams/:id/integrations`
+   returns the composition map of chat/tips/vip/audio/ai URLs. ✅
+9. **Browser smoke workflow checks** — four new product/status JSON
+   surface checks in [scripts/staging/browser-smoke.js](scripts/staging/browser-smoke.js)
+   (tips, VIP, AI, content) plus updated test fixtures. ✅
+10. **Admin runtime product matrix UI** — `buildRuntimeStatus` fans out
+    to all four `/product/status` endpoints and admin.html renders a
+    `product-capability-matrix` panel under the runtime tab. ✅
+11. **Phase 16 tracker doc** — [context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md](context/PHASE_16_PRODUCT_WORKFLOWS_AND_CANONICAL_RUNTIME.md). ✅

@@ -503,6 +503,185 @@ function lookupLegacy(source, kind, legacy_id) {
     ).get(String(source), String(kind), String(legacy_id));
 }
 
+// ── Phase 16: call participants ──────────────────────────
+function addCallParticipant({ call_id, actor_type, actor_id, role, metadata }) {
+    db.get().prepare(`
+        INSERT INTO chat_call_participants (call_id, actor_type, actor_id, role, joined_at, metadata_json)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT(call_id, actor_type, actor_id) DO UPDATE SET
+            role = excluded.role,
+            metadata_json = excluded.metadata_json,
+            joined_at = COALESCE(chat_call_participants.joined_at, excluded.joined_at),
+            left_at = NULL
+    `).run(
+        String(call_id), String(actor_type), String(actor_id),
+        role || 'participant',
+        JSON.stringify(metadata || {}),
+    );
+    return getCallParticipant(call_id, actor_type, actor_id);
+}
+
+function leaveCallParticipant(call_id, actor_type, actor_id) {
+    db.get().prepare(`
+        UPDATE chat_call_participants
+        SET left_at = CURRENT_TIMESTAMP
+        WHERE call_id = ? AND actor_type = ? AND actor_id = ? AND left_at IS NULL
+    `).run(String(call_id), String(actor_type), String(actor_id));
+    return getCallParticipant(call_id, actor_type, actor_id);
+}
+
+function getCallParticipant(call_id, actor_type, actor_id) {
+    const r = db.get().prepare(
+        `SELECT * FROM chat_call_participants WHERE call_id = ? AND actor_type = ? AND actor_id = ?`
+    ).get(String(call_id), String(actor_type), String(actor_id));
+    if (!r) return null;
+    return Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) });
+}
+
+function listCallParticipants(call_id, { include_left } = {}) {
+    const where = ['call_id = ?'];
+    if (!include_left) where.push('left_at IS NULL');
+    const rows = db.get().prepare(
+        `SELECT * FROM chat_call_participants WHERE ${where.join(' AND ')} ORDER BY joined_at ASC`
+    ).all(String(call_id));
+    return rows.map((r) => Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) }));
+}
+
+// ── Phase 16: stream-room bindings ───────────────────────
+function upsertStreamBinding(input) {
+    const id = input.id || newId('sbnd');
+    const stream_ref_type = String(input.stream_ref_type || 'stream');
+    const stream_ref_id = String(input.stream_ref_id);
+    const existing = getStreamBinding(stream_ref_type, stream_ref_id);
+    if (existing) {
+        db.get().prepare(`
+            UPDATE chat_stream_bindings
+            SET room_id = ?, channel_id = ?, tts_owner_type = ?, tts_owner_id = ?,
+                audio_owner_type = ?, audio_owner_id = ?, metadata_json = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(
+            String(input.room_id),
+            input.channel_id != null ? String(input.channel_id) : null,
+            input.tts_owner_type || null,
+            input.tts_owner_id != null ? String(input.tts_owner_id) : null,
+            input.audio_owner_type || null,
+            input.audio_owner_id != null ? String(input.audio_owner_id) : null,
+            JSON.stringify(input.metadata || {}),
+            existing.id,
+        );
+        return getStreamBindingById(existing.id);
+    }
+    db.get().prepare(`
+        INSERT INTO chat_stream_bindings (id, stream_ref_type, stream_ref_id, room_id, channel_id,
+            tts_owner_type, tts_owner_id, audio_owner_type, audio_owner_id, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id, stream_ref_type, stream_ref_id,
+        String(input.room_id),
+        input.channel_id != null ? String(input.channel_id) : null,
+        input.tts_owner_type || null,
+        input.tts_owner_id != null ? String(input.tts_owner_id) : null,
+        input.audio_owner_type || null,
+        input.audio_owner_id != null ? String(input.audio_owner_id) : null,
+        JSON.stringify(input.metadata || {}),
+    );
+    return getStreamBindingById(id);
+}
+
+function hydrateBinding(r) {
+    if (!r) return null;
+    return {
+        id: r.id,
+        stream_ref_type: r.stream_ref_type,
+        stream_ref_id: r.stream_ref_id,
+        room_id: r.room_id,
+        channel_id: r.channel_id,
+        tts_owner_type: r.tts_owner_type,
+        tts_owner_id: r.tts_owner_id,
+        audio_owner_type: r.audio_owner_type,
+        audio_owner_id: r.audio_owner_id,
+        metadata: safeJson(r.metadata_json, {}),
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+    };
+}
+
+function getStreamBinding(stream_ref_type, stream_ref_id) {
+    return hydrateBinding(db.get().prepare(
+        `SELECT * FROM chat_stream_bindings WHERE stream_ref_type = ? AND stream_ref_id = ?`
+    ).get(String(stream_ref_type), String(stream_ref_id)));
+}
+
+function getStreamBindingById(id) {
+    return hydrateBinding(db.get().prepare(
+        `SELECT * FROM chat_stream_bindings WHERE id = ?`
+    ).get(String(id)));
+}
+
+function listStreamBindings({ limit } = {}) {
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+    const rows = db.get().prepare(
+        `SELECT * FROM chat_stream_bindings ORDER BY rowid DESC LIMIT ?`
+    ).all(cap);
+    return rows.map(hydrateBinding);
+}
+
+// ── Phase 16: audio integrations ─────────────────────────
+function createAudioIntegration(input) {
+    const id = input.id || newId('aint');
+    db.get().prepare(`
+        INSERT INTO chat_audio_integrations (id, owner_type, owner_id, provider, label,
+            enabled, config_json, credential_ref)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_type, owner_id, provider, label) DO UPDATE SET
+            enabled = excluded.enabled,
+            config_json = excluded.config_json,
+            credential_ref = excluded.credential_ref,
+            updated_at = CURRENT_TIMESTAMP
+    `).run(
+        id, String(input.owner_type), String(input.owner_id),
+        String(input.provider),
+        input.label || null,
+        input.enabled === false ? 0 : 1,
+        JSON.stringify(input.config || {}),
+        input.credential_ref || null,
+    );
+    return getAudioIntegrationByOwner(input.owner_type, input.owner_id, input.provider, input.label || null);
+}
+
+function hydrateIntegration(r) {
+    if (!r) return null;
+    return {
+        id: r.id,
+        owner_type: r.owner_type, owner_id: r.owner_id,
+        provider: r.provider, label: r.label,
+        enabled: !!r.enabled,
+        config: safeJson(r.config_json, {}),
+        credential_ref: r.credential_ref || null,
+        created_at: r.created_at, updated_at: r.updated_at,
+    };
+}
+
+function getAudioIntegrationByOwner(owner_type, owner_id, provider, label) {
+    return hydrateIntegration(db.get().prepare(
+        `SELECT * FROM chat_audio_integrations
+         WHERE owner_type = ? AND owner_id = ? AND provider = ? AND COALESCE(label, '') = COALESCE(?, '')`
+    ).get(String(owner_type), String(owner_id), String(provider), label || null));
+}
+
+function listAudioIntegrations({ owner_type, owner_id }) {
+    const rows = db.get().prepare(
+        `SELECT * FROM chat_audio_integrations WHERE owner_type = ? AND owner_id = ? ORDER BY rowid ASC`
+    ).all(String(owner_type), String(owner_id));
+    return rows.map(hydrateIntegration);
+}
+
+function deleteAudioIntegration(id) {
+    db.get().prepare(`DELETE FROM chat_audio_integrations WHERE id = ?`).run(String(id));
+    return { ok: true };
+}
+
 module.exports = {
     newId,
     // rooms
@@ -515,10 +694,14 @@ module.exports = {
     findOrCreateDmRoom, listDmsForActor, getDmUnreadSummary,
     // calls
     createCall, getCall, updateCallStatus, recordCallSignal, listCallSignals, listActiveCalls,
+    addCallParticipant, leaveCallParticipant, listCallParticipants, getCallParticipant,
     // tts
     getTtsSettings, upsertTtsSettings,
     // audio
     enqueueAudio, getAudio, listAudio, setAudioStatus, clearAudioQueue,
+    // Phase 16
+    upsertStreamBinding, getStreamBinding, getStreamBindingById, listStreamBindings,
+    createAudioIntegration, listAudioIntegrations, deleteAudioIntegration, getAudioIntegrationByOwner,
     // legacy
     recordLegacyMap, lookupLegacy,
 };

@@ -186,6 +186,38 @@ function createSqliteContentStore(options) {
             FOREIGN KEY (item_id) REFERENCES content_items(id) ON DELETE SET NULL
         );
         CREATE INDEX IF NOT EXISTS idx_content_jobs_state ON content_jobs(state, job_type, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS content_review_decisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id         TEXT NOT NULL,
+            decision        TEXT NOT NULL,
+            from_state      TEXT,
+            to_state        TEXT,
+            reviewer_actor_type TEXT,
+            reviewer_actor_id   TEXT,
+            notes           TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            decided_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES content_items(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_content_review_item ON content_review_decisions(item_id, decided_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_content_review_decision ON content_review_decisions(decision, decided_at DESC);
+
+        CREATE TABLE IF NOT EXISTS content_distribution_audit (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id         TEXT NOT NULL,
+            surface         TEXT NOT NULL,
+            channel         TEXT NOT NULL,
+            outcome         TEXT NOT NULL,
+            actor_type      TEXT,
+            actor_id        TEXT,
+            error_message   TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            recorded_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES content_items(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_content_distribution_item ON content_distribution_audit(item_id, recorded_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_content_distribution_outcome ON content_distribution_audit(outcome, recorded_at DESC);
     `);
 
     const status = {
@@ -313,6 +345,133 @@ function createSqliteContentStore(options) {
             sources: db.prepare('SELECT COUNT(*) AS count FROM content_sources').get().count,
             items: db.prepare('SELECT COUNT(*) AS count FROM content_items').get().count,
             jobs: db.prepare('SELECT COUNT(*) AS count FROM content_jobs').get().count,
+            review_decisions: db.prepare('SELECT COUNT(*) AS count FROM content_review_decisions').get().count,
+            distribution_audit: db.prepare('SELECT COUNT(*) AS count FROM content_distribution_audit').get().count,
+        };
+    }
+
+    function hydrateReviewDecision(row) {
+        if (!row) return null;
+        return {
+            id: row.id, item_id: row.item_id, decision: row.decision,
+            from_state: row.from_state, to_state: row.to_state,
+            reviewer_actor_type: row.reviewer_actor_type,
+            reviewer_actor_id: row.reviewer_actor_id,
+            notes: row.notes || '',
+            metadata: safeJsonParse(row.metadata_json, {}),
+            decided_at: row.decided_at,
+        };
+    }
+
+    function hydrateDistribution(row) {
+        if (!row) return null;
+        return {
+            id: row.id, item_id: row.item_id, surface: row.surface,
+            channel: row.channel, outcome: row.outcome,
+            actor_type: row.actor_type, actor_id: row.actor_id,
+            error_message: row.error_message || null,
+            metadata: safeJsonParse(row.metadata_json, {}),
+            recorded_at: row.recorded_at,
+        };
+    }
+
+    async function recordReviewDecision(input) {
+        const payload = input || {};
+        if (!payload.item_id) throw new Error('item_id required');
+        const item = db.prepare('SELECT * FROM content_items WHERE id = ?').get(String(payload.item_id));
+        if (!item) throw new Error(`unknown content item: ${payload.item_id}`);
+        const fromState = item.state;
+        const toState = payload.to_state || (
+            payload.decision === 'approve' ? 'approved' :
+            payload.decision === 'reject' ? 'rejected' :
+            payload.decision === 'publish' ? 'published' :
+            payload.decision === 'unpublish' ? 'draft' :
+            fromState
+        );
+        const result = db.prepare(`
+            INSERT INTO content_review_decisions (item_id, decision, from_state, to_state,
+                reviewer_actor_type, reviewer_actor_id, notes, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            String(payload.item_id),
+            String(payload.decision || 'note'),
+            fromState,
+            toState,
+            payload.reviewer_actor_type || null,
+            payload.reviewer_actor_id != null ? String(payload.reviewer_actor_id) : null,
+            payload.notes ? String(payload.notes) : null,
+            JSON.stringify(payload.metadata || {}),
+        );
+        if (toState && toState !== fromState) {
+            const publishedAt = toState === 'published' ? new Date().toISOString() : null;
+            db.prepare(`UPDATE content_items SET state = ?, published_at = COALESCE(?, published_at), indexable = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+                .run(toState, publishedAt, toState === 'published' ? 1 : item.indexable, String(payload.item_id));
+        }
+        return hydrateReviewDecision(db.prepare('SELECT * FROM content_review_decisions WHERE id = ?').get(result.lastInsertRowid));
+    }
+
+    async function listReviewDecisions(filters) {
+        const f = filters || {};
+        const where = [];
+        const args = [];
+        if (f.item_id) { where.push('item_id = ?'); args.push(String(f.item_id)); }
+        if (f.decision) { where.push('decision = ?'); args.push(String(f.decision)); }
+        const limit = Math.min(Math.max(Number(f.limit) || 50, 1), 250);
+        const sql = `SELECT * FROM content_review_decisions ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY decided_at DESC, id DESC LIMIT ?`;
+        return db.prepare(sql).all(...args, limit).map(hydrateReviewDecision);
+    }
+
+    async function recordDistributionAudit(input) {
+        const payload = input || {};
+        if (!payload.item_id) throw new Error('item_id required');
+        if (!payload.channel) throw new Error('channel required');
+        const item = db.prepare('SELECT * FROM content_items WHERE id = ?').get(String(payload.item_id));
+        if (!item) throw new Error(`unknown content item: ${payload.item_id}`);
+        const result = db.prepare(`
+            INSERT INTO content_distribution_audit (item_id, surface, channel, outcome,
+                actor_type, actor_id, error_message, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            String(payload.item_id),
+            String(payload.surface || item.surface),
+            String(payload.channel),
+            String(payload.outcome || 'delivered'),
+            payload.actor_type || null,
+            payload.actor_id != null ? String(payload.actor_id) : null,
+            payload.error_message || null,
+            JSON.stringify(payload.metadata || {}),
+        );
+        return hydrateDistribution(db.prepare('SELECT * FROM content_distribution_audit WHERE id = ?').get(result.lastInsertRowid));
+    }
+
+    async function listDistributionAudit(filters) {
+        const f = filters || {};
+        const where = [];
+        const args = [];
+        if (f.item_id) { where.push('item_id = ?'); args.push(String(f.item_id)); }
+        if (f.surface) { where.push('surface = ?'); args.push(String(f.surface)); }
+        if (f.outcome) { where.push('outcome = ?'); args.push(String(f.outcome)); }
+        if (f.channel) { where.push('channel = ?'); args.push(String(f.channel)); }
+        const limit = Math.min(Math.max(Number(f.limit) || 100, 1), 500);
+        const sql = `SELECT * FROM content_distribution_audit ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY recorded_at DESC, id DESC LIMIT ?`;
+        return db.prepare(sql).all(...args, limit).map(hydrateDistribution);
+    }
+
+    async function getProductWorkflowStatus() {
+        const stateCounts = db.prepare(`SELECT state, COUNT(*) AS n FROM content_items GROUP BY state`).all();
+        const byState = {};
+        for (const row of stateCounts) byState[row.state] = Number(row.n);
+        const decisionCounts = db.prepare(`SELECT decision, COUNT(*) AS n FROM content_review_decisions GROUP BY decision`).all();
+        const byDecision = {};
+        for (const row of decisionCounts) byDecision[row.decision] = Number(row.n);
+        const distributionCounts = db.prepare(`SELECT outcome, COUNT(*) AS n FROM content_distribution_audit GROUP BY outcome`).all();
+        const byOutcome = {};
+        for (const row of distributionCounts) byOutcome[row.outcome] = Number(row.n);
+        return {
+            items_by_state: byState,
+            decisions_by_type: byDecision,
+            distribution_by_outcome: byOutcome,
+            counts: await getCounts(),
         };
     }
 
@@ -331,6 +490,11 @@ function createSqliteContentStore(options) {
         createSource,
         listJobs,
         queueJob,
+        recordReviewDecision,
+        listReviewDecisions,
+        recordDistributionAudit,
+        listDistributionAudit,
+        getProductWorkflowStatus,
     };
 }
 

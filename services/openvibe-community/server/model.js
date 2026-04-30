@@ -276,6 +276,17 @@ function createPaste(input) {
         input.created_by_actor_id != null ? String(input.created_by_actor_id) : null,
         JSON.stringify(input.metadata || {}),
     );
+    // Phase 16 — record version 1 on create.
+    recordPasteVersion({
+        paste_id: id,
+        title: input.title || null,
+        body: String(input.body || ''),
+        language: input.language || null,
+        edited_by_actor_type: input.created_by_actor_type || null,
+        edited_by_actor_id: input.created_by_actor_id != null ? String(input.created_by_actor_id) : null,
+        change_summary: 'created',
+        metadata: input.version_metadata || {},
+    });
     return getPasteBySlug(slug);
 }
 function getPasteBySlug(slug) {
@@ -298,17 +309,36 @@ function listPastes({ visibility, created_by_actor_type, created_by_actor_id, li
 function updatePaste(slug, patch) {
     const cur = getPasteBySlug(slug);
     if (!cur) return null;
+    const nextTitle = patch.title !== undefined ? patch.title : cur.title;
+    const nextBody = patch.body != null ? String(patch.body) : cur.body;
+    const nextLanguage = patch.language !== undefined ? patch.language : cur.language;
+    const nextVisibility = patch.visibility != null ? patch.visibility : cur.visibility;
+    const nextMetadata = patch.metadata != null ? Object.assign({}, cur.metadata, patch.metadata) : cur.metadata;
     db.get().prepare(`
         UPDATE community_pastes SET title = ?, body = ?, language = ?, visibility = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
     `).run(
-        patch.title !== undefined ? patch.title : cur.title,
-        patch.body != null ? String(patch.body) : cur.body,
-        patch.language !== undefined ? patch.language : cur.language,
-        patch.visibility != null ? patch.visibility : cur.visibility,
-        JSON.stringify(patch.metadata != null ? Object.assign({}, cur.metadata, patch.metadata) : cur.metadata),
+        nextTitle,
+        nextBody,
+        nextLanguage,
+        nextVisibility,
+        JSON.stringify(nextMetadata),
         cur.id,
     );
+    // Phase 16 — record a new version when content actually changed.
+    const contentChanged = nextBody !== cur.body || nextTitle !== cur.title || nextLanguage !== cur.language;
+    if (contentChanged) {
+        recordPasteVersion({
+            paste_id: cur.id,
+            title: nextTitle,
+            body: nextBody,
+            language: nextLanguage,
+            edited_by_actor_type: patch.edited_by_actor_type || null,
+            edited_by_actor_id: patch.edited_by_actor_id != null ? String(patch.edited_by_actor_id) : null,
+            change_summary: patch.change_summary || 'updated',
+            metadata: patch.version_metadata || {},
+        });
+    }
     return getPasteBySlug(cur.slug);
 }
 function deletePaste(slug) {
@@ -422,6 +452,117 @@ function lookupLegacy(source, kind, legacy_id) {
     ).get(String(source), String(kind), String(legacy_id));
 }
 
+// ── Phase 16: paste versions ─────────────────────────────
+function nextPasteVersionNumber(paste_id) {
+    const row = db.get().prepare(
+        `SELECT COALESCE(MAX(version), 0) AS max_version FROM community_paste_versions WHERE paste_id = ?`
+    ).get(String(paste_id));
+    return (row && row.max_version ? row.max_version : 0) + 1;
+}
+function hydratePasteVersion(r) {
+    if (!r) return null;
+    return {
+        id: r.id, paste_id: r.paste_id, version: r.version,
+        title: r.title, body: r.body, language: r.language,
+        edited_by_actor_type: r.edited_by_actor_type,
+        edited_by_actor_id: r.edited_by_actor_id,
+        change_summary: r.change_summary,
+        metadata: safeJson(r.metadata_json, {}),
+        created_at: r.created_at,
+    };
+}
+function recordPasteVersion(input) {
+    const id = input.id || newId('pver');
+    const version = input.version || nextPasteVersionNumber(input.paste_id);
+    db.get().prepare(`
+        INSERT INTO community_paste_versions (id, paste_id, version, title, body, language,
+            edited_by_actor_type, edited_by_actor_id, change_summary, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id, String(input.paste_id), version,
+        input.title || null,
+        String(input.body || ''),
+        input.language || null,
+        input.edited_by_actor_type || null,
+        input.edited_by_actor_id != null ? String(input.edited_by_actor_id) : null,
+        input.change_summary || null,
+        JSON.stringify(input.metadata || {}),
+    );
+    return getPasteVersion(input.paste_id, version);
+}
+function listPasteVersions(paste_id, { limit } = {}) {
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    return db.get().prepare(
+        `SELECT * FROM community_paste_versions WHERE paste_id = ? ORDER BY version DESC LIMIT ?`
+    ).all(String(paste_id), cap).map(hydratePasteVersion);
+}
+function getPasteVersion(paste_id, version) {
+    return hydratePasteVersion(db.get().prepare(
+        `SELECT * FROM community_paste_versions WHERE paste_id = ? AND version = ?`
+    ).get(String(paste_id), parseInt(version, 10)));
+}
+
+// ── Phase 16: discord relay audit ────────────────────────
+function hydrateRelayAudit(r) {
+    if (!r) return null;
+    return {
+        id: r.id,
+        relay_direction: r.relay_direction,
+        outcome: r.outcome,
+        relay_id: r.relay_id,
+        discord_channel_id: r.discord_channel_id,
+        discord_message_id: r.discord_message_id,
+        openvibe_post_id: r.openvibe_post_id,
+        openvibe_thread_id: r.openvibe_thread_id,
+        idempotency_key: r.idempotency_key,
+        error_message: r.error_message,
+        metadata: safeJson(r.metadata_json, {}),
+        recorded_at: r.recorded_at,
+    };
+}
+function recordRelayAudit(input) {
+    const r = db.get().prepare(`
+        INSERT INTO community_relay_audit (relay_direction, outcome, relay_id, discord_channel_id,
+            discord_message_id, openvibe_post_id, openvibe_thread_id, idempotency_key, error_message, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        String(input.relay_direction),
+        String(input.outcome),
+        input.relay_id || null,
+        input.discord_channel_id || null,
+        input.discord_message_id || null,
+        input.openvibe_post_id || null,
+        input.openvibe_thread_id || null,
+        input.idempotency_key || null,
+        input.error_message || null,
+        JSON.stringify(input.metadata || {}),
+    );
+    return { id: r.lastInsertRowid };
+}
+function listRelayAudit({ relay_direction, outcome, limit } = {}) {
+    const where = [];
+    const args = [];
+    if (relay_direction) { where.push('relay_direction = ?'); args.push(String(relay_direction)); }
+    if (outcome) { where.push('outcome = ?'); args.push(String(outcome)); }
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+    const sql = `SELECT * FROM community_relay_audit ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ?`;
+    return db.get().prepare(sql).all(...args, cap).map(hydrateRelayAudit);
+}
+function getRelayAuditSummary() {
+    const rows = db.get().prepare(`
+        SELECT relay_direction, outcome, COUNT(*) AS n
+        FROM community_relay_audit
+        GROUP BY relay_direction, outcome
+    `).all();
+    const summary = { totals: {}, by_direction: {} };
+    for (const r of rows) {
+        summary.totals[r.outcome] = (summary.totals[r.outcome] || 0) + Number(r.n);
+        if (!summary.by_direction[r.relay_direction]) summary.by_direction[r.relay_direction] = {};
+        summary.by_direction[r.relay_direction][r.outcome] = Number(r.n);
+    }
+    return summary;
+}
+
 module.exports = {
     newId, slugify,
     // spaces
@@ -434,6 +575,10 @@ module.exports = {
     createPost, getPost, listPosts, updatePost, deletePost, findPostBySource,
     // pastes
     createPaste, getPasteBySlug, getPasteById, listPastes, updatePaste, deletePaste, bumpPasteView,
+    // Phase 16: paste versions
+    recordPasteVersion, listPasteVersions, getPasteVersion,
+    // Phase 16: relay audit
+    recordRelayAudit, listRelayAudit, getRelayAuditSummary,
     // attachments
     attachMedia, listAttachments,
     // discord

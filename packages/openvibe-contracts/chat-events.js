@@ -34,6 +34,13 @@ const CHAT_EVENT_TYPES = Object.freeze({
     AUDIO_STARTED:          'chat.audio.started',
     AUDIO_COMPLETED:        'chat.audio.completed',
     AUDIO_FAILED:           'chat.audio.failed',
+    // Phase 16
+    CALL_PARTICIPANT_JOINED: 'chat.call.participant_joined',
+    CALL_PARTICIPANT_LEFT:   'chat.call.participant_left',
+    STREAM_ROOM_BOUND:       'chat.stream_room.bound',
+    TTS_ITEM_STATUS_UPDATED: 'chat.tts.item_status_updated',
+    AUDIO_ITEM_STATUS_UPDATED: 'chat.audio.item_status_updated',
+    AUDIO_INTEGRATION_CREATED: 'chat.audio.integration.created',
 });
 
 const CHAT_EVENT_TYPE_LIST = Object.freeze(Object.values(CHAT_EVENT_TYPES));

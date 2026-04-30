@@ -153,6 +153,63 @@ const SCHEMA_SQL = `
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (source, kind, legacy_id)
         );
+
+        -- Phase 16 — first-class call participant lifecycle distinct from
+        -- chat_participants (which models room membership). A call participant
+        -- row is created on accept/join and ended on leave/end so dashboards
+        -- and realtime overlays can show authoritative attendance.
+        CREATE TABLE IF NOT EXISTS chat_call_participants (
+            call_id        TEXT NOT NULL,
+            actor_type     TEXT NOT NULL,
+            actor_id       TEXT NOT NULL,
+            joined_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            left_at        DATETIME,
+            role           TEXT NOT NULL DEFAULT 'participant',
+            metadata_json  TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY (call_id, actor_type, actor_id),
+            FOREIGN KEY (call_id) REFERENCES chat_call_sessions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_call_parts_call ON chat_call_participants(call_id);
+        CREATE INDEX IF NOT EXISTS idx_chat_call_parts_actor ON chat_call_participants(actor_type, actor_id);
+
+        -- Phase 16 — explicit stream/channel -> chat-room binding so the live
+        -- product can compose chat without owning room creation logic.
+        CREATE TABLE IF NOT EXISTS chat_stream_bindings (
+            id                TEXT PRIMARY KEY,
+            stream_ref_type   TEXT NOT NULL,
+            stream_ref_id     TEXT NOT NULL,
+            room_id           TEXT NOT NULL,
+            channel_id        TEXT,
+            tts_owner_type    TEXT,
+            tts_owner_id      TEXT,
+            audio_owner_type  TEXT,
+            audio_owner_id    TEXT,
+            metadata_json     TEXT NOT NULL DEFAULT '{}',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (stream_ref_type, stream_ref_id),
+            FOREIGN KEY (room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_stream_bindings_room ON chat_stream_bindings(room_id);
+
+        -- Phase 16 — durable per-owner audio source integrations (e.g.
+        -- soundboard providers). Stored as opaque metadata so future
+        -- providers can plug in without schema churn.
+        CREATE TABLE IF NOT EXISTS chat_audio_integrations (
+            id              TEXT PRIMARY KEY,
+            owner_type      TEXT NOT NULL,
+            owner_id        TEXT NOT NULL,
+            provider        TEXT NOT NULL,
+            label           TEXT,
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            config_json     TEXT NOT NULL DEFAULT '{}',
+            credential_ref  TEXT,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (owner_type, owner_id, provider, label)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_audio_integrations_owner
+            ON chat_audio_integrations(owner_type, owner_id);
     `;
 const LEGACY_BOOTSTRAP_SQL = [
     `ALTER TABLE chat_participants ADD COLUMN last_read_at DATETIME`,

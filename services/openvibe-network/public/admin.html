@@ -326,6 +326,30 @@
                     }).join('') || '<tr><td colspan="10">No worker processor data returned.</td></tr>'}</tbody>
                 </table>
             </div>
+        </div>
+        <div class="ov-section" style="margin-top:1rem;" data-runtime-panel="product-capability-matrix">
+            <div class="ov-section-head"><div><h2>Product capability matrix</h2><p class="ov-section-sub">Phase 16 product/status seams: tips, VIP, AI, and content workflows reporting their own runtime truth.</p></div></div>
+            <div class="ov-table-wrap">
+                <table class="ov-table">
+                    <thead><tr><th>product</th><th>status</th><th>signal</th><th>summary</th><th>raw</th></tr></thead>
+                    <tbody>${(function () {
+                        const products = (runtimeStatus && runtimeStatus.products) || {};
+                        const rows = [
+                            { id: 'tips', body: products.tips, summarize: (b) => `sample=${b && b.sample_size || 0} · recent_minor=${b && b.recent_posted_minor || 0} ${b && b.currency || ''}` },
+                            { id: 'vip', body: products.vip, summarize: (b) => `plans=${b && b.plan_count || 0} · subs=${b && b.subscription_count || 0}` },
+                            { id: 'ai', body: products.ai, summarize: (b) => `providers=${b && b.providers || 0} · routes=${b && b.routes || 0} · workflows=${b && b.workflows || 0}` },
+                            { id: 'content', body: products.content, summarize: (b) => `items=${b && b.counts && b.counts.items || 0} · reviews=${b && b.counts && b.counts.review_decisions || 0} · distribution=${b && b.counts && b.counts.distribution_audit || 0}` },
+                        ];
+                        return rows.map((row) => {
+                            const ok = row.body && row.body.ok === true;
+                            const tone = ok ? 'ok' : 'danger';
+                            const status = ok ? 'green' : (row.body ? 'red' : 'unavailable');
+                            const summary = row.body ? row.summarize(row.body) : '—';
+                            return `<tr><td><code>${OpenVibe.escapeHtml(row.id)}</code></td><td><span class="ov-tag ${tone}">${OpenVibe.escapeHtml(status)}</span></td><td><code>${OpenVibe.escapeHtml(String(row.body && row.body.product || '—'))}</code></td><td>${OpenVibe.escapeHtml(summary)}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(row.body || {}), null, 0))}</code></td></tr>`;
+                        }).join('');
+                    })()}</tbody>
+                </table>
+            </div>
         </div>`
         : renderEmpty('Runtime report unavailable', 'The readiness or metrics endpoints did not return a payload.');
 

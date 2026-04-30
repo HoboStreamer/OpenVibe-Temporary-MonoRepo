@@ -368,6 +368,44 @@ function buildApp() {
         res.json({ timeline });
     });
 
+    // Phase 16 — composition descriptor for a stream: which downstream
+    // products (chat room, tips overlay, audio overlay, vip plan, ai
+    // assistance) are wired in. This is a read-model returning the URLs
+    // that consumers should call; it does not proxy data itself.
+    app.get('/api/v1/streams/:id/integrations', (req, res) => {
+        const stream = model.getStreamById(req.params.id);
+        if (!stream) return res.status(404).json({ error: 'not found' });
+        const ownerType = stream.owner_type || 'channel';
+        const ownerId = stream.owner_id || stream.channel_id || stream.channel_slug;
+        const services = (config && config.services) || {};
+        const desc = {
+            stream: { id: stream.id, slug: stream.channel_slug, status: stream.status, owner_type: ownerType, owner_id: ownerId },
+            integrations: {
+                chat: services.chat ? {
+                    base_url: services.chat,
+                    stream_binding: `${services.chat}/api/v1/stream-bindings/${encodeURIComponent(stream.id)}?stream_ref_type=live_stream`,
+                } : null,
+                tips: services.billing ? {
+                    base_url: services.billing,
+                    overlay: `${services.billing}/api/tips/overlay/live_stream/${encodeURIComponent(stream.id)}`,
+                    product_status: `${services.billing}/api/tips/product/status`,
+                } : null,
+                vip: services.billing ? {
+                    base_url: services.billing,
+                    plans: `${services.billing}/api/vip/plans?owner_type=${encodeURIComponent(ownerType)}&owner_id=${encodeURIComponent(ownerId || '')}`,
+                    product_status: `${services.billing}/api/vip/product/status`,
+                } : null,
+                audio_overlay: services.chat ? {
+                    overlay_url: `${services.chat}/api/v1/audio/overlay/${encodeURIComponent(ownerType)}/${encodeURIComponent(ownerId || '')}?queue_type=tts`,
+                } : null,
+                ai: services.ai ? {
+                    product_status: `${services.ai}/api/v1/ai/product/status`,
+                } : null,
+            },
+        };
+        res.json(desc);
+    });
+
     // Service-callable upsert (used by openre-stream → openvibe-live mirror).
     app.post('/api/v1/channels', guarded, json, (req, res) => {
         if (!req.serviceActor) return res.status(401).json({ error: 'service actor required' });

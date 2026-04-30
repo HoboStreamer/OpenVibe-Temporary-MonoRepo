@@ -66,6 +66,29 @@ function buildRouter({ config, eventBus }) {
         res.json({ entries: model.listCache(parseInt(req.query.limit, 10) || 100) });
     }));
 
+    // Phase 16 — operator-facing AI product status seam: rolls up the
+    // workflow / route / template configuration plus recent run health.
+    r.get('/product/status', _wrap(async (_req, res) => {
+        const recentRuns = model.listRuns({ limit: 50 });
+        const runsByStatus = {};
+        for (const run of recentRuns) {
+            const k = run.status || 'unknown';
+            runsByStatus[k] = (runsByStatus[k] || 0) + 1;
+        }
+        res.json({
+            ok: true,
+            product: 'ai',
+            providers: model.listProviders().length,
+            routes: model.listRoutes().length,
+            templates: model.listTemplates().length,
+            workflows: model.listWorkflows().length,
+            sources: model.listContentSources().length,
+            recent_runs_sample: recentRuns.length,
+            runs_by_status: runsByStatus,
+            search: model.searchIndexStatus(),
+        });
+    }));
+
     // ── providers ─────────────────────────────────────────────────
     r.get('/providers', _wrap(async (_req, res) => {
         res.json({ providers: model.listProviders().map(_stripProvider) });

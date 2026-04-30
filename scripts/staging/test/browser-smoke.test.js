@@ -18,6 +18,18 @@ function buildHealthyPersistenceDescriptor() {
     };
 }
 
+const BILLING_HOST_MAP = { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' };
+const BILLING_JSON_ROUTES = {
+    '/api/tips/product/status': { ok: true, product: 'tips', sample_size: 0, by_status: {}, by_interaction: {}, recent_posted_minor: 0, currency: 'usd', platform_fee_bps: 100 },
+    '/api/vip/product/status': { ok: true, product: 'vip', plan_count: 0, plans_by_status: {}, subscription_count: 0, subscriptions_by_status: {}, currency: 'usd', platform_fee_bps: 100 },
+};
+const AI_JSON_ROUTES = {
+    '/api/v1/ai/product/status': { ok: true, product: 'ai', providers: 0, routes: 0, templates: 0, workflows: 0, sources: 0, recent_runs_sample: 0, runs_by_status: {}, search: { documents: 0 } },
+};
+
+function billingFixture() { return makeHtmlServer('OpenVibe Billing', { hostMap: BILLING_HOST_MAP, jsonRoutes: BILLING_JSON_ROUTES }); }
+function aiFixture() { return makeHtmlServer('OpenVibe AI — ai.openvibe.network', { jsonRoutes: AI_JSON_ROUTES }); }
+
 function buildReadinessPayload(service, checks) {
     const summary = { green: 0, yellow: 0, red: 0 };
     for (const check of checks) {
@@ -120,10 +132,16 @@ function makeNetworkServer(options = {}) {
 function makeHtmlServer(title, options = {}) {
     const persistence = options.persistence || buildHealthyPersistenceDescriptor();
     const hostMap = options.hostMap || null;
+    const jsonRoutes = options.jsonRoutes || null;
     return http.createServer((req, res) => {
         if (req.url === '/health') {
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ ok: true, persistence }));
+            return;
+        }
+        if (jsonRoutes && Object.prototype.hasOwnProperty.call(jsonRoutes, req.url)) {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(jsonRoutes[req.url]));
             return;
         }
         const host = String(req.headers.host || '').split(':')[0].toLowerCase();
@@ -164,6 +182,18 @@ function makeContentServer() {
                     { surface: 'wiki', implemented: true },
                     { surface: 'news', implemented: false },
                 ],
+            }));
+            return;
+        }
+        if (req.url === '/api/v1/content/product/status') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                product: 'content',
+                items_by_state: { published: 3, draft: 1 },
+                decisions_by_type: { publish: 1 },
+                distribution_by_outcome: { delivered: 2 },
+                counts: { sources: 1, items: 4, jobs: 2, review_decisions: 1, distribution_audit: 2 },
             }));
             return;
         }
@@ -209,9 +239,9 @@ async function testGreenSmokeReport() {
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
-        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
+        billing: billingFixture(),
         media: makeHtmlServer('OpenVibe Media'),
-        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        ai: aiFixture(),
         games: makeHtmlServer('OpenVibe Games'),
         workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
         realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),
@@ -239,7 +269,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 41);
+        assert.strictEqual(report.checks.length, 45);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -252,9 +282,9 @@ async function testDetectsProductionLeakInLocalMode() {
         restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
-        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
+        billing: billingFixture(),
         media: makeHtmlServer('OpenVibe Media'),
-        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        ai: aiFixture(),
         games: makeHtmlServer('OpenVibe Games'),
         workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
         realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),
@@ -302,9 +332,9 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
                 warning: 'Requested persistence mode \u0027postgres\u0027 does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.',
             },
         }),
-        billing: makeHtmlServer('OpenVibe Billing', { hostMap: { 'openvibe.tips.localhost': 'OpenVibe Tips', 'openvibe.vip.localhost': 'OpenVibe VIP' } }),
+        billing: billingFixture(),
         media: makeHtmlServer('OpenVibe Media'),
-        ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
+        ai: aiFixture(),
         games: makeHtmlServer('OpenVibe Games'),
         workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }, buildWorkersReadyPayload()),
         realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }, buildRealtimeReadyPayload()),

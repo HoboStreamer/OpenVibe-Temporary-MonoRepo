@@ -265,6 +265,10 @@ async function buildRuntimeStatus(config) {
         realtimeReadiness,
         realtimeConnections,
         realtimeBridge,
+        tipsProduct,
+        vipProduct,
+        aiProduct,
+        contentProduct,
     ] = await Promise.all([
         fetchJson(`${config.events.url}/health`, config.internalKey),
         fetchJson(`${config.events.url}/ready`, config.internalKey),
@@ -276,6 +280,18 @@ async function buildRuntimeStatus(config) {
         fetchJson(`${config.realtime.internalUrl}/ready`, config.internalKey),
         fetchJson(`${config.realtime.internalUrl}/api/v1/realtime/connections`, config.internalKey),
         fetchJson(`${config.realtime.internalUrl}/api/v1/realtime/bridge`, config.internalKey),
+        config.billing && config.billing.internalUrl
+            ? fetchJson(`${config.billing.internalUrl}/api/tips/product/status`, config.internalKey)
+            : Promise.resolve(null),
+        config.billing && config.billing.internalUrl
+            ? fetchJson(`${config.billing.internalUrl}/api/vip/product/status`, config.internalKey)
+            : Promise.resolve(null),
+        config.ai && config.ai.internalUrl
+            ? fetchJson(`${config.ai.internalUrl}/api/v1/ai/product/status`, config.internalKey)
+            : Promise.resolve(null),
+        config.content && config.content.internalUrl
+            ? fetchJson(`${config.content.internalUrl}/api/v1/content/product/status`, config.internalKey)
+            : Promise.resolve(null),
     ]);
 
     return {
@@ -297,6 +313,12 @@ async function buildRuntimeStatus(config) {
                 connections: unwrapFetch(realtimeConnections),
                 bridge: unwrapFetch(realtimeBridge),
             },
+        },
+        products: {
+            tips: unwrapFetch(tipsProduct),
+            vip: unwrapFetch(vipProduct),
+            ai: unwrapFetch(aiProduct),
+            content: unwrapFetch(contentProduct),
         },
     };
 }

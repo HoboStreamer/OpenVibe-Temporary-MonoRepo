@@ -31,6 +31,7 @@ const ADMIN_RUNTIME_SELECTORS = Object.freeze({
     distributedRuntimeStatus: '#tab-runtime [data-runtime-panel="distributed-runtime-status"]',
     workerProcessorMatrix: '#tab-runtime [data-runtime-panel="worker-processor-matrix"]',
     workerProcessorTableHead: '#tab-runtime [data-runtime-panel="worker-processor-matrix"] thead',
+    productCapabilityMatrix: '#tab-runtime [data-runtime-panel="product-capability-matrix"]',
 });
 
 function readFlag(value, fallbackValue) {

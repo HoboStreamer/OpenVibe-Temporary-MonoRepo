@@ -26,6 +26,10 @@ const COMMUNITY_EVENT_TYPES = Object.freeze({
     DISCORD_MESSAGE_RELAYED: 'community.discord.message.relayed',
     DISCORD_MESSAGE_UPDATED: 'community.discord.message.updated',
     DISCORD_MESSAGE_DELETED: 'community.discord.message.deleted',
+    // Phase 16
+    PASTE_VERSION_CREATED:   'community.paste.version_created',
+    DISCORD_RELAY_AUDITED:   'community.discord.relay_audited',
+    DISCORD_OUTBOUND_RELAYED:'community.discord.outbound_relayed',
 });
 
 const COMMUNITY_EVENT_TYPE_LIST = Object.freeze(Object.values(COMMUNITY_EVENT_TYPES));

@@ -104,6 +104,14 @@ module.exports = {
             fallbackPort: 5200,
         }),
     },
+    content: {
+        url: resolvePublicOrigin({ surface: 'content' }),
+        internalUrl: resolveInternalOrigin({
+            envKeys: ['OPENVIBE_CONTENT_INTERNAL_URL'],
+            publicEnvKeys: ['OPENVIBE_CONTENT_URL'],
+            fallbackPort: 5500,
+        }),
+    },
 
     hoboTools: {
         publicUrl:   trim(process.env.HOBO_TOOLS_URL),

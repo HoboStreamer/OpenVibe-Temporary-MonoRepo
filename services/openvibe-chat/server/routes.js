@@ -497,6 +497,181 @@ function buildRouter({ eventBus }) {
         res.json({ items: model.listActiveCalls() });
     });
 
+    // ── Phase 16: call participant lifecycle ────────────
+    r.post('/calls/:callId/join', json, (req, res) => {
+        const c = model.getCall(req.params.callId);
+        if (!c) return res.status(404).json({ error: 'call not found' });
+        try { policy.assert(policy.decideCallParticipant({ req, call: c }), actorMeta(req)); }
+        catch (err) { return denied(res, err); }
+        const a = policy.actorOfReq(req);
+        const b = req.body || {};
+        const participant = model.addCallParticipant({
+            call_id: c.id,
+            actor_type: b.actor_type || a.type,
+            actor_id: b.actor_id != null ? String(b.actor_id) : a.id,
+            role: b.role || 'participant',
+            metadata: b.metadata,
+        });
+        if (c.status === 'ringing' || c.status === 'pending') {
+            model.updateCallStatus(c.id, 'active');
+        }
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.CALL_PARTICIPANT_JOINED, {
+            call_id: c.id, room_id: c.room_id,
+            actor_type: participant.actor_type, actor_id: participant.actor_id,
+        }, actorMeta(req));
+        res.status(201).json({ participant });
+    });
+
+    r.post('/calls/:callId/leave', json, (req, res) => {
+        const c = model.getCall(req.params.callId);
+        if (!c) return res.status(404).json({ error: 'call not found' });
+        try { policy.assert(policy.decideCallParticipant({ req, call: c }), actorMeta(req)); }
+        catch (err) { return denied(res, err); }
+        const a = policy.actorOfReq(req);
+        const b = req.body || {};
+        const actorType = b.actor_type || a.type;
+        const actorId = b.actor_id != null ? String(b.actor_id) : a.id;
+        const participant = model.leaveCallParticipant(c.id, actorType, actorId);
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.CALL_PARTICIPANT_LEFT, {
+            call_id: c.id, room_id: c.room_id,
+            actor_type: actorType, actor_id: actorId,
+        }, actorMeta(req));
+        // Auto-end the call when no active participants remain.
+        const remaining = model.listCallParticipants(c.id);
+        if (!remaining.length && c.status === 'active') {
+            model.updateCallStatus(c.id, 'ended');
+            eventBus.publishChatEvent(CHAT_EVENT_TYPES.CALL_ENDED, { call_id: c.id, room_id: c.room_id, reason: 'all_left' }, actorMeta(req));
+        }
+        res.json({ participant: participant || null });
+    });
+
+    r.get('/calls/:callId/participants', (req, res) => {
+        const c = model.getCall(req.params.callId);
+        if (!c) return res.status(404).json({ error: 'call not found' });
+        try { policy.assert(policy.decideCallParticipant({ req, call: c }), actorMeta(req)); }
+        catch (err) { return denied(res, err); }
+        const include_left = String(req.query.include_left || '').toLowerCase() === 'true';
+        res.json({ items: model.listCallParticipants(c.id, { include_left }) });
+    });
+
+    // ── Phase 16: stream-room binding ───────────────────
+    r.post('/stream-bindings', json, (req, res) => {
+        const a = policy.actorOfReq(req);
+        if (a.type !== 'service' && a.type !== 'admin' && (!req.user || req.user.role !== 'admin')) {
+            return res.status(403).json({ error: 'service or admin required' });
+        }
+        const b = req.body || {};
+        if (!b.stream_ref_id || !b.room_id) {
+            return res.status(400).json({ error: 'stream_ref_id + room_id required' });
+        }
+        const room = model.getRoom(b.room_id);
+        if (!room) return res.status(404).json({ error: 'room not found' });
+        const binding = model.upsertStreamBinding(b);
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.STREAM_ROOM_BOUND, {
+            binding_id: binding.id,
+            stream_ref_type: binding.stream_ref_type,
+            stream_ref_id: binding.stream_ref_id,
+            room_id: binding.room_id,
+        }, actorMeta(req));
+        res.status(201).json({ binding });
+    });
+    r.get('/stream-bindings', (req, res) => {
+        res.json({ items: model.listStreamBindings({ limit: req.query.limit }) });
+    });
+    r.get('/stream-bindings/:streamId', (req, res) => {
+        const refType = String(req.query.stream_ref_type || 'stream');
+        const binding = model.getStreamBinding(refType, req.params.streamId);
+        if (!binding) return res.status(404).json({ error: 'binding not found' });
+        res.json({ binding });
+    });
+
+    // ── Phase 16: overlay/dashboard queue read + status update ─
+    r.get('/tts/overlay/:ownerType/:ownerId', (req, res) => {
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: req.params.ownerType, owner_id: req.params.ownerId })); }
+        catch (err) { return denied(res, err); }
+        const queue = model.listAudio({ owner_type: req.params.ownerType, owner_id: req.params.ownerId, queue_type: 'tts' });
+        res.json({
+            owner_type: req.params.ownerType,
+            owner_id: req.params.ownerId,
+            settings: model.getTtsSettings(req.params.ownerType, req.params.ownerId),
+            items: queue,
+        });
+    });
+    r.post('/tts/queue/:itemId/status', json, (req, res) => {
+        const b = req.body || {};
+        if (!b.status) return res.status(400).json({ error: 'status required' });
+        const item = model.setAudioStatus(req.params.itemId, b.status);
+        if (!item) return res.status(404).json({ error: 'item not found' });
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.TTS_ITEM_STATUS_UPDATED, {
+            queue_id: item.id, status: item.status,
+            owner_type: item.owner_type, owner_id: item.owner_id,
+        }, actorMeta(req));
+        res.json({ item });
+    });
+    r.get('/audio/overlay/:ownerType/:ownerId', (req, res) => {
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: req.params.ownerType, owner_id: req.params.ownerId })); }
+        catch (err) { return denied(res, err); }
+        const items = model.listAudio({
+            owner_type: req.params.ownerType, owner_id: req.params.ownerId,
+            queue_type: req.query.queue_type,
+        });
+        res.json({
+            owner_type: req.params.ownerType,
+            owner_id: req.params.ownerId,
+            items,
+        });
+    });
+    r.post('/audio/queue/:itemId/status', json, (req, res) => {
+        const b = req.body || {};
+        if (!b.status) return res.status(400).json({ error: 'status required' });
+        const item = model.setAudioStatus(req.params.itemId, b.status);
+        if (!item) return res.status(404).json({ error: 'item not found' });
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.AUDIO_ITEM_STATUS_UPDATED, {
+            queue_id: item.id, status: item.status,
+            owner_type: item.owner_type, owner_id: item.owner_id,
+        }, actorMeta(req));
+        res.json({ item });
+    });
+
+    // ── Phase 16: durable audio integrations ─────────────
+    r.get('/audio/integrations', (req, res) => {
+        const a = policy.actorOfReq(req);
+        const ot = req.query.owner_type || a.type;
+        const oid = req.query.owner_id != null ? String(req.query.owner_id) : a.id;
+        if (!oid) return res.status(400).json({ error: 'owner_id required' });
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: ot, owner_id: oid })); }
+        catch (err) { return denied(res, err); }
+        res.json({ items: model.listAudioIntegrations({ owner_type: ot, owner_id: oid }) });
+    });
+    r.post('/audio/integrations', json, (req, res) => {
+        const a = policy.actorOfReq(req);
+        const b = req.body || {};
+        const ot = b.owner_type || a.type;
+        const oid = b.owner_id != null ? String(b.owner_id) : a.id;
+        if (!oid) return res.status(400).json({ error: 'owner_id required' });
+        if (!b.provider) return res.status(400).json({ error: 'provider required' });
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: ot, owner_id: oid })); }
+        catch (err) { return denied(res, err); }
+        const integration = model.createAudioIntegration({
+            owner_type: ot, owner_id: oid,
+            provider: b.provider, label: b.label,
+            enabled: b.enabled,
+            config: b.config,
+            credential_ref: b.credential_ref,
+        });
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.AUDIO_INTEGRATION_CREATED, {
+            integration_id: integration.id, provider: integration.provider,
+            owner_type: integration.owner_type, owner_id: integration.owner_id,
+        }, actorMeta(req));
+        res.status(201).json({ integration });
+    });
+    r.delete('/audio/integrations/:id', (req, res) => {
+        const a = policy.actorOfReq(req);
+        if (a.type === 'anonymous') return res.status(401).json({ error: 'auth required' });
+        model.deleteAudioIntegration(req.params.id);
+        res.json({ ok: true });
+    });
+
     return r;
 }
 

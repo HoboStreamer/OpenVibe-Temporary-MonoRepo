@@ -162,6 +162,17 @@ npm run check
 npm test
 ```
 
+For faster or narrower feedback, use the component-aware test runner flows in
+[`docs/openvibe/testing-workflows.md`](docs/openvibe/testing-workflows.md).
+Common examples:
+
+```bash
+npm run test:fast
+npm run test:changed
+npm test -- --component=openvibe-content
+npm test -- --scope=scripts/staging
+```
+
 3. Start each service from its own folder:
 
 ```bash
@@ -318,6 +329,9 @@ Validation commands:
 
 - `npm run check`
 - `npm test`
+- `npm run test:fast`
+- `npm run test:changed`
+- `npm run test:list:components`
 - `npm run readiness`
 - `node scripts/readiness/check-storage-providers.js --offline --dry-run --skip-external`
 - `node scripts/readiness/check-queue-health.js --offline --dry-run --skip-external`
@@ -478,6 +492,7 @@ full public publishing is not launched yet):
 | Migration scripts | [`scripts/migrate-hobo/README.md`](scripts/migrate-hobo/README.md) |
 | Production SSH export | [`docs/openvibe/production-ssh-export.md`](docs/openvibe/production-ssh-export.md) |
 | Staging environment | [`docs/openvibe/staging-environment.md`](docs/openvibe/staging-environment.md) |
+| Testing workflows | [`docs/openvibe/testing-workflows.md`](docs/openvibe/testing-workflows.md) |
 | Postgres loader | [`docs/openvibe/postgres-loader.md`](docs/openvibe/postgres-loader.md) |
 | Media strategy | [`docs/openvibe/media-storage-strategy.md`](docs/openvibe/media-storage-strategy.md) |
 | Media backfill | [`docs/openvibe/media-backfill.md`](docs/openvibe/media-backfill.md) |

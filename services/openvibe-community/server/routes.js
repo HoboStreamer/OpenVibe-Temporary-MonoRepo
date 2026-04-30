@@ -275,19 +275,31 @@ function buildRouter({ eventBus, config }) {
         if (config.discord && config.discord.webhookSecret) {
             const provided = req.headers['x-discord-relay-secret'];
             if (!provided || provided !== config.discord.webhookSecret) {
+                model.recordRelayAudit({ relay_direction: 'discord_to_openvibe', outcome: 'auth_failed' });
                 return res.status(401).json({ error: 'invalid relay secret' });
             }
         }
         const b = req.body || {};
         if (!b.discord_channel_id || !b.discord_message_id) {
+            model.recordRelayAudit({ relay_direction: 'discord_to_openvibe', outcome: 'invalid_request' });
             return res.status(400).json({ error: 'discord_channel_id + discord_message_id required' });
         }
         // loop prevention — drop messages we've already imported
         if (model.findDiscordMessage(b.discord_message_id)) {
+            model.recordRelayAudit({
+                relay_direction: 'discord_to_openvibe', outcome: 'deduped',
+                discord_channel_id: b.discord_channel_id,
+                discord_message_id: b.discord_message_id,
+            });
             return res.json({ ok: true, deduped: true });
         }
         const relay = model.findRelayByChannel(b.discord_channel_id);
         if (!relay || !relay.enabled) {
+            model.recordRelayAudit({
+                relay_direction: 'discord_to_openvibe', outcome: 'skipped_no_relay',
+                discord_channel_id: b.discord_channel_id,
+                discord_message_id: b.discord_message_id,
+            });
             return res.json({ ok: false, reason: 'no enabled relay for channel' });
         }
         let thread = relay.openvibe_thread_id ? model.getThread(relay.openvibe_thread_id) : null;
@@ -320,6 +332,14 @@ function buildRouter({ eventBus, config }) {
             metadata: { author: b.discord_author_name },
         });
         model.updateRelay(relay.id, { last_synced_at: new Date().toISOString() });
+        model.recordRelayAudit({
+            relay_direction: 'discord_to_openvibe', outcome: 'imported',
+            relay_id: relay.id,
+            discord_channel_id: b.discord_channel_id,
+            discord_message_id: b.discord_message_id,
+            openvibe_post_id: post.id,
+            openvibe_thread_id: thread.id,
+        });
         eventBus.publishCommunityEvent(COMMUNITY_EVENT_TYPES.DISCORD_MESSAGE_IMPORTED,
             { post_id: post.id, thread_id: thread.id, discord_message_id: b.discord_message_id }, { actor_type: 'service', actor_id: 'openvibe-community' });
         res.status(201).json({ post, thread });
@@ -329,11 +349,139 @@ function buildRouter({ eventBus, config }) {
         try { policy.assert(policy.decideRelayManage({ req })); }
         catch (err) { return denied(res, err); }
         const relays = model.listRelays();
+        const audit = model.getRelayAuditSummary();
         res.json({
             relay_count: relays.length,
             enabled_count: relays.filter(r => r.enabled).length,
+            inbound_secret_configured: !!(config.discord && config.discord.webhookSecret),
+            outbound_adapter_configured: !!(config.discord && config.discord.outboundWebhookUrl),
+            audit_summary: audit,
             relays,
         });
+    });
+
+    // ── Phase 16: paste versions ─────────────────────────
+    r.get('/pastes/:slug/versions', (req, res) => {
+        const paste = model.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        try { policy.assert(policy.decideRead({ req, target: { visibility: paste.visibility, created_by_actor_type: paste.created_by_actor_type, created_by_actor_id: paste.created_by_actor_id } })); }
+        catch (err) { return denied(res, err); }
+        res.json({ items: model.listPasteVersions(paste.id, { limit: req.query.limit }) });
+    });
+    r.get('/pastes/:slug/versions/:version', (req, res) => {
+        const paste = model.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        try { policy.assert(policy.decideRead({ req, target: { visibility: paste.visibility, created_by_actor_type: paste.created_by_actor_type, created_by_actor_id: paste.created_by_actor_id } })); }
+        catch (err) { return denied(res, err); }
+        const version = model.getPasteVersion(paste.id, req.params.version);
+        if (!version) return res.status(404).json({ error: 'version not found' });
+        res.json({ version });
+    });
+
+    // ── Phase 16: paste comments wrapper (uses generic comments) ─
+    r.get('/pastes/:slug/comments', (req, res) => {
+        const paste = model.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        try { policy.assert(policy.decideRead({ req, target: { visibility: paste.visibility, created_by_actor_type: paste.created_by_actor_type, created_by_actor_id: paste.created_by_actor_id } })); }
+        catch (err) { return denied(res, err); }
+        const thread = model.findThreadByRef('paste', paste.id);
+        if (!thread) return res.json({ items: [] });
+        res.json({ items: model.listPosts({ thread_id: thread.id, limit: req.query.limit }) });
+    });
+    r.post('/pastes/:slug/comments', json, (req, res) => {
+        const paste = model.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        const a = actorMeta(req);
+        if (a.actor_type === 'anonymous') return res.status(401).json({ error: 'auth required' });
+        const b = req.body || {};
+        if (!b.body) return res.status(400).json({ error: 'body required' });
+        const thread = model.ensureThreadForRef('paste', paste.id, {
+            title: paste.title || `paste:${paste.slug}`,
+            thread_type: 'paste',
+            visibility: paste.visibility,
+            community_id: null,
+            category_id: null,
+        });
+        const post = model.createPost({
+            thread_id: thread.id,
+            author_type: a.actor_type, author_id: a.actor_id,
+            body: String(b.body), body_format: b.body_format || 'markdown',
+            metadata: b.metadata || {},
+        });
+        eventBus.publishCommunityEvent(COMMUNITY_EVENT_TYPES.COMMENT_CREATED,
+            { post_id: post.id, thread_id: thread.id, ref_type: 'paste', ref_id: paste.id }, a);
+        res.status(201).json({ post, thread });
+    });
+
+    // ── Phase 16: discord audit and outbound mock ────────
+    r.get('/discord/audit', (req, res) => {
+        try { policy.assert(policy.decideRelayManage({ req })); }
+        catch (err) { return denied(res, err); }
+        res.json({
+            items: model.listRelayAudit({
+                relay_direction: req.query.relay_direction,
+                outcome: req.query.outcome,
+                limit: req.query.limit,
+            }),
+            summary: model.getRelayAuditSummary(),
+        });
+    });
+    r.post('/discord/outbound', json, (req, res) => {
+        try { policy.assert(policy.decideRelayManage({ req })); }
+        catch (err) { return denied(res, err); }
+        const b = req.body || {};
+        if (!b.discord_channel_id || !b.body) {
+            return res.status(400).json({ error: 'discord_channel_id + body required' });
+        }
+        const idempotencyKey = req.headers['x-idempotency-key'] || b.idempotency_key || null;
+        if (!idempotencyKey) {
+            return res.status(400).json({ error: 'idempotency required (X-Idempotency-Key header or idempotency_key)' });
+        }
+        // Idempotency: dedupe on idempotency_key already audited
+        const dedupe = model.listRelayAudit({ relay_direction: 'openvibe_to_discord', limit: 200 })
+            .find((row) => row.idempotency_key === idempotencyKey && row.outcome === 'sent');
+        if (dedupe) {
+            model.recordRelayAudit({
+                relay_direction: 'openvibe_to_discord', outcome: 'deduped',
+                discord_channel_id: b.discord_channel_id, idempotency_key: idempotencyKey,
+            });
+            return res.json({ ok: true, deduped: true });
+        }
+        const relay = model.findRelayByChannel(b.discord_channel_id);
+        if (!relay || !relay.enabled) {
+            model.recordRelayAudit({
+                relay_direction: 'openvibe_to_discord', outcome: 'skipped_no_relay',
+                discord_channel_id: b.discord_channel_id, idempotency_key: idempotencyKey,
+            });
+            return res.json({ ok: false, reason: 'no enabled relay for channel' });
+        }
+        // Phase 16 — outbound is intentionally a mock seam: real Discord
+        // delivery requires a configured webhook adapter and credentials.
+        const outboundConfigured = !!(config.discord && config.discord.outboundWebhookUrl);
+        const outcome = outboundConfigured ? 'sent' : 'mock_delivered';
+        // Synthesize a fake discord_message_id for loop prevention symmetry.
+        const synthMessageId = `mock_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+        model.recordDiscordMessage({
+            discord_message_id: synthMessageId,
+            discord_channel_id: b.discord_channel_id,
+            openvibe_post_id: b.source_post_id || null,
+            openvibe_thread_id: relay.openvibe_thread_id || null,
+            relay_direction: 'openvibe_to_discord',
+            metadata: { mock: !outboundConfigured, idempotency_key: idempotencyKey },
+        });
+        model.recordRelayAudit({
+            relay_direction: 'openvibe_to_discord', outcome,
+            relay_id: relay.id,
+            discord_channel_id: b.discord_channel_id,
+            discord_message_id: synthMessageId,
+            openvibe_post_id: b.source_post_id || null,
+            idempotency_key: idempotencyKey,
+            metadata: { configured: outboundConfigured },
+        });
+        eventBus.publishCommunityEvent(COMMUNITY_EVENT_TYPES.DISCORD_MESSAGE_RELAYED,
+            { discord_message_id: synthMessageId, discord_channel_id: b.discord_channel_id, outcome },
+            { actor_type: 'service', actor_id: 'openvibe-community' });
+        res.status(201).json({ ok: true, outcome, discord_message_id: synthMessageId });
     });
 
     return r;

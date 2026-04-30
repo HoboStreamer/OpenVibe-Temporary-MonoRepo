@@ -422,6 +422,59 @@ const SURFACE_CHECKS = Object.freeze([
         path: '/',
         marker: 'OpenVibe VIP',
     },
+    // Phase 16 — product status seams. These verify the new
+    // /product/status endpoints respond with the expected `product` field
+    // so the admin runtime matrix has a real signal to render.
+    {
+        id: 'tips-product-status',
+        type: 'json',
+        baseKey: 'billingUrl',
+        host: 'billing.openvibe.network.localhost',
+        path: '/api/tips/product/status',
+        validate(body) {
+            if (!body || body.product !== 'tips') return 'tips product status payload missing product=tips';
+            if (body.ok !== true) return 'tips product status not ok';
+            return null;
+        },
+    },
+    {
+        id: 'vip-product-status',
+        type: 'json',
+        baseKey: 'billingUrl',
+        host: 'billing.openvibe.network.localhost',
+        path: '/api/vip/product/status',
+        validate(body) {
+            if (!body || body.product !== 'vip') return 'vip product status payload missing product=vip';
+            if (body.ok !== true) return 'vip product status not ok';
+            return null;
+        },
+    },
+    {
+        id: 'ai-product-status',
+        type: 'json',
+        baseKey: 'aiUrl',
+        host: 'ai.openvibe.network.localhost',
+        path: '/api/v1/ai/product/status',
+        validate(body) {
+            if (!body || body.product !== 'ai') return 'ai product status payload missing product=ai';
+            if (body.ok !== true) return 'ai product status not ok';
+            return null;
+        },
+    },
+    {
+        id: 'content-product-status',
+        type: 'json',
+        baseKey: 'contentUrl',
+        host: 'openvibe.codes.localhost',
+        path: '/api/v1/content/product/status',
+        validate(body) {
+            if (!body || body.product !== 'content') return 'content product status payload missing product=content';
+            if (!body.counts || typeof body.counts.review_decisions !== 'number') {
+                return 'content product status missing counts.review_decisions';
+            }
+            return null;
+        },
+    },
 ]);
 
 function readFlag(value, fallbackValue) {

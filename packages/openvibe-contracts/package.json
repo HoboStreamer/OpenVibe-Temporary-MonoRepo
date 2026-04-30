@@ -8,6 +8,7 @@
     "./topics": "./topics.js",
     "./events": "./events.js",
     "./capabilities": "./capabilities.js",
+    "./product-capabilities": "./product-capabilities.js",
     "./namespaces": "./namespaces.js",
     "./services": "./services.js",
     "./envelope": "./envelope.js",

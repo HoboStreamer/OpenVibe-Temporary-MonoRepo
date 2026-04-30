@@ -100,4 +100,51 @@ assert.strictEqual(policy.decideRelayManage({ req: svcReq }).allow, true);
 model.recordLegacyMap({ source: 'hobostreamer', kind: 'paste', legacy_id: 'p1', new_id: paste.id });
 assert.strictEqual(model.lookupLegacy('hobostreamer', 'paste', 'p1').new_id, paste.id);
 
+// ── Phase 16: paste versions ────────────────────────────
+const versionedSlug = paste.slug;
+let versions = model.listPasteVersions(paste.id);
+assert.strictEqual(versions.length, 1, 'createPaste must record version 1');
+assert.strictEqual(versions[0].version, 1);
+assert.strictEqual(versions[0].body, 'console.log(1)');
+assert.strictEqual(versions[0].change_summary, 'created');
+
+model.updatePaste(versionedSlug, { body: 'console.log(2)', edited_by_actor_type: 'user', edited_by_actor_id: '42', change_summary: 'tweak' });
+versions = model.listPasteVersions(paste.id);
+assert.strictEqual(versions.length, 2, 'updatePaste with new body must add a version');
+assert.strictEqual(versions[0].version, 2);
+assert.strictEqual(versions[0].body, 'console.log(2)');
+assert.strictEqual(versions[0].change_summary, 'tweak');
+
+// no-op update should NOT add a version
+model.updatePaste(versionedSlug, { visibility: 'public' });
+assert.strictEqual(model.listPasteVersions(paste.id).length, 2, 'metadata-only update should not bump version');
+
+const v1 = model.getPasteVersion(paste.id, 1);
+assert.ok(v1 && v1.body === 'console.log(1)');
+
+// ── Phase 16: discord relay audit ───────────────────────
+model.recordRelayAudit({
+    relay_direction: 'discord_to_openvibe', outcome: 'imported',
+    relay_id: relay.id, discord_channel_id: 'chan_1', discord_message_id: 'dm_audit_1',
+});
+model.recordRelayAudit({
+    relay_direction: 'openvibe_to_discord', outcome: 'sent',
+    relay_id: relay.id, discord_channel_id: 'chan_1', discord_message_id: 'dm_audit_2',
+    idempotency_key: 'idem-1',
+});
+model.recordRelayAudit({
+    relay_direction: 'openvibe_to_discord', outcome: 'deduped',
+    discord_channel_id: 'chan_1', idempotency_key: 'idem-1',
+});
+
+const auditList = model.listRelayAudit({ relay_direction: 'openvibe_to_discord' });
+assert.strictEqual(auditList.length, 2, 'should list outbound audit rows');
+assert.ok(auditList.some(a => a.outcome === 'sent' && a.idempotency_key === 'idem-1'));
+
+const summary = model.getRelayAuditSummary();
+assert.strictEqual(summary.totals.sent, 1);
+assert.strictEqual(summary.totals.deduped, 1);
+assert.strictEqual(summary.totals.imported, 1);
+assert.strictEqual(summary.by_direction.openvibe_to_discord.sent, 1);
+
 console.log('openvibe-community smoke OK');

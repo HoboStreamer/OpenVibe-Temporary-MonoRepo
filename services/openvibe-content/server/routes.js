@@ -90,6 +90,81 @@ function buildRouter({ config, contentStore }) {
         res.status(202).json(result);
     }));
 
+    // ── Phase 16: review decisions + publish workflow ─────────────
+    router.get('/api/v1/content/items/:id/reviews', asyncHandler(async (req, res) => {
+        const item = await contentStore.getItemById(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not found' });
+        const items = await contentStore.listReviewDecisions({ item_id: item.id, limit: req.query.limit });
+        res.json({ items });
+    }));
+
+    router.post('/api/v1/content/items/:id/reviews', asyncHandler(async (req, res) => {
+        if (!req.serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        const item = await contentStore.getItemById(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not found' });
+        const body = req.body || {};
+        try {
+            const decision = await contentStore.recordReviewDecision({
+                item_id: item.id,
+                decision: body.decision,
+                to_state: body.to_state,
+                reviewer_actor_type: body.reviewer_actor_type || 'service',
+                reviewer_actor_id: body.reviewer_actor_id || serviceActorId(req),
+                notes: body.notes,
+                metadata: body.metadata,
+            });
+            res.status(201).json({ decision });
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    }));
+
+    router.get('/api/v1/content/reviews', asyncHandler(async (req, res) => {
+        res.json({ items: await contentStore.listReviewDecisions(req.query || {}) });
+    }));
+
+    // ── Phase 16: distribution audit ──────────────────────────────
+    router.get('/api/v1/content/items/:id/distribution', asyncHandler(async (req, res) => {
+        const item = await contentStore.getItemById(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not found' });
+        res.json({ items: await contentStore.listDistributionAudit({ item_id: item.id, limit: req.query.limit }) });
+    }));
+
+    router.post('/api/v1/content/items/:id/distribution', asyncHandler(async (req, res) => {
+        if (!req.serviceActor) {
+            return res.status(403).json({ error: 'internal service actor required' });
+        }
+        const item = await contentStore.getItemById(req.params.id);
+        if (!item) return res.status(404).json({ error: 'not found' });
+        const body = req.body || {};
+        try {
+            const entry = await contentStore.recordDistributionAudit({
+                item_id: item.id,
+                surface: body.surface,
+                channel: body.channel,
+                outcome: body.outcome,
+                actor_type: body.actor_type || 'service',
+                actor_id: body.actor_id || serviceActorId(req),
+                error_message: body.error_message,
+                metadata: body.metadata,
+            });
+            res.status(201).json({ entry });
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    }));
+
+    router.get('/api/v1/content/distribution', asyncHandler(async (req, res) => {
+        res.json({ items: await contentStore.listDistributionAudit(req.query || {}) });
+    }));
+
+    // Phase 16 — content product status seam.
+    router.get('/api/v1/content/product/status', asyncHandler(async (_req, res) => {
+        res.json(Object.assign({ ok: true, product: 'content' }, await contentStore.getProductWorkflowStatus()));
+    }));
+
     router.get('*', (req, res) => {
         const rendered = renderRequest({
             config,

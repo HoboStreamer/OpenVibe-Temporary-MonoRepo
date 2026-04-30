@@ -427,6 +427,30 @@ function buildTipsRouter({ eventBus }) {
         res.json({ items });
     });
 
+    // Phase 16 — product status seam: lightweight summary that the admin
+    // matrix and product surfaces use to confirm the tips workflow is wired.
+    r.get('/product/status', (req, res) => {
+        const recent = model.listTips({ limit: 50 });
+        const byStatus = {};
+        const byInteraction = {};
+        let totalPostedMinor = 0;
+        for (const t of recent) {
+            byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+            byInteraction[t.interaction_type] = (byInteraction[t.interaction_type] || 0) + 1;
+            if (t.status === 'posted') totalPostedMinor += Number(t.amount_minor) || 0;
+        }
+        res.json({
+            ok: true,
+            product: 'tips',
+            sample_size: recent.length,
+            by_status: byStatus,
+            by_interaction: byInteraction,
+            recent_posted_minor: totalPostedMinor,
+            currency: config.creditsCurrency,
+            platform_fee_bps: config.platformFeeBps,
+        });
+    });
+
     r.get('/:tipId', (req, res) => {
         const tip = model.getTip(req.params.tipId);
         if (!tip) return res.status(404).json({ error: 'tip not found' });
@@ -467,6 +491,26 @@ function buildVipRouter({ eventBus }) {
         return res.status(500).json({ error: 'internal error' });
     }
     function publishSafe(fn) { try { Promise.resolve(fn()).catch(() => {}); } catch { /* ignore */ } }
+
+    // Phase 16 — VIP product status seam.
+    r.get('/product/status', (req, res) => {
+        const plans = model.listPlans({ limit: 200 });
+        const subs = model.listSubscriptions({ limit: 200 });
+        const planByStatus = {};
+        const subByStatus = {};
+        for (const p of plans) planByStatus[p.status] = (planByStatus[p.status] || 0) + 1;
+        for (const s of subs) subByStatus[s.status] = (subByStatus[s.status] || 0) + 1;
+        res.json({
+            ok: true,
+            product: 'vip',
+            plan_count: plans.length,
+            plans_by_status: planByStatus,
+            subscription_count: subs.length,
+            subscriptions_by_status: subByStatus,
+            currency: config.creditsCurrency,
+            platform_fee_bps: config.platformFeeBps,
+        });
+    });
 
     // plans
     r.get('/plans', (req, res) => {

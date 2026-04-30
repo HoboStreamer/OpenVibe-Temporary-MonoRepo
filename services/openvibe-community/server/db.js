@@ -147,6 +147,49 @@ const SCHEMA_SQL = `
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (source, kind, legacy_id)
         );
+
+        -- Phase 16 — paste version history. Append-only; one row per
+        -- create/update so HoboStreamer paste imports retain edit lineage.
+        CREATE TABLE IF NOT EXISTS community_paste_versions (
+            id              TEXT PRIMARY KEY,
+            paste_id        TEXT NOT NULL,
+            version         INTEGER NOT NULL,
+            title           TEXT,
+            body            TEXT NOT NULL,
+            language        TEXT,
+            edited_by_actor_type TEXT,
+            edited_by_actor_id   TEXT,
+            change_summary  TEXT,
+            metadata_json   TEXT NOT NULL DEFAULT '{}',
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (paste_id, version),
+            FOREIGN KEY (paste_id) REFERENCES community_pastes(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_paste_versions_paste
+            ON community_paste_versions(paste_id, version DESC);
+
+        -- Phase 16 — Discord relay audit. Captures inbound, outbound,
+        -- dedupe-skipped, and failed relay attempts so the runtime tab and
+        -- readiness reports show truthful relay activity rather than counting
+        -- messages alone.
+        CREATE TABLE IF NOT EXISTS community_relay_audit (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            relay_direction     TEXT NOT NULL,
+            outcome             TEXT NOT NULL,
+            relay_id            TEXT,
+            discord_channel_id  TEXT,
+            discord_message_id  TEXT,
+            openvibe_post_id    TEXT,
+            openvibe_thread_id  TEXT,
+            idempotency_key     TEXT,
+            error_message       TEXT,
+            metadata_json       TEXT NOT NULL DEFAULT '{}',
+            recorded_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_relay_audit_dir
+            ON community_relay_audit(relay_direction, recorded_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_community_relay_audit_outcome
+            ON community_relay_audit(outcome, recorded_at DESC);
     `;
 
 function defaultSqlitePath() {

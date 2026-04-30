@@ -9,6 +9,7 @@ const {
     jsonRequest,
 } = require('@openvibe/sdk');
 const { CAPABILITIES } = require('@openvibe/contracts/capabilities');
+const { PRODUCT_CAPABILITY_RECORDS } = require('@openvibe/contracts/product-capabilities');
 
 const SERVICE_NAME = 'openvibe-network';
 
@@ -181,7 +182,22 @@ function seedCapabilityRegistry(sql) {
             deprecated = excluded.deprecated,
             updated_at = CURRENT_TIMESTAMP
     `);
-    for (const def of KNOWN_CAPABILITY_DEFINITIONS) {
+    // Build a merged catalog: every product capability gets a baseline record
+    // from the contracts catalog, then implemented capabilities are upserted
+    // with their richer schema/policy/rate-limit metadata so the network
+    // dispatcher can rely on the enriched record.
+    const richById = new Map();
+    for (const def of KNOWN_CAPABILITY_DEFINITIONS) richById.set(def.capability_id, def);
+    const merged = PRODUCT_CAPABILITY_RECORDS.map((record) => {
+        const enriched = richById.get(record.capability_id);
+        if (!enriched) return record;
+        return Object.assign({}, record, enriched, {
+            owner_service: enriched.owner_service || record.owner_service,
+            policy: enriched.policy || record.policy,
+            rate_limit: enriched.rate_limit || record.rate_limit,
+        });
+    });
+    for (const def of merged) {
         stmt.run(
             def.capability_id,
             def.version || 1,

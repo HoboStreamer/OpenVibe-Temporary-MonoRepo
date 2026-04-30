@@ -293,15 +293,170 @@ function createPostgresContentStore(options) {
 
     async function getCounts() {
         await ensureReady();
-        const [sources, items, jobs] = await Promise.all([
+        const [sources, items, jobs, reviews, distribution] = await Promise.all([
             query(pool, 'SELECT COUNT(*)::int AS count FROM content_sources', []),
             query(pool, 'SELECT COUNT(*)::int AS count FROM content_items', []),
             query(pool, 'SELECT COUNT(*)::int AS count FROM content_jobs', []),
+            query(pool, 'SELECT COUNT(*)::int AS count FROM content_review_decisions', []),
+            query(pool, 'SELECT COUNT(*)::int AS count FROM content_distribution_audit', []),
         ]);
         return {
             sources: sources.rows[0].count,
             items: items.rows[0].count,
             jobs: jobs.rows[0].count,
+            review_decisions: reviews.rows[0].count,
+            distribution_audit: distribution.rows[0].count,
+        };
+    }
+
+    function hydrateReviewDecision(row) {
+        if (!row) return null;
+        return {
+            id: row.id, item_id: row.item_id, decision: row.decision,
+            from_state: row.from_state, to_state: row.to_state,
+            reviewer_actor_type: row.reviewer_actor_type,
+            reviewer_actor_id: row.reviewer_actor_id,
+            notes: row.notes || '',
+            metadata: safeJsonParse(row.metadata_json, {}),
+            decided_at: row.decided_at,
+        };
+    }
+
+    function hydrateDistribution(row) {
+        if (!row) return null;
+        return {
+            id: row.id, item_id: row.item_id, surface: row.surface,
+            channel: row.channel, outcome: row.outcome,
+            actor_type: row.actor_type, actor_id: row.actor_id,
+            error_message: row.error_message || null,
+            metadata: safeJsonParse(row.metadata_json, {}),
+            recorded_at: row.recorded_at,
+        };
+    }
+
+    async function recordReviewDecision(input) {
+        await ensureReady();
+        const payload = input || {};
+        if (!payload.item_id) throw new Error('item_id required');
+        const itemResult = await query(pool, 'SELECT * FROM content_items WHERE id = $1', [String(payload.item_id)]);
+        if (!itemResult.rows[0]) throw new Error(`unknown content item: ${payload.item_id}`);
+        const item = itemResult.rows[0];
+        const fromState = item.state;
+        const toState = payload.to_state || (
+            payload.decision === 'approve' ? 'approved' :
+            payload.decision === 'reject' ? 'rejected' :
+            payload.decision === 'publish' ? 'published' :
+            payload.decision === 'unpublish' ? 'draft' :
+            fromState
+        );
+        const result = await query(pool, `
+            INSERT INTO content_review_decisions (item_id, decision, from_state, to_state,
+                reviewer_actor_type, reviewer_actor_id, notes, metadata_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+            RETURNING *
+        `, [
+            String(payload.item_id),
+            String(payload.decision || 'note'),
+            fromState,
+            toState,
+            payload.reviewer_actor_type || null,
+            payload.reviewer_actor_id != null ? String(payload.reviewer_actor_id) : null,
+            payload.notes ? String(payload.notes) : null,
+            JSON.stringify(payload.metadata || {}),
+        ]);
+        if (toState && toState !== fromState) {
+            const publishedAt = toState === 'published' ? new Date().toISOString() : null;
+            await query(pool, `
+                UPDATE content_items
+                SET state = $1, published_at = COALESCE($2, published_at), indexable = $3, updated_at = NOW()
+                WHERE id = $4
+            `, [toState, publishedAt, toState === 'published' ? true : item.indexable, String(payload.item_id)]);
+        }
+        return hydrateReviewDecision(result.rows[0]);
+    }
+
+    async function listReviewDecisions(filters) {
+        await ensureReady();
+        const f = filters || {};
+        const parts = [];
+        const args = [];
+        if (f.item_id) { args.push(String(f.item_id)); parts.push(`item_id = $${args.length}`); }
+        if (f.decision) { args.push(String(f.decision)); parts.push(`decision = $${args.length}`); }
+        const limit = Math.min(Math.max(Number(f.limit) || 50, 1), 250);
+        args.push(limit);
+        const result = await query(pool, `
+            SELECT * FROM content_review_decisions
+            ${parts.length ? 'WHERE ' + parts.join(' AND ') : ''}
+            ORDER BY decided_at DESC, id DESC
+            LIMIT $${args.length}
+        `, args);
+        return result.rows.map(hydrateReviewDecision);
+    }
+
+    async function recordDistributionAudit(input) {
+        await ensureReady();
+        const payload = input || {};
+        if (!payload.item_id) throw new Error('item_id required');
+        if (!payload.channel) throw new Error('channel required');
+        const itemResult = await query(pool, 'SELECT * FROM content_items WHERE id = $1', [String(payload.item_id)]);
+        if (!itemResult.rows[0]) throw new Error(`unknown content item: ${payload.item_id}`);
+        const item = itemResult.rows[0];
+        const result = await query(pool, `
+            INSERT INTO content_distribution_audit (item_id, surface, channel, outcome,
+                actor_type, actor_id, error_message, metadata_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+            RETURNING *
+        `, [
+            String(payload.item_id),
+            String(payload.surface || item.surface),
+            String(payload.channel),
+            String(payload.outcome || 'delivered'),
+            payload.actor_type || null,
+            payload.actor_id != null ? String(payload.actor_id) : null,
+            payload.error_message || null,
+            JSON.stringify(payload.metadata || {}),
+        ]);
+        return hydrateDistribution(result.rows[0]);
+    }
+
+    async function listDistributionAudit(filters) {
+        await ensureReady();
+        const f = filters || {};
+        const parts = [];
+        const args = [];
+        if (f.item_id) { args.push(String(f.item_id)); parts.push(`item_id = $${args.length}`); }
+        if (f.surface) { args.push(String(f.surface)); parts.push(`surface = $${args.length}`); }
+        if (f.outcome) { args.push(String(f.outcome)); parts.push(`outcome = $${args.length}`); }
+        if (f.channel) { args.push(String(f.channel)); parts.push(`channel = $${args.length}`); }
+        const limit = Math.min(Math.max(Number(f.limit) || 100, 1), 500);
+        args.push(limit);
+        const result = await query(pool, `
+            SELECT * FROM content_distribution_audit
+            ${parts.length ? 'WHERE ' + parts.join(' AND ') : ''}
+            ORDER BY recorded_at DESC, id DESC
+            LIMIT $${args.length}
+        `, args);
+        return result.rows.map(hydrateDistribution);
+    }
+
+    async function getProductWorkflowStatus() {
+        await ensureReady();
+        const [stateRows, decisionRows, distributionRows] = await Promise.all([
+            query(pool, `SELECT state, COUNT(*)::int AS n FROM content_items GROUP BY state`, []),
+            query(pool, `SELECT decision, COUNT(*)::int AS n FROM content_review_decisions GROUP BY decision`, []),
+            query(pool, `SELECT outcome, COUNT(*)::int AS n FROM content_distribution_audit GROUP BY outcome`, []),
+        ]);
+        const byState = {};
+        for (const row of stateRows.rows) byState[row.state] = Number(row.n);
+        const byDecision = {};
+        for (const row of decisionRows.rows) byDecision[row.decision] = Number(row.n);
+        const byOutcome = {};
+        for (const row of distributionRows.rows) byOutcome[row.outcome] = Number(row.n);
+        return {
+            items_by_state: byState,
+            decisions_by_type: byDecision,
+            distribution_by_outcome: byOutcome,
+            counts: await getCounts(),
         };
     }
 
@@ -323,6 +478,11 @@ function createPostgresContentStore(options) {
         createSource,
         listJobs,
         queueJob,
+        recordReviewDecision,
+        listReviewDecisions,
+        recordDistributionAudit,
+        listDistributionAudit,
+        getProductWorkflowStatus,
     };
 }
 
