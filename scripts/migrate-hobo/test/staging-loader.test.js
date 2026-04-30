@@ -294,7 +294,7 @@ async function main() {
         assert.deepStrictEqual(dryRunReport.selected_services, ['chat']);
         assert.deepStrictEqual(dryRunReport.selected_datasets, ['chat/messages']);
         assert.deepStrictEqual(Object.keys(dryRunReport.datasets), ['chat/messages']);
-        assert.strictEqual(dryRunReport.effective_service_db_paths.chat, ':memory:');
+        assert.strictEqual(path.basename(dryRunReport.effective_service_db_paths.chat), 'openvibe-chat.db');
         assert.strictEqual(fs.existsSync(dryRunDbPaths.chat), false);
     } finally {
         if (previousAllow == null) delete process.env.OPENVIBE_ALLOW_STAGING_LOAD;

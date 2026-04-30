@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const {
@@ -60,7 +61,11 @@ function parseSelectionSet(value, normalizeItem) {
 }
 
 function effectiveDryRunDbPaths(dbPaths) {
-    return Object.fromEntries(Object.keys(dbPaths).map((name) => [name, ':memory:']));
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-staging-dry-run-'));
+    return Object.fromEntries(Object.entries(dbPaths).map(([name, dbPath]) => {
+        const safeBaseName = path.basename(String(dbPath || name)).replace(/[:]/g, '-');
+        return [name, path.join(tempRoot, safeBaseName || `${name}.db`)];
+    }));
 }
 
 function datasetTargetServices(dataset) {

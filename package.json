@@ -12,9 +12,17 @@
     "check": "node scripts/check-syntax.js",
     "test": "node scripts/run-tests.js",
     "readiness": "node scripts/readiness/generate-production-readiness-report.js --offline --dry-run --skip-external",
-    "smoke:browser": "node scripts/staging/browser-smoke.js"
+    "readiness:local-prod": "node scripts/readiness/check-local-prod-stack.js",
+    "smoke:browser": "node scripts/staging/browser-smoke.js",
+    "smoke:browser:playwright": "node scripts/staging/browser-smoke-playwright.js",
+    "stack:local:start": "bash scripts/dev/start-production-like-stack.sh",
+    "stack:local:stop": "bash scripts/dev/stop-production-like-stack.sh",
+    "stack:local:wait": "node scripts/dev/wait-for-stack.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
   }
 }

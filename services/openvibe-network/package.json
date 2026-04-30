@@ -12,6 +12,7 @@
   "dependencies": {
     "@openvibe/contracts": "*",
     "@openvibe/icons": "*",
+    "@openvibe/persistence": "*",
     "@openvibe/runtime": "*",
     "@openvibe/sdk": "*",
     "better-sqlite3": "^11.3.0",

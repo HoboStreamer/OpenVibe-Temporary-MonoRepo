@@ -7,23 +7,14 @@
 // concurrent reads while writes are serialised through better-sqlite3.
 
 const path = require('path');
-const fs = require('fs');
-const Database = require('better-sqlite3');
-const { warnIfUnsupported } = require('@openvibe/sdk');
+const {
+    createLegacyPersistenceRuntime,
+    createLegacyPostgresStore,
+    createLegacySqliteStore,
+} = require('@openvibe/persistence');
 
-let dbInstance = null;
-let persistenceDescriptor = null;
-
-function init(dbPath) {
-    persistenceDescriptor = warnIfUnsupported('openvibe-billing', dbPath);
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    const db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-
-    db.exec(`
+const SERVICE_NAME = 'openvibe-billing';
+const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS billing_wallets (
             id              TEXT PRIMARY KEY,
             owner_type      TEXT NOT NULL,
@@ -232,19 +223,44 @@ function init(dbPath) {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (source, kind, legacy_id)
         );
-    `);
+    `;
 
-    dbInstance = db;
-    return db;
+function defaultSqlitePath() {
+    return path.resolve(__dirname, '..', 'data', 'openvibe-billing.db');
 }
 
-function get() {
-    if (!dbInstance) throw new Error('billing db not initialized — call db.init(path) first');
-    return dbInstance;
+function createSqliteStore(options) {
+    const opts = Object.assign({}, options || {});
+    return createLegacySqliteStore({
+        serviceName: SERVICE_NAME,
+        sqlitePath: opts.sqlitePath || defaultSqlitePath(),
+        schemaSql: SCHEMA_SQL,
+    });
 }
 
-function describePersistence() {
-    return persistenceDescriptor || { service: 'openvibe-billing', mode: 'sqlite', database_url_configured: false };
+function createPostgresStore(options) {
+    const opts = Object.assign({}, options || {});
+    return createLegacyPostgresStore({
+        serviceName: SERVICE_NAME,
+        databaseUrl: opts.databaseUrl,
+        schemaSql: SCHEMA_SQL,
+    });
 }
 
-module.exports = { init, get, describePersistence };
+const sqliteStore = createSqliteStore({ sqlitePath: defaultSqlitePath() });
+const runtime = createLegacyPersistenceRuntime({
+    serviceName: SERVICE_NAME,
+    defaultSqlitePath,
+    sqlite: sqliteStore,
+    createPostgres({ databaseUrl }) {
+        return createPostgresStore({ databaseUrl });
+    },
+});
+
+module.exports = Object.assign({}, runtime, {
+    SERVICE_NAME,
+    SCHEMA_SQL,
+    defaultSqlitePath,
+    createSqliteStore,
+    createPostgresStore,
+});

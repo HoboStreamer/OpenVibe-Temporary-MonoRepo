@@ -89,6 +89,18 @@
         return `${OpenVibe.formatDateTime(value)} · ${OpenVibe.formatRelativeTime(value)}`;
     }
 
+    function sanitizeLegacyUrls(value) {
+        return JSON.parse(JSON.stringify(value || {}, (key, innerValue) => {
+            if (/legacy_proxy_url/i.test(String(key || '')) && typeof innerValue === 'string') {
+                return '[legacy origin hidden in browser view]';
+            }
+            if (typeof innerValue === 'string' && /^https:\/\/hobo\.tools\b/i.test(innerValue)) {
+                return '[legacy origin hidden in browser view]';
+            }
+            return innerValue;
+        }));
+    }
+
     function decorateTabs() {
         const tabIcons = {
             overview: 'admin',
@@ -270,7 +282,7 @@
         <div class="ov-table-wrap" style="margin-top:1rem;">
             <table class="ov-table">
                 <thead><tr><th>check</th><th>status</th><th>critical</th><th>message</th><th>details</th></tr></thead>
-                <tbody>${(readiness.checks || []).map((check) => `<tr><td><code>${OpenVibe.escapeHtml(check.name || 'unnamed')}</code></td><td><span class="ov-tag ${check.status === 'green' ? 'ok' : check.status === 'yellow' ? 'warn' : 'danger'}">${OpenVibe.escapeHtml(check.status)}</span></td><td>${check.critical === false ? '<span class="ov-tag soft">no</span>' : '<span class="ov-tag warn">yes</span>'}</td><td>${OpenVibe.escapeHtml(check.message || '—')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(check.details || {}, null, 0))}</code></td></tr>`).join('') || '<tr><td colspan="5">No readiness checks returned.</td></tr>'}</tbody>
+                <tbody>${(readiness.checks || []).map((check) => `<tr><td><code>${OpenVibe.escapeHtml(check.name || 'unnamed')}</code></td><td><span class="ov-tag ${check.status === 'green' ? 'ok' : check.status === 'yellow' ? 'warn' : 'danger'}">${OpenVibe.escapeHtml(check.status)}</span></td><td>${check.critical === false ? '<span class="ov-tag soft">no</span>' : '<span class="ov-tag warn">yes</span>'}</td><td>${OpenVibe.escapeHtml(check.message || '—')}</td><td><code>${OpenVibe.escapeHtml(JSON.stringify(sanitizeLegacyUrls(check.details), null, 0))}</code></td></tr>`).join('') || '<tr><td colspan="5">No readiness checks returned.</td></tr>'}</tbody>
             </table>
         </div>
         <div class="ov-section" style="margin-top:1rem;">
@@ -375,6 +387,7 @@
             </table>
         </div>`;
     await OpenVibe.renderServiceCards(document.getElementById('registry-service-grid'), services.slice(0, 6));
+    const runtimeRegistryEntries = Object.entries((registry && registry.registry) || {}).filter(([key]) => !/^HOBO_/i.test(String(key || '')));
 
     const auditTarget = document.getElementById('tab-audit');
     if (!canViewAudit) {
@@ -414,7 +427,7 @@
             </div>` : renderEmpty('Migration report unavailable', 'The migration status endpoint did not return a payload.')}`;
 
     document.getElementById('tab-compat').innerHTML = `
-        <div class="ov-section-head"><div><h2>Compatibility / identity</h2><p class="ov-section-sub">Current federation mode, discovery document, and resolved runtime URLs.</p></div></div>
+        <div class="ov-section-head"><div><h2>Compatibility / identity</h2><p class="ov-section-sub">Current federation mode, discovery document, and resolved OpenVibe runtime URLs. Legacy HOBO_* origins stay out of the local-first browser view.</p></div></div>
         <div class="ov-grid">
             <article class="ov-card"><div class="ov-kicker">Mode</div><h3 class="ov-service-title" style="margin-top:.8rem;">${compatOn ? 'Compat available' : 'OpenVibe-native only'}</h3><p class="ov-muted">${compatOn ? 'Legacy Hobo federation is configured as an optional path.' : 'No Hobo compat dependency is active in the runtime health report.'}</p></article>
             <article class="ov-card"><div class="ov-kicker">Issuers</div><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((health.trusted_issuers || []).length))}</h3><p class="ov-muted">Trusted issuers returned by the health endpoint.</p></article>
@@ -423,7 +436,7 @@
         <div class="ov-table-wrap" style="margin-top:1rem;">
             <table class="ov-table">
                 <thead><tr><th>resolved key</th><th>value</th><th>source</th></tr></thead>
-                <tbody>${Object.entries((registry && registry.registry) || {}).map(([key, entry]) => `<tr><td><code>${OpenVibe.escapeHtml(key)}</code></td><td>${OpenVibe.escapeHtml(String(entry && entry.value || '—'))}</td><td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td></tr>`).join('') || '<tr><td colspan="3">No runtime registry values resolved.</td></tr>'}</tbody>
+                <tbody>${runtimeRegistryEntries.map(([key, entry]) => `<tr><td><code>${OpenVibe.escapeHtml(key)}</code></td><td>${OpenVibe.escapeHtml(String(entry && entry.value || '—'))}</td><td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td></tr>`).join('') || '<tr><td colspan="3">No OpenVibe runtime registry values resolved.</td></tr>'}</tbody>
             </table>
         </div>`;
 })();

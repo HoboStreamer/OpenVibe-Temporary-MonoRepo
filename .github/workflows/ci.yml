@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Syntax check
         run: npm run check
 
@@ -29,3 +32,22 @@ jobs:
 
       - name: Offline scalable readiness
         run: npm run readiness
+
+      - name: Start local production-like stack
+        run: npm run stack:local:start
+
+      - name: Wait for local production-like stack
+        run: npm run stack:local:wait
+
+      - name: HTTP browser smoke
+        run: npm run smoke:browser
+
+      - name: Playwright browser smoke
+        run: npm run smoke:browser:playwright
+
+      - name: Local production-like readiness
+        run: npm run readiness:local-prod
+
+      - name: Stop local production-like stack
+        if: always()
+        run: npm run stack:local:stop

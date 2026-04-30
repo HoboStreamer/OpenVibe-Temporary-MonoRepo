@@ -3,23 +3,14 @@
 // openvibe-chat — SQLite persistence (migration-safe via CREATE IF NOT EXISTS).
 
 const path = require('path');
-const fs = require('fs');
-const Database = require('better-sqlite3');
-const { warnIfUnsupported } = require('@openvibe/sdk');
+const {
+    createLegacyPersistenceRuntime,
+    createLegacyPostgresStore,
+    createLegacySqliteStore,
+} = require('@openvibe/persistence');
 
-let dbInstance = null;
-let persistenceDescriptor = null;
-
-function init(dbPath) {
-    persistenceDescriptor = warnIfUnsupported('openvibe-chat', dbPath);
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    const db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-
-    db.exec(`
+const SERVICE_NAME = 'openvibe-chat';
+const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS chat_rooms (
             id                  TEXT PRIMARY KEY,
             room_type           TEXT NOT NULL,
@@ -160,25 +151,60 @@ function init(dbPath) {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (source, kind, legacy_id)
         );
-    `);
+    `;
+const LEGACY_BOOTSTRAP_SQL = [
+    `ALTER TABLE chat_participants ADD COLUMN last_read_at DATETIME`,
+];
 
-    try {
-        db.exec(`ALTER TABLE chat_participants ADD COLUMN last_read_at DATETIME`);
-    } catch {
-        // already present
+function defaultSqlitePath() {
+    return path.resolve(__dirname, '..', 'data', 'openvibe-chat.db');
+}
+
+function applyLegacyBootstrap(database) {
+    for (const sql of LEGACY_BOOTSTRAP_SQL) {
+        try {
+            database.exec(sql);
+        } catch {
+            // Existing SQLite installs may already have the column.
+        }
     }
-
-    dbInstance = db;
-    return db;
 }
 
-function get() {
-    if (!dbInstance) throw new Error('chat db not initialized — call db.init(path) first');
-    return dbInstance;
+function createSqliteStore(options) {
+    const opts = Object.assign({}, options || {});
+    return createLegacySqliteStore({
+        serviceName: SERVICE_NAME,
+        sqlitePath: opts.sqlitePath || defaultSqlitePath(),
+        schemaSql: SCHEMA_SQL,
+        afterInit: applyLegacyBootstrap,
+    });
 }
 
-function describePersistence() {
-    return persistenceDescriptor || { service: 'openvibe-chat', mode: 'sqlite', database_url_configured: false };
+function createPostgresStore(options) {
+    const opts = Object.assign({}, options || {});
+    return createLegacyPostgresStore({
+        serviceName: SERVICE_NAME,
+        databaseUrl: opts.databaseUrl,
+        schemaSql: SCHEMA_SQL,
+        afterInit: applyLegacyBootstrap,
+    });
 }
 
-module.exports = { init, get, describePersistence };
+const sqliteStore = createSqliteStore({ sqlitePath: defaultSqlitePath() });
+const runtime = createLegacyPersistenceRuntime({
+    serviceName: SERVICE_NAME,
+    defaultSqlitePath,
+    sqlite: sqliteStore,
+    createPostgres({ databaseUrl }) {
+        return createPostgresStore({ databaseUrl });
+    },
+});
+
+module.exports = Object.assign({}, runtime, {
+    SERVICE_NAME,
+    SCHEMA_SQL,
+    LEGACY_BOOTSTRAP_SQL,
+    defaultSqlitePath,
+    createSqliteStore,
+    createPostgresStore,
+});

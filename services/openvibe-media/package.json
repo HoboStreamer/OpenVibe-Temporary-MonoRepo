@@ -12,6 +12,7 @@
   "dependencies": {
     "@openvibe/contracts": "*",
     "@openvibe/icons": "*",
+    "@openvibe/persistence": "*",
     "@openvibe/queue": "*",
     "@openvibe/runtime": "*",
     "@openvibe/sdk": "*",

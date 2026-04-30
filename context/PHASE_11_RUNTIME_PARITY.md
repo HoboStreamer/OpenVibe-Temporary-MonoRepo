@@ -1,6 +1,6 @@
 # Phase 11 — runtime parity tracker
 
-Last audited: 2026-04-29 (post-validation update, content runtime + icon pass)
+Last audited: 2026-04-30 (Postgres compat + Playwright smoke + local-prod stack update)
 
 ## Implemented
 
@@ -72,6 +72,24 @@ Last audited: 2026-04-29 (post-validation update, content runtime + icon pass)
   - `services/openvibe-content/server/index.js`
   - `services/openvibe-content/server/routes.js`
   - `services/openvibe-content/test/content-api.test.js`
+- Generic Postgres compatibility/runtime selector layer is now implemented for the remaining legacy sync DB services:
+  - `packages/openvibe-persistence/sql-compat.js`
+  - `packages/openvibe-persistence/pg-sync-worker.js`
+  - `packages/openvibe-persistence/compat.js`
+  - `packages/openvibe-persistence/legacy-runtime.js`
+  - `packages/openvibe-persistence/test/sql-compat.test.js`
+- Core DB-backed services now expose selector-runtime entrypoints and Postgres-compatible bootstrap seams:
+  - `services/openvibe-network/server/db.js`
+  - `services/openvibe-events/server/db.js`
+  - `services/openvibe-media/server/db.js`
+  - `services/openvibe-live/server/db.js`
+  - `services/openre-stream/server/db.js`
+  - `services/openvibe-chat/server/db.js`
+  - `services/openvibe-community/server/db.js`
+  - `services/openvibe-billing/server/db.js`
+  - `services/openvibe-ai/server/db.js`
+  - `services/openvibe-games/server/db.js`
+  - plus corresponding `server/db/index.js`, `server/db/sqlite.js`, and `server/db/postgres.js` wrappers for each converted service
 - Shared browser icon pass is now applied across the major public shells:
   - `services/openvibe-network/public/assets/openvibe.js`
   - `services/openvibe-network/public/admin.html`
@@ -97,14 +115,22 @@ Last audited: 2026-04-29 (post-validation update, content runtime + icon pass)
   - `scripts/readiness/check-nginx-config.js`
   - `scripts/readiness/check-cloudflare-assumptions.js`
   - `scripts/readiness/generate-production-readiness-report.js`
+- Playwright browser smoke, local-prod stack helpers, and readiness/CI wiring are now implemented:
+  - `scripts/staging/browser-smoke.js`
+  - `scripts/staging/browser-smoke-playwright.js`
+  - `scripts/staging/test/browser-smoke.test.js`
+  - `scripts/staging/test/browser-smoke-playwright.test.js`
+  - `scripts/dev/start-production-like-stack.sh`
+  - `scripts/dev/stop-production-like-stack.sh`
+  - `scripts/dev/wait-for-stack.js`
+  - `scripts/readiness/check-local-prod-stack.js`
+  - `deploy/compose/docker-compose.local.yml`
+  - `.github/workflows/ci.yml`
 
 ## Partially implemented
 
-- Postgres runtime seam exists but is not wired into DB-backed services:
-  - shared helper: `packages/openvibe-persistence/runtime.js`
-  - descriptor helper: `packages/openvibe-sdk/persistence-mode.js`
-  - currently unused by service DB modules (confirmed by search)
-- SQLite-only DB modules still back the core services:
+- Postgres compatibility/runtime selection is now wired into the legacy DB-backed services, but most converted services still rely on in-code `SCHEMA_SQL` bootstrap rather than checked-in `server/migrations/postgres/` trees:
+  - `packages/openvibe-persistence/legacy-runtime.js`
   - `services/openvibe-network/server/db.js`
   - `services/openvibe-events/server/db.js`
   - `services/openvibe-media/server/db.js`
@@ -120,38 +146,25 @@ Last audited: 2026-04-29 (post-validation update, content runtime + icon pass)
 - Realtime bridge now works, but without Redis it truthfully degrades to HTTP polling fallback and remains yellow in readiness:
   - `services/openvibe-realtime/server/event-bridge.js`
   - `scripts/readiness/check-realtime-socketio.js`
-- Worker heartbeat/runtime visibility is now surfaced, but workers remain red/yellow until Redis-backed distributed mode is configured:
+- Worker heartbeat/runtime visibility is now surfaced, but workers still remain yellow unless Redis-backed distributed mode and processors are configured in the target environment:
   - `services/openvibe-workers/server/runtime.js`
   - `services/openvibe-network/public/admin.html`
+- Browser smoke and local-prod stack commands now exist, but fully automated stack startup still depends on host Docker availability and active validation may require port overrides when unrelated local processes already occupy defaults:
+  - `scripts/dev/start-production-like-stack.sh`
+  - `scripts/dev/wait-for-stack.js`
+  - `scripts/readiness/check-local-prod-stack.js`
 - Icon assets are mounted across the main UI-facing services, but some untouched pages still need deeper surface-specific polish beyond the shared nav/card treatment.
-- Browser smoke exists only as HTTP/file inspection, not Playwright automation:
-  - `scripts/staging/browser-smoke.js`
-  - `scripts/staging/test/browser-smoke.test.js`
-- Local compose stack is partial and only starts a subset of required services:
-  - `deploy/compose/docker-compose.local.yml`
 
 ## Still missing
 
-- Service runtime selectors and Postgres adapters for:
-  - `services/openvibe-network/server/db/index.js`
-  - `services/openvibe-events/server/db/index.js`
-  - `services/openvibe-media/server/db/index.js`
-  - `services/openvibe-live/server/db/index.js`
-  - `services/openre-stream/server/db/index.js`
-  - `services/openvibe-chat/server/db/index.js`
-  - `services/openvibe-community/server/db/index.js`
-  - `services/openvibe-billing/server/db/index.js`
-  - `services/openvibe-ai/server/db/index.js`
-  - `services/openvibe-games/server/db/index.js`
-  - plus corresponding `server/db/sqlite.js`, `server/db/postgres.js`, and `server/migrations/postgres/` trees
-- Playwright browser smoke implementation:
-  - missing file `scripts/staging/browser-smoke-playwright.js`
-  - missing test `scripts/staging/test/browser-smoke-playwright.test.js`
-- Production-like local stack scripts:
-  - missing `scripts/dev/start-production-like-stack.sh`
-  - missing `scripts/dev/stop-production-like-stack.sh`
-  - missing `scripts/dev/wait-for-stack.js`
-  - missing `scripts/readiness/check-local-prod-stack.js`
+- Dedicated `server/migrations/postgres/` trees for the converted legacy services (beyond content) are not checked in yet; bootstrap currently happens from in-code schema strings plus compat translation.
+- Full non-placeholder worker processor implementations are still missing for:
+  - `clips.materialize`
+  - `lifecycle.reconcile`
+  - `search.reindex`
+  - `billing.reconcile`
+  - `migration.bundle-verify`
+  - `notifications.broadcast`
 - Legacy grounding trees requested in the implementation prompt are not present in this checkout:
   - missing `/opt/openvibe/HoboStreamer.com`
   - missing `/opt/openvibe/HoboApp`
@@ -166,6 +179,8 @@ Required existing commands after each runtime-parity tranche:
 - `npm test`
 - `npm run readiness`
 - `npm run smoke:browser`
+- `npm run smoke:browser:playwright`
+- `npm run readiness:local-prod`
 - `node scripts/readiness/check-scalable-runtime.js --offline --dry-run --skip-external`
 - `node scripts/readiness/check-queue-health.js --offline --dry-run --skip-external`
 - `node scripts/readiness/check-realtime-socketio.js --offline --dry-run --skip-external`
@@ -175,35 +190,40 @@ Required existing commands after each runtime-parity tranche:
 - `node services/openvibe-realtime/test/*.test.js`
 - `node services/openvibe-workers/test/*.test.js`
 
-Additional acceptance gates still not yet satisfiable from the current repo state:
+When Docker is available on the host, also run the local stack lifecycle commands:
 
-- `npm run smoke:browser:playwright` once `scripts/staging/browser-smoke-playwright.js` exists
-- `npm run stack:local:start` / `npm run readiness:local-prod` / `npm run stack:local:stop` once stack scripts exist
+- `npm run stack:local:start`
+- `npm run stack:local:wait`
+- `npm run stack:local:stop`
 
-Validated on 2026-04-29 for this tranche:
+Validated on 2026-04-30 for this tranche:
 
-- `npm install` ✅ — added 5 packages, audited 368 packages, 0 vulnerabilities
-- `npm run check` ✅ — `[check] 236 files, 0 failures`
-- `npm test` ✅ — `[test] 46 files, 46 pass, 0 fail`
-- `npm run smoke:browser` ❌ — `gate=red`, summary `green=7 yellow=1 red=16`; network/admin/auth/session surfaces passed, but `live`, `chat`, `community`, `media`, `ai`, `games`, and `content` default ports were not running.
-- `node packages/openvibe-realtime/test/helpers.test.js` ✅
-- `node packages/openvibe-queue/test/queue.test.js` ✅
-- `node services/openvibe-realtime/test/socket-auth.test.js` ✅
-- `node services/openvibe-realtime/test/realtime-smoke.test.js` ✅
-- `node services/openvibe-realtime/test/event-bridge.test.js` ✅
-- `node services/openvibe-workers/test/workers-smoke.test.js` ✅
-- `node scripts/readiness/check-realtime-socketio.js --offline --dry-run --skip-external` ✅ — gate `yellow` (polling fallback, no Redis)
-- `node scripts/readiness/check-queue-health.js --offline --dry-run --skip-external` ✅ — gate `yellow` (registry-only, no Redis)
-- `npm run readiness` ✅ artifact written to `data/readiness/openvibe-production-readiness-report.json` with `gate=red`, summary `green=6 yellow=5 red=1`
-- Browser validation ✅ on a focused validation stack (`network:4110`, `ai:5100`, `billing:5001`, `chat:4800`, `content:5500`):
-  - `admin.openvibe.network.localhost:4110/admin.html` rendered iconized nav/tabs plus snapshot timestamp and refresh controls after fixing icon asset route ordering in `services/openvibe-network/server/index.js`
-  - `ai.openvibe.network.localhost:5100/` rendered the refreshed icon-aware surface and `/api/v1/ai/status` returned live JSON from the page controls
-  - `billing.openvibe.network.localhost:5001/` rendered the refreshed icon-aware economy surface
-  - `openvibe.chat.localhost:4800/` rendered the shared icon-aware nav successfully
-  - `openvibe.codes.localhost:5500/` rendered iconized content navigation and article chrome via the new content runtime foundation
+- `npm install` ✅ — added 2 packages, audited 370 packages, 0 vulnerabilities
+- `npm run check` ✅ — `[check] 271 files, 0 failures`
+- `npm test` ✅ — `[test] 48 files, 48 pass, 0 fail`
+- `npm run readiness` ✅ — artifact written to `data/readiness/openvibe-production-readiness-report.json` with `gate=yellow`, summary `green=6 yellow=8 red=0`; now includes `local_prod_stack` and `browser_smoke_playwright` sections
+- `npm run smoke:browser -- --billing-url=http://127.0.0.1:5001` ✅ — `gate=yellow`, summary `green=21 yellow=10 red=0`; remaining yellow checks are truthful SQLite-bootstrap warnings from locally running services
+- `npm run smoke:browser:playwright -- --network-url=http://127.0.0.1:4110 --billing-url=http://127.0.0.1:5001` ✅ — `gate=yellow`, summary `green=21 yellow=10 red=0`; browser-driven validation passed after sanitizing legacy Hobo URLs out of admin runtime detail rendering
+- `npm run readiness:local-prod -- --network-url=http://127.0.0.1:4110 --billing-url=http://127.0.0.1:5001 --timeout-ms=10000 --interval-ms=1000` ✅ — `gate=yellow`; the active stack probe reached steady state in one attempt with `green=21 yellow=10 red=0`
+- `npm run stack:local:start` ⚠️ blocked in this Linux session because Docker is not installed; compose-backed startup remains environment-dependent
+- Integrated browser validation ✅ on the focused validation stack (`network:4110`, `billing:5001`, `events:4400`, `openre-stream:4700`, `workers:5300`, `realtime:5400`, `content:5500`):
+  - `admin.openvibe.network.localhost:4110/` loaded in the integrated browser and rendered the operator shell with current-code runtime tabs
+  - DOM inspection confirmed the previous `https://hobo.tools` leak from readiness/detail rendering was removed in the current `4110` network instance
+  - the same live stack backed the successful HTTP and Playwright smoke passes above
 
 ## Files changed
 
+- `package.json` / `package-lock.json` — added the `playwright` dev dependency plus runtime-parity scripts for `smoke:browser:playwright`, `stack:local:*`, and `readiness:local-prod`.
+- `packages/openvibe-persistence/{compat.js,legacy-runtime.js,pg-sync-worker.js,sql-compat.js}` plus `packages/openvibe-persistence/test/sql-compat.test.js` — added the sync-compatible Postgres bridge and SQL translation layer for legacy DB modules.
+- `services/openvibe-{network,events,media,live,chat,community,billing,ai,games}/server/db.js`, `services/openre-stream/server/db.js`, and each corresponding `server/db/{index,sqlite,postgres}.js` wrapper — wired selector-runtime persistence entrypoints across the remaining legacy DB services.
+- `scripts/staging/browser-smoke.js` — expanded smoke coverage to events/restream/billing/workers/realtime and exported shared helpers for reuse.
+- `scripts/staging/browser-smoke-playwright.js` — added browser-driven smoke validation with real Chromium navigation for host-routed surfaces.
+- `scripts/staging/test/browser-smoke.test.js` / `scripts/staging/test/browser-smoke-playwright.test.js` — updated and added smoke coverage for the expanded matrix.
+- `deploy/compose/docker-compose.local.yml` — expanded the local production-like stack to the full runtime set with Postgres/Redis wiring and host-networked nginx.
+- `scripts/dev/start-production-like-stack.sh`, `scripts/dev/stop-production-like-stack.sh`, `scripts/dev/wait-for-stack.js` — added local stack lifecycle and steady-state wait helpers.
+- `scripts/readiness/check-local-prod-stack.js` / `scripts/readiness/generate-production-readiness-report.js` — added local-prod structural validation plus Playwright/local-stack sections in the top-level readiness report.
+- `.github/workflows/ci.yml` — added Playwright install plus local stack / smoke / readiness CI gates.
+- `services/openvibe-network/public/admin.html` — filtered legacy Hobo URLs out of runtime detail rendering so local-first browser validation stays truthful.
 - `context/PHASE_11_RUNTIME_PARITY.md` — runtime-parity tracker updated with verified implementation and validation status.
 - `packages/openvibe-queue/bullmq.js` — fixed disabled queue bundle stats so no-Redis workers return safe queue telemetry.
 - `packages/openvibe-queue/test/queue.test.js` — added regression coverage for disabled queue stats.

@@ -11,12 +11,17 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_OUT = path.join(ROOT, 'data', 'migrations', 'browser-smoke-report.json');
 const DEFAULT_URLS = Object.freeze({
     networkUrl: 'http://127.0.0.1:4100',
+    eventsUrl: 'http://127.0.0.1:4400',
+    mediaUrl: 'http://127.0.0.1:4500',
     liveUrl: 'http://127.0.0.1:4600',
+    restreamUrl: 'http://127.0.0.1:4700',
     chatUrl: 'http://127.0.0.1:4800',
     communityUrl: 'http://127.0.0.1:4900',
-    mediaUrl: 'http://127.0.0.1:4500',
+    billingUrl: 'http://127.0.0.1:5000',
     aiUrl: 'http://127.0.0.1:5100',
     gamesUrl: 'http://127.0.0.1:5200',
+    workersUrl: 'http://127.0.0.1:5300',
+    realtimeUrl: 'http://127.0.0.1:5400',
     contentUrl: 'http://127.0.0.1:5500',
 });
 const FALSEY = new Set(['0', 'false', 'no', 'off', '']);
@@ -45,6 +50,16 @@ const SURFACE_CHECKS = Object.freeze([
         path: '/health',
         validate(body) {
             return classifyPersistenceBody('openvibe-network', body);
+        },
+    },
+    {
+        id: 'events-health',
+        type: 'json',
+        baseKey: 'eventsUrl',
+        host: 'events.openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-events', body);
         },
     },
     {
@@ -132,6 +147,24 @@ const SURFACE_CHECKS = Object.freeze([
         },
     },
     {
+        id: 'restream-shell',
+        type: 'html',
+        baseKey: 'restreamUrl',
+        host: 'openre.stream.localhost',
+        path: '/',
+        marker: 'openre.stream',
+    },
+    {
+        id: 'restream-health',
+        type: 'json',
+        baseKey: 'restreamUrl',
+        host: 'openre.stream.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openre-stream', body);
+        },
+    },
+    {
         id: 'chat-shell',
         type: 'html',
         baseKey: 'chatUrl',
@@ -165,6 +198,24 @@ const SURFACE_CHECKS = Object.freeze([
         path: '/health',
         validate(body) {
             return classifyPersistenceBody('openvibe-community', body);
+        },
+    },
+    {
+        id: 'billing-shell',
+        type: 'html',
+        baseKey: 'billingUrl',
+        host: 'billing.openvibe.network.localhost',
+        path: '/',
+        marker: 'OpenVibe Billing',
+    },
+    {
+        id: 'billing-health',
+        type: 'json',
+        baseKey: 'billingUrl',
+        host: 'billing.openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return classifyPersistenceBody('openvibe-billing', body);
         },
     },
     {
@@ -219,6 +270,26 @@ const SURFACE_CHECKS = Object.freeze([
         path: '/health',
         validate(body) {
             return classifyPersistenceBody('openvibe-games', body);
+        },
+    },
+    {
+        id: 'workers-health',
+        type: 'json',
+        baseKey: 'workersUrl',
+        host: 'workers.openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return validateRuntimeHealthBody('openvibe-workers', body);
+        },
+    },
+    {
+        id: 'realtime-health',
+        type: 'json',
+        baseKey: 'realtimeUrl',
+        host: 'realtime.openvibe.network.localhost',
+        path: '/health',
+        validate(body) {
+            return validateRuntimeHealthBody('openvibe-realtime', body);
         },
     },
     {
@@ -308,6 +379,16 @@ function classifyPersistenceBody(serviceName, body) {
         return { status: 'yellow', detail: descriptor.warning || `${summary}, sqlite bootstrap remains local/dev only` };
     }
     return { status: 'green', detail: summary };
+}
+
+function validateRuntimeHealthBody(serviceName, body) {
+    if (!body || typeof body !== 'object') {
+        return { status: 'red', detail: `${serviceName} health did not return a JSON object` };
+    }
+    if (body.service !== serviceName) {
+        return { status: 'red', detail: `${serviceName} health omitted service marker (${body.service || 'missing'})` };
+    }
+    return { status: 'green', detail: `${serviceName} health responded with expected service marker` };
 }
 
 function requestUrl(targetUrl, options = {}) {
@@ -464,12 +545,17 @@ async function runBrowserSmoke(options = {}) {
         summary,
         options: {
             network_url: resolved.networkUrl,
+            events_url: resolved.eventsUrl,
+            media_url: resolved.mediaUrl,
             live_url: resolved.liveUrl,
+            restream_url: resolved.restreamUrl,
             chat_url: resolved.chatUrl,
             community_url: resolved.communityUrl,
-            media_url: resolved.mediaUrl,
+            billing_url: resolved.billingUrl,
             ai_url: resolved.aiUrl,
             games_url: resolved.gamesUrl,
+            workers_url: resolved.workersUrl,
+            realtime_url: resolved.realtimeUrl,
             content_url: resolved.contentUrl,
             expect_localhost: !!resolved.expectLocalhost,
             only: selected ? Array.from(selected) : [],
@@ -489,12 +575,17 @@ async function main() {
     const args = parseArgs(process.argv.slice(2));
     const report = await runBrowserSmoke({
         networkUrl: args.networkUrl || DEFAULT_URLS.networkUrl,
+        eventsUrl: args.eventsUrl || DEFAULT_URLS.eventsUrl,
+        mediaUrl: args.mediaUrl || DEFAULT_URLS.mediaUrl,
         liveUrl: args.liveUrl || DEFAULT_URLS.liveUrl,
+        restreamUrl: args.restreamUrl || DEFAULT_URLS.restreamUrl,
         chatUrl: args.chatUrl || DEFAULT_URLS.chatUrl,
         communityUrl: args.communityUrl || DEFAULT_URLS.communityUrl,
-        mediaUrl: args.mediaUrl || DEFAULT_URLS.mediaUrl,
+        billingUrl: args.billingUrl || DEFAULT_URLS.billingUrl,
         aiUrl: args.aiUrl || DEFAULT_URLS.aiUrl,
         gamesUrl: args.gamesUrl || DEFAULT_URLS.gamesUrl,
+        workersUrl: args.workersUrl || DEFAULT_URLS.workersUrl,
+        realtimeUrl: args.realtimeUrl || DEFAULT_URLS.realtimeUrl,
         contentUrl: args.contentUrl || DEFAULT_URLS.contentUrl,
         expectLocalhost: readFlag(args.expectLocalhost, undefined),
         only: args.only || null,
@@ -520,8 +611,16 @@ if (require.main === module) {
 }
 
 module.exports = {
+    DEFAULT_URLS,
+    DEFAULT_OUT,
+    FORBIDDEN_LOCAL_PRODUCTION_ORIGINS,
     classifyPersistenceBody,
+    evaluateHtmlCheck,
+    evaluateJsonCheck,
     requestUrl,
+    resolveCheckTarget,
     runBrowserSmoke,
     SURFACE_CHECKS,
+    splitSelection,
+    validateRuntimeHealthBody,
 };

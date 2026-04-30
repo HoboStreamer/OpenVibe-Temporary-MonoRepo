@@ -13,6 +13,7 @@ const { checkRealtimeSocketIo } = require('./check-realtime-socketio');
 const { checkMediaPipeline } = require('./check-media-pipeline');
 const { checkNginxConfig } = require('./check-nginx-config');
 const { checkCloudflareAssumptions } = require('./check-cloudflare-assumptions');
+const { checkLocalProdStack } = require('./check-local-prod-stack');
 const { ensureDir, parseArgs, writeJson } = require('../migrate-hobo/lib/common');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -189,6 +190,28 @@ function collectBrowserSmokeStatus() {
     return artifact;
 }
 
+function collectPlaywrightBrowserSmokeStatus() {
+    const artifact = readJsonIfExists(path.join(ROOT, 'data', 'readiness', 'browser-smoke-playwright-report.json'))
+        || readJsonIfExists(path.join(ROOT, 'data', 'migrations', 'browser-smoke-playwright-report.json'));
+    if (!artifact) {
+        return {
+            gate: 'yellow',
+            summary: summarizeStatuses(['yellow']),
+            note: 'Playwright browser-smoke artifact is not present yet; run npm run smoke:browser:playwright after the relevant services are started.',
+            continuation_points: ['scripts/staging/browser-smoke-playwright.js', 'scripts/staging/test/browser-smoke-playwright.test.js'],
+        };
+    }
+    if (hasPartialBrowserSelection(artifact)) {
+        return {
+            ...artifact,
+            gate: artifact.gate === 'red' ? 'red' : 'yellow',
+            partial: true,
+            note: `Playwright browser smoke artifact covers only selected checks (${artifact.options.only.join(', ')}); run npm run smoke:browser:playwright for full-stack browser coverage.`,
+        };
+    }
+    return artifact;
+}
+
 function collectKnownBlockers(sections) {
     const blockers = [];
     for (const entry of sections) {
@@ -201,8 +224,8 @@ function collectKnownBlockers(sections) {
         for (const check of entry.report && entry.report.checks || []) {
             if (check.status === 'red') {
                 blockers.push({
-                    system: `${entry.name}:${check.name}`,
-                    reason: check.message || 'Check is red.',
+                    system: `${entry.name}:${check.name || check.id || 'unnamed_check'}`,
+                    reason: check.message || check.detail || 'Check is red.',
                     continuation_points: check.details && check.details.continuation_points || [],
                 });
             }
@@ -219,14 +242,17 @@ async function generateProductionReadinessReport(options = {}) {
     const mediaPipeline = await checkMediaPipeline(options);
     const nginxConfig = await checkNginxConfig(options);
     const cloudflareAssumptions = await checkCloudflareAssumptions(options);
+    const localProdStack = await checkLocalProdStack(options);
     const migrationReadiness = collectMigrationReadiness();
     const postgresReadiness = collectPostgresReadiness(options);
     const aiSeoSourceSearch = collectAiSeoSourceSearchReadiness();
     const publicContentRuntime = collectPublicContentRuntimeReadiness();
     const browserSmoke = collectBrowserSmokeStatus();
+    const browserSmokePlaywright = collectPlaywrightBrowserSmokeStatus();
 
     const sections = [
         section('scalable_runtime', scalableRuntime),
+        section('local_prod_stack', localProdStack),
         section('migration_readiness', migrationReadiness),
         section('postgres_readiness', postgresReadiness),
         section('storage_providers', storageProviders),
@@ -238,6 +264,7 @@ async function generateProductionReadinessReport(options = {}) {
         section('nginx_config', nginxConfig),
         section('cloudflare_assumptions', cloudflareAssumptions),
         section('browser_smoke', browserSmoke),
+        section('browser_smoke_playwright', browserSmokePlaywright),
     ];
 
     const sectionStatuses = sections.map((entry) => entry.gate);
@@ -248,6 +275,7 @@ async function generateProductionReadinessReport(options = {}) {
         mode: options.offline ? 'offline' : 'active',
         gate,
         summary,
+        local_prod_stack: localProdStack,
         migration_readiness: migrationReadiness,
         postgres_readiness: postgresReadiness,
         redis_readiness: {
@@ -263,6 +291,7 @@ async function generateProductionReadinessReport(options = {}) {
         nginx_config: nginxConfig,
         cloudflare_assumptions: cloudflareAssumptions,
         browser_smoke: browserSmoke,
+        browser_smoke_playwright: browserSmokePlaywright,
         known_blockers: collectKnownBlockers(sections),
         sections,
     };

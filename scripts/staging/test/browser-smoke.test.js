@@ -97,6 +97,18 @@ function makeHtmlServer(title, options = {}) {
     });
 }
 
+function makeHealthServer(payload) {
+    return http.createServer((req, res) => {
+        if (req.url === '/health') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify(payload));
+            return;
+        }
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+    });
+}
+
 function makeContentServer() {
     return http.createServer((req, res) => {
         const host = String(req.headers.host || '').split(':')[0].toLowerCase();
@@ -145,24 +157,34 @@ async function withServers(factory, callback) {
 async function testGreenSmokeReport() {
     await withServers(() => ({
         network: makeNetworkServer(),
+        events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
         live: makeHtmlServer('openvibe.live — native fallback shell'),
+        restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
+        billing: makeHtmlServer('OpenVibe Billing'),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
         content: makeContentServer(),
     }), async (servers) => {
         const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-browser-smoke-'));
         const outFile = path.join(tmpDir, 'browser-smoke-report.json');
         const report = await runBrowserSmoke({
             networkUrl: urlFor(servers.network),
+            eventsUrl: urlFor(servers.events),
             liveUrl: urlFor(servers.live),
+            restreamUrl: urlFor(servers.restream),
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
+            billingUrl: urlFor(servers.billing),
             mediaUrl: urlFor(servers.media),
             aiUrl: urlFor(servers.ai),
             gamesUrl: urlFor(servers.games),
+            workersUrl: urlFor(servers.workers),
+            realtimeUrl: urlFor(servers.realtime),
             contentUrl: urlFor(servers.content),
             outFile,
             expectLocalhost: true,
@@ -170,7 +192,7 @@ async function testGreenSmokeReport() {
 
         assert.strictEqual(report.gate, 'green');
         assert.strictEqual(report.summary.red, 0);
-        assert.strictEqual(report.checks.length, 24);
+        assert.strictEqual(report.checks.length, 31);
         assert.ok(fs.existsSync(outFile), 'expected report file');
     });
 }
@@ -178,22 +200,32 @@ async function testGreenSmokeReport() {
 async function testDetectsProductionLeakInLocalMode() {
     await withServers(() => ({
         network: makeNetworkServer({ leakProductionOrigin: true }),
+        events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
         live: makeHtmlServer('openvibe.live — native fallback shell'),
+        restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community'),
+        billing: makeHtmlServer('OpenVibe Billing'),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
         content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({
             networkUrl: urlFor(servers.network),
+            eventsUrl: urlFor(servers.events),
             liveUrl: urlFor(servers.live),
+            restreamUrl: urlFor(servers.restream),
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
+            billingUrl: urlFor(servers.billing),
             mediaUrl: urlFor(servers.media),
             aiUrl: urlFor(servers.ai),
             gamesUrl: urlFor(servers.games),
+            workersUrl: urlFor(servers.workers),
+            realtimeUrl: urlFor(servers.realtime),
             contentUrl: urlFor(servers.content),
             expectLocalhost: true,
         });
@@ -209,7 +241,9 @@ async function testDetectsProductionLeakInLocalMode() {
 async function testDetectsRuntimeFallbackInHealthCheck() {
     await withServers(() => ({
         network: makeNetworkServer(),
+        events: makeHealthServer({ ok: true, service: 'openvibe-events', persistence: buildHealthyPersistenceDescriptor() }),
         live: makeHtmlServer('openvibe.live — native fallback shell'),
+        restream: makeHtmlServer('openre.stream'),
         chat: makeHtmlServer('OpenVibe Chat'),
         community: makeHtmlServer('OpenVibe Community', {
             persistence: {
@@ -221,19 +255,27 @@ async function testDetectsRuntimeFallbackInHealthCheck() {
                 warning: 'Requested persistence mode \u0027postgres\u0027 does not have a runtime adapter yet; the service still depends on the SQLite bootstrap path.',
             },
         }),
+        billing: makeHtmlServer('OpenVibe Billing'),
         media: makeHtmlServer('OpenVibe Media'),
         ai: makeHtmlServer('OpenVibe AI — ai.openvibe.network'),
         games: makeHtmlServer('OpenVibe Games'),
+        workers: makeHealthServer({ ok: true, service: 'openvibe-workers' }),
+        realtime: makeHealthServer({ ok: true, service: 'openvibe-realtime' }),
         content: makeContentServer(),
     }), async (servers) => {
         const report = await runBrowserSmoke({
             networkUrl: urlFor(servers.network),
+            eventsUrl: urlFor(servers.events),
             liveUrl: urlFor(servers.live),
+            restreamUrl: urlFor(servers.restream),
             chatUrl: urlFor(servers.chat),
             communityUrl: urlFor(servers.community),
+            billingUrl: urlFor(servers.billing),
             mediaUrl: urlFor(servers.media),
             aiUrl: urlFor(servers.ai),
             gamesUrl: urlFor(servers.games),
+            workersUrl: urlFor(servers.workers),
+            realtimeUrl: urlFor(servers.realtime),
             contentUrl: urlFor(servers.content),
             expectLocalhost: true,
         });

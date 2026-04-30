@@ -6,6 +6,7 @@
   "license": "MIT",
   "dependencies": {
     "@openvibe/sdk": "*",
+    "better-sqlite3": "^11.3.0",
     "pg": "^8.13.1"
   }
 }
