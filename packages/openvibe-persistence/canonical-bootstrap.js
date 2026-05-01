@@ -63,10 +63,13 @@ function loadCanonicalBootstrapSql(serviceName, opts = {}) {
  *       -> `INTEGER PRIMARY KEY AUTOINCREMENT`
  *   - any column line containing `GENERATED ALWAYS AS (...) STORED`
  *       -> dropped (SQLite uses rowid implicitly)
+ *   - Postgres-only `ALTER TABLE ...` repair / type-widening statements
+ *       -> dropped (fresh SQLite bootstrap already starts from canonical CREATEs)
  *   - `TIMESTAMPTZ` -> `DATETIME`
  *   - `JSONB` -> `TEXT`
  *   - `BIGINT`/`INT8` outside identity columns -> `INTEGER`
  *   - Postgres-only `DO $$ ... $$;` blocks -> dropped
+ *   - Postgres cast suffixes such as `::TEXT` / `::BIGINT` -> dropped
  */
 function convertCanonicalMigrationsToSqlite(sourceSql) {
     let sql = String(sourceSql || '');
@@ -74,6 +77,12 @@ function convertCanonicalMigrationsToSqlite(sourceSql) {
 
     // Drop Postgres DO $$...$$ procedural blocks.
     sql = sql.replace(/DO\s+\$\$[\s\S]*?\$\$\s*;?/gi, '');
+
+    // Drop Postgres ALTER TABLE repair / type-change statements. The
+    // SQLite bootstrap is built from the concatenated canonical migrations on a
+    // fresh database, so replaying incremental ALTER TABLE steps is both
+    // unnecessary and frequently unsupported by SQLite syntax.
+    sql = sql.replace(/ALTER\s+TABLE[\s\S]*?;/gi, '');
 
     // Drop column lines containing GENERATED ALWAYS AS (...) STORED.
     sql = sql.split('\n').filter((line) => {
@@ -99,6 +108,11 @@ function convertCanonicalMigrationsToSqlite(sourceSql) {
 
     // JSONB -> TEXT (SQLite stores JSON as TEXT).
     sql = sql.replace(/\bJSONB\b/gi, 'TEXT');
+
+    // Postgres cast suffixes (`value::TEXT`, `'{}'::jsonb`, etc.) are either
+    // redundant or unsupported in SQLite. Strip the cast and let SQLite's
+    // dynamic typing do its thing.
+    sql = sql.replace(/::\s*[A-Z_][A-Z0-9_]*(?:\s+[A-Z_][A-Z0-9_]*)*/gi, '');
 
     // Remaining BIGINT/INT8 (not part of identity) -> INTEGER.
     sql = sql.replace(/\bBIGINT\b/gi, 'INTEGER');
