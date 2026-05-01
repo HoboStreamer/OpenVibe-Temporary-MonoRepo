@@ -5,6 +5,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_NETWORK_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
+
 const db = require('../server/db');
 const staff = require('../server/api/staff');
 
@@ -42,5 +49,7 @@ assert.strictEqual(migration.cutover.gate, 'yellow');
 assert.strictEqual(migration.artifacts.filter((artifact) => artifact.exists).length >= 4, true);
 
 console.log('staff: OK');
+const activeDb = db.get();
+if (activeDb && typeof activeDb.close === 'function') activeDb.close();
 fs.rmSync(tmp, { recursive: true, force: true });
 fs.rmSync(tmpRoot, { recursive: true, force: true });

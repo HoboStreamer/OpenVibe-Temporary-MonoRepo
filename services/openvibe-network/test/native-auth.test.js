@@ -20,6 +20,12 @@ process.env.OPENVIBE_THEMES_URL = 'http://themes.openvibe.network';
 process.env.OPENVIBE_ADMIN_URL = 'http://admin.openvibe.network';
 process.env.HOBO_TOOLS_URL = '';
 process.env.HOBO_TOOLS_PUBLIC_KEY = '';
+process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_NETWORK_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
 
 const { buildApp } = require('../server/index');
 const { deriveCookieDomain } = require('../server/native-auth');
@@ -31,8 +37,10 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             port,
             path: requestPath,
             method,
+            agent: false,
             headers: Object.assign({
                 host: hostHeader,
+                connection: 'close',
             }, headers || {}, body ? { 'content-length': Buffer.byteLength(body) } : {}),
         }, (res) => {
             let raw = '';
@@ -65,9 +73,12 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         assert.ok(authorizePage.body.includes('Create an account or sign in'));
 
         const formBody = [
+            'mode=register',
             'username=alice',
             'display_name=Alice%20Example',
             'email=alice%40example.com',
+            'password=' + encodeURIComponent('TopSecret123!'),
+            'confirm_password=' + encodeURIComponent('TopSecret123!'),
             'return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
         ].join('&');
         const signIn = await request({
@@ -84,7 +95,7 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         assert.ok(setCookies.some((value) => value && value.includes('Domain=.openvibe.network')), 'auth cookie should cover the configured OpenVibe domain');
         const cookie = setCookies[0];
         assert.ok(cookie && cookie.includes('openvibe_token='), 'auth cookie should be set');
-        const authCookie = cookie.split(';')[0];
+        let authCookie = cookie.split(';')[0];
 
         const sessionRes = await request({
             port,
@@ -96,6 +107,33 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         assert.strictEqual(sessionRes.status, 200);
         assert.strictEqual(session.authenticated, true);
         assert.strictEqual(session.user.username, 'alice');
+
+        const logoutRes = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            requestPath: '/oauth/logout?return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(logoutRes.status, 302);
+
+        const loginBody = [
+            'mode=login',
+            'identifier=alice',
+            'password=' + encodeURIComponent('TopSecret123!'),
+            'return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+        ].join('&');
+        const loginRes = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            method: 'POST',
+            requestPath: '/oauth/authorize',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: loginBody,
+        });
+        assert.strictEqual(loginRes.status, 302);
+        assert.strictEqual(loginRes.headers.location, 'http://my.openvibe.network/account');
+        const loginCookies = Array.isArray(loginRes.headers['set-cookie']) ? loginRes.headers['set-cookie'] : [loginRes.headers['set-cookie']];
+        authCookie = loginCookies[0].split(';')[0];
 
         const bridgeRes = await request({
             port,
@@ -216,7 +254,8 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
 
         console.log('native-auth: OK');
     } finally {
-        server.close();
+        server.closeAllConnections && server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 })().catch((err) => {

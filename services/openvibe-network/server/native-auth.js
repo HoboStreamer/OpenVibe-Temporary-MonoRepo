@@ -1,5 +1,6 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -22,6 +23,14 @@ function randomOpaque(prefix) {
 
 function hashOpaque(value) {
     return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function looksLikeBcryptHash(value) {
+    return /^\$2[aby]?\$/.test(String(value || ''));
+}
+
+function passwordAlgorithmForHash(value) {
+    return looksLikeBcryptHash(value) ? 'bcrypt' : 'none';
 }
 
 function parseJson(value, fallback) {
@@ -288,7 +297,9 @@ function renderAuthorizePage({ config, request, sessionUser, errorMessage }) {
                 <h2>${sessionUser ? `Continue as @${escapeHtml(sessionUser.username)}` : 'Create an account or sign in'}</h2>
                 <p>${sessionUser
                     ? 'You already have a valid OpenVibe session. Continue, switch account, or sign out.'
-                    : 'No password ceremony here yet — use a username, optional display name, and optional email to bootstrap a native OpenVibe identity in this environment.'}</p>
+                    : (request.prompt === 'login'
+                        ? 'Sign in with your native OpenVibe password using your username or email.'
+                        : 'Create a native OpenVibe account with a password, or continue with imported credentials after migration.')}</p>
             </div>
             ${errorMessage ? `<div class="ov-banner warn">${escapeHtml(errorMessage)}</div>` : ''}
             ${sessionUser ? `<div class="ov-auth-callout">
@@ -303,11 +314,27 @@ function renderAuthorizePage({ config, request, sessionUser, errorMessage }) {
                     <a class="ov-btn" href="/oauth/logout?return_to=${encodeURIComponent(config.surfaces.network)}">Sign out</a>
                 </div>
             </div>` : ''}
-            <form class="ov-auth-form" method="post" action="/oauth/authorize">
+            ${request.prompt === 'login' ? `<form class="ov-auth-form" method="post" action="/oauth/authorize">
                 ${renderHiddenAuthorizeFields(request)}
+                <input type="hidden" name="mode" value="login">
+                <label>
+                    Username or email
+                    <input class="ov-input" type="text" name="identifier" maxlength="160" placeholder="alice or alice@example.com" autocomplete="username" required>
+                </label>
+                <label>
+                    Password
+                    <input class="ov-input" type="password" name="password" minlength="8" autocomplete="current-password" required>
+                </label>
+                <div class="ov-auth-actions">
+                    <button class="ov-btn ov-btn-primary" type="submit">${request.client_id ? 'Sign in and continue' : 'Sign in'}</button>
+                    <a class="ov-btn" href="/oauth/authorize?return_to=${encodeURIComponent(continueTarget)}">Need an account?</a>
+                </div>
+            </form>` : `<form class="ov-auth-form" method="post" action="/oauth/authorize">
+                ${renderHiddenAuthorizeFields(request)}
+                <input type="hidden" name="mode" value="register">
                 <label>
                     Username
-                    <input class="ov-input" type="text" name="username" maxlength="32" placeholder="openvibe-fan" required>
+                    <input class="ov-input" type="text" name="username" maxlength="32" placeholder="openvibe-fan" autocomplete="username" required>
                     <small>Your canonical handle. Letters, numbers, dots, underscores, and hyphens are cleaned automatically.</small>
                 </label>
                 <label>
@@ -316,13 +343,23 @@ function renderAuthorizePage({ config, request, sessionUser, errorMessage }) {
                 </label>
                 <label>
                     Email <small>(optional)</small>
-                    <input class="ov-input" type="email" name="email" maxlength="160" placeholder="you@example.com">
+                    <input class="ov-input" type="email" name="email" maxlength="160" placeholder="you@example.com" autocomplete="email">
+                </label>
+                <label>
+                    Password
+                    <input class="ov-input" type="password" name="password" minlength="8" autocomplete="new-password" required>
+                    <small>Use at least 8 characters. Imported bcrypt credentials continue to work after migration.</small>
+                </label>
+                <label>
+                    Confirm password
+                    <input class="ov-input" type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
                 </label>
                 <div class="ov-auth-actions">
-                    <button class="ov-btn ov-btn-primary" type="submit">${request.client_id ? 'Authorize and continue' : 'Create account / sign in'}</button>
+                    <button class="ov-btn ov-btn-primary" type="submit">${request.client_id ? 'Create account and continue' : 'Create account'}</button>
+                    <a class="ov-btn" href="/oauth/authorize?prompt=login&amp;return_to=${encodeURIComponent(continueTarget)}">Already have an account?</a>
                     <a class="ov-btn" href="${escapeHtml(config.surfaces.auth)}/.well-known/openid-configuration">View OIDC discovery</a>
                 </div>
-            </form>
+            </form>`}
             <p class="ov-auth-muted">Return target: <code>${escapeHtml(continueTarget)}</code>${request.client_id ? ` · client=<code>${escapeHtml(request.client_id)}</code>` : ''}</p>
         </section>
     </div>
@@ -339,60 +376,7 @@ function buildNativeAuth({ config, identity }) {
     const localhostCookieDomain = deriveLocalhostCookieDomain(config.surfaces.auth);
 
     function ensureTables() {
-        db.get().exec(`
-            CREATE TABLE IF NOT EXISTS auth_users (
-                id            TEXT PRIMARY KEY,
-                username      TEXT NOT NULL UNIQUE,
-                display_name  TEXT,
-                email         TEXT UNIQUE,
-                avatar_url    TEXT,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_login_at DATETIME
-            );
-            CREATE TABLE IF NOT EXISTS auth_authorization_codes (
-                code_hash              TEXT PRIMARY KEY,
-                user_id                TEXT NOT NULL,
-                client_id              TEXT,
-                redirect_uri           TEXT,
-                scope                  TEXT NOT NULL,
-                nonce                  TEXT,
-                state                  TEXT,
-                code_challenge         TEXT,
-                code_challenge_method  TEXT,
-                session_id             TEXT,
-                expires_at             DATETIME NOT NULL,
-                consumed_at            DATETIME,
-                created_at             DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_auth_codes_user ON auth_authorization_codes(user_id, created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
-                token_hash   TEXT PRIMARY KEY,
-                user_id      TEXT NOT NULL,
-                client_id    TEXT,
-                scope        TEXT NOT NULL,
-                session_id   TEXT,
-                expires_at   DATETIME NOT NULL,
-                rotated_at   DATETIME,
-                revoked_at   DATETIME,
-                created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_refresh_user ON auth_refresh_tokens(user_id, created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS auth_sessions (
-                id            TEXT PRIMARY KEY,
-                user_id       TEXT NOT NULL,
-                user_agent    TEXT,
-                ip_address    TEXT,
-                created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-                revoked_at    DATETIME,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
-        `);
+        db.get().exec(db.AUTH_SCHEMA_SQL);
     }
 
     function cookieParts(token, maxAgeSeconds, domain) {
@@ -467,6 +451,9 @@ function buildNativeAuth({ config, identity }) {
             email: row.email || null,
             avatar_url: row.avatar_url || null,
             role,
+            primary_source: row.primary_source || null,
+            is_banned: Boolean(row.is_banned),
+            ban_reason: row.ban_reason || null,
             metadata: parseJson(row.metadata_json, {}),
             created_at: row.created_at,
             updated_at: row.updated_at,
@@ -528,37 +515,92 @@ function buildNativeAuth({ config, identity }) {
             .slice(0, cap);
     }
 
-    function upsertUser({ username, display_name, email }) {
+    function getUserByEmail(email) {
+        const normalizedEmail = normalizeEmail(email);
+        if (!normalizedEmail) return null;
+        const row = db.get().prepare('SELECT * FROM auth_users WHERE email = ? LIMIT 1').get(normalizedEmail);
+        return hydrateUser(row);
+    }
+
+    function getRawUserRowByIdentifier(identifier) {
+        const normalizedIdentifier = String(identifier || '').trim();
+        if (!normalizedIdentifier) return null;
+        const sql = db.get();
+        const username = slugifyUsername(normalizedIdentifier);
+        if (username) {
+            const byUsername = sql.prepare('SELECT * FROM auth_users WHERE username = ? LIMIT 1').get(username);
+            if (byUsername) return byUsername;
+        }
+        const email = normalizeEmail(normalizedIdentifier);
+        if (email) {
+            return sql.prepare('SELECT * FROM auth_users WHERE email = ? LIMIT 1').get(email) || null;
+        }
+        return null;
+    }
+
+    function touchUserLastLogin(userId) {
+        db.get().prepare(`
+            UPDATE auth_users
+               SET last_login_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        `).run(String(userId));
+    }
+
+    function registerUser({ username, display_name, email, password, confirm_password }) {
         const normalizedUsername = slugifyUsername(username || (email ? String(email).split('@')[0] : ''));
         if (!normalizedUsername || normalizedUsername.length < 2) {
             throw new Error('username must contain at least 2 valid characters');
         }
         const normalizedEmail = normalizeEmail(email);
         const trimmedDisplayName = String(display_name || '').trim() || normalizedUsername;
-        const sql = db.get();
-        const byUsername = sql.prepare('SELECT * FROM auth_users WHERE username = ? LIMIT 1').get(normalizedUsername);
-        const byEmail = normalizedEmail
-            ? sql.prepare('SELECT * FROM auth_users WHERE email = ? LIMIT 1').get(normalizedEmail)
-            : null;
-        const existing = byUsername || byEmail || null;
-        if (existing) {
-            sql.prepare(`
-                UPDATE auth_users
-                   SET username = ?,
-                       display_name = ?,
-                       email = ?,
-                       updated_at = CURRENT_TIMESTAMP,
-                       last_login_at = CURRENT_TIMESTAMP
-                 WHERE id = ?
-            `).run(normalizedUsername, trimmedDisplayName, normalizedEmail, existing.id);
-            return getUserById(existing.id);
+        const rawPassword = String(password || '');
+        if (rawPassword.length < 8) {
+            throw new Error('password must be at least 8 characters');
         }
+        if (rawPassword !== String(confirm_password || '')) {
+            throw new Error('password confirmation does not match');
+        }
+        const sql = db.get();
+        if (sql.prepare('SELECT 1 FROM auth_users WHERE username = ? LIMIT 1').get(normalizedUsername)) {
+            throw new Error('username is already taken');
+        }
+        if (normalizedEmail && sql.prepare('SELECT 1 FROM auth_users WHERE email = ? LIMIT 1').get(normalizedEmail)) {
+            throw new Error('email is already registered');
+        }
+        const passwordHash = bcrypt.hashSync(rawPassword, 12);
         const id = randomOpaque('usr');
         sql.prepare(`
-            INSERT INTO auth_users (id, username, display_name, email, last_login_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `).run(id, normalizedUsername, trimmedDisplayName, normalizedEmail);
+            INSERT INTO auth_users (
+                id, username, display_name, email, password_hash, password_algorithm,
+                password_updated_at, primary_source, last_login_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+        `).run(id, normalizedUsername, trimmedDisplayName, normalizedEmail, passwordHash, passwordAlgorithmForHash(passwordHash), 'native');
         return getUserById(id);
+    }
+
+    function authenticateUser({ identifier, password }) {
+        const rawPassword = String(password || '');
+        const row = getRawUserRowByIdentifier(identifier);
+        if (!row || !rawPassword) {
+            throw new Error('invalid username/email or password');
+        }
+        if (Boolean(row.is_banned)) {
+            throw new Error(row.ban_reason ? `account banned: ${row.ban_reason}` : 'account banned');
+        }
+        if (passwordAlgorithmForHash(row.password_hash) !== 'bcrypt') {
+            throw new Error('password login is not available for this account yet');
+        }
+        if (!bcrypt.compareSync(rawPassword, row.password_hash)) {
+            throw new Error('invalid username/email or password');
+        }
+        touchUserLastLogin(row.id);
+        return getUserById(row.id);
+    }
+
+    function upsertUser(fields) {
+        return registerUser(fields);
     }
 
     function updateUserProfile(userId, patch) {
@@ -777,9 +819,12 @@ function buildNativeAuth({ config, identity }) {
 
     function handleAuthorizePost(req, res) {
         const request = normalizeAuthorizeRequest(req, config);
+        const mode = String((req.body && req.body.mode) || (request.prompt === 'login' ? 'login' : 'register')).toLowerCase();
         let user;
         try {
-            user = upsertUser(req.body || {});
+            user = mode === 'login'
+                ? authenticateUser(req.body || {})
+                : registerUser(req.body || {});
         } catch (err) {
             return res.status(400).send(renderAuthorizePage({ config, request, sessionUser: null, errorMessage: err.message }));
         }
@@ -788,10 +833,10 @@ function buildNativeAuth({ config, identity }) {
         audit.record({
             actorType: 'user',
             actorId: user.id,
-            action: 'auth.sign_in',
+            action: mode === 'login' ? 'auth.login' : 'auth.register',
             resource: `auth_user:${user.id}`,
             outcome: 'allow',
-            detail: { client_id: request.client_id || null },
+            detail: { client_id: request.client_id || null, mode },
         });
         return finishAuthorize(req, res, user, request, bundle.session.id);
     }
@@ -895,6 +940,10 @@ function buildNativeAuth({ config, identity }) {
         const user = getUserById(userId);
         if (!user) {
             res.status(401).json({ error: 'user not found' });
+            return null;
+        }
+        if (user.is_banned) {
+            res.status(403).json({ error: user.ban_reason ? `account banned: ${user.ban_reason}` : 'account banned' });
             return null;
         }
         touchSession(req.user.sid, req);
@@ -1026,6 +1075,47 @@ function buildNativeAuth({ config, identity }) {
             const user = requireNativeUser(req, res);
             if (!user) return;
             res.json({ items: user.metadata.linked_accounts || [] });
+        });
+
+        router.put('/account/password', express.json(), (req, res) => {
+            const user = requireNativeUser(req, res);
+            if (!user) return;
+            const body = req.body || {};
+            const newPassword = String(body.new_password || '');
+            const confirmPassword = String(body.confirm_password || '');
+            if (newPassword.length < 8) {
+                return res.status(400).json({ error: 'new_password must be at least 8 characters' });
+            }
+            if (newPassword !== confirmPassword) {
+                return res.status(400).json({ error: 'password confirmation does not match' });
+            }
+            const current = db.get().prepare('SELECT password_hash FROM auth_users WHERE id = ? LIMIT 1').get(String(user.id));
+            if (current && current.password_hash) {
+                const currentPassword = String(body.current_password || '');
+                if (!currentPassword) {
+                    return res.status(400).json({ error: 'current_password is required' });
+                }
+                if (passwordAlgorithmForHash(current.password_hash) !== 'bcrypt' || !bcrypt.compareSync(currentPassword, current.password_hash)) {
+                    return res.status(400).json({ error: 'current password is incorrect' });
+                }
+            }
+            const passwordHash = bcrypt.hashSync(newPassword, 12);
+            db.get().prepare(`
+                UPDATE auth_users
+                   SET password_hash = ?,
+                       password_algorithm = ?,
+                       password_updated_at = CURRENT_TIMESTAMP,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?
+            `).run(passwordHash, passwordAlgorithmForHash(passwordHash), String(user.id));
+            audit.record({
+                actorType: 'user',
+                actorId: user.id,
+                action: 'account.password.update',
+                resource: `auth_user:${user.id}`,
+                outcome: 'allow',
+            });
+            res.json({ ok: true });
         });
 
         router.post('/account/sign-out', (_req, res) => {

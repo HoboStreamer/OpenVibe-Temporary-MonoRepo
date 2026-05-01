@@ -16,7 +16,8 @@ function request({ port, method = 'GET', requestPath = '/', headers, body }) {
             port,
             path: requestPath,
             method,
-            headers: Object.assign({ host: 'openvibe.network' }, headers || {}, payload ? {
+            agent: false,
+            headers: Object.assign({ host: 'openvibe.network', connection: 'close' }, headers || {}, payload ? {
                 'content-type': 'application/json',
                 'content-length': Buffer.byteLength(payload),
             } : {}),
@@ -48,6 +49,11 @@ async function main() {
     process.env.OPENVIBE_THEMES_URL = 'http://themes.openvibe.network';
     process.env.OPENVIBE_ADMIN_URL = 'http://admin.openvibe.network';
     process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
+    process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+    process.env.OPENVIBE_OPENVIBE_NETWORK_PERSISTENCE_MODE = 'sqlite';
+    process.env.OPENVIBE_DATABASE_URL = '';
+    process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+    process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
     process.env.HOBO_TOOLS_URL = '';
     process.env.HOBO_TOOLS_PUBLIC_KEY = '';
     process.env.INTERNAL_API_KEY = 'test-internal';
@@ -82,7 +88,8 @@ async function main() {
         const audit = staff.recentAudit({ limit: 5 });
         assert.ok(audit.some((item) => item.action === 'internal.notifications.broadcast'));
     } finally {
-        server.close();
+        server.closeAllConnections && server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 

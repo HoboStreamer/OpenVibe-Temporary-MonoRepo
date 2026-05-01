@@ -11,6 +11,10 @@
 //   contract_registry    — schema/contract definitions (events, modules, media, ...)
 //   url_registry_overlay — OpenVibe-only URL registry keys (extends hobo-tools registry)
 //   audit_log            — every mutating action across the kernel
+//   auth_users           — native username/email/password identities
+//   auth_authorization_codes — OAuth authorization code staging
+//   auth_refresh_tokens  — native refresh token rotation store
+//   auth_sessions        — browser/device session inventory
 
 const path = require('path');
 const {
@@ -22,6 +26,67 @@ const {
 
 const SERVICE_NAME = 'openvibe-network';
 const POSTGRES_MIGRATIONS_DIR = path.resolve(__dirname, 'migrations', 'postgres');
+const AUTH_SCHEMA_SQL = `
+        CREATE TABLE IF NOT EXISTS auth_users (
+            id            TEXT PRIMARY KEY,
+            username      TEXT NOT NULL UNIQUE,
+            display_name  TEXT,
+            email         TEXT UNIQUE,
+            avatar_url    TEXT,
+            password_hash TEXT,
+            password_algorithm TEXT NOT NULL DEFAULT 'none',
+            password_updated_at DATETIME,
+            primary_source TEXT,
+            is_banned     INTEGER NOT NULL DEFAULT 0,
+            ban_reason    TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login_at DATETIME
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_authorization_codes (
+            code_hash              TEXT PRIMARY KEY,
+            user_id                TEXT NOT NULL,
+            client_id              TEXT,
+            redirect_uri           TEXT,
+            scope                  TEXT NOT NULL,
+            nonce                  TEXT,
+            state                  TEXT,
+            code_challenge         TEXT,
+            code_challenge_method  TEXT,
+            session_id             TEXT,
+            expires_at             DATETIME NOT NULL,
+            consumed_at            DATETIME,
+            created_at             DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_codes_user ON auth_authorization_codes(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+            token_hash   TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            client_id    TEXT,
+            scope        TEXT NOT NULL,
+            session_id   TEXT,
+            expires_at   DATETIME NOT NULL,
+            rotated_at   DATETIME,
+            revoked_at   DATETIME,
+            created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_refresh_user ON auth_refresh_tokens(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            id            TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL,
+            user_agent    TEXT,
+            ip_address    TEXT,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            revoked_at    DATETIME,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
+    `;
 const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS user_modules (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +197,66 @@ const SCHEMA_SQL = `
             recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_type, actor_id, recorded_at DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_users (
+            id            TEXT PRIMARY KEY,
+            username      TEXT NOT NULL UNIQUE,
+            display_name  TEXT,
+            email         TEXT UNIQUE,
+            avatar_url    TEXT,
+            password_hash TEXT,
+            password_algorithm TEXT NOT NULL DEFAULT 'none',
+            password_updated_at DATETIME,
+            primary_source TEXT,
+            is_banned     INTEGER NOT NULL DEFAULT 0,
+            ban_reason    TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login_at DATETIME
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_authorization_codes (
+            code_hash              TEXT PRIMARY KEY,
+            user_id                TEXT NOT NULL,
+            client_id              TEXT,
+            redirect_uri           TEXT,
+            scope                  TEXT NOT NULL,
+            nonce                  TEXT,
+            state                  TEXT,
+            code_challenge         TEXT,
+            code_challenge_method  TEXT,
+            session_id             TEXT,
+            expires_at             DATETIME NOT NULL,
+            consumed_at            DATETIME,
+            created_at             DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_codes_user ON auth_authorization_codes(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+            token_hash   TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            client_id    TEXT,
+            scope        TEXT NOT NULL,
+            session_id   TEXT,
+            expires_at   DATETIME NOT NULL,
+            rotated_at   DATETIME,
+            revoked_at   DATETIME,
+            created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_refresh_user ON auth_refresh_tokens(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            id            TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL,
+            user_agent    TEXT,
+            ip_address    TEXT,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            revoked_at    DATETIME,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
     `;
 
 function defaultSqlitePath() {
@@ -169,6 +294,7 @@ const runtime = createLegacyPersistenceRuntime({
 });
 
 module.exports = Object.assign({}, runtime, {
+    AUTH_SCHEMA_SQL,
     SERVICE_NAME,
     POSTGRES_MIGRATIONS_DIR,
     SCHEMA_SQL,
