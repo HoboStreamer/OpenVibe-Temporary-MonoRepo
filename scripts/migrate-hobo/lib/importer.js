@@ -198,6 +198,8 @@ function createImportContext(sourceDir, outDir, logger) {
             users: new Map(),
             hoboToolsUsersByLegacyId: new Map(),
             hoboStreamerUsersByLegacyId: new Map(),
+            hoboQuestAnonUsersByLegacyId: new Map(),
+            hoboQuestAnonRecordsById: new Map(),
             serviceLinks: new Map(),
             linkedAccounts: [],
             hoboStreamerLinkedAccountsByUserId: new Map(),
@@ -377,12 +379,97 @@ function canonicalUserIdFor(context, sourceName, legacyUserId) {
         return context.userContext.hoboToolsUsersByLegacyId.get(String(legacyUserId)) || null;
     }
     if (sourceName === 'hoboquest') {
+        if (Number.isFinite(Number(legacyUserId)) && Number(legacyUserId) < 0) {
+            return ensureHoboQuestAnonUser(context, legacyUserId);
+        }
         return context.userContext.hoboToolsUsersByLegacyId.get(String(legacyUserId)) || null;
     }
     if (sourceName === 'hobostreamer') {
         return context.userContext.hoboStreamerUsersByLegacyId.get(String(legacyUserId)) || null;
     }
     return null;
+}
+
+function defaultHoboQuestAnonDisplayName(legacyUserId) {
+    const numericId = Math.abs(toNumber(legacyUserId, 0));
+    return numericId ? `Legacy HoboQuest Anon #${numericId}` : 'Legacy HoboQuest Anon';
+}
+
+function rememberHoboQuestAnonHint(context, sourceName, legacyUserId, hints) {
+    if (sourceName !== 'hoboquest') return null;
+    const numericId = Number(legacyUserId);
+    if (!Number.isFinite(numericId) || numericId >= 0) return null;
+    return ensureHoboQuestAnonUser(context, legacyUserId, hints);
+}
+
+function ensureHoboQuestAnonUser(context, legacyUserId, hints) {
+    const legacyKey = String(legacyUserId);
+    const existingCanonicalId = context.userContext.hoboQuestAnonUsersByLegacyId.get(legacyKey);
+    const hintSource = hints || {};
+    const primaryLegacyRef = makeLegacyRef('hoboquest', hintSource.table || 'game_players', legacyKey);
+
+    if (!existingCanonicalId) {
+        const canonicalId = buildEntityId('anon-user', 'hoboquest', legacyKey);
+        const record = {
+            id: canonicalId,
+            source: 'hoboquest',
+            anon_number: null,
+            session_token: null,
+            display_name: hintSource.display_name || hintSource.username || defaultHoboQuestAnonDisplayName(legacyKey),
+            preferences: {
+                migrated_from: 'hoboquest',
+                legacy_game_user_id: legacyKey,
+                username: hintSource.username || null,
+                legacy_tables: [hintSource.table || 'game_players'],
+            },
+            total_messages: 0,
+            total_commands: 0,
+            first_seen: hintSource.created_at || null,
+            last_seen: hintSource.updated_at || null,
+            legacy_ref: primaryLegacyRef,
+            legacy_refs: [primaryLegacyRef],
+        };
+        context.userContext.hoboQuestAnonUsersByLegacyId.set(legacyKey, canonicalId);
+        context.userContext.hoboQuestAnonRecordsById.set(canonicalId, record);
+        context.userContext.anonIds.add(canonicalId);
+        return canonicalId;
+    }
+
+    const record = context.userContext.hoboQuestAnonRecordsById.get(existingCanonicalId);
+    if (!record) return existingCanonicalId;
+
+    if (hintSource.display_name && (!record.display_name || record.display_name === defaultHoboQuestAnonDisplayName(legacyKey))) {
+        record.display_name = hintSource.display_name;
+    }
+    if (hintSource.username && !record.preferences.username) {
+        record.preferences.username = hintSource.username;
+    }
+    if (hintSource.table && !record.preferences.legacy_tables.includes(hintSource.table)) {
+        record.preferences.legacy_tables.push(hintSource.table);
+    }
+    if (hintSource.created_at) {
+        record.first_seen = earliestTimestamp(record.first_seen, hintSource.created_at);
+    }
+    if (hintSource.updated_at) {
+        record.last_seen = latestTimestamp(record.last_seen, hintSource.updated_at);
+    }
+    const legacyRefKey = `${primaryLegacyRef.source}:${primaryLegacyRef.table}:${primaryLegacyRef.legacy_id}`;
+    const existingLegacyRefs = new Set((record.legacy_refs || []).map((legacyRef) => `${legacyRef.source}:${legacyRef.table}:${legacyRef.legacy_id}`));
+    if (!existingLegacyRefs.has(legacyRefKey)) {
+        record.legacy_refs.push(primaryLegacyRef);
+    }
+    return existingCanonicalId;
+}
+
+function flushHoboQuestAnonUsers(context) {
+    const anonWriter = context.writers.get('identity/anon-users');
+    for (const record of context.userContext.hoboQuestAnonRecordsById.values()) {
+        if (record._written) continue;
+        anonWriter.write(record);
+        record._written = true;
+        context.stats.bump('identity/anon-users', 'source_records');
+        context.stats.bump('identity/anon-users', 'written_records');
+    }
 }
 
 async function writeGamesDatasets(context) {
@@ -452,6 +539,13 @@ async function writeGamesDatasets(context) {
 
         await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'game_players'), async (row) => {
             context.stats.bump('games/players', 'source_records');
+            rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                table: 'game_players',
+                display_name: row.display_name || null,
+                username: row.display_name || null,
+                created_at: row.created_at || null,
+                updated_at: row.last_action || row.updated_at || null,
+            });
             const userId = resolveRequiredCanonicalUserId(context, 'games/players', sourceName, row.user_id);
             if (!userId) return;
 
@@ -557,6 +651,10 @@ async function writeGamesDatasets(context) {
         ]) {
             await forEachNdjson(tableFile(context.sourceRoots[sourceName], tableName), async (row) => {
                 context.stats.bump(datasetName, 'source_records');
+                rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                    table: tableName,
+                    updated_at: row.updated_at || row.created_at || null,
+                });
                 const userId = resolveRequiredCanonicalUserId(context, datasetName, sourceName, row.user_id);
                 if (!userId) return;
                 const itemId = String(row.item_id);
@@ -1044,6 +1142,12 @@ async function writeGamesDatasets(context) {
 
         await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_tiles'), async (row) => {
             context.stats.bump('games/canvas-tiles', 'source_records');
+            rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                table: 'canvas_tiles',
+                display_name: row.username || null,
+                username: row.username || null,
+                updated_at: row.placed_at || row.updated_at || null,
+            });
             const userId = resolveOptionalCanonicalUserId(context, sourceName, row.user_id);
             writers.canvasTiles.write({
                 id: buildEntityId('canvas-tile', sourceName, `${row.x}:${row.y}`),
@@ -1065,6 +1169,12 @@ async function writeGamesDatasets(context) {
 
         await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_actions'), async (row) => {
             context.stats.bump('games/canvas-actions', 'source_records');
+            rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                table: 'canvas_actions',
+                display_name: row.username || null,
+                username: row.username || null,
+                updated_at: row.created_at || null,
+            });
             const userId = resolveOptionalCanonicalUserId(context, sourceName, row.user_id);
             writers.canvasActions.write({
                 id: toNumber(row.id, 0),
@@ -1127,6 +1237,14 @@ async function writeGamesDatasets(context) {
 
         await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_bans'), async (row) => {
             context.stats.bump('games/canvas-bans', 'source_records');
+            rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                table: 'canvas_bans',
+                updated_at: row.created_at || null,
+            });
+            rememberHoboQuestAnonHint(context, sourceName, row.banned_by || row.created_by, {
+                table: 'canvas_bans',
+                updated_at: row.created_at || null,
+            });
             writers.canvasBans.write({
                 id: toNumber(row.id, 0),
                 user_id: resolveOptionalCanonicalUserId(context, sourceName, row.user_id),
@@ -1148,6 +1266,14 @@ async function writeGamesDatasets(context) {
 
         await forEachNdjson(tableFile(context.sourceRoots[sourceName], 'canvas_user_overrides'), async (row) => {
             context.stats.bump('games/canvas-user-overrides', 'source_records');
+            rememberHoboQuestAnonHint(context, sourceName, row.user_id, {
+                table: 'canvas_user_overrides',
+                updated_at: row.updated_at || null,
+            });
+            rememberHoboQuestAnonHint(context, sourceName, row.updated_by, {
+                table: 'canvas_user_overrides',
+                updated_at: row.updated_at || null,
+            });
             const userId = resolveRequiredCanonicalUserId(context, 'games/canvas-user-overrides', sourceName, row.user_id);
             if (!userId) return;
             if (canvasUserOverridesMap.has(userId)) {
@@ -1276,6 +1402,8 @@ async function writeGamesDatasets(context) {
         writers.canvasUserOverrides.write(row);
         context.stats.bump('games/canvas-user-overrides', 'written_records');
     }
+
+    flushHoboQuestAnonUsers(context);
 }
 
 async function writeIdentityDatasets(context) {

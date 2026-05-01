@@ -170,6 +170,40 @@ function toJson(value, fallbackValue) {
     }
 }
 
+function parseJsonValue(value, fallbackValue) {
+    if (!value) return fallbackValue;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallbackValue;
+    }
+}
+
+function looksLikeBcryptHash(value) {
+    return /^\$2[aby]?\$/.test(String(value || ''));
+}
+
+function normalizeImportedPasswordHash(value) {
+    return looksLikeBcryptHash(value) ? String(value) : null;
+}
+
+function inferPasswordAlgorithm(value) {
+    return looksLikeBcryptHash(value) ? 'bcrypt' : 'none';
+}
+
+function mergeUniqueBy(existingItems, incomingItems, keyBuilder) {
+    const merged = [];
+    const seen = new Set();
+    for (const item of [...(existingItems || []), ...(incomingItems || [])]) {
+        if (!item) continue;
+        const key = keyBuilder(item);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(item);
+    }
+    return merged;
+}
+
 function initServiceDbs(dbPaths) {
     return {
         network: networkDbModule.init(dbPaths.network),
@@ -242,6 +276,115 @@ function upsertNetworkUrlOverlay(db, row) {
             description = excluded.description,
             updated_at = CURRENT_TIMESTAMP
     `).run(String(row.key), row.value == null ? null : String(row.value), row.description || null);
+}
+
+function buildNetworkAuthMetadata(existingMetadata, row) {
+    const metadata = Object.assign({}, existingMetadata || {});
+    metadata.migrated_identity = true;
+    metadata.primary_source = row.primary_source || metadata.primary_source || null;
+    metadata.legacy_role = row.role || metadata.legacy_role || null;
+    metadata.bio = row.bio != null ? row.bio : (metadata.bio || '');
+    metadata.profile_color = row.profile_color != null ? row.profile_color : (metadata.profile_color || null);
+    metadata.token_valid_after = row.token_valid_after || metadata.token_valid_after || null;
+    metadata.password_login_ready = !!normalizeImportedPasswordHash(row.password_hash);
+    metadata.source_profiles = Object.assign({}, metadata.source_profiles || {}, row.source_profiles || {});
+    metadata.legacy_refs = mergeUniqueBy(
+        Array.isArray(metadata.legacy_refs) ? metadata.legacy_refs : [],
+        Array.isArray(row.legacy_refs) ? row.legacy_refs : (row.legacy_ref ? [row.legacy_ref] : []),
+        (item) => `${item.source || 'unknown'}:${item.table || 'unknown'}:${item.legacy_id || 'unknown'}`
+    );
+    metadata.linked_accounts = Array.isArray(metadata.linked_accounts) ? metadata.linked_accounts : [];
+    return metadata;
+}
+
+function upsertNetworkAuthUser(context, row) {
+    const existing = context.dbs.network.prepare('SELECT * FROM auth_users WHERE id = ? LIMIT 1').get(String(row.id));
+    const existingMetadata = parseJsonValue(existing && existing.metadata_json, {});
+    const metadata = buildNetworkAuthMetadata(existingMetadata, row);
+    const importedPasswordHash = normalizeImportedPasswordHash(row.password_hash);
+    const nextPasswordHash = importedPasswordHash || (existing && existing.password_hash) || null;
+    const nextPasswordAlgorithm = nextPasswordHash
+        ? inferPasswordAlgorithm(nextPasswordHash)
+        : String((existing && existing.password_algorithm) || 'none');
+    const nextUsername = String(row.username || (existing && existing.username) || 'unknown-user');
+    const nextDisplayName = row.display_name || existing && existing.display_name || nextUsername;
+    const nextEmail = row.email == null ? (existing && existing.email) || null : row.email;
+    const nextAvatarUrl = row.avatar_url == null ? (existing && existing.avatar_url) || null : row.avatar_url;
+    const nextPrimarySource = row.primary_source || existing && existing.primary_source || null;
+    const nextIsBanned = row.is_banned == null ? Number((existing && existing.is_banned) || 0) : (row.is_banned ? 1 : 0);
+    const nextBanReason = row.ban_reason == null ? (existing && existing.ban_reason) || null : row.ban_reason;
+    const nextCreatedAt = row.created_at || existing && existing.created_at || null;
+    const nextUpdatedAt = row.updated_at || existing && existing.updated_at || null;
+    const nextLastLoginAt = existing && existing.last_login_at || null;
+
+    context.dbs.network.prepare(`
+        INSERT INTO auth_users (
+            id, username, display_name, email, avatar_url,
+            password_hash, password_algorithm, password_updated_at,
+            primary_source, is_banned, ban_reason, metadata_json,
+            created_at, updated_at, last_login_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP), ?)
+        ON CONFLICT(id) DO UPDATE SET
+            username = excluded.username,
+            display_name = excluded.display_name,
+            email = excluded.email,
+            avatar_url = excluded.avatar_url,
+            password_hash = excluded.password_hash,
+            password_algorithm = excluded.password_algorithm,
+            password_updated_at = excluded.password_updated_at,
+            primary_source = excluded.primary_source,
+            is_banned = excluded.is_banned,
+            ban_reason = excluded.ban_reason,
+            metadata_json = excluded.metadata_json,
+            created_at = COALESCE(auth_users.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP),
+            last_login_at = COALESCE(auth_users.last_login_at, excluded.last_login_at)
+    `).run(
+        String(row.id),
+        nextUsername,
+        nextDisplayName,
+        nextEmail,
+        nextAvatarUrl,
+        nextPasswordHash,
+        nextPasswordAlgorithm,
+        importedPasswordHash ? (row.updated_at || row.created_at || null) : null,
+        nextPrimarySource,
+        nextIsBanned,
+        nextBanReason,
+        toJson(metadata, {}),
+        nextCreatedAt,
+        nextUpdatedAt,
+        nextLastLoginAt
+    );
+}
+
+function upsertNetworkLinkedAccountMetadata(context, row) {
+    if (!row.user_id) return false;
+    const current = context.dbs.network.prepare('SELECT metadata_json FROM auth_users WHERE id = ? LIMIT 1').get(String(row.user_id));
+    if (!current) return false;
+    const metadata = parseJsonValue(current.metadata_json, {});
+    const linkedAccounts = Array.isArray(metadata.linked_accounts) ? metadata.linked_accounts : [];
+    const nextLinkedAccount = {
+        id: row.id,
+        source: row.source || null,
+        service: row.service || null,
+        service_user_id: row.service_user_id || null,
+        service_username: row.service_username || null,
+        linked_at: row.linked_at || null,
+        legacy_ref: row.legacy_ref || null,
+    };
+    metadata.linked_accounts = mergeUniqueBy(
+        linkedAccounts,
+        [nextLinkedAccount],
+        (item) => `${item.source || 'unknown'}:${item.service || 'unknown'}:${item.service_user_id || 'unknown'}`
+    );
+    context.dbs.network.prepare(`
+        UPDATE auth_users
+           SET metadata_json = ?,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+    `).run(toJson(metadata, {}), String(row.user_id));
+    return true;
 }
 
 function normalizeLiveStatus(status) {
@@ -1672,10 +1815,20 @@ function loadDatasetRow(context, dataset, row) {
             rememberCanonicalUser(context, row);
             if (shouldWriteService(context, 'network')) {
                 loadIntoNetworkHolding(context, dataset, row);
-                context.addManualAction('openvibe-network stores migrated identity/control-plane rows in staging_import_records until standalone OpenVibe auth tables are implemented.');
+                upsertNetworkAuthUser(context, row);
+                bumpLoadReport(context.report, dataset, 'network', 'auth_users', 'direct', context.dbPaths.network);
+                context.addManualAction('Canonical identity users are projected into openvibe-network auth_users for native password sign-in, while full source payloads remain mirrored in staging_import_records for audit and not-yet-modeled fields.');
             }
             return;
         case 'identity/linked-accounts':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkLinkedAccountMetadata(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'auth_users', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Canonical identity users are projected into openvibe-network auth_users for native password sign-in, while full source payloads remain mirrored in staging_import_records for audit and not-yet-modeled fields.');
+            }
+            return;
         case 'identity/anon-users':
         case 'identity/verification-keys':
         case 'identity/user-effects':
@@ -1689,7 +1842,7 @@ function loadDatasetRow(context, dataset, row) {
         case 'social/follows':
             if (shouldWriteService(context, 'network')) {
                 loadIntoNetworkHolding(context, dataset, row);
-                context.addManualAction('openvibe-network stores migrated identity/control-plane rows in staging_import_records until standalone OpenVibe auth tables are implemented.');
+                context.addManualAction('Non-login identity/control-plane datasets remain mirrored in openvibe-network staging_import_records until dedicated runtime tables are expanded further.');
             }
             return;
         case 'control-plane/url-registry':

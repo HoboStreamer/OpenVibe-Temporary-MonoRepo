@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -32,6 +33,9 @@ async function main() {
         {
             id: 'user:hobotools:1',
             username: 'alice',
+            display_name: 'Alice Example',
+            email: 'alice@example.com',
+            password_hash: bcrypt.hashSync('TopSecret123!', 10),
             primary_source: 'hobotools',
             source_profiles: {
                 hobotools: { legacy_id: '1' },
@@ -314,6 +318,16 @@ async function main() {
 
     try {
         assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/users'").get().count, 1);
+        const authUser = networkDb.prepare("SELECT username, email, password_hash, password_algorithm, metadata_json FROM auth_users WHERE id = 'user:hobotools:1'").get();
+        assert.ok(authUser, 'expected canonical identity to project into auth_users');
+        assert.strictEqual(authUser.username, 'alice');
+        assert.strictEqual(authUser.email, 'alice@example.com');
+        assert.ok(authUser.password_hash && authUser.password_hash.startsWith('$2'), 'expected migrated bcrypt password hash to be stored');
+        assert.strictEqual(authUser.password_algorithm, 'bcrypt');
+        const authMetadata = JSON.parse(authUser.metadata_json);
+        assert.ok(Array.isArray(authMetadata.linked_accounts), 'expected linked accounts to be merged into auth user metadata');
+        assert.deepStrictEqual(authMetadata.linked_accounts[0].service, 'hobostreamer');
+        assert.deepStrictEqual(authMetadata.source_profiles.hobostreamer.legacy_id, '42');
         assert.strictEqual(restreamDb.prepare('SELECT COUNT(*) AS count FROM channels').get().count, 1);
         assert.strictEqual(restreamDb.prepare('SELECT COUNT(*) AS count FROM streams').get().count, 2);
         assert.strictEqual(

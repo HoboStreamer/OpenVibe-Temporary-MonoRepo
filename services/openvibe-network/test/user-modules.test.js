@@ -19,7 +19,8 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             port,
             path: requestPath,
             method,
-            headers: Object.assign({ host: hostHeader }, headers || {}, payload ? {
+            agent: false,
+            headers: Object.assign({ host: hostHeader, connection: 'close' }, headers || {}, payload ? {
                 'content-length': Buffer.byteLength(payload),
             } : {}),
         }, (res) => {
@@ -67,6 +68,12 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
     process.env.OPENRE_STREAM_INTERNAL_URL = stubBase;
     process.env.HOBO_TOOLS_URL = '';
     process.env.HOBO_TOOLS_PUBLIC_KEY = '';
+    process.env.INTERNAL_API_KEY = 'change-me-in-production';
+    process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+    process.env.OPENVIBE_OPENVIBE_NETWORK_PERSISTENCE_MODE = 'sqlite';
+    process.env.OPENVIBE_DATABASE_URL = '';
+    process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+    process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
 
     const { buildApp } = require('../server/index');
     const { app } = buildApp();
@@ -88,9 +95,12 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             requestPath: '/oauth/authorize',
             headers: { 'content-type': 'application/x-www-form-urlencoded' },
             body: [
+                'mode=register',
                 'username=alice',
                 'display_name=Alice%20Example',
                 'email=alice%40example.com',
+                'password=' + encodeURIComponent('TopSecret123!'),
+                'confirm_password=' + encodeURIComponent('TopSecret123!'),
                 'return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
             ].join('&'),
             formEncoded: true,
@@ -259,8 +269,10 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
 
         console.log('user-modules: OK');
     } finally {
-        server.close();
-        stubServer.close();
+        server.closeAllConnections && server.closeAllConnections();
+        stubServer.closeAllConnections && stubServer.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+        await new Promise((resolve) => stubServer.close(resolve));
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 })().catch((err) => {
