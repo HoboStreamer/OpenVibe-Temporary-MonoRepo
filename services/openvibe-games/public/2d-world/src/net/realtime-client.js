@@ -57,6 +57,7 @@ export class RealtimeClient {
         return this.request('inventory:drop', { item_id: itemId, quantity, ...extra });
     }
     closeInteraction() { return this.request('interaction:close', {}); }
+    performInteraction(payload) { return this.request('interaction:perform', payload || {}); }
     travel(targetZone) { return this.request('travel', { targetZone }); }
     pickup() { return this.request('pickup'); }
     respawn() { return this.request('respawn'); }

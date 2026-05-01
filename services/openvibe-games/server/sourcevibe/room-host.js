@@ -83,6 +83,13 @@ class SourceVibeRoomHost {
 			: { ok: false, reason: 'room not joined' };
 	}
 
+	performInteraction(socketId, payload = {}) {
+		const player = this.playerForSocket(socketId);
+		return player && typeof this.room.handleInteractionAction === 'function'
+			? this.room.handleInteractionAction(player, payload)
+			: { ok: false, reason: 'room not joined' };
+	}
+
 	travel(socketId, payload = {}) {
 		const player = this.playerForSocket(socketId);
 		return player && typeof this.room._handleTravel === 'function'

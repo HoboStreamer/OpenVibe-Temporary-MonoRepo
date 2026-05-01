@@ -199,7 +199,7 @@ const reEquipResult = room.handleInventoryEquip(roomPlayer, {
 assert.strictEqual(reEquipResult.ok, true);
 assert.strictEqual(reEquipResult.slot, 'weapon');
 assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
-assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
+assert.strictEqual(roomPlayer.held_item_id, 'hands');
 
 const hotbarAssignResult = room.handleHotbarUpdate(roomPlayer, {
     slot: 1,
@@ -220,6 +220,96 @@ const hotbarSnapshot = room.buildSnapshotForPlayer(roomPlayer, Date.now());
 assert.ok(Array.isArray(hotbarSnapshot.self.hotbar));
 assert.strictEqual(hotbarSnapshot.self.hotbar[0].item_id, 'stone_spear');
 assert.strictEqual(hotbarSnapshot.self.hotbar[1].item_id, 'coins');
+
+const clearHotbarHandsResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 1,
+    clear: true,
+});
+assert.strictEqual(clearHotbarHandsResult.ok, true);
+assert.strictEqual(roomPlayer.quick_slot, 1);
+assert.strictEqual(roomPlayer.held_item_id, 'hands');
+room._handleAttack(roomPlayer, {
+    aim: { x: roomPlayer.x + 24, y: roomPlayer.y },
+}, Date.now());
+assert.strictEqual(roomPlayer.held_item_id, 'fists');
+
+const restoreHotbarResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 1,
+    item_id: 'stone_spear',
+});
+assert.strictEqual(restoreHotbarResult.ok, true);
+assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
+
+assert.ok(Array.isArray(STARTER_WORLD.runtime_entities));
+assert.ok(STARTER_WORLD.runtime_entities.length >= 4);
+assert.ok(STARTER_WORLD.runtime_entities.some((entry) => entry.kind === 'vehicle_car1'));
+assert.ok(room.runtimeEntities.size >= 4);
+assert.ok(Array.from(room.runtimeEntities.values()).some((entry) => entry.kind === 'vehicle_car1'));
+
+const runtimeCatalog = buildCatalog(room.world, STARTER_WORLD);
+assert.ok(runtimeCatalog.definitions.runtime_entities);
+assert.ok(runtimeCatalog.definitions.runtime_entities.vehicle_car1);
+
+roomPlayer.x = 5510;
+roomPlayer.y = 4304;
+roomPlayer.zone_id = 'wilderness';
+const chestInteractAt = Date.now();
+const chestInteractResult = room.receiveInput('socket-shopper', {
+    seq: 2,
+    dt: 0.05,
+    sent_at: chestInteractAt,
+    keys: {},
+    aim: { x: 5510, y: 4304 },
+    action: 'interact',
+});
+assert.strictEqual(chestInteractResult.ok, true);
+room.tick(0.05, chestInteractAt + 50);
+const chestSnapshot = room.buildSnapshotForPlayer(roomPlayer, chestInteractAt + 60);
+assert.ok(chestSnapshot.interaction.active);
+assert.strictEqual(chestSnapshot.interaction.active.type, 'container');
+assert.ok(chestSnapshot.interaction.active.items.some((entry) => entry.item_id === 'wood'));
+const takeWoodResult = room.handleInteractionAction(roomPlayer, {
+    action: 'take',
+    entity_id: chestSnapshot.interaction.active.entity_id,
+    item_id: 'wood',
+    quantity: 2,
+});
+assert.strictEqual(takeWoodResult.ok, true);
+assert.ok(model.listInventory('shopper').some((entry) => entry.item_id === 'wood' && entry.quantity >= 2));
+room.closeInteraction(roomPlayer);
+
+roomPlayer.x = 5444;
+roomPlayer.y = 4088;
+roomPlayer.zone_id = 'wilderness';
+const signInteractAt = Date.now();
+const signInteractResult = room.receiveInput('socket-shopper', {
+    seq: 3,
+    dt: 0.05,
+    sent_at: signInteractAt,
+    keys: {},
+    aim: { x: 5444, y: 4088 },
+    action: 'interact',
+});
+assert.strictEqual(signInteractResult.ok, true);
+room.tick(0.05, signInteractAt + 50);
+const signSnapshot = room.buildSnapshotForPlayer(roomPlayer, signInteractAt + 60);
+assert.ok(signSnapshot.interaction.active);
+assert.strictEqual(signSnapshot.interaction.active.type, 'sign');
+assert.ok(signSnapshot.interaction.active.text.includes('legacy yard ahead'));
+assert.strictEqual(signSnapshot.interaction.active.editable, false);
+room.closeInteraction(roomPlayer);
+
+model.addInventoryItem({ user_id: 'shopper', item_id: 'build_wall', quantity: 1, metadata: {} });
+roomPlayer.x = 6280;
+roomPlayer.y = 4300;
+roomPlayer.zone_id = 'wilderness';
+const privilegeBuildResult = room._handleBuild(roomPlayer, {
+    item_id: 'build_wall',
+    x: 6280,
+    y: 4300,
+});
+assert.strictEqual(privilegeBuildResult.ok, false);
+assert.ok(String(privilegeBuildResult.reason || '').includes('build privilege'));
 
 const coinDropResult = room.handleInventoryDrop(roomPlayer, {
     item_id: 'coins',

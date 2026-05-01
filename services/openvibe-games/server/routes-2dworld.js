@@ -5,6 +5,7 @@ const express = require('express');
 const model = require('./model');
 const policy = require('./policy');
 const worldStore = require('./realtime/world-store');
+const { importLegacyEntities } = require('./realtime/engine/legacy-entity-importer');
 const modRegistry = require('./mods/registry');
 const { worldSnapshotPayload } = require('./realtime/systems/persistence-system');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
@@ -106,6 +107,21 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
         try {
             const a = requireAuthenticated(req);
             const body = req.body || {};
+            const importedLegacy = Array.isArray(body.legacy_entities)
+                ? importLegacyEntities(body.legacy_entities, {
+                    zones: Array.isArray(body.zones) ? body.zones : [],
+                    worldId: body.slug || 'draft-world',
+                    idPrefix: 'api-legacy',
+                })
+                : { resources: [], runtime_entities: [], summary: null };
+            const resourceNodes = [
+                ...(Array.isArray(body.resources) ? body.resources : []),
+                ...importedLegacy.resources,
+            ];
+            const runtimeEntities = [
+                ...(Array.isArray(body.runtime_entities) ? body.runtime_entities : []),
+                ...importedLegacy.runtime_entities,
+            ];
             const world = worldStore.upsertWorld({
                 slug: body.slug || String(body.name || 'world').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64),
                 name: body.name || 'Untitled World',
@@ -124,12 +140,19 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
                     Array.isArray(body.landmarks) ? { landmarks: body.landmarks } : {},
                     body.camera ? { camera: body.camera } : {},
                     body.ambience ? { ambience: body.ambience } : {},
+                    importedLegacy.summary ? { legacy_import: importedLegacy.summary } : {},
                 ),
             });
             if (Array.isArray(body.zones)) worldStore.setZones(world.id, body.zones);
-            if (Array.isArray(body.resources)) worldStore.setResourceNodes(world.id, body.resources);
+            if (Array.isArray(body.resources) || importedLegacy.resources.length) worldStore.setResourceNodes(world.id, resourceNodes);
+            if (Array.isArray(body.runtime_entities) || importedLegacy.runtime_entities.length) worldStore.setRuntimeEntities(world.id, runtimeEntities);
             publish(req, GAME_EVENT_TYPES.WORLD_CREATED, { world_id: world.id, slug: world.slug, owner_id: a.id });
-            res.status(201).json({ world, zones: worldStore.listZones(world.id) });
+            res.status(201).json({
+                world,
+                zones: worldStore.listZones(world.id),
+                runtime_entities: worldStore.listRuntimeEntities(world.id),
+                import_summary: importedLegacy.summary,
+            });
         } catch (err) {
             fail(res, err);
         }

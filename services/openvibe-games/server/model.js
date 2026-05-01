@@ -569,6 +569,11 @@ function listStructures(filters) {
     return rows.map(hydrateStructure);
 }
 
+function getStructure(id) {
+    const row = getDb().prepare('SELECT * FROM game_structures WHERE id = ?').get(String(id));
+    return hydrateStructure(row);
+}
+
 function createStructure(input) {
     if (!input || !input.type) throw new Error('type required');
     const id = uid('structure');
@@ -584,7 +589,18 @@ function createStructure(input) {
         input.owner_id != null ? String(input.owner_id) : null,
         json(input.data || {}, {})
     );
-    return getDb().prepare('SELECT * FROM game_structures WHERE id = ?').get(id);
+    return getStructure(id);
+}
+
+function updateStructureData(id, data) {
+    const structureId = String(id || '');
+    if (!structureId) throw new Error('structure id required');
+    getDb().prepare(`
+        UPDATE game_structures
+        SET data_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(json(data || {}, {}), structureId);
+    return getStructure(structureId);
 }
 
 function ensureFarmPlots(userId) {
@@ -1067,6 +1083,7 @@ module.exports = {
     getCanvasSettings,
     getCanvasState,
     getPlayer,
+    getStructure,
     incrementDailyQuestProgress,
     levelFromXp,
     listAchievements,
@@ -1093,6 +1110,7 @@ module.exports = {
     setPlayerSourceVibeMetadata,
     summarizeProduct,
     unlockAchievement,
+    updateStructureData,
     upsertCosmetic,
     upsertFarmPlot,
     upsertPlayer,

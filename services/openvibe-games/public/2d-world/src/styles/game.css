@@ -119,7 +119,8 @@ body { overflow: hidden; }
 #map-root,
 #mods-root,
 #settings-root,
-#shop-root {
+#shop-root,
+#interaction-root {
     right: 18px;
     top: 92px;
     width: min(360px, calc(100vw - 36px));
@@ -666,6 +667,7 @@ body.hud-resting #hud-root .interaction-prompt.visible {
     #map-root,
     #mods-root,
     #shop-root,
+    #interaction-root,
     #loot-root {
         left: 12px;
         right: 12px;
@@ -682,7 +684,8 @@ body.hud-resting #hud-root .interaction-prompt.visible {
     #map-root,
     #mods-root,
     #settings-root,
-    #shop-root { top: 92px; }
+    #shop-root,
+    #interaction-root { top: 92px; }
 
     #panel-hotkeys {
         width: calc(100vw - 24px);
@@ -715,6 +718,10 @@ body.hud-resting #hud-root .interaction-prompt.visible {
     top: 72px;
     width: min(760px, calc(100vw - 36px));
     max-height: min(82vh, 860px);
+}
+
+#interaction-root {
+    width: min(460px, calc(100vw - 36px));
 }
 
 #console-root,
@@ -1369,6 +1376,103 @@ body.hud-resting #hud-root .interaction-prompt.visible {
 .legacy-inventory-panel__meta {
     color: #f2dda2;
     font-weight: 700;
+}
+
+.interaction-panel {
+    border-radius: 2px;
+    background: linear-gradient(180deg, rgba(58, 66, 76, 0.97) 0%, rgba(18, 21, 26, 0.98) 12%, rgba(10, 12, 15, 0.98) 100%);
+}
+
+.interaction-panel__titlebar {
+    cursor: default;
+}
+
+.interaction-panel__section {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 0.85rem;
+}
+
+.interaction-list {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.interaction-list--compact {
+    max-height: 34vh;
+    overflow: auto;
+    padding-right: 0.1rem;
+}
+
+.interaction-entry {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+}
+
+.interaction-entry--compact {
+    grid-template-columns: auto 1fr;
+}
+
+.interaction-entry--detail {
+    grid-template-columns: 1fr;
+}
+
+.interaction-entry__icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+}
+
+.interaction-entry__icon-image {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.interaction-entry__icon-emoji {
+    font-size: 1.2rem;
+}
+
+.interaction-entry__body {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.interaction-entry__body small,
+.interaction-sign__footer small {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.interaction-entry__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    grid-column: 1 / -1;
+}
+
+.interaction-sign__textarea {
+    min-height: 160px;
+    resize: vertical;
+}
+
+.interaction-sign__footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
 }
 
 .legacy-inventory-panel__section {

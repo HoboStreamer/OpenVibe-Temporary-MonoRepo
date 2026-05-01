@@ -77,6 +77,15 @@ const RECIPES = Object.freeze([
         xp: 12,
     },
     {
+        id: 'recipe.build_half_wall',
+        result: { item_id: 'build_half_wall', quantity: 1 },
+        inputs: [{ item_id: 'wood', quantity: 2 }, { item_id: 'stone', quantity: 1 }],
+        station: 'build_workbench',
+        skill: 'construction',
+        level: 1,
+        xp: 10,
+    },
+    {
         id: 'recipe.build_door',
         result: { item_id: 'build_door', quantity: 1 },
         inputs: [{ item_id: 'wood', quantity: 6 }],
@@ -93,6 +102,24 @@ const RECIPES = Object.freeze([
         skill: 'construction',
         level: 3,
         xp: 18,
+    },
+    {
+        id: 'recipe.build_tool_cupboard',
+        result: { item_id: 'build_tool_cupboard', quantity: 1 },
+        inputs: [{ item_id: 'wood', quantity: 10 }, { item_id: 'stone', quantity: 6 }],
+        station: 'build_workbench',
+        skill: 'construction',
+        level: 4,
+        xp: 20,
+    },
+    {
+        id: 'recipe.build_sign',
+        result: { item_id: 'build_sign', quantity: 1 },
+        inputs: [{ item_id: 'wood', quantity: 3 }, { item_id: 'fiber', quantity: 1 }],
+        station: 'build_workbench',
+        skill: 'construction',
+        level: 1,
+        xp: 8,
     },
 ]);
 

@@ -17,6 +17,7 @@ import { DeathPanel } from './ui/death-panel.js';
 import { ModBrowser } from './ui/mod-browser.js';
 import { LootPanel } from './ui/loot-panel.js';
 import { ShopPanel } from './ui/shop-panel.js';
+import { InteractionPanel } from './ui/interaction-panel.js';
 import { ConsolePanel } from './gamemodes/2dworld/ui/console-panel.js';
 import { SettingsPanel } from './ui/settings-panel.js';
 import { MenuPanel } from './gamemodes/2dworld/ui/menu-panel.js';
@@ -82,7 +83,7 @@ const state = {
     latestSnapshot: null,
     buildSelection: null,
     catalog: { items: [], itemMap: {}, skills: [], definitions: {}, mods: [], worldDefinition: { bounds: { x: 0, y: 0, w: 8192, h: 8192 } } },
-    panels: { menu: false, chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, console: false, settings: false, loot: false, shop: false },
+    panels: { menu: false, chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, console: false, settings: false, loot: false, shop: false, interaction: false },
     hudActiveUntil: performance.now() + 8000,
     snapshotBuffer: new SnapshotBuffer(45),
     settings: loadClientSettings(),
@@ -122,6 +123,7 @@ const dom = {
     death: document.getElementById('death-root'),
     loot: document.getElementById('loot-root'),
     shop: document.getElementById('shop-root'),
+    interaction: document.getElementById('interaction-root'),
     hotkeys: document.getElementById('panel-hotkeys'),
 };
 
@@ -138,6 +140,7 @@ let skills = null;
 let mods = null;
 let lootPanel = null;
 let shopPanel = null;
+let interactionPanel = null;
 let crafting = null;
 let buildMenu = null;
 let mapPanel = null;
@@ -637,12 +640,23 @@ function closeAllPanels() {
     setPanelOpen('menu', false);
     setPanelOpen('chat', false);
     closeUtilityPanels(null);
+    setPanelOpen('interaction', false);
     setPanelOpen('loot', false);
     setPanelOpen('shop', false);
     chat.blur();
+    if (interactionPanel) interactionPanel.hide();
     if (shopPanel) shopPanel.hide();
     refreshOverlayPanels();
     return hadOpen;
+}
+
+function applyInteractionResult(result) {
+    if (!state.latestSnapshot || !state.latestSnapshot.interaction) return;
+    if (Object.prototype.hasOwnProperty.call(result || {}, 'interaction')) {
+        state.latestSnapshot.interaction.active = result && result.interaction || null;
+        refreshPanels(state.latestSnapshot);
+        refreshHud(state.latestSnapshot);
+    }
 }
 
 function toggleChatPanel(forceOpen = !state.panels.chat) {
@@ -705,6 +719,7 @@ async function loadCatalog() {
     mods = new ModBrowser(dom.mods);
     lootPanel = new LootPanel(dom.loot, state.catalog.items);
     shopPanel = new ShopPanel(dom.shop, state.catalog.items);
+    interactionPanel = new InteractionPanel(dom.interaction, state.catalog.items);
     buildMenu.render((item) => {
         state.buildSelection = item;
     });
@@ -828,8 +843,9 @@ function bindUi() {
 }
 
 function refreshPanels(snapshot) {
-    if (!snapshot || !inventory || !crafting || !buildMenu || !mapPanel || !skills || !mods || !lootPanel || !shopPanel) return;
+    if (!snapshot || !inventory || !crafting || !buildMenu || !mapPanel || !skills || !mods || !lootPanel || !shopPanel || !interactionPanel) return;
     const activeInteraction = snapshot.interaction && snapshot.interaction.active;
+    input.setHotbar(snapshot.self && snapshot.self.hotbar || [], snapshot.self && snapshot.self.quick_slot || input.quickSlot);
     const inventoryLayout = sourcevibeInventoryLayout();
     const showBank = !!(activeInteraction && activeInteraction.type === 'bank')
         || (!inventoryLayout.showBankOnInteractionOnly && Array.isArray(snapshot.self && snapshot.self.bank) && snapshot.self.bank.length > 0);
@@ -890,6 +906,7 @@ function refreshPanels(snapshot) {
             },
             onSelectHotbar: (slot) => {
                 input.quickSlot = slot;
+                input.setHotbar(snapshot.self && snapshot.self.hotbar || [], slot);
                 if (state.localSelf) state.localSelf.quick_slot = slot;
                 if (state.renderSelf) state.renderSelf.quick_slot = slot;
                 markHudActivity(9000);
@@ -911,9 +928,75 @@ function refreshPanels(snapshot) {
     death.render(snapshot.self);
     lootPanel.render(snapshot.entities.loot || []);
 
+    if (activeInteraction && activeInteraction.type !== 'shop') {
+        closeUtilityPanels(null);
+        setPanelOpen('menu', false);
+        setPanelOpen('shop', false);
+        shopPanel.hide();
+        setPanelOpen('interaction', true);
+        interactionPanel.render(activeInteraction, snapshot.self, {
+            onClose: async () => {
+                if (!client) return;
+                const result = await client.closeInteraction();
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Close failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || 'Could not close interaction.', 'warn');
+                    return;
+                }
+                applyInteractionResult({ interaction: null });
+                markHudActivity(9000);
+            },
+            onTake: async ({ interaction, itemId, quantity }) => {
+                if (!client) return;
+                const result = await client.performInteraction({ action: 'take', entity_id: interaction.entity_id, item_id: itemId, quantity });
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Take failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not take ${itemId}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Took ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId}.`);
+                applyInteractionResult(result || {});
+                markHudActivity(9000);
+            },
+            onStore: async ({ interaction, itemId, quantity }) => {
+                if (!client) return;
+                const result = await client.performInteraction({ action: 'store', entity_id: interaction.entity_id, item_id: itemId, quantity });
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Store failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not store ${itemId}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Stored ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId}.`);
+                applyInteractionResult(result || {});
+                markHudActivity(9000);
+            },
+            onSaveText: async ({ interaction, text }) => {
+                if (!client) return;
+                const result = await client.performInteraction({ action: 'set_text', entity_id: interaction.entity_id, text });
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Sign save failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || 'Could not save sign text.', 'warn');
+                    return;
+                }
+                addConsoleLog('Saved sign text.');
+                applyInteractionResult(result || {});
+                markHudActivity(9000);
+            },
+        });
+    } else {
+        setPanelOpen('interaction', false);
+        interactionPanel.hide();
+    }
+
     if (activeInteraction && activeInteraction.type === 'shop') {
         closeUtilityPanels(null);
         setPanelOpen('menu', false);
+        setPanelOpen('interaction', false);
+        interactionPanel.hide();
         setPanelOpen('shop', true);
         shopPanel.render(activeInteraction, snapshot.self, async ({ npcId, itemId, quantity }) => {
             if (!client) return;
@@ -975,6 +1058,7 @@ function onSnapshot(snapshot) {
     state.snapshotCount += 1;
     bufferSnapshotEntities(snapshot);
     if (snapshot && snapshot.self && snapshot.self.quick_slot) input.quickSlot = Number(snapshot.self.quick_slot) || input.quickSlot;
+    if (snapshot && snapshot.self) input.setHotbar(snapshot.self.hotbar || [], snapshot.self.quick_slot || input.quickSlot);
     if (!state.latestSnapshot) {
         state.latestSnapshot = snapshot;
         state.localSelf = structuredClone(snapshot.self);

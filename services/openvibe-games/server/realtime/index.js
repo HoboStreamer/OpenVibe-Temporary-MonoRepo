@@ -31,6 +31,7 @@ function resolveWorldDefinition(world, fallback = STARTER_WORLD) {
     const metadata = isObject(world && world.metadata) ? world.metadata : {};
     const persistedZones = world && world.id ? worldStore.listZones(world.id) : [];
     const persistedResources = world && world.id ? worldStore.listResourceNodes(world.id) : [];
+    const persistedRuntimeEntities = world && world.id ? worldStore.listRuntimeEntities(world.id) : [];
     return Object.assign({}, base, {
         slug: world && world.slug || base.slug,
         name: world && world.name || base.name,
@@ -44,6 +45,7 @@ function resolveWorldDefinition(world, fallback = STARTER_WORLD) {
         landmarks: Array.isArray(metadata.landmarks) ? clone(metadata.landmarks) : clone(base.landmarks || []),
         travel: Array.isArray(metadata.travel) ? clone(metadata.travel) : clone(base.travel || []),
         npcs: Array.isArray(metadata.npcs) ? clone(metadata.npcs) : clone(base.npcs || []),
+        runtime_entities: persistedRuntimeEntities.length ? persistedRuntimeEntities : (Array.isArray(metadata.runtime_entities) ? clone(metadata.runtime_entities) : clone(base.runtime_entities || [])),
         zones: persistedZones.length ? persistedZones : (Array.isArray(metadata.zones) ? clone(metadata.zones) : clone(base.zones || [])),
         resources: persistedResources.length ? persistedResources : (Array.isArray(metadata.resources) ? clone(metadata.resources) : clone(base.resources || [])),
     });
@@ -93,6 +95,7 @@ function seedStarterContent({ publish } = {}) {
     worldStore.ensureSeedNpcTemplates(NPC_TEMPLATES);
     worldStore.setZones(world.id, STARTER_WORLD.zones);
     worldStore.setResourceNodes(world.id, STARTER_WORLD.resources);
+    worldStore.setRuntimeEntities(world.id, STARTER_WORLD.runtime_entities || []);
     if (typeof publish === 'function') {
         publish(GAME_EVENT_TYPES.WORLD_SEEDED, { world_id: world.id, slug: world.slug, name: world.name });
     }
@@ -331,6 +334,14 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
             const room = currentRoom(socket);
             const result = room && typeof room.closeInteraction === 'function'
                 ? room.closeInteraction(socket.id)
+                : { ok: false, reason: 'room not joined' };
+            if (typeof callback === 'function') callback(result);
+        });
+
+        socket.on('interaction:perform', (payload, callback) => {
+            const room = currentRoom(socket);
+            const result = room && typeof room.performInteraction === 'function'
+                ? room.performInteraction(socket.id, payload || {})
                 : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });

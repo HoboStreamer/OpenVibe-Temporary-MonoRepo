@@ -5,7 +5,35 @@ export class InputController {
         this.mouse = { x: 0, y: 0, down: false };
         this.pendingActions = [];
         this.quickSlot = 1;
+        this.hotbar = Array.from({ length: 9 }, () => null);
         this._bind();
+    }
+
+    setHotbar(hotbar = [], quickSlot = this.quickSlot) {
+        this.hotbar = Array.from({ length: 9 }, (_, index) => {
+            const entry = hotbar[index];
+            return entry && entry.item_id && Number(entry.quantity || 0) > 0 ? entry : null;
+        });
+        this.quickSlot = Math.max(1, Math.min(9, Number(quickSlot) || this.quickSlot));
+    }
+
+    _filledSlots() {
+        return this.hotbar
+            .map((entry, index) => entry ? index + 1 : null)
+            .filter(Boolean);
+    }
+
+    _cycleQuickSlot(direction) {
+        const filledSlots = this._filledSlots();
+        if (!filledSlots.length) {
+            const next = this.quickSlot + direction;
+            this.quickSlot = next < 1 ? 9 : next > 9 ? 1 : next;
+            return;
+        }
+        let index = filledSlots.indexOf(this.quickSlot);
+        if (index === -1) index = direction > 0 ? -1 : 0;
+        index = (index + direction + filledSlots.length) % filledSlots.length;
+        this.quickSlot = filledSlots[index];
     }
 
     _bind() {
@@ -51,8 +79,7 @@ export class InputController {
             const direction = Math.sign(event.deltaY || 0);
             if (!direction) return;
             event.preventDefault();
-            const next = this.quickSlot + direction;
-            this.quickSlot = next < 1 ? 9 : next > 9 ? 1 : next;
+            this._cycleQuickSlot(direction);
         }, { passive: false });
     }
 

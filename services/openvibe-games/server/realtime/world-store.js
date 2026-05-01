@@ -129,6 +129,101 @@ function listResourceNodes(worldId) {
         }));
 }
 
+function rowToRuntimeEntity(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        world_id: row.world_id,
+        zone_id: row.zone_id,
+        kind: row.kind,
+        template_id: row.template_id || null,
+        x: Number(row.x) || 0,
+        y: Number(row.y) || 0,
+        hp: Number(row.hp || 0),
+        max_hp: Number(row.max_hp || 0),
+        owner_id: row.owner_id || null,
+        state_version: Number(row.state_version || 0),
+        metadata: safeParse(row.metadata_json, {}),
+        updated_at: row.updated_at,
+    };
+}
+
+function setRuntimeEntities(worldId, entities) {
+    const stmt = getDb().prepare(`
+        INSERT INTO game_runtime_entities (id, world_id, zone_id, kind, template_id, x, y, hp, max_hp, owner_id, state_version, metadata_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+    const tx = getDb().transaction((items) => {
+        getDb().prepare('DELETE FROM game_runtime_entities WHERE world_id = ?').run(String(worldId));
+        for (const entity of items || []) {
+            stmt.run(
+                entity.id || uid('entity'),
+                String(worldId),
+                String(entity.zone_id || 'wilderness'),
+                String(entity.kind || 'prop'),
+                entity.template_id || null,
+                Number(entity.x) || 0,
+                Number(entity.y) || 0,
+                Number(entity.hp || 0),
+                Number(entity.max_hp || entity.hp || 0),
+                entity.owner_id || null,
+                Number(entity.state_version || 0),
+                JSON.stringify(entity.metadata || {}),
+            );
+        }
+    });
+    tx(entities || []);
+}
+
+function listRuntimeEntities(worldId) {
+    return getDb().prepare('SELECT * FROM game_runtime_entities WHERE world_id = ? ORDER BY updated_at ASC, id ASC')
+        .all(String(worldId))
+        .map(rowToRuntimeEntity);
+}
+
+function upsertRuntimeEntity(entity) {
+    if (!entity || !entity.id) {
+        const err = new Error('runtime entity id required');
+        err.status = 400;
+        throw err;
+    }
+    getDb().prepare(`
+        INSERT INTO game_runtime_entities (id, world_id, zone_id, kind, template_id, x, y, hp, max_hp, owner_id, state_version, metadata_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            world_id = excluded.world_id,
+            zone_id = excluded.zone_id,
+            kind = excluded.kind,
+            template_id = excluded.template_id,
+            x = excluded.x,
+            y = excluded.y,
+            hp = excluded.hp,
+            max_hp = excluded.max_hp,
+            owner_id = excluded.owner_id,
+            state_version = excluded.state_version,
+            metadata_json = excluded.metadata_json,
+            updated_at = CURRENT_TIMESTAMP
+    `).run(
+        String(entity.id),
+        String(entity.world_id || 'main'),
+        String(entity.zone_id || 'wilderness'),
+        String(entity.kind || 'prop'),
+        entity.template_id || null,
+        Number(entity.x) || 0,
+        Number(entity.y) || 0,
+        Number(entity.hp || 0),
+        Number(entity.max_hp || entity.hp || 0),
+        entity.owner_id || null,
+        Number(entity.state_version || 0),
+        JSON.stringify(entity.metadata || {}),
+    );
+    return rowToRuntimeEntity(getDb().prepare('SELECT * FROM game_runtime_entities WHERE id = ?').get(String(entity.id)));
+}
+
+function deleteRuntimeEntity(id) {
+    getDb().prepare('DELETE FROM game_runtime_entities WHERE id = ?').run(String(id));
+}
+
 function recordSnapshot(worldId, payload) {
     const id = uid('snap');
     const next = (getDb().prepare('SELECT COALESCE(MAX(sequence),0)+1 AS n FROM game_world_snapshots WHERE world_id = ?').get(String(worldId)) || {}).n || 1;
@@ -226,6 +321,7 @@ module.exports = {
     listWorlds, getWorld, upsertWorld,
     setZones, listZones,
     setResourceNodes, listResourceNodes,
+    setRuntimeEntities, listRuntimeEntities, upsertRuntimeEntity, deleteRuntimeEntity,
     recordSnapshot, latestSnapshot,
     recordSession, endSession,
     ensureSeedItemCatalog, ensureSeedNpcTemplates, ensureSeedLootTables,

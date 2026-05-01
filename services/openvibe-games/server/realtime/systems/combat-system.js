@@ -4,12 +4,20 @@ const { withinRange } = require('../engine/collision');
 const { resolveRewind, rewindPosition } = require('../net/lag-compensation');
 
 function defaultWeapon(player) {
-    const weaponId = player.equip_weapon || 'fists';
+    const weaponId = String(player && player.held_item_id || player && player.held_item || 'hands').trim() || 'hands';
     switch (weaponId) {
     case 'iron_sword': return { item_id: weaponId, damage: 10, range: 38, cooldown_ms: 650, projectile: false };
     case 'stone_spear': return { item_id: weaponId, damage: 7, range: 52, cooldown_ms: 800, projectile: false };
     case 'short_bow': return { item_id: weaponId, damage: 7, range: 220, cooldown_ms: 1000, projectile: true, projectile_speed: 360 };
     case 'wooden_club': return { item_id: weaponId, damage: 4, range: 28, cooldown_ms: 700, projectile: false };
+    case 'stone_hatchet': return { item_id: weaponId, damage: 5, range: 30, cooldown_ms: 760, projectile: false };
+    case 'iron_hatchet': return { item_id: weaponId, damage: 7, range: 32, cooldown_ms: 720, projectile: false };
+    case 'stone_pickaxe': return { item_id: weaponId, damage: 5, range: 30, cooldown_ms: 780, projectile: false };
+    case 'iron_pickaxe': return { item_id: weaponId, damage: 6, range: 32, cooldown_ms: 740, projectile: false };
+    case 'hammer': return { item_id: weaponId, damage: 5, range: 28, cooldown_ms: 690, projectile: false };
+    case 'fishing_rod': return { item_id: weaponId, damage: 3, range: 36, cooldown_ms: 780, projectile: false };
+    case 'fists':
+    case 'hands':
     default: return { item_id: 'fists', damage: 2, range: 22, cooldown_ms: 500, projectile: false };
     }
 }

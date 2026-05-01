@@ -20,6 +20,7 @@ const { createHookBus } = require('../engine/hook-bus');
 const { installModHooks } = require('../engine/mod-script-runtime');
 const { levelForXp, xpRequiredForNext } = require('../engine/skills');
 const { rollLoot } = require('../engine/loot');
+const { normalizeLegacyContainer } = require('../engine/legacy-entity-importer');
 const inventoryUtils = require('../engine/inventory');
 
 const LOOT_PICKUP_RADIUS = 48;
@@ -34,6 +35,13 @@ function uid(prefix) {
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
+}
+
+function humanizeId(value) {
+    return String(value || '')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase())
+        .trim() || 'Object';
 }
 
 function asBoolObject(input) {
@@ -74,6 +82,7 @@ class WorldRoom {
         this.histories = new Map();
         this.npcs = new Map();
         this.resources = new Map();
+        this.runtimeEntities = new Map();
         this.loot = new Map();
         this.projectiles = new Map();
         this.structures = new Map();
@@ -93,6 +102,7 @@ class WorldRoom {
         this.lootTableMap = {};
         this.resourceDefinitions = {};
         this.structureDefinitions = {};
+        this.runtimeEntityDefinitions = {};
         this.setCatalog(opts.catalog || buildRuntimeCatalog({
             world: this.world,
             worldDefinition: this.worldDefinition,
@@ -118,6 +128,7 @@ class WorldRoom {
         this.lootTableMap = nextCatalog.loot_table_map || {};
         this.resourceDefinitions = nextCatalog.definitions && nextCatalog.definitions.resources || {};
         this.structureDefinitions = nextCatalog.definitions && nextCatalog.definitions.structures || {};
+        this.runtimeEntityDefinitions = nextCatalog.definitions && (nextCatalog.definitions.runtime_entities || nextCatalog.definitions.entities) || {};
         this.hooks = createHookBus();
         this.scriptDiagnostics = [];
         if (nextCatalog && nextCatalog.__server && Array.isArray(nextCatalog.__server.enabledMods)) {
@@ -143,6 +154,11 @@ class WorldRoom {
     _npcSeedKey(seed) {
         if (seed && seed.id) return String(seed.id);
         return `${String(seed && seed.zone_id || 'outpost')}|${String(seed && seed.template_id || 'npc')}|${Number(seed && seed.x) || 0}|${Number(seed && seed.y) || 0}`;
+    }
+
+    _runtimeEntitySeedKey(entity) {
+        if (entity && entity.id) return String(entity.id);
+        return `${String(entity && entity.zone_id || 'wilderness')}|${String(entity && entity.kind || 'entity')}|${Number(entity && entity.x) || 0}|${Number(entity && entity.y) || 0}`;
     }
 
     _createResourceEntry(resource) {
@@ -192,6 +208,25 @@ class WorldRoom {
         });
     }
 
+    _createRuntimeEntityEntry(seed) {
+        if (!seed) return null;
+        return {
+            id: seed.id || uid('entity'),
+            _catalog_key: this._runtimeEntitySeedKey(seed),
+            world_id: seed.world_id || this.world.id,
+            zone_id: seed.zone_id || 'wilderness',
+            kind: String(seed.kind || seed.type || 'prop'),
+            template_id: seed.template_id || null,
+            x: Number(seed.x) || 0,
+            y: Number(seed.y) || 0,
+            hp: Number(seed.hp || 0),
+            max_hp: Number(seed.max_hp || seed.hp || 0),
+            owner_id: seed.owner_id || null,
+            state_version: Number(seed.state_version || 0),
+            metadata: clone(seed.metadata || {}),
+        };
+    }
+
     _syncCatalogSpawns() {
         const resourceSeeds = (this.worldDefinition && this.worldDefinition.resources) || [];
         for (const seed of resourceSeeds) {
@@ -219,6 +254,16 @@ class WorldRoom {
             existing.interaction = template.interaction ? clone(template.interaction) : existing.interaction;
             existing.held_item_id = seed.held_item_id || template.held_item_id || existing.held_item_id;
             existing.respawn_ms = Number(seed.respawn_ms || existing.respawn_ms || (template.kind === 'boss' ? 45000 : 15000));
+        }
+
+        const runtimeEntitySeeds = (this.worldDefinition && this.worldDefinition.runtime_entities) || [];
+        for (const seed of runtimeEntitySeeds) {
+            const key = this._runtimeEntitySeedKey(seed);
+            const existing = Array.from(this.runtimeEntities.values()).find((entry) => entry._catalog_key === key);
+            if (!existing) {
+                const entity = this._createRuntimeEntityEntry(seed);
+                if (entity) this.runtimeEntities.set(entity.id, entity);
+            }
         }
     }
 
@@ -254,6 +299,19 @@ class WorldRoom {
             this.npcs.set(npc.id, npc);
         }
 
+        const runtimeEntitySeeds = new Map();
+        for (const entry of [
+            ...worldStore.listRuntimeEntities(this.world.id),
+            ...((this.worldDefinition && this.worldDefinition.runtime_entities) || []),
+        ]) {
+            const entity = this._createRuntimeEntityEntry(entry);
+            if (!entity) continue;
+            runtimeEntitySeeds.set(entity._catalog_key, entity);
+        }
+        for (const entity of runtimeEntitySeeds.values()) {
+            this.runtimeEntities.set(entity.id, entity);
+        }
+
         const structures = model.listStructures({ world_id: this.world.id, limit: 500 });
         for (const structure of structures) {
             this.structures.set(structure.id, Object.assign({}, structure, {
@@ -281,6 +339,13 @@ class WorldRoom {
         }
         const loot = Array.isArray(payload.loot) ? payload.loot : [];
         for (const drop of loot) this.loot.set(drop.id, Object.assign({}, drop));
+        const runtimeEntities = Array.isArray(payload.runtime_entities) ? payload.runtime_entities : [];
+        for (const entry of runtimeEntities) {
+            if (!this.runtimeEntities.has(entry.id)) continue;
+            Object.assign(this.runtimeEntities.get(entry.id), entry, {
+                metadata: clone(entry.metadata || this.runtimeEntities.get(entry.id).metadata || {}),
+            });
+        }
     }
 
     _recordHistory(entity) {
@@ -465,7 +530,7 @@ class WorldRoom {
         } else if (activeEntry && activeEntry.item_id === 'coins') {
             player.held_item_id = 'coins';
         } else {
-            player.held_item_id = this._legacyHeldItem(player);
+            player.held_item_id = 'hands';
         }
 
         if (changed) model.upsertPlayer(patch);
@@ -512,7 +577,7 @@ class WorldRoom {
             const item = this.itemDefinitions[activeEntry.item_id] || this.itemMap[activeEntry.item_id] || null;
             return item && item.category === 'build' ? 'hammer' : activeEntry.item_id;
         }
-        return this._legacyHeldItem(player);
+        return 'hands';
     }
 
     _setHeldItem(player, itemId, now, holdMs = 320) {
@@ -590,6 +655,231 @@ class WorldRoom {
         return best;
     }
 
+    _structureState(structure) {
+        return structure && structure.data && typeof structure.data === 'object' ? structure.data : {};
+    }
+
+    _runtimeEntityState(entity) {
+        return entity && entity.metadata && typeof entity.metadata === 'object' ? entity.metadata : {};
+    }
+
+    _interactionProfileForStructure(structure) {
+        if (!structure) return null;
+        const definition = this.structureDefinitions[structure.type] || {};
+        const state = this._structureState(structure);
+        if (definition.interaction) return clone(definition.interaction);
+        if (Array.isArray(state.container)) return { type: 'container', radius: 72, prompt: 'open container', title: definition.name || humanizeId(structure.type) };
+        if (state.sign_text) return { type: 'sign', radius: 96, prompt: 'read sign', title: definition.name || humanizeId(structure.type) };
+        return null;
+    }
+
+    _interactionProfileForRuntimeEntity(entity) {
+        if (!entity) return null;
+        const definition = this.runtimeEntityDefinitions[entity.kind] || this.structureDefinitions[entity.kind] || {};
+        const state = this._runtimeEntityState(entity);
+        if (definition.interaction) return clone(definition.interaction);
+        if (state.item_id) return { type: 'pickup', radius: 58, prompt: 'pick up', title: definition.name || humanizeId(entity.kind) };
+        if (Array.isArray(state.container)) return { type: 'container', radius: 72, prompt: 'open container', title: definition.name || humanizeId(entity.kind) };
+        if (state.sign_text) return { type: 'sign', radius: 96, prompt: 'read sign', title: definition.name || humanizeId(entity.kind) };
+        return null;
+    }
+
+    _worldObjectDisplayName(source, target) {
+        if (source === 'structure') {
+            const definition = this.structureDefinitions[target.type] || {};
+            return definition.name || humanizeId(target.type);
+        }
+        const definition = this.runtimeEntityDefinitions[target.kind] || this.structureDefinitions[target.kind] || {};
+        return definition.name || humanizeId(target.kind);
+    }
+
+    _containerItemsForSource(source, target) {
+        const state = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
+        return normalizeLegacyContainer(state.container || state.Container || []);
+    }
+
+    _persistStructureState(structure, nextState) {
+        const updated = model.updateStructureData(structure.id, nextState);
+        structure.data = clone(updated && updated.data || nextState || {});
+        return structure.data;
+    }
+
+    _persistRuntimeEntityState(entity, nextState) {
+        entity.metadata = clone(nextState || {});
+        entity.state_version = Number(entity.state_version || 0) + 1;
+        const updated = worldStore.upsertRuntimeEntity(Object.assign({}, entity, { metadata: entity.metadata }));
+        if (updated) {
+            Object.assign(entity, updated, { metadata: clone(updated.metadata || {}) });
+        }
+        return entity.metadata;
+    }
+
+    _updateWorldObjectState(source, target, patch) {
+        const current = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
+        const next = Object.assign({}, current, patch || {});
+        if (source === 'structure') return this._persistStructureState(target, next);
+        return this._persistRuntimeEntityState(target, next);
+    }
+
+    _activeInteractionWorldObject(player) {
+        if (!player || !player.activeInteraction || !player.activeInteraction.source || !player.activeInteraction.target_id) return null;
+        const source = player.activeInteraction.source;
+        const target = source === 'structure'
+            ? this.structures.get(player.activeInteraction.target_id)
+            : this.runtimeEntities.get(player.activeInteraction.target_id);
+        if (!target || target.zone_id !== player.zone_id) {
+            player.activeInteraction = null;
+            return null;
+        }
+        const profile = source === 'structure'
+            ? this._interactionProfileForStructure(target)
+            : this._interactionProfileForRuntimeEntity(target);
+        if (!profile) {
+            player.activeInteraction = null;
+            return null;
+        }
+        const radius = Math.max(48, Number(profile.radius || 72));
+        if (distanceSq(player, target) > (radius * radius)) {
+            player.activeInteraction = null;
+            return null;
+        }
+        return { source, target, profile };
+    }
+
+    _nearestInteractiveWorldObject(player) {
+        let best = null;
+        let bestDistSq = Number.POSITIVE_INFINITY;
+        const consider = (source, target, profile) => {
+            if (!target || !profile || target.zone_id !== player.zone_id) return;
+            const radius = Math.max(48, Number(profile.radius || 72));
+            const distSq = distanceSq(player, target);
+            if (distSq <= (radius * radius) && distSq < bestDistSq) {
+                best = { source, target, profile };
+                bestDistSq = distSq;
+            }
+        };
+        for (const structure of this.structures.values()) consider('structure', structure, this._interactionProfileForStructure(structure));
+        for (const entity of this.runtimeEntities.values()) consider('runtime', entity, this._interactionProfileForRuntimeEntity(entity));
+        return best;
+    }
+
+    _worldObjectPrompt(source, target, profile) {
+        if (!target || !profile) return null;
+        const state = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
+        const labelName = this._worldObjectDisplayName(source, target).toLowerCase();
+        if (profile.type === 'pickup') {
+            const itemId = String(state.item_id || '').trim();
+            const item = this.itemDefinitions[itemId] || this.itemMap[itemId] || { name: itemId || labelName };
+            return {
+                type: 'pickup',
+                target_id: target.id,
+                x: target.x,
+                y: target.y - 34,
+                label: `E · pick up ${item.name || labelName}`,
+                description: `Quantity ${Math.max(1, Number(state.quantity || 1))}`,
+            };
+        }
+        if (profile.type === 'door') {
+            return {
+                type: 'door',
+                target_id: target.id,
+                x: target.x,
+                y: target.y - 42,
+                label: `E · ${state.opened ? 'close' : 'open'} ${labelName}`,
+                description: state.opened ? 'Passage is currently open.' : 'A closed barrier blocks the lane.',
+            };
+        }
+        if (profile.type === 'container') {
+            const items = this._containerItemsForSource(source, target);
+            return {
+                type: 'container',
+                target_id: target.id,
+                x: target.x,
+                y: target.y - 48,
+                label: `E · ${profile.prompt || 'open'} ${labelName}`,
+                description: items.length ? `${items.length} stored stack${items.length === 1 ? '' : 's'}` : 'Nothing stored yet.',
+            };
+        }
+        if (profile.type === 'sign') {
+            return {
+                type: 'sign',
+                target_id: target.id,
+                x: target.x,
+                y: target.y - 46,
+                label: `E · ${profile.prompt || 'read'} ${labelName}`,
+                description: String(state.sign_text || 'A blank plank waits for a message.').slice(0, 64),
+            };
+        }
+        return {
+            type: profile.type || 'inspect',
+            target_id: target.id,
+            x: target.x,
+            y: target.y - 46,
+            label: `E · ${profile.prompt || 'inspect'} ${labelName}`,
+            description: profile.description || '',
+        };
+    }
+
+    _interactionPayloadForWorldObject(context, player) {
+        if (!context) return null;
+        const { source, target, profile } = context;
+        const state = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
+        const title = profile.title || this._worldObjectDisplayName(source, target);
+        const ownerId = target.owner_id || state.owner || null;
+        if (profile.type === 'container') {
+            return {
+                type: 'container',
+                source,
+                entity_id: target.id,
+                title,
+                description: ownerId ? `Owner ${ownerId}` : 'Legacy storage with server-authoritative contents.',
+                owner_id: ownerId,
+                editable: !ownerId || ownerId === player.user_id,
+                can_store: true,
+                can_take: true,
+                items: this._containerItemsForSource(source, target).map((entry) => ({
+                    item_id: entry.item_id,
+                    item_name: this.itemDefinitions[entry.item_id] && this.itemDefinitions[entry.item_id].name || this.itemMap[entry.item_id] && this.itemMap[entry.item_id].name || entry.item_id,
+                    quantity: entry.quantity,
+                    note: entry.metadata && entry.metadata.legacy_item_id && entry.metadata.legacy_item_id !== entry.item_id
+                        ? `legacy ${entry.metadata.legacy_item_id}`
+                        : '',
+                })),
+            };
+        }
+        if (profile.type === 'sign') {
+            return {
+                type: 'sign',
+                source,
+                entity_id: target.id,
+                title,
+                description: ownerId ? `Owner ${ownerId}` : 'A weathered sign from the old sandbox.',
+                text: String(state.sign_text || ''),
+                editable: !ownerId || ownerId === player.user_id,
+            };
+        }
+        if (profile.type === 'vehicle') {
+            return {
+                type: 'vehicle',
+                source,
+                entity_id: target.id,
+                title,
+                description: state.vehicle_model ? `Recovered ${humanizeId(state.vehicle_model)} waiting for a future driving pass.` : 'A parked vehicle from the legacy shard.',
+                details: {
+                    condition: `${Math.max(0, Number(target.hp || target.max_hp || 100))}%`,
+                    cargo_stacks: this._containerItemsForSource(source, target).length,
+                },
+            };
+        }
+        return {
+            type: profile.type || 'inspect',
+            source,
+            entity_id: target.id,
+            title,
+            description: profile.description || `Inspect ${title.toLowerCase()}.`,
+        };
+    }
+
     _interactionPrompt(player) {
         const hookPrompt = this.hooks.firstDefined('interaction:prompt', { room: this, player });
         if (hookPrompt) return hookPrompt;
@@ -607,6 +897,19 @@ class WorldRoom {
             } : null;
         }
 
+        const activeWorldObject = this._activeInteractionWorldObject(player);
+        if (activeWorldObject) {
+            const activeInteraction = this._interactionPayloadForWorldObject(activeWorldObject, player);
+            return activeInteraction ? {
+                type: activeInteraction.type,
+                target_id: activeWorldObject.target.id,
+                x: activeWorldObject.target.x,
+                y: activeWorldObject.target.y - 58,
+                label: `Esc · close ${activeInteraction.title}`,
+                description: activeInteraction.description,
+            } : null;
+        }
+
         for (const drop of this.loot.values()) {
             if (drop.zone_id !== player.zone_id) continue;
             if (distanceSq(player, drop) <= (LOOT_PICKUP_RADIUS * LOOT_PICKUP_RADIUS)) {
@@ -621,6 +924,9 @@ class WorldRoom {
                 };
             }
         }
+
+        const worldObject = this._nearestInteractiveWorldObject(player);
+        if (worldObject) return this._worldObjectPrompt(worldObject.source, worldObject.target, worldObject.profile);
 
         const npc = this._nearestNpcInteraction(player);
         if (npc) {
@@ -873,6 +1179,110 @@ class WorldRoom {
         });
         this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: itemId, world_id: this.world.id });
         return { ok: true, item_id: itemId, quantity: amount, hotbar: this._buildHotbarSnapshot(player) };
+    }
+
+    _removeRuntimeEntity(entity) {
+        if (!entity) return;
+        this.runtimeEntities.delete(entity.id);
+        worldStore.deleteRuntimeEntity(entity.id);
+    }
+
+    _takeWorldObjectItem(player, context, payload) {
+        const { source, target, profile } = context;
+        const itemId = String(payload && payload.item_id || '').trim();
+        const requestedQuantity = Math.max(1, Math.floor(Number(payload && payload.quantity) || 1));
+        if (profile.type !== 'container') return { ok: false, reason: 'target is not a container' };
+        if (!itemId) return { ok: false, reason: 'item_id required' };
+        const items = this._containerItemsForSource(source, target);
+        const entry = items.find((item) => item.item_id === itemId);
+        if (!entry) return { ok: false, reason: 'item not found in container' };
+        const amount = Math.min(requestedQuantity, Math.max(0, Number(entry.quantity || 0)));
+        if (amount <= 0) return { ok: false, reason: 'invalid quantity' };
+        if (itemId === 'coins') {
+            player.coins += amount;
+            model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+        } else {
+            model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: amount, metadata: { source: target.id, source_type: `${source}:container` } });
+        }
+        entry.quantity -= amount;
+        const nextItems = items.filter((item) => Number(item.quantity || 0) > 0);
+        this._updateWorldObjectState(source, target, { container: nextItems });
+        this._applyHotbarSelection(player, player.quick_slot);
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: itemId, world_id: this.world.id });
+        return {
+            ok: true,
+            item_id: itemId,
+            quantity: amount,
+            interaction: this._interactionPayloadForWorldObject(context, player),
+        };
+    }
+
+    _storeWorldObjectItem(player, context, payload) {
+        const { source, target, profile } = context;
+        const itemId = String(payload && payload.item_id || '').trim();
+        const requestedQuantity = Math.max(1, Math.floor(Number(payload && payload.quantity) || 1));
+        if (profile.type !== 'container') return { ok: false, reason: 'target is not a container' };
+        if (!itemId) return { ok: false, reason: 'item_id required' };
+        const items = this._containerItemsForSource(source, target);
+        let amount = requestedQuantity;
+        if (itemId === 'coins') {
+            amount = Math.min(amount, Math.max(0, Number(player.coins || 0)));
+            if (amount <= 0) return { ok: false, reason: 'not enough coins' };
+            player.coins -= amount;
+            model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+        } else {
+            const inventory = model.listInventory(player.user_id);
+            const entry = inventory.find((item) => item.item_id === itemId && Number(item.quantity || 0) > 0);
+            if (!entry) return { ok: false, reason: 'item not in backpack' };
+            amount = Math.min(amount, Math.max(0, Number(entry.quantity || 0)));
+            if (amount <= 0) return { ok: false, reason: 'invalid quantity' };
+            model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: -amount, metadata: {} });
+            if (!model.listInventory(player.user_id).some((item) => item.item_id === itemId && Number(item.quantity || 0) > 0)) this._clearItemReferences(player, itemId);
+            else this._applyHotbarSelection(player, player.quick_slot);
+        }
+        const existing = items.find((item) => item.item_id === itemId);
+        if (existing) existing.quantity += amount;
+        else items.push({ item_id: itemId, quantity: amount, metadata: { stored_by: player.user_id } });
+        this._updateWorldObjectState(source, target, { container: items });
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: itemId, world_id: this.world.id });
+        return {
+            ok: true,
+            item_id: itemId,
+            quantity: amount,
+            interaction: this._interactionPayloadForWorldObject(context, player),
+        };
+    }
+
+    handleInteractionAction(player, payload) {
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const context = this._activeInteractionWorldObject(player);
+        if (!context) return { ok: false, reason: 'no active world interaction' };
+        if (payload && payload.entity_id && String(payload.entity_id) !== context.target.id) return { ok: false, reason: 'interaction target mismatch' };
+        const action = String(payload && payload.action || 'close').trim().toLowerCase();
+        if (context.profile.type === 'container') {
+            if (action === 'take') return this._takeWorldObjectItem(player, context, payload);
+            if (action === 'store') return this._storeWorldObjectItem(player, context, payload);
+            if (action === 'close') return this.closeInteraction(player);
+            return { ok: false, reason: 'unsupported container action' };
+        }
+        if (context.profile.type === 'sign') {
+            if (action === 'set_text') {
+                const nextText = String(payload && (payload.value || payload.text) || '').slice(0, 180);
+                const ownerId = context.target.owner_id || (context.source === 'structure' ? this._structureState(context.target).owner : this._runtimeEntityState(context.target).owner) || null;
+                if (ownerId && ownerId !== player.user_id) {
+                    return { ok: false, reason: 'sign is read-only' };
+                }
+                this._updateWorldObjectState(context.source, context.target, { sign_text: nextText });
+                return {
+                    ok: true,
+                    interaction: this._interactionPayloadForWorldObject(context, player),
+                };
+            }
+            if (action === 'close') return this.closeInteraction(player);
+            return { ok: false, reason: 'unsupported sign action' };
+        }
+        if (action === 'close') return this.closeInteraction(player);
+        return { ok: false, reason: 'unsupported interaction action' };
     }
 
     _addSkillXp(player, skill, amount, reason) {
@@ -1129,12 +1539,18 @@ class WorldRoom {
     }
 
     _gatherPower(player, resource) {
+        const heldItemId = String(player && player.held_item_id || '').trim();
+        const heldItem = heldItemId ? this.itemDefinitions[heldItemId] || this.itemMap[heldItemId] || null : null;
         if (resource.kind === 'tree') {
-            const axe = this.itemDefinitions[player.equip_axe] || this.itemDefinitions.stone_hatchet || this.itemMap[player.equip_axe] || this.itemMap.stone_hatchet || null;
+            const axe = heldItem && heldItem.metadata && heldItem.metadata.skill === 'woodcut'
+                ? heldItem
+                : this.itemDefinitions.stone_hatchet || this.itemMap.stone_hatchet || null;
             return axe && axe.metadata && axe.metadata.tier ? axe.metadata.tier : 1;
         }
         if (resource.kind === 'rock') {
-            const pick = this.itemDefinitions[player.equip_pickaxe] || this.itemDefinitions.stone_pickaxe || this.itemMap[player.equip_pickaxe] || this.itemMap.stone_pickaxe || null;
+            const pick = heldItem && heldItem.metadata && heldItem.metadata.skill === 'mining'
+                ? heldItem
+                : this.itemDefinitions.stone_pickaxe || this.itemMap.stone_pickaxe || null;
             return pick && pick.metadata && pick.metadata.tier ? pick.metadata.tier : 1;
         }
         return 1;
@@ -1144,6 +1560,43 @@ class WorldRoom {
         for (const drop of this.loot.values()) {
             if (drop.zone_id !== player.zone_id) continue;
             if (distanceSq(player, drop) <= (LOOT_PICKUP_RADIUS * LOOT_PICKUP_RADIUS)) return this._pickupLoot(player, drop.id);
+        }
+
+        const worldObject = this._nearestInteractiveWorldObject(player);
+        if (worldObject) {
+            const { source, target, profile } = worldObject;
+            const state = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
+            if (profile.type === 'pickup') {
+                const itemId = String(state.item_id || '').trim();
+                const quantity = Math.max(1, Math.floor(Number(state.quantity || 1)));
+                if (!itemId) return { ok: false, reason: 'pickup is empty' };
+                if (itemId === 'coins') {
+                    player.coins += quantity;
+                    model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+                } else {
+                    model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity, metadata: { source: target.id, source_type: `${source}:pickup` } });
+                }
+                if (source === 'runtime') this._removeRuntimeEntity(target);
+                this._setHeldItem(player, itemId, now, 520);
+                this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: itemId, world_id: this.world.id });
+                return { ok: true, item_id: itemId, quantity };
+            }
+            if (profile.type === 'door') {
+                const opened = !state.opened;
+                this._updateWorldObjectState(source, target, {
+                    opened,
+                    auto_close_at: opened ? now + 12000 : null,
+                });
+                this._setHeldItem(player, this._defaultHeldItem(player), now, 220);
+                return { ok: true, opened };
+            }
+            player.activeInteraction = {
+                type: profile.type,
+                source,
+                target_id: target.id,
+                opened_at: now,
+            };
+            return { ok: true, interaction: this._interactionPayloadForWorldObject(worldObject, player) };
         }
 
         const interactiveNpc = this._nearestNpcInteraction(player);
@@ -1170,12 +1623,9 @@ class WorldRoom {
         if (!closest) return { ok: false, reason: 'nothing to interact with' };
         player.activeInteraction = null;
         const resourceDefinition = this.resourceDefinitions[closest.kind] || {};
-        const resourceInteraction = resourceDefinition.interaction || {};
         const power = this._gatherPower(player, closest);
         closest.hit_flash_until = now + 140;
-        if (closest.kind === 'tree') this._setHeldItem(player, player.equip_axe || resourceInteraction.held_item_id || 'stone_hatchet', now, 460);
-        else if (closest.kind === 'rock') this._setHeldItem(player, player.equip_pickaxe || resourceInteraction.held_item_id || 'stone_pickaxe', now, 460);
-        else if (resourceInteraction.held_item_id) this._setHeldItem(player, resourceInteraction.held_item_id, now, 460);
+        if (player.held_item_id && player.held_item_id !== 'hands' && player.held_item_id !== 'coins') this._setHeldItem(player, player.held_item_id, now, 460);
         applyGatherDamage(closest, power);
         this._publish(GAME_EVENT_TYPES.RESOURCE_GATHERED, {
             user_id: player.user_id,
@@ -1228,6 +1678,44 @@ class WorldRoom {
         return { ok: true };
     }
 
+    _buildPrivilegeDecision(player, placement) {
+        const cupboards = [
+            ...Array.from(this.structures.values()).filter((structure) => structure.zone_id === placement.zone_id && structure.type === 'tool_cupboard'),
+            ...Array.from(this.runtimeEntities.values()).filter((entity) => entity.zone_id === placement.zone_id && entity.kind === 'tool_cupboard'),
+        ];
+        for (const cupboard of cupboards) {
+            const isStructure = Object.prototype.hasOwnProperty.call(cupboard, 'type');
+            const state = isStructure ? this._structureState(cupboard) : this._runtimeEntityState(cupboard);
+            const radius = Math.max(0, Number(state.build_radius || state.BuildRadius || this.structureDefinitions.tool_cupboard && this.structureDefinitions.tool_cupboard.build_privilege && this.structureDefinitions.tool_cupboard.build_privilege.radius || 600));
+            if (!radius) continue;
+            if (distanceSq(placement, cupboard) > (radius * radius)) continue;
+            const ownerId = cupboard.owner_id || state.owner || null;
+            if (ownerId && ownerId !== player.user_id) {
+                return { ok: false, reason: `build privilege belongs to ${ownerId}` };
+            }
+        }
+        return { ok: true };
+    }
+
+    _initialStructureState(structureKind, player, placement, itemId, structureSize, input = {}) {
+        const state = {
+            zone_id: placement.zone_id,
+            size: structureSize,
+            source_item_id: itemId,
+        };
+        if (structureKind === 'chest' || structureKind === 'tool_cupboard') state.container = [];
+        if (structureKind === 'tool_cupboard') {
+            state.build_radius = Number(this.structureDefinitions.tool_cupboard && this.structureDefinitions.tool_cupboard.build_privilege && this.structureDefinitions.tool_cupboard.build_privilege.radius || 600);
+            state.build_origin = [Math.round(placement.x - player.x), Math.round(placement.y - player.y)];
+        }
+        if (structureKind === 'text_sign') state.sign_text = String(input.sign_text || 'A freshly hammered sign.').slice(0, 180);
+        if (structureKind === 'door' || structureKind === 'forcefield') {
+            state.opened = false;
+            state.auto_close_at = null;
+        }
+        return state;
+    }
+
     _handleBuild(player, input) {
         const itemId = String(input.item_id || 'build_wall');
         player.activeInteraction = null;
@@ -1246,22 +1734,38 @@ class WorldRoom {
             y: Number(input.y) || player.y,
             zone_id: player.zone_id,
         };
+        const blockingEntities = [
+            ...Array.from(this.structures.values()),
+            ...Array.from(this.runtimeEntities.values())
+                .filter((entity) => {
+                    const definition = this.runtimeEntityDefinitions[entity.kind] || this.structureDefinitions[entity.kind] || {};
+                    return definition.blocks_movement !== false;
+                })
+                .map((entity) => ({
+                    x: entity.x,
+                    y: entity.y,
+                    size: Number(entity.metadata && entity.metadata.size || 48),
+                })),
+        ];
         const decision = canPlaceStructure({
             x: placement.x,
             y: placement.y,
             size: structureSize,
             zone_id: placement.zone_id,
             bounds: this.bounds(),
-            structures: Array.from(this.structures.values()),
+            structures: blockingEntities,
         });
         if (!decision.ok) return decision;
+        const privilegeDecision = this._buildPrivilegeDecision(player, placement);
+        if (!privilegeDecision.ok) return privilegeDecision;
+        const structureData = this._initialStructureState(buildDefinition.structure_kind, player, placement, itemId, structureSize, input);
         const structure = model.createStructure({
             type: buildDefinition.structure_kind,
             world_id: this.world.id,
             x: placement.x,
             y: placement.y,
             owner_id: player.user_id,
-            data: { zone_id: placement.zone_id, size: structureSize, source_item_id: itemId },
+            data: structureData,
         });
         const hydrated = {
             id: structure.id,
@@ -1272,10 +1776,12 @@ class WorldRoom {
             y: Number(structure.y),
             zone_id: placement.zone_id,
             size: structureSize,
-            data: structure.data || { zone_id: placement.zone_id, size: structureSize },
+            data: structure.data || structureData,
         };
         this.structures.set(hydrated.id, hydrated);
         model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: -1, metadata: {} });
+        if (!model.listInventory(player.user_id).some((item) => item.item_id === itemId && Number(item.quantity || 0) > 0)) this._clearItemReferences(player, itemId);
+        else this._applyHotbarSelection(player, player.quick_slot);
         this._setHeldItem(player, 'hammer', Date.now(), 540);
         this._addSkillXp(player, 'construction', 14, 'build');
         this._publish(GAME_EVENT_TYPES.STRUCTURE_PLACED, {
@@ -1532,6 +2038,9 @@ class WorldRoom {
         case 'close_interaction':
             result = this.closeInteraction(player);
             break;
+        case 'interaction_action':
+            result = this.handleInteractionAction(player, action);
+            break;
         case 'respawn':
             if (player.dead && now >= player.dead_until) this._respawnPlayer(player);
             result = { ok: true };
@@ -1681,6 +2190,18 @@ class WorldRoom {
                 this._publish(GAME_EVENT_TYPES.RESOURCE_RESPAWNED, { resource_id: resource.id, kind: resource.kind, world_id: this.world.id, zone_id: resource.zone_id });
             }
         }
+        for (const structure of this.structures.values()) {
+            const state = this._structureState(structure);
+            if (state.opened && state.auto_close_at && now >= Number(state.auto_close_at)) {
+                this._updateWorldObjectState('structure', structure, { opened: false, auto_close_at: null });
+            }
+        }
+        for (const entity of this.runtimeEntities.values()) {
+            const state = this._runtimeEntityState(entity);
+            if (state.opened && state.auto_close_at && now >= Number(state.auto_close_at)) {
+                this._updateWorldObjectState('runtime', entity, { opened: false, auto_close_at: null });
+            }
+        }
         this._updateNpcs(dt, now);
         this._updateProjectiles(dt, now);
         if (now - this.lastSnapshotAt >= Math.round(1000 / this.tickRate)) {
@@ -1697,7 +2218,12 @@ class WorldRoom {
     buildSnapshotForPlayer(player, now) {
         const prompt = this._interactionPrompt(player);
         const activeNpc = this._activeInteractionNpc(player);
-        const activeInteraction = activeNpc ? this._shopInteractionPayload(activeNpc) : null;
+        const activeWorldObject = this._activeInteractionWorldObject(player);
+        const activeInteraction = activeNpc
+            ? this._shopInteractionPayload(activeNpc)
+            : activeWorldObject
+                ? this._interactionPayloadForWorldObject(activeWorldObject, player)
+                : null;
         const zoneDefinition = ((this.worldDefinition && this.worldDefinition.zones) || []).find((zone) => zone.zone_id === player.zone_id) || {};
         const sameZonePlayers = Array.from(this.players.values())
             .filter((entry) => entry.zone_id === player.zone_id && entry.user_id !== player.user_id && !entry.dead)
@@ -1752,7 +2278,21 @@ class WorldRoom {
             .map((entry) => ({ id: entry.id, kind: entry.kind, x: entry.x, y: entry.y, hp: entry.hp, max_hp: entry.max_hp, zone_id: entry.zone_id, hit_flash_until: Number(entry.hit_flash_until || 0) }));
         const structures = Array.from(this.structures.values())
             .filter((entry) => entry.zone_id === player.zone_id)
-            .map((entry) => ({ id: entry.id, kind: entry.type, x: entry.x, y: entry.y, owner_id: entry.owner_id, zone_id: entry.zone_id, size: entry.size || 48 }));
+            .map((entry) => ({ id: entry.id, kind: entry.type, x: entry.x, y: entry.y, owner_id: entry.owner_id, zone_id: entry.zone_id, size: entry.size || 48, data: clone(entry.data || {}) }));
+        const runtimeEntities = Array.from(this.runtimeEntities.values())
+            .filter((entry) => entry.zone_id === player.zone_id)
+            .map((entry) => ({
+                id: entry.id,
+                kind: entry.kind,
+                template_id: entry.template_id || null,
+                x: entry.x,
+                y: entry.y,
+                owner_id: entry.owner_id,
+                zone_id: entry.zone_id,
+                hp: entry.hp,
+                max_hp: entry.max_hp,
+                metadata: clone(entry.metadata || {}),
+            }));
         const loot = Array.from(this.loot.values())
             .filter((entry) => entry.zone_id === player.zone_id)
             .map((entry) => ({ id: entry.id, item_id: entry.item_id, quantity: entry.quantity, x: entry.x, y: entry.y, zone_id: entry.zone_id }));
@@ -1795,6 +2335,7 @@ class WorldRoom {
                 moving: !!player.moving,
                 sprinting: !!player.sprinting,
                 step_phase: Number(player.step_phase || 0),
+                quick_slot: Number(player.quick_slot || 1),
                 coins: Number(player.coins || 0),
                 loyalty_points: Number(player.loyalty_points || 0),
                 held_item: player.held_item_id || this._defaultHeldItem(player),
@@ -1825,6 +2366,7 @@ class WorldRoom {
                 npcs: visibleWithinAoi(player, npcs, this.aoiRadius, { zone_id: player.zone_id }),
                 resources: visibleWithinAoi(player, resources, this.aoiRadius, { zone_id: player.zone_id }),
                 structures: visibleWithinAoi(player, structures, this.aoiRadius + 64, { zone_id: player.zone_id }),
+                runtime_entities: visibleWithinAoi(player, runtimeEntities, this.aoiRadius + 96, { zone_id: player.zone_id }),
                 loot: visibleWithinAoi(player, loot, this.aoiRadius, { zone_id: player.zone_id }),
                 projectiles: visibleWithinAoi(player, projectiles, this.aoiRadius, { zone_id: player.zone_id }),
             },
@@ -1834,7 +2376,7 @@ class WorldRoom {
                 tick_rate: this.tickRate,
                 aoi_radius: this.aoiRadius,
                 players_in_room: this.players.size,
-                entities_visible: sameZonePlayers.length + npcs.length + resources.length + structures.length + loot.length,
+                entities_visible: sameZonePlayers.length + npcs.length + resources.length + structures.length + runtimeEntities.length + loot.length,
             },
         };
         this.hooks.call('snapshot:decorate', snapshot, { room: this, player, now });
@@ -1856,6 +2398,7 @@ class WorldRoom {
             npc_count: Array.from(this.npcs.values()).filter((npc) => npc.hp > 0).length,
             resource_count: Array.from(this.resources.values()).filter((resource) => resource.hp > 0).length,
             structure_count: this.structures.size,
+            runtime_entity_count: this.runtimeEntities.size,
             loot_count: this.loot.size,
             latest_feed: this.feed.slice(-5),
             script_diagnostics: this.scriptDiagnostics.slice(-5),
