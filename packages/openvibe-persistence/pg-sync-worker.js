@@ -16,6 +16,13 @@ const pool = createPostgresPool({
     allowExitOnIdle: true,
 });
 
+pool.on('connect', (client) => {
+    client.query('SET search_path TO public').catch(() => {
+        // Ignore search_path setup failures here; the actual query path will
+        // surface a concrete error if the session is unusable.
+    });
+});
+
 let replyPort = null;
 let activeClient = null;
 const savepointStack = [];
@@ -52,6 +59,7 @@ function normalizeRow(row) {
 async function beginTransaction() {
     if (!activeClient) {
         activeClient = await pool.connect();
+        await activeClient.query('SET search_path TO public');
         await activeClient.query('BEGIN');
         return { depth: 1 };
     }

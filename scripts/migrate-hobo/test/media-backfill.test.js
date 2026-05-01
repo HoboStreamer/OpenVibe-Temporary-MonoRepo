@@ -6,6 +6,14 @@ const os = require('os');
 const path = require('path');
 const Database = require('better-sqlite3');
 
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_MEDIA_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_MEDIA_DATABASE_URL = '';
+
 const { ensureDir, writeJson } = require('../lib/common');
 const { backfillMedia } = require('../lib/media-backfill');
 const { ROOT } = require('../lib/service-paths');
@@ -73,6 +81,24 @@ async function main() {
         mediaDbPath,
         hotRoot,
         publicBaseUrl: 'http://127.0.0.1:4500',
+        providerName: 'local',
+        storageConfig: {
+            provider: 'local',
+            providerPolicy: 'legacy-auto-hot',
+            canonicalProvider: 'local',
+            defaultPlaybackProvider: 'local',
+            hotProvider: 'local',
+            assetOriginProvider: 'local',
+            root: hotRoot,
+            hotRoot,
+            multipartRoot: path.join(root, 'multipart'),
+            publicBaseUrl: 'http://127.0.0.1:4500',
+            local: {
+                root: hotRoot,
+                multipartRoot: path.join(root, 'multipart'),
+                publicBaseUrl: 'http://127.0.0.1:4500',
+            },
+        },
         dryRun: false,
         logger: { info() {}, warn() {}, error() {} },
     });
@@ -84,11 +110,16 @@ async function main() {
     const verifyDb = new Database(mediaDbPath, { readonly: true });
     try {
         for (const mediaId of ['media:hobostreamer-vod:51', 'media:hobostreamer-vod:52']) {
-            const row = verifyDb.prepare('SELECT status, storage_key, sha256 FROM media_objects WHERE id = ?').get(mediaId);
+            const row = verifyDb.prepare('SELECT status, storage_key, sha256, storage_provider FROM media_objects WHERE id = ?').get(mediaId);
             assert.strictEqual(row.status, 'ready');
+            assert.strictEqual(row.storage_provider, 'local');
             assert.ok(row.storage_key, 'expected storage key to be recorded');
             assert.ok(row.sha256, 'expected sha256 to be recorded');
             assert.ok(fs.existsSync(path.join(hotRoot, row.storage_key)), 'expected copied media file in hot storage');
+            const location = verifyDb.prepare('SELECT provider_name, role, status FROM media_object_locations WHERE media_id = ?').get(mediaId);
+            assert.strictEqual(location.provider_name, 'local');
+            assert.strictEqual(location.role, 'canonical');
+            assert.strictEqual(location.status, 'active');
         }
     } finally {
         verifyDb.close();

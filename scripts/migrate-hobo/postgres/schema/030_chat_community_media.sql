@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
 );
 
 CREATE TABLE IF NOT EXISTS chat_moderation_actions (
-    id            BIGSERIAL PRIMARY KEY,
+    id            TEXT PRIMARY KEY,
     room          TEXT,
     actor_id      TEXT,
     target_id     TEXT,

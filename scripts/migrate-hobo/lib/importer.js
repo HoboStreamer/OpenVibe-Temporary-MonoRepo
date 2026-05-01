@@ -111,6 +111,57 @@ function latestTimestamp(left, right) {
     return left >= right ? left : right;
 }
 
+function normalizeAnonNumber(value) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function anonDisplayNameForNumber(anonNumber) {
+    return anonNumber ? `Anonymous #${anonNumber}` : 'Anonymous';
+}
+
+function extractAnonNumberHint(...values) {
+    for (const value of values) {
+        const candidate = String(value == null ? '' : value).trim();
+        if (!candidate) continue;
+        let match = candidate.match(/^anonymous\s*#\s*(\d+)$/i);
+        if (match) return normalizeAnonNumber(match[1]);
+        match = candidate.match(/^hobo_anon(\d+)$/i);
+        if (match) return normalizeAnonNumber(match[1]);
+        match = candidate.match(/^anon(\d+)$/i);
+        if (match) return normalizeAnonNumber(match[1]);
+    }
+    return null;
+}
+
+function deriveHoboQuestAnonNumber(legacyUserId, hints) {
+    const hintSource = hints || {};
+    const hintedNumber = extractAnonNumberHint(
+        hintSource.display_name,
+        hintSource.username,
+        hintSource.label,
+    );
+    if (hintedNumber) return hintedNumber;
+    const numericId = Number(legacyUserId);
+    if (!Number.isFinite(numericId) || numericId >= 0) return null;
+    return Math.abs(Math.trunc(numericId));
+}
+
+function appendAnonLegacyRef(record, legacyRef) {
+    if (!record || !legacyRef) return;
+    if (!record.legacy_ref) {
+        record.legacy_ref = legacyRef;
+    }
+    if (!Array.isArray(record.legacy_refs)) {
+        record.legacy_refs = record.legacy_ref ? [record.legacy_ref] : [];
+    }
+    const key = `${legacyRef.source}:${legacyRef.table}:${legacyRef.legacy_id}`;
+    const existing = new Set(record.legacy_refs.map((ref) => `${ref.source}:${ref.table}:${ref.legacy_id}`));
+    if (!existing.has(key)) {
+        record.legacy_refs.push(legacyRef);
+    }
+}
+
 function ensureRowMetadata(row) {
     if (!row.metadata || typeof row.metadata !== 'object') {
         row.metadata = {};
@@ -198,6 +249,8 @@ function createImportContext(sourceDir, outDir, logger) {
             users: new Map(),
             hoboToolsUsersByLegacyId: new Map(),
             hoboStreamerUsersByLegacyId: new Map(),
+            anonRecordsById: new Map(),
+            anonUsersByNumber: new Map(),
             hoboQuestAnonUsersByLegacyId: new Map(),
             hoboQuestAnonRecordsById: new Map(),
             serviceLinks: new Map(),
@@ -218,6 +271,7 @@ async function buildUserContext(context) {
     const { sourceRoots, userContext, stats } = context;
     const hoboToolsUsers = tableFile(sourceRoots.hobotools, 'users');
     const hoboToolsLinks = tableFile(sourceRoots.hobotools, 'linked_accounts');
+    const hoboToolsAnonUsers = tableFile(sourceRoots.hobotools, 'anon_users');
     const hoboStreamerLinks = tableFile(sourceRoots.hobostreamer, 'linked_accounts');
     const hoboStreamerUsers = tableFile(sourceRoots.hobostreamer, 'users');
 
@@ -371,6 +425,31 @@ async function buildUserContext(context) {
             userContext.serviceLinks.set(`${link.service}:${link.service_user_id}`, canonicalId);
         }
     });
+
+    await forEachNdjson(hoboToolsAnonUsers, async (row) => {
+        const canonicalId = buildEntityId('anon-user', 'hobotools', row.id);
+        const anonNumber = normalizeAnonNumber(row.anon_number);
+        const legacyRef = makeLegacyRef('hobotools', 'anon_users', row.id);
+        const record = {
+            id: canonicalId,
+            source: 'hobotools',
+            anon_number: anonNumber,
+            session_token: row.session_token || null,
+            display_name: anonDisplayNameForNumber(anonNumber),
+            preferences: safeJsonParse(row.preferences, {}),
+            total_messages: row.total_messages || 0,
+            total_commands: row.total_commands || 0,
+            first_seen: row.first_seen || null,
+            last_seen: row.last_seen || null,
+            legacy_ref: legacyRef,
+            legacy_refs: [legacyRef],
+        };
+        userContext.anonRecordsById.set(canonicalId, record);
+        userContext.anonIds.add(canonicalId);
+        if (anonNumber) {
+            userContext.anonUsersByNumber.set(String(anonNumber), canonicalId);
+        }
+    });
 }
 
 function canonicalUserIdFor(context, sourceName, legacyUserId) {
@@ -391,8 +470,7 @@ function canonicalUserIdFor(context, sourceName, legacyUserId) {
 }
 
 function defaultHoboQuestAnonDisplayName(legacyUserId) {
-    const numericId = Math.abs(toNumber(legacyUserId, 0));
-    return numericId ? `Legacy HoboQuest Anon #${numericId}` : 'Legacy HoboQuest Anon';
+    return anonDisplayNameForNumber(deriveHoboQuestAnonNumber(legacyUserId));
 }
 
 function rememberHoboQuestAnonHint(context, sourceName, legacyUserId, hints) {
@@ -407,15 +485,33 @@ function ensureHoboQuestAnonUser(context, legacyUserId, hints) {
     const existingCanonicalId = context.userContext.hoboQuestAnonUsersByLegacyId.get(legacyKey);
     const hintSource = hints || {};
     const primaryLegacyRef = makeLegacyRef('hoboquest', hintSource.table || 'game_players', legacyKey);
+    const derivedAnonNumber = deriveHoboQuestAnonNumber(legacyUserId, hintSource);
 
     if (!existingCanonicalId) {
+        const linkedCanonicalId = derivedAnonNumber
+            ? context.userContext.anonUsersByNumber.get(String(derivedAnonNumber)) || null
+            : null;
+        if (linkedCanonicalId) {
+            const linkedRecord = context.userContext.anonRecordsById.get(linkedCanonicalId);
+            if (linkedRecord) {
+                const nextAnonNumber = normalizeAnonNumber(linkedRecord.anon_number) || derivedAnonNumber;
+                linkedRecord.anon_number = nextAnonNumber;
+                linkedRecord.display_name = anonDisplayNameForNumber(nextAnonNumber);
+                linkedRecord.first_seen = earliestTimestamp(linkedRecord.first_seen, hintSource.created_at || null);
+                linkedRecord.last_seen = latestTimestamp(linkedRecord.last_seen, hintSource.updated_at || null);
+                appendAnonLegacyRef(linkedRecord, primaryLegacyRef);
+            }
+            context.userContext.hoboQuestAnonUsersByLegacyId.set(legacyKey, linkedCanonicalId);
+            return linkedCanonicalId;
+        }
+
         const canonicalId = buildEntityId('anon-user', 'hoboquest', legacyKey);
         const record = {
             id: canonicalId,
             source: 'hoboquest',
-            anon_number: null,
+            anon_number: derivedAnonNumber,
             session_token: null,
-            display_name: hintSource.display_name || hintSource.username || defaultHoboQuestAnonDisplayName(legacyKey),
+            display_name: anonDisplayNameForNumber(derivedAnonNumber),
             preferences: {
                 migrated_from: 'hoboquest',
                 legacy_game_user_id: legacyKey,
@@ -431,16 +527,32 @@ function ensureHoboQuestAnonUser(context, legacyUserId, hints) {
         };
         context.userContext.hoboQuestAnonUsersByLegacyId.set(legacyKey, canonicalId);
         context.userContext.hoboQuestAnonRecordsById.set(canonicalId, record);
+        context.userContext.anonRecordsById.set(canonicalId, record);
         context.userContext.anonIds.add(canonicalId);
+        if (derivedAnonNumber) {
+            context.userContext.anonUsersByNumber.set(String(derivedAnonNumber), canonicalId);
+        }
         return canonicalId;
     }
 
-    const record = context.userContext.hoboQuestAnonRecordsById.get(existingCanonicalId);
+    const record = context.userContext.hoboQuestAnonRecordsById.get(existingCanonicalId)
+        || context.userContext.anonRecordsById.get(existingCanonicalId);
     if (!record) return existingCanonicalId;
 
-    if (hintSource.display_name && (!record.display_name || record.display_name === defaultHoboQuestAnonDisplayName(legacyKey))) {
-        record.display_name = hintSource.display_name;
+    if (!record.preferences || typeof record.preferences !== 'object') {
+        record.preferences = {};
     }
+    if (!Array.isArray(record.preferences.legacy_tables)) {
+        record.preferences.legacy_tables = [];
+    }
+
+    const nextAnonNumber = normalizeAnonNumber(record.anon_number) || derivedAnonNumber;
+    if (nextAnonNumber) {
+        record.anon_number = nextAnonNumber;
+        record.display_name = anonDisplayNameForNumber(nextAnonNumber);
+        context.userContext.anonUsersByNumber.set(String(nextAnonNumber), existingCanonicalId);
+    }
+
     if (hintSource.username && !record.preferences.username) {
         record.preferences.username = hintSource.username;
     }
@@ -453,11 +565,7 @@ function ensureHoboQuestAnonUser(context, legacyUserId, hints) {
     if (hintSource.updated_at) {
         record.last_seen = latestTimestamp(record.last_seen, hintSource.updated_at);
     }
-    const legacyRefKey = `${primaryLegacyRef.source}:${primaryLegacyRef.table}:${primaryLegacyRef.legacy_id}`;
-    const existingLegacyRefs = new Set((record.legacy_refs || []).map((legacyRef) => `${legacyRef.source}:${legacyRef.table}:${legacyRef.legacy_id}`));
-    if (!existingLegacyRefs.has(legacyRefKey)) {
-        record.legacy_refs.push(primaryLegacyRef);
-    }
+    appendAnonLegacyRef(record, primaryLegacyRef);
     return existingCanonicalId;
 }
 
@@ -1408,6 +1516,7 @@ async function writeGamesDatasets(context) {
 
 async function writeIdentityDatasets(context) {
     const usersWriter = context.writers.get('identity/users');
+    const anonWriter = context.writers.get('identity/anon-users');
     const linkedWriter = context.writers.get('identity/linked-accounts');
     const conflictWriter = context.writers.get('identity/username-conflicts');
 
@@ -1427,25 +1536,13 @@ async function writeIdentityDatasets(context) {
         context.stats.bump('identity/username-conflicts', 'written_records');
     }
 
-    await forEachNdjson(tableFile(context.sourceRoots.hobotools, 'anon_users'), async (row) => {
-        const record = {
-            id: buildEntityId('anon-user', 'hobotools', row.id),
-            source: 'hobotools',
-            anon_number: row.anon_number,
-            session_token: row.session_token,
-            display_name: row.display_name || null,
-            preferences: safeJsonParse(row.preferences, {}),
-            total_messages: row.total_messages || 0,
-            total_commands: row.total_commands || 0,
-            first_seen: row.first_seen || null,
-            last_seen: row.last_seen || null,
-            legacy_ref: makeLegacyRef('hobotools', 'anon_users', row.id),
-        };
-        context.userContext.anonIds.add(record.id);
-        context.writers.get('identity/anon-users').write(record);
+    for (const record of context.userContext.anonRecordsById.values()) {
+        if (record.source !== 'hobotools' || record._written) continue;
+        anonWriter.write(record);
+        record._written = true;
         context.stats.bump('identity/anon-users', 'source_records');
         context.stats.bump('identity/anon-users', 'written_records');
-    });
+    }
 
     const seenVerificationKeys = new Set();
     for (const sourceName of ['hobotools', 'hobostreamer']) {

@@ -232,18 +232,41 @@
     document.getElementById('stat-namespaces').textContent = Object.keys(namespaces.items || {}).length;
     document.getElementById('stat-themes').textContent = OpenVibe.BUILTIN_THEMES.length;
     document.getElementById('issuer-chip').textContent = `${(health.trusted_issuers || []).length} trusted issuer${(health.trusted_issuers || []).length === 1 ? '' : 's'}`;
+    const isAnonymous = !!(session && session.anonymous && session.user);
     document.getElementById('session-chip').textContent = session.authenticated && session.user
         ? `Signed in as @${session.user.username || session.user.id}`
-        : 'Anonymous browsing enabled';
+        : (isAnonymous
+            ? `${session.user.display_name || session.user.username || 'Anonymous'} active`
+            : 'Guest browsing enabled');
 
     const heroActions = document.getElementById('hero-actions');
     heroActions.innerHTML = session.authenticated && session.user
         ? `<a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('my')}">Open my account</a>
            <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Tune my theme</a>
            <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse tools</a>`
-        : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Create free account</a>
-           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Preview themes</a>
-           <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse services</a>`;
+        : (isAnonymous
+            ? `<a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse as ${OpenVibe.escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</a>
+               <a class="ov-btn" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Create full account</a>
+               <a class="ov-btn ov-btn-ghost" href="${OpenVibe.signOutUrl(OpenVibe.resolveSurfaceUrl('network'))}">Leave anonymous</a>`
+            : `<button class="ov-btn ov-btn-primary" type="button" id="start-anon-session">Use anonymous identity</button>
+               <a class="ov-btn" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Create free account</a>
+               <a class="ov-btn ov-btn-ghost" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse services</a>`);
+
+    const startAnonButton = document.getElementById('start-anon-session');
+    if (startAnonButton) {
+        startAnonButton.addEventListener('click', async function () {
+            startAnonButton.disabled = true;
+            startAnonButton.textContent = 'Starting anonymous session…';
+            try {
+                await OpenVibe.startAnonymousSession();
+                globalThis.location.reload();
+            } catch (error) {
+                console.warn('[network-home] failed to start anonymous session:', error.message);
+                startAnonButton.disabled = false;
+                startAnonButton.textContent = 'Use anonymous identity';
+            }
+        });
+    }
 
     document.getElementById('user-summary-card').innerHTML = session.authenticated && session.user
         ? `<div class="ov-chip-row" style="margin-bottom:.65rem;">
@@ -252,9 +275,13 @@
            </div>
            <h3 class="ov-service-title">Welcome back${session.user.display_name ? `, ${OpenVibe.escapeHtml(session.user.display_name)}` : ''}</h3>
            <p class="ov-muted">Your account is ready to carry theme choices, notification preferences, and launcher favorites across the network.</p>`
-        : `<div class="ov-chip-row" style="margin-bottom:.65rem;"><span class="ov-chip warn">Guest mode</span></div>
-           <h3 class="ov-service-title">Explore first, sign in when ready</h3>
-           <p class="ov-muted">You can browse services anonymously. Sign in only when you want synced favorites, profile settings, and network-wide theme storage.</p>`;
+        : (isAnonymous
+            ? `<div class="ov-chip-row" style="margin-bottom:.65rem;"><span class="ov-chip warn">${OpenVibe.escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span></div>
+               <h3 class="ov-service-title">Your numbered anonymous identity is active</h3>
+               <p class="ov-muted">OpenVibe keeps anonymous users on the reserved <code>anon*</code> namespace and shows the migrated number-backed label instead of letting a random display name drift across surfaces.</p>`
+            : `<div class="ov-chip-row" style="margin-bottom:.65rem;"><span class="ov-chip warn">Guest mode</span></div>
+               <h3 class="ov-service-title">Explore first, sign in when ready</h3>
+               <p class="ov-muted">You can browse as a numbered anonymous identity or sign in when you want synced favorites, profile settings, and network-wide theme storage.</p>`);
 
     const pulseGrid = document.getElementById('pulse-grid');
     pulseGrid.innerHTML = [

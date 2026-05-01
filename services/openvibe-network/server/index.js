@@ -111,8 +111,8 @@ function buildApp() {
     apiRouter.use(staff.buildRouter({ config }));
     apiRouter.use(nativeAuth.buildAccountRouter());
 
-    apiRouter.get('/session', (req, res) => res.json({ authenticated: !!req.user, user: req.user || null }));
-    apiRouter.get('/me', requireOpenVibeAuth(authClient), (req, res) => res.json({ user: req.user }));
+    apiRouter.get('/session', (req, res) => res.json(nativeAuth.buildSessionResponse(req)));
+    apiRouter.get('/me', requireOpenVibeAuth(authClient), (req, res) => res.json({ user: nativeAuth.resolveSessionUser(req) || req.user }));
     apiRouter.get('/audit', (req, res) => {
         // Read-only diagnostic — limited to admins.
         if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: 'admin only' });

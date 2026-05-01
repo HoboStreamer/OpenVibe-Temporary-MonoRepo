@@ -4,6 +4,50 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
+const DOTENV_ROOT = path.resolve(__dirname, '..', '..', '..');
+const DOTENV_PATH = path.join(DOTENV_ROOT, '.env');
+
+function parseDotenv(content) {
+    return String(content).split(/\r?\n/).reduce((acc, line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return acc;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) return acc;
+        const key = trimmed.slice(0, eq).trim();
+        let value = trimmed.slice(eq + 1).trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+        }
+        if (key) acc[key] = value;
+        return acc;
+    }, {});
+}
+
+function loadEnvFile(filePath) {
+    if (!fs.existsSync(filePath)) return {};
+    const content = fs.readFileSync(filePath, 'utf8');
+    return parseDotenv(content);
+}
+
+function applyEnv(envMap) {
+    for (const [key, value] of Object.entries(envMap)) {
+        if (process.env[key] === undefined) {
+            process.env[key] = value;
+        }
+    }
+}
+
+function loadDotenv() {
+    try {
+        const envValues = loadEnvFile(DOTENV_PATH);
+        applyEnv(envValues);
+    } catch {
+        // ignore failures to support environments without a root .env file
+    }
+}
+
+loadDotenv();
+
 function ensureDir(dirPath) {
     if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
@@ -258,4 +302,5 @@ module.exports = {
     sanitizeIdPart,
     toInt,
     writeJson,
+    loadDotenv,
 };

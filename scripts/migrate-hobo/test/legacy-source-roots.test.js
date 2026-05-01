@@ -97,4 +97,25 @@ function withTempDir(fn) {
     });
 })();
 
+(function sharedRootResolvesLocalHoboRootLayout() {
+    withTempDir((root) => {
+        const sharedRoot = path.join(root, 'hobo');
+        const hobotoolsRoot = path.join(sharedRoot, 'hobo-tools');
+        const hoboquestRoot = path.join(sharedRoot, 'hobo-quest');
+        const hobotoolsDb = writeDb(hobotoolsRoot, 'hobo-tools.db');
+        const hoboquestDb = writeDb(hoboquestRoot, 'hobo-quest.db');
+
+        const summary = resolveLegacyArtifactSummary({
+            sourceDir: path.join(root, 'staging'),
+            args: { legacySourceRoot: sharedRoot },
+            env: {},
+        });
+
+        assert.strictEqual(summary.hobotools_root, hobotoolsRoot);
+        assert.strictEqual(summary.hobotools_db, hobotoolsDb);
+        assert.strictEqual(summary.hoboquest_root, hoboquestRoot);
+        assert.strictEqual(summary.hoboquest_db, hoboquestDb);
+    });
+})();
+
 console.log('legacy source roots test OK');

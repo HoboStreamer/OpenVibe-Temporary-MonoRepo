@@ -72,6 +72,85 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         assert.strictEqual(authorizePage.status, 200);
         assert.ok(authorizePage.body.includes('Create an account or sign in'));
 
+        const anonSessionStart = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(anonSessionStart.status, 201);
+        const anonSetCookies = Array.isArray(anonSessionStart.headers['set-cookie']) ? anonSessionStart.headers['set-cookie'] : [anonSessionStart.headers['set-cookie']];
+        const anonCookie = anonSetCookies[0].split(';')[0];
+        const anonSession = JSON.parse(anonSessionStart.body);
+        assert.strictEqual(anonSession.authenticated, false);
+        assert.strictEqual(anonSession.anonymous, true);
+        assert.strictEqual(anonSession.user.username, 'anon1');
+        assert.strictEqual(anonSession.user.display_name, 'Anonymous #1');
+
+        const anonSessionRes = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/session',
+            headers: { cookie: anonCookie },
+        });
+        const anonSessionState = JSON.parse(anonSessionRes.body);
+        assert.strictEqual(anonSessionRes.status, 200);
+        assert.strictEqual(anonSessionState.authenticated, false);
+        assert.strictEqual(anonSessionState.anonymous, true);
+        assert.strictEqual(anonSessionState.user.display_name, 'Anonymous #1');
+
+        const anonRepeat = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: {
+                cookie: anonCookie,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(anonRepeat.status, 200);
+        assert.strictEqual(JSON.parse(anonRepeat.body).user.anon_number, 1);
+
+        const anonMe = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/me',
+            headers: { cookie: anonCookie },
+        });
+        assert.strictEqual(anonMe.status, 401);
+        assert.match(anonMe.body, /anonymous token/);
+
+        const anonAuthorize = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            requestPath: '/oauth/authorize?return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+            headers: { cookie: anonCookie },
+        });
+        assert.strictEqual(anonAuthorize.status, 200);
+        assert.ok(anonAuthorize.body.includes('Create an account or sign in'));
+
+        const reservedAnonUsername = await request({
+            port,
+            hostHeader: 'auth.openvibe.network',
+            method: 'POST',
+            requestPath: '/oauth/authorize',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: [
+                'mode=register',
+                'username=anon123',
+                'display_name=Nope',
+                'password=' + encodeURIComponent('TopSecret123!'),
+                'confirm_password=' + encodeURIComponent('TopSecret123!'),
+                'return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
+            ].join('&'),
+        });
+        assert.strictEqual(reservedAnonUsername.status, 400);
+        assert.ok(reservedAnonUsername.body.includes('reserved for anonymous identities'));
+
         const formBody = [
             'mode=register',
             'username=alice',
@@ -106,6 +185,7 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         const session = JSON.parse(sessionRes.body);
         assert.strictEqual(sessionRes.status, 200);
         assert.strictEqual(session.authenticated, true);
+        assert.strictEqual(session.anonymous, false);
         assert.strictEqual(session.user.username, 'alice');
 
         const logoutRes = await request({
@@ -234,7 +314,9 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             requestPath: '/api/v1/session',
             headers: { authorization: `Bearer ${tokens.access_token}` },
         });
-        assert.strictEqual(JSON.parse(bearerSession.body).authenticated, true);
+        const bearerSessionBody = JSON.parse(bearerSession.body);
+        assert.strictEqual(bearerSessionBody.authenticated, true);
+        assert.strictEqual(bearerSessionBody.anonymous, false);
 
         const refreshBody = [
             'grant_type=refresh_token',

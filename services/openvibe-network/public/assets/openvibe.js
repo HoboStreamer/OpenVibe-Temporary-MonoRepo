@@ -304,8 +304,19 @@
 
     async function loadSession(force) {
         if (!force && sessionPromise) return sessionPromise;
-        sessionPromise = api('/session').catch(() => ({ authenticated: false, user: null }));
+        sessionPromise = api('/session').catch(() => ({ authenticated: false, anonymous: false, user: null }));
         return sessionPromise;
+    }
+
+    async function startAnonymousSession(options) {
+        const payload = Object.assign({}, options || {});
+        const result = await api('/session/anonymous', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        sessionPromise = Promise.resolve(result);
+        return result;
     }
 
     async function loadServices() {
@@ -484,7 +495,7 @@
         });
         accountProfilePromise = Promise.resolve(result);
         if (result && result.user) {
-            sessionPromise = Promise.resolve({ authenticated: true, user: result.user });
+            sessionPromise = Promise.resolve({ authenticated: true, anonymous: false, user: result.user });
         }
         return result;
     }
@@ -669,8 +680,32 @@
         const target = global.document.getElementById('ov-nav-session');
         if (!target) return;
         const session = await loadSession();
+        if (session && session.anonymous && session.user) {
+            target.innerHTML = `
+                <span class="ov-chip warn">${escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span>
+                <a class="ov-btn" href="${signInUrl(global.location.href)}">Create account</a>
+                <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Leave anonymous</a>`;
+            return;
+        }
         if (!session || !session.authenticated || !session.user) {
-            target.innerHTML = `<a class="ov-btn ov-btn-primary" href="${signInUrl(global.location.href)}">Sign in</a>`;
+            target.innerHTML = `
+                <button class="ov-btn" type="button" data-openvibe-anon-session="true">Use anonymous identity</button>
+                <a class="ov-btn ov-btn-primary" href="${signInUrl(global.location.href)}">Sign in</a>`;
+            const anonButton = target.querySelector('[data-openvibe-anon-session]');
+            if (anonButton) {
+                anonButton.addEventListener('click', async function () {
+                    anonButton.disabled = true;
+                    anonButton.textContent = 'Starting anonymous session…';
+                    try {
+                        await startAnonymousSession();
+                        global.location.reload();
+                    } catch (error) {
+                        console.warn('[openvibe] failed to start anonymous session:', error.message);
+                        anonButton.disabled = false;
+                        anonButton.textContent = 'Use anonymous identity';
+                    }
+                });
+            }
             return;
         }
         target.innerHTML = `
@@ -771,6 +806,7 @@
         signInUrl,
         signOutUrl,
         slugifyLabel,
+        startAnonymousSession,
         syncThemePreference,
         themeById,
         toggleFavorite,

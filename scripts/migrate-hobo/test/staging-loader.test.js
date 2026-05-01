@@ -8,7 +8,78 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const { ensureDir, writeJson } = require('../lib/common');
-const { loadStagingBundle } = require('../lib/staging-loader');
+
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_MEDIA_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_BILLING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENRE_STREAM_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_LIVE_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_CHAT_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_COMMUNITY_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_GAMES_DATABASE_URL = '';
+
+const { loadStagingBundle, __test } = require('../lib/staging-loader');
+
+(function hasTableSupportsPostgresCompat() {
+    const postgresCalls = [];
+    const postgresDb = {
+        getStatus() {
+            return { adapter: 'postgres' };
+        },
+        prepare(sql) {
+            postgresCalls.push(sql);
+            return {
+                get(tableName) {
+                    return tableName === 'legacy_id_map' ? { present: 1 } : undefined;
+                },
+            };
+        },
+    };
+    assert.strictEqual(__test.isPostgresCompatDb(postgresDb), true);
+    assert.strictEqual(__test.hasTable(postgresDb, 'legacy_id_map'), true);
+    assert.match(postgresCalls[0], /information_schema\.tables/);
+
+    const sqliteCalls = [];
+    const sqliteDb = {
+        prepare(sql) {
+            sqliteCalls.push(sql);
+            return {
+                get(tableName) {
+                    return tableName === 'legacy_id_map' ? { name: tableName } : undefined;
+                },
+            };
+        },
+    };
+    assert.strictEqual(__test.isPostgresCompatDb(sqliteDb), false);
+    assert.strictEqual(__test.hasTable(sqliteDb, 'legacy_id_map'), true);
+    assert.match(sqliteCalls[0], /sqlite_master/);
+})();
+
+(function battleStatsSchemaSupportsFractionalTotals() {
+    const sqliteSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-games', 'server', 'db.js'), 'utf8');
+    const postgresSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-games', 'server', 'migrations', 'postgres', '001_init.sql'), 'utf8');
+    assert.match(sqliteSchema, /total_stolen REAL NOT NULL DEFAULT 0/);
+    assert.match(sqliteSchema, /total_lost REAL NOT NULL DEFAULT 0/);
+    assert.match(postgresSchema, /total_stolen REAL NOT NULL DEFAULT 0/);
+    assert.match(postgresSchema, /total_lost REAL NOT NULL DEFAULT 0/);
+})();
+
+(function mediaSchemaSupportsLargeByteValues() {
+    const sqliteSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-media', 'server', 'db.js'), 'utf8');
+    const postgresSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-media', 'server', 'migrations', 'postgres', '001_init.sql'), 'utf8');
+    const postgresEvolution = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-media', 'server', 'migrations', 'postgres', '003_widen_byte_columns.sql'), 'utf8');
+    assert.match(sqliteSchema, /CREATE TABLE IF NOT EXISTS media_objects \([\s\S]*?size_bytes\s+BIGINT NOT NULL DEFAULT 0/);
+    assert.match(sqliteSchema, /CREATE TABLE IF NOT EXISTS media_object_locations \([\s\S]*?size_bytes\s+BIGINT NOT NULL DEFAULT 0/);
+    assert.match(postgresSchema, /CREATE TABLE IF NOT EXISTS media_objects \([\s\S]*?size_bytes BIGINT NOT NULL DEFAULT 0/);
+    assert.match(postgresSchema, /CREATE TABLE IF NOT EXISTS media_object_locations \([\s\S]*?size_bytes BIGINT NOT NULL DEFAULT 0/);
+    assert.match(postgresEvolution, /ALTER TABLE media_objects[\s\S]*?ALTER COLUMN size_bytes TYPE BIGINT/);
+    assert.match(postgresEvolution, /ALTER TABLE media_object_locations[\s\S]*?ALTER COLUMN size_bytes TYPE BIGINT/);
+})();
 
 function writeNdjson(filePath, rows) {
     ensureDir(path.dirname(filePath));
@@ -41,6 +112,47 @@ async function main() {
                 hobotools: { legacy_id: '1' },
                 hobostreamer: { legacy_id: '42' },
             },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-users.ndjson'), [
+        {
+            id: 'anon-user:hobotools:7',
+            source: 'hobotools',
+            anon_number: 7,
+            session_token: 'anon-session-token-7',
+            display_name: 'should not survive',
+            preferences: { color: 'green' },
+            total_messages: 12,
+            total_commands: 3,
+            first_seen: '2026-01-01T00:00:00Z',
+            last_seen: '2026-01-02T00:00:00Z',
+            legacy_ref: { source: 'hobotools', legacy_id: '7' },
+        },
+        {
+            id: 'anon-user:hoboquest:-7',
+            source: 'hoboquest',
+            anon_number: null,
+            session_token: null,
+            display_name: 'hobo_anon7',
+            preferences: { username: 'hobo_anon7', legacy_game_user_id: '-7' },
+            total_messages: 99,
+            total_commands: 8,
+            first_seen: '2026-01-03T00:00:00Z',
+            last_seen: '2026-01-04T00:00:00Z',
+            legacy_ref: { source: 'hoboquest', legacy_id: '-7' },
+        },
+        {
+            id: 'anon-user:hoboquest:-4242',
+            source: 'hoboquest',
+            anon_number: null,
+            session_token: null,
+            display_name: 'hobo_anon4242',
+            preferences: { username: 'hobo_anon4242', legacy_game_user_id: '-4242' },
+            total_messages: 4,
+            total_commands: 1,
+            first_seen: '2026-01-05T00:00:00Z',
+            last_seen: '2026-01-06T00:00:00Z',
+            legacy_ref: { source: 'hoboquest', legacy_id: '-4242' },
         },
     ]);
     writeNdjson(path.join(bundleDir, 'identity', 'linked-accounts.ndjson'), [
@@ -138,7 +250,7 @@ async function main() {
             visibility: 'public',
             title: 'VOD 1',
             file_path: './data/vods/vod1.mp4',
-            size_bytes: 123,
+            size_bytes: 3063137389,
             created_at: '2026-01-01T00:00:00Z',
             legacy_ref: { source: 'hobostreamer', legacy_id: '51' },
         },
@@ -215,6 +327,24 @@ async function main() {
             legacy_ref: { source: 'hoboquest', legacy_id: '1:2026-01-04:daily_gather_wood' },
         },
     ]);
+    writeNdjson(path.join(bundleDir, 'games', 'battle-stats.ndjson'), [
+        {
+            id: 'battle-stats:hoboquest:1',
+            source: 'hoboquest',
+            user_id: 'user:hobotools:1',
+            battles_won: 1,
+            battles_lost: 0,
+            total_stolen: 4.7,
+            total_lost: 0,
+            kill_streak: 1,
+            best_streak: 1,
+            fatalities: 0,
+            kills: 2,
+            deaths: 5,
+            metadata: { legacy_user_id: '1' },
+            legacy_ref: { source: 'hoboquest', legacy_id: '1' },
+        },
+    ]);
 
     writeJson(path.join(bundleDir, 'audit', 'import-report.json'), {
         exclusions: [
@@ -223,6 +353,7 @@ async function main() {
         ],
         datasets: {
             'identity/users': {},
+            'identity/anon-users': {},
             'identity/linked-accounts': {},
             'live/channels': {},
             'live/stream-sessions': {},
@@ -236,6 +367,7 @@ async function main() {
             'games/inventory': {},
             'games/canvas-tiles': {},
             'games/daily-quests': {},
+            'games/battle-stats': {},
         },
     });
 
@@ -318,12 +450,34 @@ async function main() {
 
     try {
         assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/users'").get().count, 1);
+        assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/anon-users'").get().count, 3);
         const authUser = networkDb.prepare("SELECT username, email, password_hash, password_algorithm, metadata_json FROM auth_users WHERE id = 'user:hobotools:1'").get();
         assert.ok(authUser, 'expected canonical identity to project into auth_users');
         assert.strictEqual(authUser.username, 'alice');
         assert.strictEqual(authUser.email, 'alice@example.com');
         assert.ok(authUser.password_hash && authUser.password_hash.startsWith('$2'), 'expected migrated bcrypt password hash to be stored');
         assert.strictEqual(authUser.password_algorithm, 'bcrypt');
+        assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM auth_anon_users").get().count, 2);
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT anon_number, session_token, display_name, total_messages, total_commands FROM auth_anon_users WHERE id = 'anon-user:hobotools:7'").get(),
+            {
+                anon_number: 7,
+                session_token: 'anon-session-token-7',
+                display_name: 'Anonymous #7',
+                total_messages: 99,
+                total_commands: 8,
+            }
+        );
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT anon_number, session_token, display_name, total_messages, total_commands FROM auth_anon_users WHERE id = 'anon-user:hoboquest:-4242'").get(),
+            {
+                anon_number: 4242,
+                session_token: null,
+                display_name: 'Anonymous #4242',
+                total_messages: 4,
+                total_commands: 1,
+            }
+        );
         const authMetadata = JSON.parse(authUser.metadata_json);
         assert.ok(Array.isArray(authMetadata.linked_accounts), 'expected linked accounts to be merged into auth user metadata');
         assert.deepStrictEqual(authMetadata.linked_accounts[0].service, 'hobostreamer');
@@ -344,6 +498,10 @@ async function main() {
         assert.strictEqual(communityDb.prepare('SELECT COUNT(*) AS count FROM community_pastes').get().count, 1);
         assert.strictEqual(communityDb.prepare('SELECT COUNT(*) AS count FROM community_posts').get().count, 1);
         assert.strictEqual(mediaDb.prepare('SELECT COUNT(*) AS count FROM media_objects').get().count, 1);
+        assert.deepStrictEqual(
+            mediaDb.prepare("SELECT size_bytes, storage_provider, status FROM media_objects WHERE id = 'media:hobostreamer-vod:51'").get(),
+            { size_bytes: 3063137389, storage_provider: 'local', status: 'initialized' }
+        );
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'billing/subscriptions'").get().count, 1);
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'loyalty/coin-transactions'").get().count, 1);
         assert.strictEqual(gamesDb.prepare('SELECT COUNT(*) AS count FROM game_players').get().count, 1);
@@ -356,6 +514,10 @@ async function main() {
         assert.deepStrictEqual(
             gamesDb.prepare("SELECT progress, goal FROM game_daily_quests WHERE user_id = 'user:hobotools:1' AND quest_id = 'daily_gather_wood'").get(),
             { progress: 4, goal: 10 }
+        );
+        assert.deepStrictEqual(
+            gamesDb.prepare("SELECT total_stolen, total_lost FROM game_battle_stats WHERE user_id = 'user:hobotools:1'").get(),
+            { total_stolen: 4.7, total_lost: 0 }
         );
     } finally {
         networkDb.close();

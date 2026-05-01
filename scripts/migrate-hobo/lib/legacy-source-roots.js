@@ -6,6 +6,7 @@ const path = require('path');
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const DEFAULT_REPO_LEGACY_ROOT = path.join(REPO_ROOT, 'HoboReposToMigrateFrom');
 const DEFAULT_PARENT_LEGACY_ROOT = path.resolve(REPO_ROOT, '..');
+const DEFAULT_PARENT_LEGACY_HOBO_ROOT = path.join(DEFAULT_PARENT_LEGACY_ROOT, 'hobo');
 
 const SOURCE_SPECS = Object.freeze({
     hobostreamer: {
@@ -117,6 +118,7 @@ function resolveLegacySource(sourceName, options = {}) {
     if (options.sourceDir) addSourceDirCandidates(rootCandidates, options.sourceDir, spec);
     addSharedRootCandidates(rootCandidates, DEFAULT_REPO_LEGACY_ROOT, spec);
     addSharedRootCandidates(rootCandidates, DEFAULT_PARENT_LEGACY_ROOT, spec);
+    addSharedRootCandidates(rootCandidates, DEFAULT_PARENT_LEGACY_HOBO_ROOT, spec);
 
     if (options.explicitDbPath) dbCandidates.push(options.explicitDbPath);
     if (env[spec.envDbKey]) dbCandidates.push(env[spec.envDbKey]);

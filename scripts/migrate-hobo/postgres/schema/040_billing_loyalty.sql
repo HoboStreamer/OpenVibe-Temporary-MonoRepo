@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS loyalty_accounts (
 );
 
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
-    id            BIGSERIAL PRIMARY KEY,
+    id            TEXT PRIMARY KEY,
     user_id       TEXT,
     kind          TEXT,
     amount        BIGINT,

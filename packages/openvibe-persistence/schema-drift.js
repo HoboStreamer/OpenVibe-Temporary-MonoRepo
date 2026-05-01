@@ -81,6 +81,10 @@ function canonicalizeSql(source, options = {}) {
         .filter(Boolean);
 }
 
+function isTypeEvolutionStatement(statement) {
+    return /^alter table [^ ]+ alter column [^ ]+ type [^ ]+( using .+)?$/.test(String(statement || '').trim());
+}
+
 function readMigrationSql(migrationPath) {
     const migrationDir = path.dirname(migrationPath);
     const fileNames = fs.readdirSync(migrationDir)
@@ -119,9 +123,10 @@ function compareServiceSchema(service) {
     const migrationStatements = canonicalizeSql(migrationSql, { normalizeSchema: false });
     const migrationSet = new Set(migrationStatements);
     const schemaSet = new Set(schemaStatements);
+    const comparableMigrationStatements = migrationStatements.filter((statement) => !isTypeEvolutionStatement(statement));
 
     const missingInMigrations = schemaStatements.filter((statement) => !migrationSet.has(statement));
-    const missingInSchema = migrationStatements.filter((statement) => !schemaSet.has(statement));
+    const missingInSchema = comparableMigrationStatements.filter((statement) => !schemaSet.has(statement));
     const status = missingInMigrations.length || missingInSchema.length ? 'red' : 'green';
 
     return {

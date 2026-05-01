@@ -7,8 +7,10 @@ const crypto = require('crypto');
 const { findExistingPath, forEachNdjson, writeJson } = require('./common');
 const { ROOT } = require('./service-paths');
 
+const mediaConfig = require(path.join(ROOT, 'services', 'openvibe-media', 'server', 'config.js'));
 const mediaDbModule = require(path.join(ROOT, 'services', 'openvibe-media', 'server', 'db.js'));
 const { buildStorage } = require(path.join(ROOT, 'services', 'openvibe-media', 'server', 'storage.js'));
+const storageModel = require(path.join(ROOT, 'services', 'openvibe-media', 'server', 'storage-model.js'));
 
 function hashFile(filePath) {
     const hash = crypto.createHash('sha256');
@@ -22,19 +24,87 @@ function extensionFor(filePath) {
     return ext || null;
 }
 
-function copyIntoHotStorage(storage, namespace, mediaId, sourcePath) {
-    const storageKey = storage.keyFor(namespace, mediaId, extensionFor(sourcePath));
-    const destinationPath = storage.pathFor(storageKey);
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    fs.copyFileSync(sourcePath, destinationPath);
-    const stat = fs.statSync(destinationPath);
-    return {
-        storageKey,
-        destinationPath,
-        sizeBytes: stat.size,
-        sha256: hashFile(destinationPath),
-        publicUrl: storage.publicUrlFor(mediaId),
-    };
+function cloneStorageConfig(value) {
+    return JSON.parse(JSON.stringify(value || {}));
+}
+
+function buildBackfillStorageConfig(options) {
+    const source = options || {};
+    const cfg = cloneStorageConfig(source.storageConfig || mediaConfig.storage || {});
+    const hotRoot = source.hotRoot ? path.resolve(source.hotRoot) : null;
+    const multipartRoot = source.multipartRoot ? path.resolve(source.multipartRoot) : null;
+
+    if (hotRoot) {
+        cfg.root = hotRoot;
+        cfg.hotRoot = hotRoot;
+        cfg.local = Object.assign({}, cfg.local || {}, { root: hotRoot });
+    }
+    if (multipartRoot) {
+        cfg.multipartRoot = multipartRoot;
+        cfg.local = Object.assign({}, cfg.local || {}, { multipartRoot });
+    }
+    if (source.publicBaseUrl !== undefined) {
+        cfg.publicBaseUrl = source.publicBaseUrl;
+        cfg.local = Object.assign({}, cfg.local || {}, { publicBaseUrl: source.publicBaseUrl });
+    }
+
+    return cfg;
+}
+
+function providerDetails(storage, providerName) {
+    const cfg = storage && storage.config || {};
+    const normalized = String(providerName || '').trim().toLowerCase();
+    switch (normalized) {
+    case 'b2':
+        return Object.assign({ providerName: 'b2' }, cfg.b2 || {});
+    case 'r2':
+        return Object.assign({ providerName: 'r2' }, cfg.r2 || {});
+    case 's3':
+        return Object.assign({ providerName: 's3' }, cfg.s3 || {});
+    case 'local':
+        return {
+            providerName: 'local',
+            root: cfg.hotRoot || cfg.root || null,
+            publicBaseUrl: cfg.publicBaseUrl || cfg.local && cfg.local.publicBaseUrl || null,
+        };
+    default:
+        return { providerName: normalized || null };
+    }
+}
+
+async function writeIntoStorage(storage, media, sourcePath, options) {
+    const source = options || {};
+    const stat = fs.statSync(sourcePath);
+    const namespace = source.namespace || media.namespace || 'legacy.media';
+    const selection = typeof storage.chooseWriteTarget === 'function'
+        ? storage.chooseWriteTarget({
+            namespace,
+            type: media.type || source.type || null,
+            sizeBytes: stat.size,
+            providerName: source.providerName || undefined,
+            operation: 'migration-backfill',
+        })
+        : {
+            providerName: source.providerName || storage.name(),
+            role: 'canonical',
+            provider: storage.resolveProvider(source.providerName || storage.name()),
+        };
+    const provider = selection.provider || storage.resolveProvider(selection.providerName);
+    if (!provider || typeof provider.writeFile !== 'function') {
+        throw new Error(`Storage provider ${selection.providerName || provider && provider.name && provider.name() || 'unknown'} cannot accept backfilled objects`);
+    }
+
+    const result = await provider.writeFile(namespace, media.id, sourcePath, {
+        extension: extensionFor(sourcePath),
+        mimeType: media.mime_type || source.mimeType || null,
+        metadata: source.metadata || {},
+    });
+    return Object.assign({}, result, {
+        namespace,
+        role: selection.role || 'canonical',
+        providerName: result.provider || selection.providerName,
+        providerDetails: providerDetails(storage, result.provider || selection.providerName),
+    });
 }
 
 function recordLifecycle(db, mediaId, fromStatus, toStatus, detail) {
@@ -98,7 +168,10 @@ async function backfillMedia(options) {
         legacyRoot,
         mediaDbPath,
         hotRoot,
+        multipartRoot,
         publicBaseUrl,
+        providerName,
+        storageConfig,
         dryRun,
         logger,
         // strict=true means missing legacy media files cause the run to throw.
@@ -110,20 +183,24 @@ async function backfillMedia(options) {
     const resolvedBundleDir = path.resolve(bundleDir);
     const resolvedLegacyRoot = path.resolve(legacyRoot);
     const resolvedDbPath = path.resolve(mediaDbPath);
-    const storage = buildStorage({
-        provider: 'local',
-        root: path.resolve(hotRoot),
+    const storage = buildStorage(buildBackfillStorageConfig({
+        storageConfig,
+        hotRoot,
+        multipartRoot,
         publicBaseUrl,
-        coldProvider: 'none',
-    });
+    }));
     const db = mediaDbModule.init(resolvedDbPath);
+    const requestedProviderName = providerName || 'local';
 
     const report = {
         generated_at: new Date().toISOString(),
         bundle_dir: resolvedBundleDir,
         legacy_root: resolvedLegacyRoot,
         media_db_path: resolvedDbPath,
-        hot_root: path.resolve(hotRoot),
+        hot_root: hotRoot ? path.resolve(hotRoot) : null,
+        requested_provider_name: requestedProviderName,
+        canonical_provider_name: storage.canonicalProviderName || storage.name(),
+        provider_policy: storage.providerPolicy || null,
         dry_run: !!dryRun,
         copied_records: 0,
         copied_bytes: 0,
@@ -160,12 +237,41 @@ async function backfillMedia(options) {
                 return;
             }
 
-            const current = db.prepare('SELECT id, status, storage_key FROM media_objects WHERE id = ?').get(String(row.id));
-            const copied = copyIntoHotStorage(storage, row.namespace || 'legacy.media', row.id, resolved.resolvedPath);
+            const current = db.prepare(`
+                SELECT id, namespace, type, status, visibility, storage_tier, storage_provider, storage_key, mime_type
+                FROM media_objects
+                WHERE id = ?
+            `).get(String(row.id));
+            if (!current) {
+                report.skipped_records.push({ media_id: row.id, reason: 'missing-media-object', legacy_table: row.legacy_table || null });
+                return;
+            }
+
+            const media = {
+                id: String(row.id),
+                namespace: row.namespace || current.namespace || 'legacy.media',
+                type: row.media_type || row.type || current.type || null,
+                visibility: row.visibility || current.visibility || 'public',
+                mime_type: row.mime_type || current.mime_type || null,
+            };
+            const copied = await writeIntoStorage(storage, media, resolved.resolvedPath, {
+                namespace: media.namespace,
+                type: media.type,
+                providerName: requestedProviderName,
+                metadata: {
+                    media_id: media.id,
+                    migration_source: 'hobo',
+                    legacy_table: row.legacy_table || null,
+                    legacy_path: candidatePath,
+                },
+            });
+            const requiresSignedPlayback = media.visibility !== 'public' || !copied.publicUrl;
+            const nextStorageTier = current.storage_tier || (copied.role === 'hot' ? 'hot' : 'warm');
+
             db.prepare(`
                 UPDATE media_objects
                 SET status = 'ready',
-                    storage_tier = 'hot',
+                    storage_tier = ?,
                     storage_provider = ?,
                     storage_key = ?,
                     public_url = ?,
@@ -173,11 +279,35 @@ async function backfillMedia(options) {
                     sha256 = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            `).run(storage.name(), copied.storageKey, copied.publicUrl, copied.sizeBytes, copied.sha256, String(row.id));
+            `).run(nextStorageTier, copied.providerName, copied.storageKey, copied.publicUrl || null, copied.sizeBytes, copied.sha256, String(row.id));
+
+            storageModel.recordLocation({
+                mediaId: media.id,
+                providerName: copied.providerName,
+                role: copied.role || 'canonical',
+                storageKey: copied.storageKey,
+                bucket: copied.providerDetails.bucket || null,
+                endpoint: copied.providerDetails.endpoint || null,
+                region: copied.providerDetails.region || null,
+                publicUrl: copied.publicUrl || null,
+                signedUrlRequired: requiresSignedPlayback,
+                checksumSha256: copied.sha256 || null,
+                sizeBytes: copied.sizeBytes || 0,
+                status: 'active',
+                metadata: {
+                    migration_source: 'hobo',
+                    legacy_table: row.legacy_table || null,
+                    source_path: candidatePath,
+                    resolved_path: resolved.resolvedPath,
+                },
+            });
+
             recordLifecycle(db, row.id, current && current.status, 'ready', {
                 source_path: candidatePath,
                 resolved_path: resolved.resolvedPath,
                 storage_key: copied.storageKey,
+                storage_provider: copied.providerName,
+                role: copied.role || 'canonical',
             });
             report.copied_records += 1;
             report.copied_bytes += copied.sizeBytes;

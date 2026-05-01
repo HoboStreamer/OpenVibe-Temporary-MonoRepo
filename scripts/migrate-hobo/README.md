@@ -108,6 +108,24 @@ That means a staging rehearsal can still resolve legacy inputs when the fetched
 `production-source/*` tree is incomplete, as long as a compatible checkout is
 available through one of the fallback locations above.
 
+If your legacy sources are already mounted locally under `/opt/hobostreamer`
+and `/opt/hobo`, the resolver will now detect them automatically from the
+parent path of the repo. You can also force local-only resolution with:
+
+```bash
+OPENVIBE_LEGACY_SOURCE_ROOT=/opt/hobo \
+  node scripts/migrate-hobo/export-hobotools.js
+```
+
+or for a full local staging rehearsal:
+
+```bash
+OPENVIBE_LEGACY_SOURCE_ROOT=/opt/hobo \
+  node scripts/migrate-hobo/staging-cutover-rehearsal.js \
+  --source ./data/migrations/hobo-production-staging \
+  --out ./data/migrations/hobo-production-staging
+```
+
 ### 1. Export HoboStreamer
 
 Optional flags:
@@ -230,7 +248,7 @@ warnings, and planned/executed commands.
 
 ### Full staging rehearsal
 
-`node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging`
+`node scripts/migrate-hobo/staging-cutover-rehearsal.js --source ./data/migrations/hobo-production-staging --out ./data/migrations/hobo-production-staging --confirm-load`
 
 Useful override flags:
 
@@ -240,6 +258,11 @@ Useful override flags:
   explicit source checkout overrides
 - `--hobostreamer-db <file>`, `--hobotools-db <file>`, `--hoboquest-db <file>`
   explicit SQLite overrides
+- `--confirm-load` required alongside `OPENVIBE_ALLOW_STAGING_LOAD=true` and
+  `OPENVIBE_STAGING_CONFIRM=true` to hydrate staging SQLite stores
+- `--provider-name <local|b2|r2|s3>` choose where media backfill writes;
+  staging rehearsal remains safest with `local`, while production canonical
+  backfill should use `b2`
 
 Example with a parent-root fallback layout:
 
@@ -252,6 +275,14 @@ Example with a parent-root fallback layout:
 ### Backfill hot media storage only
 
 `node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --hot-root ./services/openvibe-media/data/storage/hot`
+
+The migration CLIs auto-load the repo root `.env`, so provider credentials such
+as `OPENVIBE_MEDIA_B2_*` and staging gates such as
+`OPENVIBE_ALLOW_STAGING_LOAD` / `OPENVIBE_STAGING_CONFIRM` are available
+without manually exporting them first. Backfill stays on local storage unless
+you explicitly choose a canonical provider, for example:
+
+`node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --provider-name b2`
 
 If the bundle was prepared without a colocated `production-source/hobostreamer`
 tree, pass the shared fallback root explicitly:

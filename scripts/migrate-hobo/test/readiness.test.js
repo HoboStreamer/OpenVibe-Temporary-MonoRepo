@@ -9,6 +9,18 @@ const { ensureDir, writeJson } = require('../lib/common');
 const { loadStagingBundle } = require('../lib/staging-loader');
 const { buildReadinessReport } = require('../lib/readiness');
 
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_NETWORK_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_MEDIA_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_BILLING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENRE_STREAM_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_LIVE_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_CHAT_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_COMMUNITY_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_GAMES_DATABASE_URL = '';
+
 function writeNdjson(filePath, rows) {
     ensureDir(path.dirname(filePath));
     fs.writeFileSync(filePath, rows.map((row) => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : ''), 'utf8');

@@ -27,7 +27,13 @@ class PolicyDeniedError extends Error {
 // ── helpers ───────────────────────────────────────────────────
 function actorOfReq(req) {
     if (req && req.serviceActor) return { type: 'service', id: req.serviceActor };
-    if (req && req.user) return { type: 'user', id: String(req.user.sub || req.user.id || '') };
+    if (req && req.user) {
+        const actorId = String(req.user.sub || req.user.id || '');
+        if (req.user.actor_type === 'anon' || req.user.anonymous === true) {
+            return { type: 'anonymous', id: actorId || null };
+        }
+        return { type: 'user', id: actorId };
+    }
     return { type: 'anonymous', id: null };
 }
 

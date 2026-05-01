@@ -10,8 +10,28 @@ const audit = require('./audit');
 const staff = require('./api/staff');
 
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 2;
+const ANON_ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const AUTH_CODE_TTL_SECONDS = 60 * 5;
+
+function normalizeAnonNumber(value) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function anonUsernameForNumber(anonNumber) {
+    const normalized = normalizeAnonNumber(anonNumber);
+    return normalized ? `anon${normalized}` : 'anon';
+}
+
+function anonDisplayNameForNumber(anonNumber) {
+    const normalized = normalizeAnonNumber(anonNumber);
+    return normalized ? `Anonymous #${normalized}` : 'Anonymous';
+}
+
+function isAnonActor(user) {
+    return !!user && (user.actor_type === 'anon' || user.anonymous === true);
+}
 
 function nowIso(offsetMs = 0) {
     return new Date(Date.now() + offsetMs).toISOString();
@@ -360,6 +380,16 @@ function renderAuthorizePage({ config, request, sessionUser, errorMessage }) {
                     <a class="ov-btn" href="${escapeHtml(config.surfaces.auth)}/.well-known/openid-configuration">View OIDC discovery</a>
                 </div>
             </form>`}
+            ${sessionUser ? '' : `<form class="ov-auth-form" method="post" action="/api/v1/session/anonymous">
+                <input type="hidden" name="return_to" value="${escapeHtml(continueTarget)}">
+                <div class="ov-auth-callout">
+                    <strong>Need to stay anonymous?</strong>
+                    <p style="margin:.45rem 0 0;">OpenVibe can issue a numbered anonymous identity like <code>Anonymous #27115</code> without letting arbitrary display names drift between surfaces.</p>
+                </div>
+                <div class="ov-auth-actions">
+                    <button class="ov-btn" type="submit">Continue with anonymous identity</button>
+                </div>
+            </form>`}
             <p class="ov-auth-muted">Return target: <code>${escapeHtml(continueTarget)}</code>${request.client_id ? ` · client=<code>${escapeHtml(request.client_id)}</code>` : ''}</p>
         </section>
     </div>
@@ -392,8 +422,8 @@ function buildNativeAuth({ config, identity }) {
         return parts.join('; ');
     }
 
-    function setSessionCookie(res, token) {
-        res.append('Set-Cookie', cookieParts(token, ACCESS_TOKEN_TTL_SECONDS, cookieDomain));
+    function setSessionCookie(res, token, maxAgeSeconds = ACCESS_TOKEN_TTL_SECONDS) {
+        res.append('Set-Cookie', cookieParts(token, maxAgeSeconds, cookieDomain));
         for (const domain of Array.from(new Set([legacyCookieDomain, localhostCookieDomain]))) {
             if (domain && domain !== cookieDomain) {
                 res.append('Set-Cookie', cookieParts('', 0, domain));
@@ -461,9 +491,49 @@ function buildNativeAuth({ config, identity }) {
         };
     }
 
+    function hydrateAnonUser(row) {
+        if (!row) return null;
+        const anonNumber = normalizeAnonNumber(row.anon_number);
+        return {
+            id: row.id,
+            sub: row.id,
+            actor_type: 'anon',
+            anonymous: true,
+            anon_number: anonNumber,
+            username: anonUsernameForNumber(anonNumber),
+            display_name: anonDisplayNameForNumber(anonNumber),
+            email: null,
+            avatar_url: null,
+            role: 'anonymous',
+            session_token: row.session_token || null,
+            preferences: parseJson(row.preferences_json, {}),
+            total_messages: Number(row.total_messages) || 0,
+            total_commands: Number(row.total_commands) || 0,
+            primary_source: row.primary_source || null,
+            legacy_source: row.legacy_source || null,
+            legacy_id: row.legacy_id || null,
+            first_seen: row.first_seen || row.created_at || null,
+            last_seen: row.last_seen || null,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        };
+    }
+
     function getUserById(userId) {
         const row = db.get().prepare('SELECT * FROM auth_users WHERE id = ? LIMIT 1').get(String(userId));
         return hydrateUser(row);
+    }
+
+    function getAnonUserById(userId) {
+        const row = db.get().prepare('SELECT * FROM auth_anon_users WHERE id = ? LIMIT 1').get(String(userId));
+        return hydrateAnonUser(row);
+    }
+
+    function getAnonUserBySessionToken(sessionToken) {
+        const token = String(sessionToken || '').trim();
+        if (!token) return null;
+        const row = db.get().prepare('SELECT * FROM auth_anon_users WHERE session_token = ? LIMIT 1').get(token);
+        return hydrateAnonUser(row);
     }
 
     function getUserByUsername(username) {
@@ -552,6 +622,9 @@ function buildNativeAuth({ config, identity }) {
         if (!normalizedUsername || normalizedUsername.length < 2) {
             throw new Error('username must contain at least 2 valid characters');
         }
+        if (/^anon/i.test(normalizedUsername)) {
+            throw new Error('username cannot start with "anon" — this prefix is reserved for anonymous identities');
+        }
         const normalizedEmail = normalizeEmail(email);
         const trimmedDisplayName = String(display_name || '').trim() || normalizedUsername;
         const rawPassword = String(password || '');
@@ -607,6 +680,12 @@ function buildNativeAuth({ config, identity }) {
         const current = getUserById(userId);
         if (!current) return null;
         const nextUsername = patch.username ? slugifyUsername(patch.username) : current.username;
+        if (!nextUsername || nextUsername.length < 2) {
+            throw new Error('username must contain at least 2 valid characters');
+        }
+        if (/^anon/i.test(nextUsername)) {
+            throw new Error('username cannot start with "anon" — this prefix is reserved for anonymous identities');
+        }
         const nextEmail = Object.prototype.hasOwnProperty.call(patch, 'email') ? normalizeEmail(patch.email) : current.email;
         const nextDisplayName = Object.prototype.hasOwnProperty.call(patch, 'display_name')
             ? (String(patch.display_name || '').trim() || nextUsername)
@@ -622,13 +701,62 @@ function buildNativeAuth({ config, identity }) {
         return getUserById(current.id);
     }
 
-    function createSession(userId, req) {
+    function createSession(userId, req, options) {
         const sessionId = randomOpaque('sess');
+        const metadata = Object.assign({}, options && options.metadata ? options.metadata : {});
         db.get().prepare(`
-            INSERT INTO auth_sessions (id, user_id, user_agent, ip_address)
-            VALUES (?, ?, ?, ?)
-        `).run(sessionId, String(userId), req.get('user-agent') || null, req.ip || null);
+            INSERT INTO auth_sessions (id, user_id, user_agent, ip_address, metadata_json)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(
+            sessionId,
+            String(userId),
+            req.get('user-agent') || null,
+            req.ip || null,
+            JSON.stringify(metadata || {})
+        );
         return { id: sessionId };
+    }
+
+    function nextAnonNumber() {
+        const row = db.get().prepare('SELECT COALESCE(MAX(anon_number), 0) + 1 AS next_number FROM auth_anon_users').get();
+        return normalizeAnonNumber(row && row.next_number) || 1;
+    }
+
+    function touchAnonLastSeen(anonId) {
+        db.get().prepare(`
+            UPDATE auth_anon_users
+               SET last_seen = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        `).run(String(anonId));
+    }
+
+    function ensureAnonUser({ sessionToken, req }) {
+        const requestedToken = String(sessionToken || '').trim() || null;
+        const existing = requestedToken ? getAnonUserBySessionToken(requestedToken) : null;
+        if (existing) {
+            touchAnonLastSeen(existing.id);
+            return getAnonUserById(existing.id) || existing;
+        }
+        const anonNumber = nextAnonNumber();
+        const id = `anon-user:openvibe:${anonNumber}`;
+        const nextSessionToken = requestedToken || crypto.randomUUID();
+        db.get().prepare(`
+            INSERT INTO auth_anon_users (
+                id, anon_number, session_token, display_name, preferences_json,
+                total_messages, total_commands, primary_source, legacy_source, legacy_id,
+                first_seen, last_seen, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, '{}', 0, 0, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `).run(id, anonNumber, nextSessionToken, anonDisplayNameForNumber(anonNumber), 'openvibe', 'openvibe', String(anonNumber));
+        audit.record({
+            actorType: 'anonymous',
+            actorId: id,
+            action: 'auth.anon.provision',
+            resource: `auth_anon_user:${id}`,
+            outcome: 'allow',
+            detail: { anon_number: anonNumber, ip: req && req.ip || null },
+        });
+        return getAnonUserById(id);
     }
 
     function touchSession(sessionId, req) {
@@ -665,18 +793,26 @@ function buildNativeAuth({ config, identity }) {
             username: user.username,
             display_name: user.display_name || user.username,
             email: user.email || undefined,
-            role: user.role || staff.getRole(user.id),
+            role: user.role || (isAnonActor(user) ? 'anonymous' : staff.getRole(user.id)),
             sid: sessionId,
             scope,
         }, extra || {});
     }
 
-    function issueAccessToken(user, sessionId, scope, extra) {
+    function issueTokenForActor(user, sessionId, scope, extra, expiresIn) {
         return identity.issueToken(buildClaims(user, sessionId, scope, extra), {
-            expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+            expiresIn: expiresIn || ACCESS_TOKEN_TTL_SECONDS,
             audience: 'openvibe',
             keyid: 'openvibe-1',
         });
+    }
+
+    function issueAccessToken(user, sessionId, scope, extra) {
+        return issueTokenForActor(user, sessionId, scope, extra, ACCESS_TOKEN_TTL_SECONDS);
+    }
+
+    function issueAnonAccessToken(user, sessionId, scope, extra) {
+        return issueTokenForActor(user, sessionId, scope, extra, ANON_ACCESS_TOKEN_TTL_SECONDS);
     }
 
     function issueIdToken(user, sessionId, nonce) {
@@ -772,6 +908,46 @@ function buildNativeAuth({ config, identity }) {
         };
     }
 
+    function buildAnonBrowserBundle(user, req) {
+        const session = createSession(user.id, req, {
+            metadata: {
+                actor_type: 'anon',
+                anon_number: user.anon_number,
+                session_token: user.session_token || null,
+            },
+        });
+        const scope = 'anonymous';
+        return {
+            session,
+            access_token: issueAnonAccessToken(user, session.id, scope, {
+                actor_type: 'anon',
+                anonymous: true,
+                anon_number: user.anon_number,
+                session_token: user.session_token || null,
+            }),
+            expires_in: ANON_ACCESS_TOKEN_TTL_SECONDS,
+            scope,
+        };
+    }
+
+    function resolveSessionUser(req) {
+        if (!req || !req.user) return null;
+        if (isAnonActor(req.user)) {
+            return getAnonUserById(req.user.sub || req.user.id) || req.user;
+        }
+        return getUserById(req.user.sub || req.user.id) || req.user;
+    }
+
+    function buildSessionResponse(req) {
+        const user = resolveSessionUser(req);
+        const anonymous = isAnonActor(user);
+        return {
+            authenticated: !!user && !anonymous,
+            anonymous,
+            user: user || null,
+        };
+    }
+
     function finishAuthorize(req, res, user, request, sessionId) {
         if (request.client_id || request.redirect_uri) {
             if (request.response_type !== 'code') {
@@ -803,18 +979,18 @@ function buildNativeAuth({ config, identity }) {
     }
 
     function currentSessionUser(req) {
-        if (!req.user) return null;
-        return getUserById(req.user.sub || req.user.id) || req.user;
+        return resolveSessionUser(req);
     }
 
     function handleAuthorizeGet(req, res) {
         const request = normalizeAuthorizeRequest(req, config);
         const sessionUser = currentSessionUser(req);
-        if (sessionUser && request.prompt !== 'login') {
+        const nativeSessionUser = isAnonActor(sessionUser) ? null : sessionUser;
+        if (nativeSessionUser && request.prompt !== 'login') {
             touchSession(req.user && req.user.sid, req);
-            return finishAuthorize(req, res, sessionUser, request, req.user && req.user.sid);
+            return finishAuthorize(req, res, nativeSessionUser, request, req.user && req.user.sid);
         }
-        res.type('html').send(renderAuthorizePage({ config, request, sessionUser, errorMessage: '' }));
+        res.type('html').send(renderAuthorizePage({ config, request, sessionUser: nativeSessionUser, errorMessage: '' }));
     }
 
     function handleAuthorizePost(req, res) {
@@ -937,6 +1113,10 @@ function buildNativeAuth({ config, identity }) {
             res.status(401).json({ error: 'authentication required' });
             return null;
         }
+        if (isAnonActor(req.user)) {
+            res.status(403).json({ error: 'anonymous sessions cannot use native account routes' });
+            return null;
+        }
         const user = getUserById(userId);
         if (!user) {
             res.status(401).json({ error: 'user not found' });
@@ -963,13 +1143,30 @@ function buildNativeAuth({ config, identity }) {
 
     function buildAccountRouter() {
         const router = express.Router();
+        router.post('/session/anonymous', (req, res) => {
+            const legacySessionToken = String(
+                (req.body && (req.body.legacy_session_token || req.body.session_token))
+                || (req.query && (req.query.legacy_session_token || req.query.session_token))
+                || (isAnonActor(req.user) ? (req.user.session_token || '') : '')
+            ).trim() || null;
+            const anonUser = ensureAnonUser({ sessionToken: legacySessionToken, req });
+            const bundle = buildAnonBrowserBundle(anonUser, req);
+            setSessionCookie(res, bundle.access_token, bundle.expires_in);
+            const returnTo = String((req.body && req.body.return_to) || (req.query && req.query.return_to) || '').trim();
+            if (returnTo && isAllowedRedirectUri(returnTo)) {
+                return res.redirect(302, returnTo);
+            }
+            res.status(legacySessionToken ? 200 : 201).json(buildSessionResponse({ user: anonUser }));
+        });
+
         router.get('/session/bridge', (req, res) => {
             const returnTo = String(req.query.return_to || '').trim();
             if (!isAllowedRedirectUri(returnTo)) {
                 return res.status(400).send('invalid return_to');
             }
 
-            if (!req.user || !req.user.id) {
+            const sessionUser = resolveSessionUser(req);
+            if (!sessionUser || isAnonActor(sessionUser)) {
                 const bridgeUrl = new URL('/api/v1/session/bridge', config.surfaces.network || config.surfaces.auth);
                 bridgeUrl.searchParams.set('return_to', returnTo);
                 const authorizeUrl = new URL('/oauth/authorize', config.surfaces.auth);
@@ -977,15 +1174,10 @@ function buildNativeAuth({ config, identity }) {
                 return res.redirect(302, authorizeUrl.toString());
             }
 
-            const user = getUserById(req.user.id);
-            if (!user) {
-                return res.status(401).send('user not found');
-            }
-
-            const sessionId = (req.user && req.user.sid) || createSession(user.id, req).id;
+            const sessionId = (req.user && req.user.sid) || createSession(sessionUser.id, req).id;
             if (req.user && req.user.sid) touchSession(req.user.sid, req);
             const scope = 'openid profile email theme';
-            const accessToken = issueAccessToken(user, sessionId, scope);
+            const accessToken = issueAccessToken(sessionUser, sessionId, scope);
             return res.redirect(302, appendTokenToReturnUri(returnTo, accessToken));
         });
 
@@ -1127,6 +1319,7 @@ function buildNativeAuth({ config, identity }) {
     }
 
     return {
+        buildSessionResponse,
         buildAccountRouter,
         getUserById,
         getUserByUsername,
@@ -1136,6 +1329,7 @@ function buildNativeAuth({ config, identity }) {
         handleTokenPost,
         isAllowedRedirectUri,
         listSessionsForUser,
+        resolveSessionUser,
         upsertUser,
         updateUserProfile,
     };
@@ -1143,6 +1337,9 @@ function buildNativeAuth({ config, identity }) {
 
 module.exports = {
     ACCESS_TOKEN_TTL_SECONDS,
+    ANON_ACCESS_TOKEN_TTL_SECONDS,
+    anonDisplayNameForNumber,
+    anonUsernameForNumber,
     buildNativeAuth,
     deriveCookieDomain,
     slugifyUsername,

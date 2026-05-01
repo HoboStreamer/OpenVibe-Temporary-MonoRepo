@@ -70,9 +70,30 @@ function buildUpsert(table, columns, conflictKeys) {
     return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders.join(', ')}) ${onConflict}`;
 }
 
+function buildBatchUpsert(table, columns, conflictKeys, rowCount) {
+    const safeRowCount = Math.max(1, Number(rowCount) || 1);
+    const placeholders = [];
+    let parameterIndex = 1;
+
+    for (let rowIndex = 0; rowIndex < safeRowCount; rowIndex += 1) {
+        const rowPlaceholders = columns.map(() => `$${parameterIndex++}`);
+        placeholders.push(`(${rowPlaceholders.join(', ')})`);
+    }
+
+    const updates = columns
+        .filter((c) => !conflictKeys.includes(c))
+        .map((c) => `${c} = EXCLUDED.${c}`);
+    const onConflict = updates.length
+        ? `ON CONFLICT (${conflictKeys.join(', ')}) DO UPDATE SET ${updates.join(', ')}`
+        : `ON CONFLICT (${conflictKeys.join(', ')}) DO NOTHING`;
+
+    return `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${placeholders.join(', ')} ${onConflict}`;
+}
+
 module.exports = {
     applySchemaDirectory,
     applySchemaFile,
+    buildBatchUpsert,
     buildUpsert,
     createClient,
     loadPg,

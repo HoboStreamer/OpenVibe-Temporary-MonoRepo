@@ -45,6 +45,24 @@ const AUTH_SCHEMA_SQL = `
             last_login_at DATETIME
         );
 
+        CREATE TABLE IF NOT EXISTS auth_anon_users (
+            id             TEXT PRIMARY KEY,
+            anon_number    INTEGER NOT NULL UNIQUE,
+            session_token  TEXT UNIQUE,
+            display_name   TEXT,
+            preferences_json TEXT NOT NULL DEFAULT '{}',
+            total_messages INTEGER NOT NULL DEFAULT 0,
+            total_commands INTEGER NOT NULL DEFAULT 0,
+            primary_source TEXT,
+            legacy_source  TEXT,
+            legacy_id      TEXT,
+            first_seen     DATETIME,
+            last_seen      DATETIME,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_users_number ON auth_anon_users(anon_number);
+
         CREATE TABLE IF NOT EXISTS auth_authorization_codes (
             code_hash              TEXT PRIMARY KEY,
             user_id                TEXT NOT NULL,
@@ -215,6 +233,24 @@ const SCHEMA_SQL = `
             updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_login_at DATETIME
         );
+
+        CREATE TABLE IF NOT EXISTS auth_anon_users (
+            id             TEXT PRIMARY KEY,
+            anon_number    INTEGER NOT NULL UNIQUE,
+            session_token  TEXT UNIQUE,
+            display_name   TEXT,
+            preferences_json TEXT NOT NULL DEFAULT '{}',
+            total_messages INTEGER NOT NULL DEFAULT 0,
+            total_commands INTEGER NOT NULL DEFAULT 0,
+            primary_source TEXT,
+            legacy_source  TEXT,
+            legacy_id      TEXT,
+            first_seen     DATETIME,
+            last_seen      DATETIME,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_users_number ON auth_anon_users(anon_number);
 
         CREATE TABLE IF NOT EXISTS auth_authorization_codes (
             code_hash              TEXT PRIMARY KEY,

@@ -28,9 +28,19 @@ CREATE TABLE IF NOT EXISTS identity_linked_accounts (
 );
 
 CREATE TABLE IF NOT EXISTS identity_anon_users (
-    id          TEXT PRIMARY KEY,
-    fingerprint TEXT,
-    created_at  TIMESTAMPTZ DEFAULT now()
+    id               TEXT PRIMARY KEY,
+    anon_number      TEXT,
+    session_token    TEXT,
+    display_name     TEXT,
+    preferences_json JSONB DEFAULT '{}'::jsonb,
+    total_messages   BIGINT DEFAULT 0,
+    total_commands   BIGINT DEFAULT 0,
+    first_seen       TIMESTAMPTZ,
+    last_seen        TIMESTAMPTZ,
+    fingerprint      TEXT,
+    legacy_source    TEXT,
+    legacy_id        TEXT,
+    created_at       TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS identity_verification_keys (
@@ -39,6 +49,15 @@ CREATE TABLE IF NOT EXISTS identity_verification_keys (
     key_type      TEXT,
     metadata_json JSONB DEFAULT '{}'::jsonb,
     created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS identity_username_conflicts (
+    canonical_user_id      TEXT NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    hobotools_username     TEXT,
+    hobostreamer_username  TEXT,
+    legacy_id              TEXT,
+    created_at             TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (canonical_user_id, legacy_id)
 );
 
 CREATE TABLE IF NOT EXISTS identity_user_effects (
@@ -73,6 +92,17 @@ CREATE TABLE IF NOT EXISTS control_url_registry (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS control_user_preferences (
+    user_id        TEXT NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    scope          TEXT NOT NULL,
+    language       TEXT,
+    settings_json  JSONB DEFAULT '{}'::jsonb,
+    legacy_source  TEXT,
+    legacy_id      TEXT,
+    updated_at     TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, scope)
+);
+
 CREATE TABLE IF NOT EXISTS control_oauth_clients (
     client_id     TEXT PRIMARY KEY,
     display_name  TEXT,
@@ -82,7 +112,7 @@ CREATE TABLE IF NOT EXISTS control_oauth_clients (
 );
 
 CREATE TABLE IF NOT EXISTS control_notifications (
-    id            BIGSERIAL PRIMARY KEY,
+    id            TEXT PRIMARY KEY,
     user_id       TEXT,
     category      TEXT,
     type          TEXT,

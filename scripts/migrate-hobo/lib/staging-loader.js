@@ -158,8 +158,29 @@ function shouldIncludeDataset(context, dataset) {
     return datasetTargetServices(dataset).some((serviceName) => shouldWriteService(context, serviceName));
 }
 
+function isPostgresCompatDb(db) {
+    if (!db || typeof db.getStatus !== 'function') return false;
+    try {
+        const status = db.getStatus();
+        return !!status && status.adapter === 'postgres';
+    } catch {
+        return false;
+    }
+}
+
 function hasTable(db, tableName) {
-    return !!db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const normalizedTableName = String(tableName || '').trim();
+    if (!normalizedTableName) return false;
+    if (isPostgresCompatDb(db)) {
+        return !!db.prepare(`
+            SELECT 1 AS present
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = ?
+            LIMIT 1
+        `).get(normalizedTableName);
+    }
+    return !!db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(normalizedTableName);
 }
 
 function toJson(value, fallbackValue) {
@@ -261,9 +282,12 @@ function upsertHoldingRecord(db, dataset, row) {
 
 function recordLegacyMap(db, tableName, source, kind, legacyId, newId) {
     if (!legacyId || !newId || !hasTable(db, tableName)) return;
+    const targetColumn = tableName === 'media_legacy_map' ? 'media_id' : 'new_id';
     db.prepare(`
-        INSERT OR REPLACE INTO ${tableName} (${tableName === 'media_legacy_map' ? 'source, kind, legacy_id, media_id' : 'source, kind, legacy_id, new_id'}${tableName === 'media_legacy_map' ? '' : ''})
+        INSERT INTO ${tableName} (source, kind, legacy_id, ${targetColumn})
         VALUES (?, ?, ?, ?)
+        ON CONFLICT(source, kind, legacy_id) DO UPDATE SET
+            ${targetColumn} = excluded.${targetColumn}
     `).run(String(source), String(kind), String(legacyId), String(newId));
 }
 
@@ -384,6 +408,106 @@ function upsertNetworkLinkedAccountMetadata(context, row) {
                updated_at = CURRENT_TIMESTAMP
          WHERE id = ?
     `).run(toJson(metadata, {}), String(row.user_id));
+    return true;
+}
+
+function normalizeNetworkAnonNumber(value) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function extractNetworkAnonNumber(...values) {
+    for (const value of values) {
+        const candidate = String(value == null ? '' : value).trim();
+        if (!candidate) continue;
+        let match = candidate.match(/^anonymous\s*#\s*(\d+)$/i);
+        if (match) return normalizeNetworkAnonNumber(match[1]);
+        match = candidate.match(/^hobo_anon(\d+)$/i);
+        if (match) return normalizeNetworkAnonNumber(match[1]);
+        match = candidate.match(/^anon(\d+)$/i);
+        if (match) return normalizeNetworkAnonNumber(match[1]);
+    }
+    return null;
+}
+
+function deriveNetworkAnonNumber(row) {
+    const numericAnonNumber = normalizeNetworkAnonNumber(row.anon_number);
+    if (numericAnonNumber) return numericAnonNumber;
+    const hintedNumber = extractNetworkAnonNumber(
+        row.anon_number,
+        row.display_name,
+        row.preferences && row.preferences.username,
+        row.preferences && row.preferences.display_name,
+    );
+    if (hintedNumber) return hintedNumber;
+    const sourceName = row.source || row.legacy_ref && row.legacy_ref.source || null;
+    const legacyGameUserId = row.preferences && row.preferences.legacy_game_user_id != null
+        ? row.preferences.legacy_game_user_id
+        : row.legacy_ref && row.legacy_ref.legacy_id;
+    const numericLegacyId = Number(legacyGameUserId);
+    if (sourceName === 'hoboquest' && Number.isFinite(numericLegacyId) && numericLegacyId < 0) {
+        return Math.abs(Math.trunc(numericLegacyId));
+    }
+    return null;
+}
+
+function buildNetworkAnonDisplayName(row, anonNumber) {
+    if (anonNumber) {
+        return `Anonymous #${anonNumber}`;
+    }
+    return String(row.display_name || row.id || 'Anonymous').trim() || 'Anonymous';
+}
+
+function upsertNetworkAnonUser(context, row) {
+    const anonNumber = deriveNetworkAnonNumber(row);
+    if (!row.id || !anonNumber) return false;
+    const existingById = context.dbs.network.prepare('SELECT * FROM auth_anon_users WHERE id = ? LIMIT 1').get(String(row.id));
+    const existingByNumber = context.dbs.network.prepare('SELECT * FROM auth_anon_users WHERE anon_number = ? LIMIT 1').get(anonNumber);
+    const existing = existingById || existingByNumber || null;
+    const targetId = existing && existing.id ? String(existing.id) : String(row.id);
+    const nextDisplayName = buildNetworkAnonDisplayName(row, anonNumber);
+    const nextPreferences = Object.assign({}, parseJsonValue(existing && existing.preferences_json, {}), row.preferences || {});
+    const nextFirstSeen = existing && existing.first_seen || row.first_seen || row.created_at || null;
+    const nextLastSeen = row.last_seen || existing && existing.last_seen || nextFirstSeen;
+    const nextCreatedAt = existing && existing.created_at || row.first_seen || row.created_at || null;
+    const nextUpdatedAt = row.last_seen || row.updated_at || existing && existing.updated_at || null;
+
+    context.dbs.network.prepare(`
+        INSERT INTO auth_anon_users (
+            id, anon_number, session_token, display_name, preferences_json,
+            total_messages, total_commands, primary_source, legacy_source, legacy_id,
+            first_seen, last_seen, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(id) DO UPDATE SET
+            anon_number = excluded.anon_number,
+            session_token = COALESCE(excluded.session_token, auth_anon_users.session_token),
+            display_name = excluded.display_name,
+            preferences_json = excluded.preferences_json,
+            total_messages = excluded.total_messages,
+            total_commands = excluded.total_commands,
+            primary_source = excluded.primary_source,
+            legacy_source = excluded.legacy_source,
+            legacy_id = excluded.legacy_id,
+            first_seen = COALESCE(auth_anon_users.first_seen, excluded.first_seen),
+            last_seen = COALESCE(excluded.last_seen, auth_anon_users.last_seen),
+            created_at = COALESCE(auth_anon_users.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        targetId,
+        anonNumber,
+        row.session_token || existing && existing.session_token || null,
+        nextDisplayName,
+        toJson(nextPreferences, {}),
+        Math.max(Number(row.total_messages) || 0, Number(existing && existing.total_messages) || 0),
+        Math.max(Number(row.total_commands) || 0, Number(existing && existing.total_commands) || 0),
+        existing && existing.primary_source || row.source || null,
+        existing && existing.legacy_source || row.source || row.legacy_ref && row.legacy_ref.source || null,
+        existing && existing.legacy_id || row.preferences && row.preferences.legacy_game_user_id || row.legacy_ref && row.legacy_ref.legacy_id || null,
+        nextFirstSeen,
+        nextLastSeen,
+        nextCreatedAt,
+        nextUpdatedAt
+    );
     return true;
 }
 
@@ -1829,7 +1953,6 @@ function loadDatasetRow(context, dataset, row) {
                 context.addManualAction('Canonical identity users are projected into openvibe-network auth_users for native password sign-in, while full source payloads remain mirrored in staging_import_records for audit and not-yet-modeled fields.');
             }
             return;
-        case 'identity/anon-users':
         case 'identity/verification-keys':
         case 'identity/user-effects':
         case 'identity/username-conflicts':
@@ -1843,6 +1966,15 @@ function loadDatasetRow(context, dataset, row) {
             if (shouldWriteService(context, 'network')) {
                 loadIntoNetworkHolding(context, dataset, row);
                 context.addManualAction('Non-login identity/control-plane datasets remain mirrored in openvibe-network staging_import_records until dedicated runtime tables are expanded further.');
+            }
+            return;
+        case 'identity/anon-users':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkAnonUser(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'auth_anon_users', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Canonical anonymous identities are projected into openvibe-network auth_anon_users so numbered anon sessions can survive the cutover, while the full payload remains mirrored in staging_import_records for audit and future parity work.');
             }
             return;
         case 'control-plane/url-registry':
@@ -2032,21 +2164,27 @@ function datasetLoadOrder(importReport) {
 
 async function loadStagingBundle(options) {
     const requestedMode = normalizeLoaderMode(options.mode || 'sqlite');
-    if (requestedMode !== 'sqlite') {
-        throw new Error(`load-staging-openvibe only supports sqlite staging mode. Use scripts/migrate-hobo/load-postgres.js for mode='${requestedMode}'.`);
+    if (requestedMode !== 'sqlite' && requestedMode !== 'postgres') {
+        throw new Error(`Unsupported staging loader mode '${requestedMode}'. Expected sqlite or postgres.`);
+    }
+
+    const dryRun = !!options.dryRun;
+    if (requestedMode === 'postgres' && dryRun) {
+        throw new Error('load-staging-openvibe does not support --dry-run in postgres mode yet. Use an isolated Postgres database for rehearsal or run the sqlite dry-run path.');
     }
 
     const allowStagingLoad = isTruthy(process.env.OPENVIBE_ALLOW_STAGING_LOAD);
     const stagingConfirmEnv = isTruthy(process.env.OPENVIBE_STAGING_CONFIRM);
     const confirmLoad = isTruthy(options.confirmLoad);
-    const dryRun = !!options.dryRun;
     if (!dryRun && (!allowStagingLoad || !stagingConfirmEnv || !confirmLoad)) {
         throw new Error('Refusing staging load without explicit confirmation. Set OPENVIBE_ALLOW_STAGING_LOAD=true and OPENVIBE_STAGING_CONFIRM=true, then pass --confirm-load (or confirmLoad: true).');
     }
 
     const bundleDir = path.resolve(options.bundleDir);
     const requestedDbPaths = resolveServiceDbPaths(options.dbPaths || {});
-    const effectiveDbPaths = dryRun ? effectiveDryRunDbPaths(requestedDbPaths) : requestedDbPaths;
+    const effectiveDbPaths = dryRun && requestedMode === 'sqlite'
+        ? effectiveDryRunDbPaths(requestedDbPaths)
+        : requestedDbPaths;
     const serviceFilter = parseSelectionSet(options.services || options.service, normalizeStagingServiceName);
     if (serviceFilter) {
         for (const serviceName of serviceFilter) {
@@ -2060,7 +2198,7 @@ async function loadStagingBundle(options) {
     const context = buildContext(bundleDir, effectiveDbPaths, options.logger, {
         runId,
         requestedMode,
-        effectiveMode: 'sqlite-staging',
+        effectiveMode: requestedMode === 'postgres' ? 'postgres-runtime' : 'sqlite-staging',
         dryRun,
         requestedDbPaths,
         allowStagingLoad,
@@ -2106,4 +2244,8 @@ async function loadStagingBundle(options) {
 module.exports = {
     loadStagingBundle,
     resolveServiceDbPaths,
+    __test: {
+        hasTable,
+        isPostgresCompatDb,
+    },
 };

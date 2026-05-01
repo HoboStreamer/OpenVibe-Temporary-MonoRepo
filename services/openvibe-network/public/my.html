@@ -121,19 +121,30 @@
     const session = await OpenVibe.loadSession();
     const overview = document.getElementById('account-overview');
     const actions = document.getElementById('account-actions');
+    const isAnonymous = !!(session && session.anonymous && session.user);
 
     if (!session.authenticated || !session.user) {
         document.getElementById('account-session-chip').className = 'ov-chip warn';
-        document.getElementById('account-session-chip').textContent = 'Not signed in';
+        document.getElementById('account-session-chip').textContent = isAnonymous
+            ? `${session.user.display_name || session.user.username || 'Anonymous'} active`
+            : 'Not signed in';
         document.getElementById('account-theme-chip').textContent = 'Local preview theme only';
-        actions.innerHTML = `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Sign in to OpenVibe</a>
-            <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Preview themes</a>`;
-        overview.innerHTML = `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">Guest mode</span></div>
-            <h2>Account sync starts after sign-in</h2>
-            <p class="ov-muted">Once authenticated, this page becomes your native account dashboard for profile data, linked services, themes, notifications, sessions, and launcher state.</p>`;
+        actions.innerHTML = isAnonymous
+            ? `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Create or sign in to a full account</a>
+                <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse tools</a>
+                <a class="ov-btn ov-btn-ghost" href="${OpenVibe.signOutUrl(OpenVibe.resolveSurfaceUrl('network'))}">Leave anonymous</a>`
+            : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Sign in to OpenVibe</a>
+                <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Preview themes</a>`;
+        overview.innerHTML = isAnonymous
+            ? `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">${OpenVibe.escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span></div>
+                <h2>Anonymous mode stays numbered</h2>
+                <p class="ov-muted">This session is intentionally limited to the migrated anonymous identity namespace. The label comes from your anon number, not from an editable profile field, and full account sync unlocks only after native sign-in.</p>`
+            : `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">Guest mode</span></div>
+                <h2>Account sync starts after sign-in</h2>
+                <p class="ov-muted">Once authenticated, this page becomes your native account dashboard for profile data, linked services, themes, notifications, sessions, and launcher state.</p>`;
         document.getElementById('account-tabs').hidden = true;
         document.getElementById('tab-profile').innerHTML = `
-            <div class="ov-section-head"><div><h2>What unlocks after sign-in</h2><p class="ov-section-sub">A quick preview of the OpenVibe-native account surface.</p></div></div>
+            <div class="ov-section-head"><div><h2>${isAnonymous ? 'What unlocks with a full account' : 'What unlocks after sign-in'}</h2><p class="ov-section-sub">A quick preview of the OpenVibe-native account surface.</p></div></div>
             <div class="ov-grid">
                 <article class="ov-card"><div class="ov-kicker">Profile</div><h3 class="ov-service-title" style="margin-top:.8rem;">Own your public identity</h3><p class="ov-muted">Edit username, display name, avatar URL, and richer profile metadata from one place.</p></article>
                 <article class="ov-card"><div class="ov-kicker">Theme</div><h3 class="ov-service-title" style="margin-top:.8rem;">Sync visual preferences</h3><p class="ov-muted">Choose a network-wide theme stored in <code>openvibe.theme</code> instead of relying on old scattered settings.</p></article>

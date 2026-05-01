@@ -166,10 +166,18 @@ async function main() {
             coins: 9,
             updated_at: '2026-01-04T06:00:00Z',
         },
+        {
+            user_id: -202002002,
+            display_name: 'hobo_anon5',
+            zone: 'ruins',
+            coins: 3,
+            updated_at: '2026-01-04T06:15:00Z',
+        },
     ]);
     writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'game_inventory.ndjson'), [
         { user_id: 1, item_id: 'oak_log', quantity: 12, updated_at: '2026-01-04T00:00:00Z' },
         { user_id: -101001001, item_id: 'stone', quantity: 3, updated_at: '2026-01-04T06:05:00Z' },
+        { user_id: -202002002, item_id: 'berry', quantity: 1, updated_at: '2026-01-04T06:20:00Z' },
     ]);
     writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'game_daily_quest_progress.ndjson'), [
         { user_id: 1, quest_date: '2026-01-04', quest_id: 'daily_gather_wood', value: 4, goal: 10, updated_at: '2026-01-04T10:00:00Z' },
@@ -180,6 +188,7 @@ async function main() {
     writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'canvas_tiles.ndjson'), [
         { x: 3, y: 5, color_index: 7, user_id: 1, username: 'alice', placed_at: '2026-01-04T00:00:00Z' },
         { x: 4, y: 6, color_index: 2, user_id: -101001001, username: 'Anonymous #4242', placed_at: '2026-01-04T06:10:00Z' },
+        { x: 5, y: 7, color_index: 3, user_id: -202002002, username: 'Anonymous #5', placed_at: '2026-01-04T06:25:00Z' },
     ]);
     writeNdjson(path.join(sourceDir, 'hoboquest', 'tables', 'canvas_user_overrides.ndjson'), [
         { user_id: 1, placements_per_minute: 12, updated_at: '2026-01-04T00:00:00Z' },
@@ -201,8 +210,8 @@ async function main() {
     assert.strictEqual(report.datasets['identity/users'].written_records, 1, 'expected one canonical user');
     assert.strictEqual(report.datasets['identity/anon-users'].written_records, 2, 'expected anon bundle to include hobo.tools and HoboQuest anonymous identities');
     assert.strictEqual(report.datasets['loyalty/coin-transactions'].written_records, 1, 'expected one loyalty transaction');
-    assert.strictEqual(report.datasets['games/players'].written_records, 2, 'expected canonical game players to preserve anonymous HoboQuest users');
-    assert.strictEqual(report.datasets['games/canvas-tiles'].written_records, 2, 'expected canonical canvas tiles to preserve anonymous HoboQuest placements');
+    assert.strictEqual(report.datasets['games/players'].written_records, 3, 'expected canonical game players to preserve the native user plus both anonymous HoboQuest users');
+    assert.strictEqual(report.datasets['games/canvas-tiles'].written_records, 3, 'expected canonical canvas tiles to preserve the native user plus both anonymous HoboQuest placements');
     assert.strictEqual(report.datasets['games/cosmetics'].written_records, 1, 'expected synthesized equipped-only cosmetics to count once');
     assert.ok(report.exclusions.some((entry) => entry.entity === 'users.hobo_bucks_balance'));
     assert.ok(report.exclusions.some((entry) => entry.entity === 'canvas_pixels'));
@@ -215,9 +224,14 @@ async function main() {
     const importedOverrides = readNdjson(path.join(report.bundle_dir, 'games', 'canvas-user-overrides.ndjson'));
     const importedAnonUser = importedAnonUsers.find((row) => row.source === 'hoboquest');
     assert.ok(importedAnonUser, 'expected a HoboQuest anonymous identity record');
+    assert.strictEqual(importedAnonUsers.length, 2, 'expected colliding HoboQuest anon identities to reuse the existing hobo.tools anon record');
+    assert.strictEqual(importedAnonUser.anon_number, 4242);
+    assert.strictEqual(importedAnonUser.display_name, 'Anonymous #4242');
     assert.strictEqual(importedAnonUser.preferences.legacy_game_user_id, '-101001001');
     assert.ok(importedPlayers.some((row) => row.user_id === importedAnonUser.id), 'expected anonymous HoboQuest player rows to reference canonical anon identities');
     assert.ok(importedInventory.some((row) => row.user_id === importedAnonUser.id && row.item_id === 'stone'), 'expected anonymous HoboQuest inventory to survive canonical import');
+    assert.ok(importedPlayers.some((row) => row.user_id === 'anon-user:hobotools:5' && row.zone === 'ruins'), 'expected HoboQuest anon identities that expose an existing anon number to collapse onto the matching hobo.tools anon user');
+    assert.ok(importedInventory.some((row) => row.user_id === 'anon-user:hobotools:5' && row.item_id === 'berry'), 'expected merged HoboQuest anon inventory to follow the reused canonical anon identity');
     assert.strictEqual(importedCosmetics.length, 1, 'expected one cosmetic row in canonical bundle');
     assert.strictEqual(importedCosmetics[0].equipped, true);
     assert.strictEqual(importedOverrides.length, 1, 'expected one canvas override row in canonical bundle');

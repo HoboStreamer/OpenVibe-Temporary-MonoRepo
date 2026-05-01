@@ -26,6 +26,10 @@ function requireOpenVibeAuth(authClient) {
             console.warn(`[Auth] reject ${req.method} ${req.path}: ${reason}`);
             return res.status(401).json({ error: 'authentication required', reason });
         }
+        if (user.actor_type === 'anon' || user.anonymous === true) {
+            console.warn(`[Auth] reject ${req.method} ${req.path}: anonymous token`);
+            return res.status(401).json({ error: 'authentication required', reason: 'anonymous token' });
+        }
         req.user = user;
         req.token = token;
         next();
