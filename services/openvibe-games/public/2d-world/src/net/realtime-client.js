@@ -47,6 +47,8 @@ export class RealtimeClient {
     craft(recipeId) { return this.request('craft', { recipe_id: recipeId }); }
     build(payload) { return this.request('build', payload); }
     buyFromShop(npcId, itemId, quantity = 1) { return this.request('shop:buy', { npc_id: npcId, item_id: itemId, quantity }); }
+    equipInventoryItem(itemId, slot) { return this.request('inventory:equip', { item_id: itemId, slot }); }
+    clearEquipmentSlot(slot) { return this.request('inventory:equip', { slot, clear: true }); }
     closeInteraction() { return this.request('interaction:close', {}); }
     travel(targetZone) { return this.request('travel', { targetZone }); }
     pickup() { return this.request('pickup'); }

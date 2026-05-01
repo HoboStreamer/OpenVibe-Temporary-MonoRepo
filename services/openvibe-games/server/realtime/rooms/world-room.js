@@ -14,9 +14,10 @@ const { canPlaceStructure } = require('../systems/build-system');
 const { canTravel, spawnForZone } = require('../systems/travel-system');
 const { worldSnapshotPayload } = require('../systems/persistence-system');
 const { validateInput } = require('../systems/anti-cheat-system');
-const { SKILL_KEYS, SKILL_TO_XP_FIELD } = require('../data/skills');
+const { SKILL_KEYS, SKILL_TO_XP_FIELD } = require('../catalog/skills');
 const { buildRuntimeCatalog } = require('../engine/content-registry');
 const { createHookBus } = require('../engine/hook-bus');
+const { installModHooks } = require('../engine/mod-script-runtime');
 const { levelForXp, xpRequiredForNext } = require('../engine/skills');
 const { rollLoot } = require('../engine/loot');
 const inventoryUtils = require('../engine/inventory');
@@ -80,6 +81,7 @@ class WorldRoom {
         this.lastSnapshotAt = 0;
         this.sequence = 0;
         this.hooks = createHookBus();
+        this.scriptDiagnostics = [];
         this.catalog = null;
         this.itemMap = {};
         this.itemDefinitions = {};
@@ -114,6 +116,19 @@ class WorldRoom {
         this.lootTableMap = nextCatalog.loot_table_map || {};
         this.resourceDefinitions = nextCatalog.definitions && nextCatalog.definitions.resources || {};
         this.structureDefinitions = nextCatalog.definitions && nextCatalog.definitions.structures || {};
+        this.hooks = createHookBus();
+        this.scriptDiagnostics = [];
+        if (nextCatalog && nextCatalog.__server && Array.isArray(nextCatalog.__server.enabledMods)) {
+            const scriptRuntime = installModHooks({
+                hooks: this.hooks,
+                room: this,
+                catalog: nextCatalog,
+                mods: nextCatalog.__server.enabledMods,
+                allowedHooks: nextCatalog.engine && nextCatalog.engine.hook_surfaces || [],
+                allowUntrusted: nextCatalog.__server.allowUntrustedScripts === true,
+            });
+            this.scriptDiagnostics = scriptRuntime.diagnostics;
+        }
         if (this.resources && this.npcs && (this.resources.size > 0 || this.npcs.size > 0)) this._syncCatalogSpawns();
         return this.catalog;
     }
@@ -334,6 +349,31 @@ class WorldRoom {
         player.hold_until = now + Math.max(100, Number(holdMs) || 320);
     }
 
+    _equipmentFieldForSlot(slot) {
+        switch (String(slot || '').trim()) {
+        case 'weapon': return 'equip_weapon';
+        case 'armor': return 'equip_armor';
+        case 'axe': return 'equip_axe';
+        case 'pickaxe': return 'equip_pickaxe';
+        case 'rod': return 'equip_rod';
+        default: return null;
+        }
+    }
+
+    _emptyEquipmentValue(slot) {
+        return slot === 'weapon' || slot === 'armor' ? '' : null;
+    }
+
+    _equipmentSnapshot(player) {
+        return {
+            weapon: player.equip_weapon || '',
+            armor: player.equip_armor || '',
+            axe: player.equip_axe || '',
+            pickaxe: player.equip_pickaxe || '',
+            rod: player.equip_rod || '',
+        };
+    }
+
     _shopInteractionPayload(npc) {
         if (!npc || !npc.interaction || npc.interaction.type !== 'shop') return null;
         return {
@@ -482,6 +522,52 @@ class WorldRoom {
         if (!player) return { ok: false, reason: 'player not joined' };
         player.activeInteraction = null;
         return { ok: true };
+    }
+
+    handleInventoryEquip(player, payload) {
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const requestedSlot = String(payload && payload.slot || '').trim();
+        const field = this._equipmentFieldForSlot(requestedSlot);
+        if (!field) return { ok: false, reason: 'invalid equipment slot' };
+        const now = Date.now();
+
+        if (payload && payload.clear) {
+            player[field] = this._emptyEquipmentValue(requestedSlot);
+            model.upsertPlayer({ user_id: player.user_id, [field]: player[field] });
+            this._setHeldItem(player, this._defaultHeldItem(player), now, 260);
+            this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, {
+                user_id: player.user_id,
+                world_id: this.world.id,
+                action: 'equip-clear',
+                slot: requestedSlot,
+            });
+            return { ok: true, slot: requestedSlot, item_id: null, equipment: this._equipmentSnapshot(player) };
+        }
+
+        const itemId = String(payload && payload.item_id || '').trim();
+        if (!itemId) return { ok: false, reason: 'item_id required' };
+        const inventory = model.listInventory(player.user_id);
+        const entry = inventory.find((item) => item.item_id === itemId && Number(item.quantity || 0) > 0);
+        if (!entry) return { ok: false, reason: 'item not in backpack' };
+
+        const item = this.itemDefinitions[itemId] || this.itemMap[itemId] || null;
+        const inferredSlot = item && item.equip_slot || null;
+        if (!inferredSlot) return { ok: false, reason: 'item cannot be equipped' };
+        if (inferredSlot !== requestedSlot) {
+            return { ok: false, reason: `${item.name || itemId} fits ${inferredSlot}, not ${requestedSlot}` };
+        }
+
+        player[field] = itemId;
+        model.upsertPlayer({ user_id: player.user_id, [field]: itemId });
+        this._setHeldItem(player, this._defaultHeldItem(player), now, 320);
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            action: 'equip',
+            slot: requestedSlot,
+            item_id: itemId,
+        });
+        return { ok: true, slot: requestedSlot, item_id: itemId, equipment: this._equipmentSnapshot(player) };
     }
 
     handleShopPurchase(player, payload) {
@@ -1332,6 +1418,7 @@ class WorldRoom {
         const prompt = this._interactionPrompt(player);
         const activeNpc = this._activeInteractionNpc(player);
         const activeInteraction = activeNpc ? this._shopInteractionPayload(activeNpc) : null;
+        const zoneDefinition = ((this.worldDefinition && this.worldDefinition.zones) || []).find((zone) => zone.zone_id === player.zone_id) || {};
         const sameZonePlayers = Array.from(this.players.values())
             .filter((entry) => entry.zone_id === player.zone_id && entry.user_id !== player.user_id && !entry.dead)
             .map((entry) => ({
@@ -1398,7 +1485,13 @@ class WorldRoom {
                 slug: this.world.slug,
                 name: this.world.name,
                 zone_id: player.zone_id,
+                zone_name: zoneDefinition.label || zoneDefinition.name || zoneDefinition.zone_id || player.zone_id,
+                zone_kind: zoneDefinition.kind || null,
+                zone_description: zoneDefinition.description || '',
                 chunk_size: this.chunkSize,
+                bounds: this.bounds(),
+                ambience: clone(zoneDefinition.ambience || this.worldDefinition && this.worldDefinition.ambience || {}),
+                camera: clone(this.worldDefinition && this.worldDefinition.camera || {}),
             },
             tick: this.sequence,
             server_time: now,
@@ -1484,6 +1577,7 @@ class WorldRoom {
             structure_count: this.structures.size,
             loot_count: this.loot.size,
             latest_feed: this.feed.slice(-5),
+            script_diagnostics: this.scriptDiagnostics.slice(-5),
         };
     }
 }

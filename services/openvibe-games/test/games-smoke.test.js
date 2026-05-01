@@ -18,8 +18,14 @@ const model = require('../server/model');
 const modRegistry = require('../server/mods/registry');
 const policy = require('../server/policy');
 const { buildCatalog } = require('../server/realtime');
-const { STARTER_WORLD } = require('../server/realtime/data/starter-world');
+const { STARTER_WORLD } = require('../server/realtime/catalog/starter-world');
 const { WorldRoom } = require('../server/realtime/rooms/world-room');
+
+assert.ok(STARTER_WORLD.bounds.w > 8192);
+assert.ok(STARTER_WORLD.zones.some((zone) => zone.zone_id === 'ember_basin'));
+assert.ok(Array.isArray(STARTER_WORLD.terrain_patches) && STARTER_WORLD.terrain_patches.length >= 10);
+assert.ok(STARTER_WORLD.resources.length > 40);
+assert.ok(STARTER_WORLD.travel.some((link) => link.from === 'pine_watch' && link.to === 'outpost'));
 
 const player = model.upsertPlayer({
     user_id: '42',
@@ -168,6 +174,30 @@ assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
 assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
 assert.ok(model.listInventory('shopper').some((entry) => entry.item_id === 'stone_spear' && entry.quantity >= 1));
 
+const mismatchEquipResult = room.handleInventoryEquip(roomPlayer, {
+    item_id: 'stone_spear',
+    slot: 'axe',
+});
+assert.strictEqual(mismatchEquipResult.ok, false);
+
+const clearEquipResult = room.handleInventoryEquip(roomPlayer, {
+    slot: 'weapon',
+    clear: true,
+});
+assert.strictEqual(clearEquipResult.ok, true);
+assert.strictEqual(clearEquipResult.slot, 'weapon');
+assert.strictEqual(roomPlayer.equip_weapon, '');
+assert.strictEqual(roomPlayer.held_item_id, room._defaultHeldItem(roomPlayer));
+
+const reEquipResult = room.handleInventoryEquip(roomPlayer, {
+    item_id: 'stone_spear',
+    slot: 'weapon',
+});
+assert.strictEqual(reEquipResult.ok, true);
+assert.strictEqual(reEquipResult.slot, 'weapon');
+assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
+assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
+
 const closeResult = room.closeInteraction(roomPlayer);
 assert.strictEqual(closeResult.ok, true);
 const closedSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 120);
@@ -194,6 +224,45 @@ const registeredMod = modRegistry.registerMod({
         engine_version: '17.x',
         permissions: {
             media_namespaces: ['games.assets.firekeep'],
+        },
+        scripts: {
+            server: [
+                {
+                    name: 'ember-hooks',
+                    description: 'Adds ember ambience and a shrine prompt in the scripted zone.',
+                    code: `
+hook.Add('snapshot:decorate', 'ember-glow', function(snapshot, ctx) {
+    if (!ctx || !ctx.player || ctx.player.zone_id !== 'ember_camp') return;
+    snapshot.world = Object.assign({}, snapshot.world || {}, {
+        ambience: Object.assign({}, snapshot.world && snapshot.world.ambience || {}, {
+            tint: '#ffb16a',
+            alpha: 0.09,
+        }),
+    });
+    snapshot.feed = snapshot.feed || [];
+    snapshot.feed.push({
+        type: 'script',
+        payload: {
+            mod: 'openvibe.firekeep-expansion',
+            message: 'Ember winds rise.',
+        },
+    });
+});
+
+hook.Add('interaction:prompt', 'ember-shrine', function(ctx) {
+    if (!ctx || !ctx.player || ctx.player.zone_id !== 'ember_camp') return;
+    return {
+        type: 'script',
+        target_id: 'ember-shrine',
+        x: 6200,
+        y: 2140,
+        label: 'E · Inspect ember shrine',
+        description: 'Trusted hook scripts can add ambient prompts.',
+    };
+});
+                    `,
+                },
+            ],
         },
         content: {
             items: [
@@ -236,6 +305,10 @@ const registeredMod = modRegistry.registerMod({
                             leg: '#2c1612',
                             accent: '#ffd9a0',
                         },
+                        parts: [
+                            { shape: 'roundedRect', x: -8, y: -30, w: 16, h: 6, radius: 3, palette: 'accent', alpha: 0.88 },
+                            { shape: 'line', x1: 0, y1: -24, x2: 0, y2: -38, palette: 'trim', width: 2, alpha: 0.6 },
+                        ],
                     },
                     interaction: {
                         type: 'shop',
@@ -278,6 +351,9 @@ assert.ok(moddedCatalog.recipes.some((recipe) => recipe.id === 'recipe.ember_bla
 assert.ok(moddedCatalog.zones.some((zone) => zone.zone_id === 'ember_camp'));
 assert.ok(moddedCatalog.world_definition.npcs.some((npc) => npc.template_id === 'npc.firekeep.merchant'));
 assert.strictEqual(moddedCatalog.definitions.items.ember_blade.render.weapon_type, 'blade');
+assert.strictEqual(moddedCatalog.engine.scripting.active_script_mod_count, 0);
+assert.ok(moddedCatalog.mods.some((mod) => mod.id === registeredMod.id && mod.has_scripts === true));
+assert.ok(Array.isArray(moddedCatalog.definitions.npcs['npc.firekeep.merchant'].render.parts));
 
 const moddedRoom = new WorldRoom({
     world: room.world,
@@ -329,5 +405,48 @@ assert.strictEqual(modPurchaseResult.ok, true);
 assert.strictEqual(moddedPlayer.equip_weapon, 'ember_blade');
 assert.strictEqual(moddedPlayer.held_item_id, 'ember_blade');
 assert.ok(model.listInventory('modder').some((entry) => entry.item_id === 'ember_blade' && entry.quantity >= 1));
+
+const trustedMod = modRegistry.setTrustLevel(registeredMod.id, 'trusted');
+assert.strictEqual(trustedMod.trust_level, 'trusted');
+
+const trustedCatalog = buildCatalog(room.world, STARTER_WORLD);
+assert.strictEqual(trustedCatalog.engine.scripting.active_script_mod_count, 1);
+assert.ok(trustedCatalog.engine.scripting.modules.some((module) => module.slug === 'openvibe.firekeep-expansion' && module.can_run === true));
+
+const scriptedRoom = new WorldRoom({
+    world: room.world,
+    worldDefinition: trustedCatalog.world_definition,
+    catalog: trustedCatalog,
+    publish: () => {},
+    emitToSocket: () => {},
+    tickRate: 20,
+});
+
+model.upsertPlayer({
+    user_id: 'emberfan',
+    display_name: 'Ember Fan',
+    coins: 90,
+    zone: 'ember_camp',
+    x: 6200,
+    y: 2200,
+});
+
+scriptedRoom.join({
+    socketId: 'socket-ember',
+    userId: 'emberfan',
+    displayName: 'Ember Fan',
+    zoneId: 'ember_camp',
+});
+
+const emberPlayer = scriptedRoom.players.get('socket-ember');
+emberPlayer.x = 6200;
+emberPlayer.y = 2200;
+emberPlayer.zone_id = 'ember_camp';
+
+const emberSnapshot = scriptedRoom.buildSnapshotForPlayer(emberPlayer, Date.now());
+assert.ok(emberSnapshot.interaction.prompt);
+assert.ok(emberSnapshot.interaction.prompt.label.includes('Inspect ember shrine'));
+assert.strictEqual(emberSnapshot.world.ambience.tint, '#ffb16a');
+assert.ok(emberSnapshot.feed.some((entry) => entry.type === 'script' && entry.payload && entry.payload.mod === 'openvibe.firekeep-expansion'));
 
 console.log('openvibe-games smoke OK');

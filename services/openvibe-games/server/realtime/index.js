@@ -7,15 +7,47 @@ const { createFixedTicker } = require('./systems/fixed-tick');
 const { WorldRoom } = require('./rooms/world-room');
 const { DungeonRoom } = require('./rooms/dungeon-room');
 const { EditorRoom } = require('./rooms/editor-room');
-const { STARTER_WORLD } = require('./data/starter-world');
-const { ITEMS } = require('./data/item-catalog');
-const { RECIPES } = require('./data/recipes');
-const { LOOT_TABLES } = require('./data/loot-tables');
-const { NPC_TEMPLATES } = require('./data/npc-templates');
-const { SKILL_KEYS } = require('./data/skills');
+const { STARTER_WORLD } = require('./catalog/starter-world');
+const { ITEMS } = require('./catalog/item-catalog');
+const { RECIPES } = require('./catalog/recipes');
+const { LOOT_TABLES } = require('./catalog/loot-tables');
+const { NPC_TEMPLATES } = require('./catalog/npc-templates');
+const { SKILL_KEYS } = require('./catalog/skills');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
 const modRegistry = require('../mods/registry');
 const { buildRuntimeCatalog } = require('./engine/content-registry');
+const { buildPublicScriptingSummary } = require('./engine/mod-script-runtime');
+
+function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function isObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function resolveWorldDefinition(world, fallback = STARTER_WORLD) {
+    const base = clone(fallback || STARTER_WORLD);
+    const metadata = isObject(world && world.metadata) ? world.metadata : {};
+    const persistedZones = world && world.id ? worldStore.listZones(world.id) : [];
+    const persistedResources = world && world.id ? worldStore.listResourceNodes(world.id) : [];
+    return Object.assign({}, base, {
+        slug: world && world.slug || base.slug,
+        name: world && world.name || base.name,
+        mode: world && world.mode || base.mode,
+        seed: Number(world && world.seed) || base.seed,
+        bounds: isObject(metadata.bounds) ? clone(metadata.bounds) : base.bounds,
+        chunk_size: Number(metadata.chunk_size) || base.chunk_size,
+        ambience: isObject(metadata.ambience) ? Object.assign({}, clone(base.ambience || {}), clone(metadata.ambience)) : clone(base.ambience || {}),
+        camera: isObject(metadata.camera) ? Object.assign({}, clone(base.camera || {}), clone(metadata.camera)) : clone(base.camera || {}),
+        terrain_patches: Array.isArray(metadata.terrain_patches) ? clone(metadata.terrain_patches) : clone(base.terrain_patches || []),
+        landmarks: Array.isArray(metadata.landmarks) ? clone(metadata.landmarks) : clone(base.landmarks || []),
+        travel: Array.isArray(metadata.travel) ? clone(metadata.travel) : clone(base.travel || []),
+        npcs: Array.isArray(metadata.npcs) ? clone(metadata.npcs) : clone(base.npcs || []),
+        zones: persistedZones.length ? persistedZones : (Array.isArray(metadata.zones) ? clone(metadata.zones) : clone(base.zones || [])),
+        resources: persistedResources.length ? persistedResources : (Array.isArray(metadata.resources) ? clone(metadata.resources) : clone(base.resources || [])),
+    });
+}
 
 function actorFromSocket(socket) {
     const auth = socket.handshake && socket.handshake.auth || {};
@@ -68,12 +100,18 @@ function seedStarterContent({ publish } = {}) {
 }
 
 function buildCatalog(world, worldDefinition = STARTER_WORLD) {
+    const resolvedWorldDefinition = resolveWorldDefinition(world, worldDefinition || STARTER_WORLD);
+    const enabledMods = modRegistry.listEnabledMods(world.id, { includeAssets: true });
     const catalog = buildRuntimeCatalog({
         world,
-        worldDefinition,
-        mods: modRegistry.listEnabledMods(world.id, { includeAssets: true }),
+        worldDefinition: resolvedWorldDefinition,
+        mods: enabledMods,
     });
-    return Object.assign({}, catalog, {
+    const scripting = buildPublicScriptingSummary(enabledMods, {
+        allowUntrusted: process.env.OPENVIBE_GAMES_ALLOW_UNTRUSTED_MOD_SCRIPTS === '1',
+        allowedHooks: catalog.engine && catalog.engine.hook_surfaces || [],
+    });
+    const nextCatalog = Object.assign({}, catalog, {
         seams: {
             media_namespace: 'games.assets',
             chat_surface: 'openvibe.chat',
@@ -82,6 +120,17 @@ function buildCatalog(world, worldDefinition = STARTER_WORLD) {
             community_surface: 'openvibe.community',
         },
     });
+    nextCatalog.engine = Object.assign({}, catalog.engine || {}, {
+        scripting,
+    });
+    Object.defineProperty(nextCatalog, '__server', {
+        enumerable: false,
+        value: {
+            enabledMods,
+            allowUntrustedScripts: scripting.trusted_only === false,
+        },
+    });
+    return nextCatalog;
 }
 
 function createRealtimeRuntime({ httpServer, eventBus, config }) {
@@ -231,6 +280,13 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
             const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
             const player = room && room.players.get(socket.id);
             const result = player ? room.handleShopPurchase(player, payload || {}) : { ok: false, reason: 'room not joined' };
+            if (typeof callback === 'function') callback(result);
+        });
+
+        socket.on('inventory:equip', (payload, callback) => {
+            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
+            const player = room && room.players.get(socket.id);
+            const result = player ? room.handleInventoryEquip(player, payload || {}) : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 

@@ -63,7 +63,8 @@ body { overflow: hidden; }
 }
 
 #hud-root,
-#overlay-ui {
+#overlay-ui,
+#death-root {
     pointer-events: none;
 }
 
@@ -96,6 +97,13 @@ body { overflow: hidden; }
     opacity: 0.94;
 }
 
+#welcome-root.playing {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-10px);
+}
+
 #chat-root {
     left: 18px;
     bottom: 78px;
@@ -110,11 +118,20 @@ body { overflow: hidden; }
 #build-root,
 #map-root,
 #mods-root,
+#settings-root,
 #shop-root {
     right: 18px;
     top: 92px;
     width: min(360px, calc(100vw - 36px));
     max-height: min(70vh, 760px);
+    overflow: auto;
+}
+
+#console-root {
+    left: 18px;
+    top: 92px;
+    width: min(520px, calc(100vw - 36px));
+    max-height: min(56vh, 760px);
     overflow: auto;
 }
 
@@ -202,7 +219,6 @@ button.active { outline: 2px solid var(--accent); }
 #hud-root .quickbar,
 #hud-root .ov-hud-bars,
 #hud-root .ov-hud-row,
-#hud-root .debug-overlay,
 #hud-root .interaction-prompt {
     pointer-events: none;
     transition: opacity 180ms ease, transform 180ms ease;
@@ -286,17 +302,6 @@ button.active { outline: 2px solid var(--accent); }
     border-color: rgba(110, 240, 255, 0.52);
 }
 
-.debug-overlay {
-    position: absolute;
-    right: 18px;
-    top: 18px;
-    background: rgba(0,0,0,0.45);
-    padding: 0.7rem;
-    border-radius: 12px;
-    color: #d5faff;
-    font-size: 12px;
-}
-
 .event-feed {
     position: absolute;
     right: 18px;
@@ -348,6 +353,192 @@ button.active { outline: 2px solid var(--accent); }
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 10px;
     padding: 0.45rem 0.6rem;
+}
+
+.equipment-slot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-bottom: 0.65rem;
+}
+
+.equipment-slot {
+    display: grid;
+    gap: 0.3rem;
+    min-height: 92px;
+    border-radius: 12px;
+    border: 1px dashed rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.035);
+    padding: 0.65rem;
+}
+
+.equipment-slot.filled {
+    border-style: solid;
+    border-color: rgba(110, 240, 255, 0.35);
+    background: rgba(110, 240, 255, 0.08);
+}
+
+.equipment-slot.drag-over,
+.inventory-dropzone.drag-over {
+    border-color: rgba(110, 240, 255, 0.7);
+    box-shadow: inset 0 0 0 1px rgba(110, 240, 255, 0.2);
+    background: rgba(110, 240, 255, 0.12);
+}
+
+.equipment-slot__label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.equipment-slot__name {
+    font-weight: 700;
+}
+
+.equipment-slot__meta,
+.console-toolbar,
+.item-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.equipment-slot__meta,
+.console-toolbar,
+.item-row-body small,
+.inventory-dropzone,
+.inventory-help,
+.setting-row small,
+.console-line__time {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.item-row {
+    cursor: default;
+}
+
+.item-row--inventory {
+    cursor: grab;
+}
+
+.item-row--inventory:active {
+    cursor: grabbing;
+}
+
+.item-row-body {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.mini-button {
+    width: auto !important;
+    padding: 0.35rem 0.55rem !important;
+    border-radius: 10px !important;
+    font-size: 0.78rem;
+    background: rgba(255,255,255,0.08) !important;
+}
+
+.inventory-dropzone {
+    border: 1px dashed rgba(255,255,255,0.18);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.inventory-help {
+    margin-bottom: 0.8rem;
+}
+
+.console-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-bottom: 0.75rem;
+}
+
+.console-card {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.console-card span {
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.console-log {
+    display: grid;
+    gap: 0.3rem;
+    max-height: 28vh;
+    overflow: auto;
+    margin-top: 0.65rem;
+}
+
+.console-line {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+}
+
+.console-line--warn {
+    border-left: 3px solid rgba(240, 200, 90, 0.8);
+}
+
+.console-line--error {
+    border-left: 3px solid rgba(255, 110, 110, 0.85);
+}
+
+.settings-grid {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.65rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.setting-row strong {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+
+.setting-row input[type="checkbox"] {
+    width: auto;
+    align-self: center;
+}
+
+.setting-row--stacked {
+    display: grid;
+}
+
+.setting-row--stacked input[type="range"] {
+    padding: 0;
+}
+
+.slider-value {
+    justify-self: end;
+    color: var(--muted);
+    font-size: 0.78rem;
 }
 
 .item-row,
@@ -446,12 +637,16 @@ button.active { outline: 2px solid var(--accent); }
 body.hud-resting #hud-root .ov-hud-bars,
 body.hud-resting #hud-root .ov-hud-row,
 body.hud-resting #hud-root .quickbar,
-body.hud-resting #hud-root .debug-overlay,
 body.hud-resting #hud-root .event-feed,
 body.hud-resting #panel-hotkeys,
 body.hud-resting #welcome-root.connected {
     opacity: 0.08;
     transform: translateY(6px);
+}
+
+body.hide-panel-hotkeys #panel-hotkeys,
+body.hide-hud-feed #hud-root .event-feed {
+    display: none;
 }
 
 body.hud-resting #hud-root .interaction-prompt.visible {
@@ -461,6 +656,8 @@ body.hud-resting #hud-root .interaction-prompt.visible {
 
 @media (max-width: 900px) {
     #welcome-root,
+    #console-root,
+    #settings-root,
     #chat-root,
     #inventory-root,
     #crafting-root,
@@ -484,6 +681,7 @@ body.hud-resting #hud-root .interaction-prompt.visible {
     #build-root,
     #map-root,
     #mods-root,
+    #settings-root,
     #shop-root { top: 92px; }
 
     #panel-hotkeys {
@@ -497,8 +695,12 @@ body.hud-resting #hud-root .interaction-prompt.visible {
         top: 12px;
     }
 
-    .debug-overlay,
     .event-feed {
         display: none;
+    }
+
+    .console-metrics,
+    .equipment-slot-grid {
+        grid-template-columns: 1fr;
     }
 }

@@ -1,7 +1,8 @@
 'use strict';
 
 // In-process mod registry persisted via game_mods / game_mod_versions /
-// game_mod_assets / game_mod_worlds. Pure-data mods only; no script execution.
+// game_mod_assets / game_mod_worlds. Scripted hooks are allowed for trusted
+// mods only; untrusted mods remain data-only.
 
 const crypto = require('crypto');
 const db = require('../db');
@@ -120,6 +121,26 @@ function setEnabled(modId, worldId, enabled) {
     return { mod_id: mod.id, world_id: String(worldId), enabled: !!enabled };
 }
 
+function setTrustLevel(modId, trustLevel) {
+    const mod = getMod(modId);
+    if (!mod) {
+        const err = new Error('mod not found'); err.status = 404; throw err;
+    }
+    const normalized = String(trustLevel || '').trim().toLowerCase();
+    if (!['untrusted', 'trusted', 'blocked'].includes(normalized)) {
+        const err = new Error('trust_level must be untrusted, trusted, or blocked');
+        err.status = 400;
+        throw err;
+    }
+    const now = new Date().toISOString();
+    getDb().prepare(`
+        UPDATE game_mods
+        SET trust_level = ?, updated_at = ?
+        WHERE id = ?
+    `).run(normalized, now, mod.id);
+    return getMod(mod.id);
+}
+
 function listAssets(modId) {
     const mod = getMod(modId);
     if (!mod) return [];
@@ -149,4 +170,13 @@ function uploadAsset({ modId, namespace, media_id, asset_path, metadata }) {
     return listAssets(mod.id)[0];
 }
 
-module.exports = { listMods, listEnabledMods, getMod, registerMod, setEnabled, listAssets, uploadAsset };
+module.exports = {
+    listMods,
+    listEnabledMods,
+    getMod,
+    registerMod,
+    setEnabled,
+    setTrustLevel,
+    listAssets,
+    uploadAsset,
+};

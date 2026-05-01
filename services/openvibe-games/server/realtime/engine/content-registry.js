@@ -1,10 +1,11 @@
 'use strict';
 
-const { ITEMS } = require('../data/item-catalog');
-const { RECIPES } = require('../data/recipes');
-const { LOOT_TABLES } = require('../data/loot-tables');
-const { NPC_TEMPLATES } = require('../data/npc-templates');
-const { SKILL_KEYS } = require('../data/skills');
+const { ITEMS } = require('../catalog/item-catalog');
+const { RECIPES } = require('../catalog/recipes');
+const { LOOT_TABLES } = require('../catalog/loot-tables');
+const { NPC_TEMPLATES } = require('../catalog/npc-templates');
+const { SKILL_KEYS } = require('../catalog/skills');
+const { listScriptRealms } = require('../../mods/manifest-schema');
 
 const HOOK_SURFACES = Object.freeze([
     'player:join',
@@ -67,14 +68,14 @@ const BASE_RESOURCE_TYPES = Object.freeze([
 ]);
 
 const BASE_STRUCTURE_TYPES = Object.freeze([
-    { id: 'wall', name: 'Wall', size: 48, render: { color: 0x786452, accent: 0x0f0f0f } },
-    { id: 'door', name: 'Door', size: 48, render: { color: 0xb5651d, accent: 0xf0c85a } },
-    { id: 'bed', name: 'Bed', size: 52, render: { color: 0x6f4e7c, accent: 0xe7d6ff } },
-    { id: 'chest', name: 'Chest', size: 46, render: { color: 0x8b5a2b, accent: 0xe5c07b } },
-    { id: 'workbench', name: 'Workbench', size: 52, render: { color: 0x6d4c41, accent: 0xcaa472 } },
-    { id: 'furnace', name: 'Furnace', size: 54, render: { color: 0x5d6d7e, accent: 0xf0c85a } },
-    { id: 'farm_plot', name: 'Farm Plot', size: 56, render: { color: 0x6b4f2d, accent: 0x8bc34a } },
-    { id: 'campfire', name: 'Campfire', size: 42, render: { color: 0x7a4a1f, accent: 0xffd166 } },
+    { id: 'wall', name: 'Wall', size: 48, render: { shape: 'wall', color: 0x786452, accent: 0x0f0f0f } },
+    { id: 'door', name: 'Door', size: 48, render: { shape: 'door', color: 0xb5651d, accent: 0xf0c85a } },
+    { id: 'bed', name: 'Bed', size: 52, render: { shape: 'bed', color: 0x6f4e7c, accent: 0xe7d6ff } },
+    { id: 'chest', name: 'Chest', size: 46, render: { shape: 'chest', color: 0x8b5a2b, accent: 0xe5c07b } },
+    { id: 'workbench', name: 'Workbench', size: 52, render: { shape: 'workbench', color: 0x6d4c41, accent: 0xcaa472 } },
+    { id: 'furnace', name: 'Furnace', size: 54, render: { shape: 'furnace', color: 0x5d6d7e, accent: 0xf0c85a } },
+    { id: 'farm_plot', name: 'Farm Plot', size: 56, render: { shape: 'farm_plot', color: 0x6b4f2d, accent: 0x8bc34a } },
+    { id: 'campfire', name: 'Campfire', size: 42, render: { shape: 'campfire', color: 0x7a4a1f, accent: 0xffd166 } },
 ]);
 
 function clone(value) {
@@ -229,6 +230,10 @@ function defaultNpcRender(template) {
                 leg: 0x2e2118,
                 accent: 0xf4efe7,
             },
+            parts: [
+                { shape: 'line', x1: 10, y1: -4, x2: 20, y2: -10, width: 2.5, palette: 'accent' },
+                { shape: 'line', x1: 10, y1: 2, x2: 20, y2: 10, width: 2.5, palette: 'accent' },
+            ],
         };
     }
     if (template && template.kind === 'boss') {
@@ -241,6 +246,10 @@ function defaultNpcRender(template) {
                 leg: 0x2e1616,
                 accent: 0xffd8b0,
             },
+            parts: [
+                { shape: 'polygon', points: [[-10, -28], [-4, -40], [0, -30], [4, -40], [10, -28], [0, -24]], palette: 'trim', alpha: 0.95 },
+                { shape: 'ellipse', x: 0, y: 10, rx: 16, ry: 7, palette: 'accent', alpha: 0.12 },
+            ],
         };
     }
     if (template && template.kind === 'mob') {
@@ -253,6 +262,10 @@ function defaultNpcRender(template) {
                 leg: 0x342018,
                 accent: 0xffc7b8,
             },
+            parts: [
+                { shape: 'roundedRect', x: -11, y: 1, w: 22, h: 8, radius: 4, palette: 'trim', alpha: 0.92 },
+                { shape: 'line', x1: -14, y1: -12, x2: -22, y2: 2, width: 3, palette: 'accent', alpha: 0.55 },
+            ],
         };
     }
     return {
@@ -264,19 +277,24 @@ function defaultNpcRender(template) {
             leg: 0x24352d,
             accent: 0xd8fff0,
         },
+        parts: [
+            { shape: 'roundedRect', x: 7, y: -1, w: 8, h: 18, radius: 4, palette: 'trim', alpha: 0.9 },
+            { shape: 'line', x1: -12, y1: -18, x2: 12, y2: -18, width: 2, palette: 'accent', alpha: 0.45 },
+        ],
     };
 }
 
 function defaultStructureRender(id) {
     const kind = String(id || '');
-    if (kind.includes('door')) return { color: 0xb5651d, accent: 0xf0c85a };
-    if (kind.includes('bed')) return { color: 0x6f4e7c, accent: 0xe7d6ff };
-    if (kind.includes('furnace')) return { color: 0x5d6d7e, accent: 0xf0c85a };
-    if (kind.includes('campfire')) return { color: 0x7a4a1f, accent: 0xffd166 };
-    if (kind.includes('farm')) return { color: 0x6b4f2d, accent: 0x8bc34a };
-    if (kind.includes('chest')) return { color: 0x8b5a2b, accent: 0xe5c07b };
-    if (kind.includes('workbench')) return { color: 0x6d4c41, accent: 0xcaa472 };
-    return { color: 0x786452, accent: 0x0f0f0f };
+    if (kind.includes('door')) return { shape: 'door', color: 0xb5651d, accent: 0xf0c85a };
+    if (kind.includes('bed')) return { shape: 'bed', color: 0x6f4e7c, accent: 0xe7d6ff };
+    if (kind.includes('furnace')) return { shape: 'furnace', color: 0x5d6d7e, accent: 0xf0c85a };
+    if (kind.includes('campfire')) return { shape: 'campfire', color: 0x7a4a1f, accent: 0xffd166 };
+    if (kind.includes('farm')) return { shape: 'farm_plot', color: 0x6b4f2d, accent: 0x8bc34a };
+    if (kind.includes('chest')) return { shape: 'chest', color: 0x8b5a2b, accent: 0xe5c07b };
+    if (kind.includes('workbench')) return { shape: 'workbench', color: 0x6d4c41, accent: 0xcaa472 };
+    if (kind.includes('wall')) return { shape: 'wall', color: 0x786452, accent: 0x0f0f0f };
+    return { shape: 'block', color: 0x786452, accent: 0x0f0f0f };
 }
 
 function buildStructureDefinitions(structures) {
@@ -371,6 +389,7 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
     for (const mod of mods || []) {
         const manifest = mod && isObject(mod.manifest) ? mod.manifest : {};
         const content = isObject(manifest.content) ? manifest.content : {};
+        const scriptRealms = listScriptRealms(manifest);
         const npcSplit = splitNpcEntries([
             ...asArray(content.npcs),
             ...asArray(content.npc_templates),
@@ -403,8 +422,11 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
             name: mod.name,
             version: mod.version,
             owner_id: mod.owner_id || null,
+            trust_level: mod.trust_level || 'untrusted',
             permissions: clone(manifest.permissions || {}),
             content_keys: Object.keys(content),
+            has_scripts: scriptRealms.length > 0,
+            script_realms: scriptRealms,
             assets: clone(mod.assets || []),
         });
     }

@@ -14,7 +14,6 @@ export class HudPanel {
             </div>
             <div class="interaction-prompt"></div>
             <div class="quickbar"></div>
-            <pre class="debug-overlay"></pre>
             <div class="event-feed"></div>`;
         this.hpFill = this.root.querySelector('.hp-fill');
         this.hpLabel = this.root.querySelector('.hp-label');
@@ -26,7 +25,6 @@ export class HudPanel {
         this.weaponLabel = this.root.querySelector('.weapon-label');
         this.promptLabel = this.root.querySelector('.interaction-prompt');
         this.quickbar = this.root.querySelector('.quickbar');
-        this.debugOverlay = this.root.querySelector('.debug-overlay');
         this.feed = this.root.querySelector('.event-feed');
     }
 
@@ -46,14 +44,6 @@ export class HudPanel {
         this.promptLabel.textContent = prompt ? `${prompt.label}${prompt.description ? ` · ${prompt.description}` : ''}` : '';
         this.promptLabel.classList.toggle('visible', !!prompt);
         this.quickbar.innerHTML = Array.from({ length: 9 }).map((_, index) => `<span class="slot ${meta && meta.quickSlot === index + 1 ? 'active' : ''}">${index + 1}</span>`).join('');
-        this.debugOverlay.textContent = [
-            `tick: ${snapshot && snapshot.tick || 0}`,
-            `ping: ${meta && meta.pingMs || 0} ms`,
-            `pending inputs: ${meta && meta.pendingInputs || 0}`,
-            `visible entities: ${snapshot && snapshot.performance ? snapshot.performance.entities_visible : 0}`,
-            `snapshot rate: ${meta && meta.snapshotRate || 0} hz`,
-            `fps: ${meta && meta.fps || 0}`,
-        ].join('\n');
         this.feed.innerHTML = (snapshot && snapshot.feed || []).slice(-6).map((item) => `<div class="feed-item"><strong>${item.type}</strong><span>${item.at}</span></div>`).join('');
     }
 }

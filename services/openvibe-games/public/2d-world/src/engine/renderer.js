@@ -167,6 +167,119 @@ function drawWeapon(itemId, angle, x, y, itemDefinition = null) {
     return weapon;
 }
 
+function resolvePartColor(part, palette, fallback = 0xffffff) {
+    if (!part) return fallback;
+    if (part.palette && palette && palette[part.palette] != null) return parseColor(palette[part.palette], fallback);
+    if (part.usePalette && palette && palette[part.usePalette] != null) return parseColor(palette[part.usePalette], fallback);
+    return parseColor(part.color, fallback);
+}
+
+function resolveRotation(value) {
+    const amount = Number(value) || 0;
+    if (Math.abs(amount) > (Math.PI * 2)) return radians(amount);
+    return amount;
+}
+
+function mapPoints(points = [], facing = 1, mirror = false) {
+    const dir = mirror ? facing : 1;
+    return points.map((point) => [Number(point[0]) * dir, Number(point[1])]);
+}
+
+function drawConfiguredPart(part, palette, facing = 1) {
+    const shape = String(part && part.shape || '').toLowerCase();
+    if (!shape) return null;
+    const g = new PIXI.Graphics();
+    const color = resolvePartColor(part, palette, 0xffffff);
+    const alpha = part.alpha == null ? 1 : Number(part.alpha);
+    const mirror = part.mirror === true;
+    const dir = mirror ? facing : 1;
+    switch (shape) {
+    case 'rect':
+        g.rect((Number(part.x) || 0) * dir, Number(part.y) || 0, Number(part.w) || 0, Number(part.h) || 0).fill({ color, alpha });
+        break;
+    case 'roundedrect':
+        g.roundRect((Number(part.x) || 0) * dir, Number(part.y) || 0, Number(part.w) || 0, Number(part.h) || 0, Number(part.radius) || 4).fill({ color, alpha });
+        break;
+    case 'circle':
+        g.circle((Number(part.x) || 0) * dir, Number(part.y) || 0, Number(part.radius) || 4).fill({ color, alpha });
+        break;
+    case 'ellipse':
+        g.ellipse((Number(part.x) || 0) * dir, Number(part.y) || 0, Number(part.rx) || 8, Number(part.ry) || Number(part.rx) || 6).fill({ color, alpha });
+        break;
+    case 'line':
+        g.moveTo((Number(part.x1) || 0) * dir, Number(part.y1) || 0)
+            .lineTo((Number(part.x2) || 0) * dir, Number(part.y2) || 0)
+            .stroke({ color, width: Number(part.width) || 2, alpha, cap: 'round' });
+        break;
+    case 'polygon':
+        g.poly(mapPoints(part.points || [], facing, mirror)).fill({ color, alpha });
+        break;
+    default:
+        return null;
+    }
+    if (part.stroke) {
+        g.stroke({
+            color: parseColor(part.stroke.color, 0x111111),
+            width: Number(part.stroke.width) || 1,
+            alpha: part.stroke.alpha == null ? 1 : Number(part.stroke.alpha),
+        });
+    }
+    g.rotation = resolveRotation(part.rotation);
+    return g;
+}
+
+function addConfiguredParts(container, parts, { palette = null, facing = 1 } = {}) {
+    const list = Array.isArray(parts) ? [...parts] : [];
+    list.sort((a, b) => (Number(a && a.layer) || 0) - (Number(b && b.layer) || 0));
+    for (const part of list) {
+        const graphic = drawConfiguredPart(part, palette, facing);
+        if (graphic) container.addChild(graphic);
+    }
+}
+
+function drawTerrainPatch(patch) {
+    if (!patch || typeof patch !== 'object') return null;
+    const type = String(patch.type || patch.shape || '').toLowerCase();
+    if (type === 'label') {
+        return drawLabel(patch.label || '', Number(patch.x) || 0, Number(patch.y) || 0, parseColor(patch.color, 0xe8fff3), Number(patch.size) || 18);
+    }
+    const g = new PIXI.Graphics();
+    const color = parseColor(patch.color, 0xffffff);
+    const alpha = patch.alpha == null ? 1 : Number(patch.alpha);
+    switch (type) {
+    case 'rect':
+        g.rect(Number(patch.x) || 0, Number(patch.y) || 0, Number(patch.w) || 0, Number(patch.h) || 0).fill({ color, alpha });
+        break;
+    case 'ellipse':
+        g.ellipse(Number(patch.x) || 0, Number(patch.y) || 0, Number(patch.rx) || 0, Number(patch.ry) || Number(patch.rx) || 0).fill({ color, alpha });
+        break;
+    case 'ring':
+        g.circle(Number(patch.x) || 0, Number(patch.y) || 0, Number(patch.radius) || 0).stroke({ color, width: Number(patch.width) || 16, alpha });
+        break;
+    case 'path': {
+        const points = Array.isArray(patch.points) ? patch.points : [];
+        if (!points.length) return null;
+        g.moveTo(Number(points[0].x) || 0, Number(points[0].y) || 0);
+        for (const point of points.slice(1)) {
+            g.lineTo(Number(point.x) || 0, Number(point.y) || 0);
+        }
+        g.stroke({ color, width: Number(patch.width) || 48, alpha, cap: 'round', join: 'round' });
+        break;
+    }
+    case 'scatter': {
+        const points = Array.isArray(patch.points) ? patch.points : [];
+        for (const point of points) {
+            g.ellipse(Number(point.x) || 0, Number(point.y) || 0, Number(point.rx) || Number(point.radius) || 12, Number(point.ry) || Number(point.radius) || 8)
+                .fill({ color: parseColor(point.color, color), alpha: point.alpha == null ? alpha : Number(point.alpha) });
+        }
+        break;
+    }
+    default:
+        return null;
+    }
+    return g;
+}
+
 function addLimb(container, startX, startY, angle, length, width, color) {
     const limb = new PIXI.Graphics();
     const endX = startX + (Math.cos(angle) * length);
@@ -180,6 +293,8 @@ function addLimb(container, startX, startY, angle, length, width, color) {
 function drawHumanoid(actor, { self = false, catalog = null } = {}) {
     const facing = actorFacing(actor);
     const colors = paletteFor(actor, self, catalog);
+    const definition = resolveNpcDefinition(catalog, actor) || null;
+    const render = definition && definition.render || {};
     const itemDefinition = resolveItemDefinition(catalog, actor.held_item || actor.equip_weapon || '');
     const movingSpeed = clamp(actorSpeed(actor) / 220, 0, 1.35);
     const phase = Number(actor.step_phase || 0) + ((performance.now() / 160) * movingSpeed * 0.9);
@@ -206,6 +321,8 @@ function drawHumanoid(actor, { self = false, catalog = null } = {}) {
     body.rotation = lean;
     container.addChild(body);
 
+    addConfiguredParts(body, render.back_parts, { palette: colors, facing });
+
     const legColor = hitTint(colors.leg, actor);
     addLimb(body, -5, 10, radians(90) + (stride * 0.045), 18, 5, legColor);
     addLimb(body, 5, 10, radians(90) - (stride * 0.045), 18, 5, legColor);
@@ -220,6 +337,8 @@ function drawHumanoid(actor, { self = false, catalog = null } = {}) {
     head.circle(facing * 2, -23, 1.3).fill(0x1b1b1b);
     head.moveTo(-3, -17).lineTo(3, -17).stroke({ color: 0x5a3422, width: 1.2 });
     body.addChild(head);
+
+    addConfiguredParts(body, render.parts, { palette: colors, facing });
 
     addLimb(body, -8, -4, backArmAngle, 16, 4.5, hitTint(colors.skin, actor));
     const frontHand = addLimb(body, 8, -4, frontArmAngle, 18, 4.8, hitTint(colors.skin, actor));
@@ -252,6 +371,7 @@ function drawBoar(actor, catalog = null) {
     body.moveTo(8, 10).lineTo(8 + stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
     body.moveTo(15, 8).lineTo(15 - stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
     container.addChild(body);
+    addConfiguredParts(container, render.parts, { palette, facing });
     container.addChild(drawBar(0, -24, 28, actor.max_hp ? actor.hp / actor.max_hp : 0, 0xf08c6d));
     container.addChild(drawLabel(actor.name || actor.id, 0, -26));
     return container;
@@ -292,8 +412,56 @@ function drawStructure(structure, catalog = null) {
     const render = definition.render || {};
     const color = parseColor(render.color, structure.kind && String(structure.kind).includes('door') ? 0xb5651d : 0x786452);
     const accent = parseColor(render.accent, 0x0f0f0f);
-    art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
-    if (String(structure.kind).includes('door')) art.circle(size / 4, 0, 2).fill(parseColor(render.accent, 0xf0c85a));
+    switch (String(render.shape || structure.kind || 'block')) {
+    case 'wall': {
+        art.roundRect(-size / 2, -size * 0.26, size, size * 0.52, 6).fill({ color, alpha: 0.94 }).stroke({ color: accent, width: 2, alpha: 0.28 });
+        for (let index = -1; index <= 1; index += 1) {
+            art.moveTo(index * (size * 0.22), -size * 0.22).lineTo(index * (size * 0.22), size * 0.22).stroke({ color: accent, width: 1.5, alpha: 0.24 });
+        }
+        break;
+    }
+    case 'door':
+        art.roundRect(-size / 2, -size / 2, size, size, 8).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+        art.roundRect(-size * 0.18, -size * 0.28, size * 0.36, size * 0.58, 6).fill({ color: 0x352212, alpha: 0.45 });
+        art.circle(size / 4, 0, 2.4).fill(parseColor(render.accent, 0xf0c85a));
+        break;
+    case 'bed':
+        art.roundRect(-size / 2, -size * 0.24, size, size * 0.5, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.25 });
+        art.roundRect(-size * 0.42, -size * 0.16, size * 0.84, size * 0.28, 6).fill({ color: accent, alpha: 0.78 });
+        art.roundRect(-size * 0.44, -size * 0.24, size * 0.2, size * 0.18, 5).fill({ color: 0xf0ecff, alpha: 0.86 });
+        break;
+    case 'chest':
+        art.roundRect(-size / 2, -size * 0.28, size, size * 0.56, 6).fill({ color, alpha: 0.96 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+        art.roundRect(-size / 2, -size * 0.32, size, size * 0.18, 5).fill({ color: accent, alpha: 0.58 });
+        art.circle(0, 0, 2.2).fill(0xf7e3a0);
+        break;
+    case 'workbench':
+        art.roundRect(-size / 2, -size * 0.14, size, size * 0.18, 4).fill({ color, alpha: 0.96 });
+        art.moveTo(-size * 0.32, size * 0.02).lineTo(-size * 0.22, size * 0.36).stroke({ color: accent, width: 4, alpha: 0.8, cap: 'round' });
+        art.moveTo(size * 0.32, size * 0.02).lineTo(size * 0.22, size * 0.36).stroke({ color: accent, width: 4, alpha: 0.8, cap: 'round' });
+        art.roundRect(-size * 0.15, -size * 0.22, size * 0.22, size * 0.08, 3).fill({ color: accent, alpha: 0.55 });
+        break;
+    case 'furnace':
+        art.roundRect(-size * 0.38, -size * 0.34, size * 0.76, size * 0.72, 10).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+        art.circle(0, size * 0.06, size * 0.14).fill({ color: parseColor(render.accent, 0xffc96b), alpha: 0.76 });
+        art.roundRect(-size * 0.18, -size * 0.26, size * 0.36, size * 0.08, 3).fill({ color: 0x202736, alpha: 0.5 });
+        break;
+    case 'farm_plot':
+        art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.88 }).stroke({ color: accent, width: 2, alpha: 0.2 });
+        for (let offset = -2; offset <= 2; offset += 1) {
+            art.moveTo(-size * 0.36, offset * (size * 0.14)).lineTo(size * 0.36, offset * (size * 0.14)).stroke({ color: parseColor(render.accent, 0x8bc34a), width: 2, alpha: 0.35 });
+        }
+        break;
+    case 'campfire':
+        art.moveTo(-size * 0.22, size * 0.16).lineTo(size * 0.22, -size * 0.16).stroke({ color, width: 6, alpha: 0.88, cap: 'round' });
+        art.moveTo(-size * 0.22, -size * 0.16).lineTo(size * 0.22, size * 0.16).stroke({ color, width: 6, alpha: 0.88, cap: 'round' });
+        art.poly([[0, -size * 0.28], [size * 0.14, 0], [0, size * 0.16], [-size * 0.14, 0]]).fill({ color: parseColor(render.accent, 0xffd166), alpha: 0.92 });
+        art.circle(0, 0, size * 0.28).fill({ color: parseColor(render.accent, 0xffd166), alpha: 0.12 });
+        break;
+    default:
+        art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+        break;
+    }
     g.addChild(art);
     g.position.set(structure.x, structure.y);
     return g;
@@ -342,6 +510,7 @@ export class PixiWorldRenderer {
         this.backgroundBuilt = false;
         this.cameraWorld = null;
         this.catalog = { items: {}, npcs: {}, resources: {}, structures: {} };
+        this.worldDefinition = { bounds: { x: 0, y: 0, w: 8192, h: 8192 }, chunk_size: 256, terrain_patches: [], landmarks: [], camera: {}, ambience: {} };
     }
 
     async init() {
@@ -360,26 +529,33 @@ export class PixiWorldRenderer {
             resources: definitions.resources || {},
             structures: definitions.structures || {},
         };
+        this.worldDefinition = catalog && (catalog.worldDefinition || catalog.world_definition) || this.worldDefinition;
+        this.background.removeChildren();
+        this.backgroundBuilt = false;
+        this.cameraWorld = null;
     }
 
     ensureBackground() {
         if (this.backgroundBuilt) return;
         this.backgroundBuilt = true;
+        const bounds = Object.assign({ x: 0, y: 0, w: 8192, h: 8192 }, this.worldDefinition && this.worldDefinition.bounds || {});
+        const chunkSize = Number(this.worldDefinition && this.worldDefinition.chunk_size) || 256;
+        const ambience = this.worldDefinition && this.worldDefinition.ambience || {};
         const bg = new PIXI.Graphics();
-        bg.rect(0, 0, 8192, 8192).fill(0x2f5d50);
-        bg.rect(3650, 3820, 760, 640).fill(0x7e6a54);
-        bg.rect(4850, 3450, 1600, 1180).fill(0x556b2f);
-        bg.rect(2800, 5000, 620, 520).fill(0x8bc34a);
-        bg.rect(2320, 4300, 280, 240).fill(0x2874a6);
-        bg.rect(5840, 5840, 360, 320).fill(0x3b2d1f);
-        for (let x = 0; x <= 8192; x += 256) bg.moveTo(x, 0).lineTo(x, 8192).stroke({ color: 0xffffff, width: 1, alpha: 0.03 });
-        for (let y = 0; y <= 8192; y += 256) bg.moveTo(0, y).lineTo(8192, y).stroke({ color: 0xffffff, width: 1, alpha: 0.03 });
+        bg.rect(bounds.x, bounds.y, bounds.w, bounds.h).fill(parseColor(ambience.base_color, 0x2f5d50));
         this.background.addChild(bg);
-        this.background.addChild(drawLabel('Outpost', 4096, 3880, 0xe8fff3, 18));
-        this.background.addChild(drawLabel('Wilderness', 5600, 3520, 0xffd8b8, 18));
-        this.background.addChild(drawLabel('Farm Island', 3110, 4990, 0xe8fff3, 18));
-        this.background.addChild(drawLabel('Dock', 2450, 4270, 0xdff4ff, 18));
-        this.background.addChild(drawLabel('Dungeon Depths', 6020, 5820, 0xffd8d8, 18));
+        for (const patch of this.worldDefinition && this.worldDefinition.terrain_patches || []) {
+            const displayObject = drawTerrainPatch(patch);
+            if (displayObject) this.background.addChild(displayObject);
+        }
+        const grid = new PIXI.Graphics();
+        for (let x = bounds.x; x <= bounds.x + bounds.w; x += chunkSize) grid.moveTo(x, bounds.y).lineTo(x, bounds.y + bounds.h).stroke({ color: 0xffffff, width: 1, alpha: Number(ambience.grid_alpha) || 0.03 });
+        for (let y = bounds.y; y <= bounds.y + bounds.h; y += chunkSize) grid.moveTo(bounds.x, y).lineTo(bounds.x + bounds.w, y).stroke({ color: 0xffffff, width: 1, alpha: Number(ambience.grid_alpha) || 0.03 });
+        this.background.addChild(grid);
+        for (const landmark of this.worldDefinition && this.worldDefinition.landmarks || []) {
+            const displayObject = drawTerrainPatch(landmark);
+            if (displayObject) this.background.addChild(displayObject);
+        }
     }
 
     setBuildPreview(preview) {
@@ -397,13 +573,24 @@ export class PixiWorldRenderer {
         const self = snapshot.self;
         const width = this.app.screen.width;
         const height = this.app.screen.height;
+        const cameraConfig = Object.assign({ damping: 0.18, look_ahead: 0.18, max_lead: 120 }, this.worldDefinition && this.worldDefinition.camera || {}, snapshot.world && snapshot.world.camera || {});
+        const leadX = clamp((self.vx || 0) * Number(cameraConfig.look_ahead || 0), -Number(cameraConfig.max_lead) || -120, Number(cameraConfig.max_lead) || 120);
+        const leadY = clamp((self.vy || 0) * Number(cameraConfig.look_ahead || 0), -Number(cameraConfig.max_lead) || -120, Number(cameraConfig.max_lead) || 120);
         this.ensureBackground();
         if (!this.cameraWorld) this.cameraWorld = { x: self.x, y: self.y };
-        this.cameraWorld.x += (self.x - this.cameraWorld.x) * 0.18;
-        this.cameraWorld.y += (self.y - this.cameraWorld.y) * 0.18;
+        this.cameraWorld.x += ((self.x + leadX) - this.cameraWorld.x) * Number(cameraConfig.damping || 0.18);
+        this.cameraWorld.y += ((self.y + leadY) - this.cameraWorld.y) * Number(cameraConfig.damping || 0.18);
         this.camera.position.set((width / 2) - this.cameraWorld.x, (height / 2) - this.cameraWorld.y);
         this.worldLayer.removeChildren();
         this.overlayLayer.removeChildren();
+
+        const ambience = snapshot.world && snapshot.world.ambience || {};
+        if (ambience && ambience.tint) {
+            const overlay = new PIXI.Graphics();
+            const overlayRange = Math.max(width, height) * 1.8;
+            overlay.rect(self.x - overlayRange, self.y - overlayRange, overlayRange * 2, overlayRange * 2).fill({ color: parseColor(ambience.tint, 0xffffff), alpha: Number(ambience.alpha) || 0.05 });
+            this.overlayLayer.addChild(overlay);
+        }
 
         for (const resource of snapshot.entities.resources || []) this.worldLayer.addChild(drawResource(resource, this.catalog));
         for (const structure of snapshot.entities.structures || []) this.worldLayer.addChild(drawStructure(structure, this.catalog));

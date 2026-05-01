@@ -36,6 +36,16 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
         return a;
     }
 
+    function requireElevatedActor(req) {
+        const a = actor(req);
+        if (!(a.type === 'service' || a.role === 'admin')) {
+            const err = new Error('service or admin access required');
+            err.status = 403;
+            throw err;
+        }
+        return a;
+    }
+
     function fail(res, err) {
         return res.status(err.status || 400).json({ error: err.message, reason: err.reason || null });
     }
@@ -103,7 +113,18 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
                 mode: body.mode || 'sandbox',
                 seed: Number(body.seed) || 0,
                 status: body.status || 'draft',
-                metadata: Object.assign({ description: body.description || '' }, body.metadata || {}),
+                metadata: Object.assign(
+                    { description: body.description || '' },
+                    body.metadata || {},
+                    body.bounds ? { bounds: body.bounds } : {},
+                    body.chunk_size ? { chunk_size: Number(body.chunk_size) || 256 } : {},
+                    Array.isArray(body.travel) ? { travel: body.travel } : {},
+                    Array.isArray(body.npcs) ? { npcs: body.npcs } : {},
+                    Array.isArray(body.terrain_patches) ? { terrain_patches: body.terrain_patches } : {},
+                    Array.isArray(body.landmarks) ? { landmarks: body.landmarks } : {},
+                    body.camera ? { camera: body.camera } : {},
+                    body.ambience ? { ambience: body.ambience } : {},
+                ),
             });
             if (Array.isArray(body.zones)) worldStore.setZones(world.id, body.zones);
             if (Array.isArray(body.resources)) worldStore.setResourceNodes(world.id, body.resources);
@@ -205,6 +226,19 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
             if (typeof realtime.refreshWorldCatalog === 'function') realtime.refreshWorldCatalog(worldId);
             publish(req, GAME_EVENT_TYPES.MOD_DISABLED, { mod_id: disabled.mod_id, world_id: disabled.world_id });
             res.json({ mod_world: disabled });
+        } catch (err) {
+            fail(res, err);
+        }
+    });
+
+    r.post('/mods/:modId/trust', json, (req, res) => {
+        try {
+            requireElevatedActor(req);
+            const trustLevel = req.body && req.body.trust_level || 'trusted';
+            const mod = modRegistry.setTrustLevel(req.params.modId, trustLevel);
+            if (typeof realtime.refreshWorldCatalog === 'function') realtime.refreshWorldCatalog(realtime.rootWorld.id);
+            publish(req, GAME_EVENT_TYPES.MOD_UPDATED, { mod_id: mod.id, trust_level: mod.trust_level });
+            res.json({ mod });
         } catch (err) {
             fail(res, err);
         }

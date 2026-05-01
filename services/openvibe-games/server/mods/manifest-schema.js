@@ -1,11 +1,63 @@
 'use strict';
 
-// Mod manifest validation. Mods are data-only in Phase 17 — no script
-// execution. Manifests describe content, permissions, and asset references.
+// Mod manifest validation. Manifests describe content, permissions, and asset references.
 
 const REQUIRED_FIELDS = ['id', 'name', 'version', 'engine_version'];
+const SCRIPT_REALMS = Object.freeze(['server', 'shared', 'client']);
 
 function isObject(value) { return value && typeof value === 'object' && !Array.isArray(value); }
+
+function listScriptRealms(manifest) {
+    if (!manifest || !isObject(manifest.scripts)) return [];
+    return SCRIPT_REALMS.filter((realm) => Array.isArray(manifest.scripts[realm]) && manifest.scripts[realm].length > 0);
+}
+
+function listScriptsForRealm(manifest, realm) {
+    if (!manifest || !isObject(manifest.scripts)) return [];
+    return Array.isArray(manifest.scripts[realm]) ? manifest.scripts[realm].filter(isObject) : [];
+}
+
+function validateScripts(scripts, errors) {
+    if (scripts == null) return;
+    if (!isObject(scripts)) {
+        errors.push('scripts must be an object keyed by realm');
+        return;
+    }
+
+    for (const key of Object.keys(scripts)) {
+        if (!SCRIPT_REALMS.includes(key)) {
+            errors.push(`scripts.${key} is not a recognized realm`);
+            continue;
+        }
+        if (!Array.isArray(scripts[key])) {
+            errors.push(`scripts.${key} must be an array`);
+            continue;
+        }
+
+        scripts[key].forEach((entry, index) => {
+            const prefix = `scripts.${key}[${index}]`;
+            if (!isObject(entry)) {
+                errors.push(`${prefix} must be an object`);
+                return;
+            }
+            if (!entry.name || typeof entry.name !== 'string') {
+                errors.push(`${prefix}.name is required`);
+            }
+            if (entry.name && !/^[a-z0-9][a-z0-9._-]{1,127}$/i.test(String(entry.name))) {
+                errors.push(`${prefix}.name must be 2-128 chars, [a-z0-9._-]`);
+            }
+            if (!entry.code || typeof entry.code !== 'string') {
+                errors.push(`${prefix}.code is required`);
+            }
+            if (typeof entry.code === 'string' && entry.code.length > 20000) {
+                errors.push(`${prefix}.code must be 20000 chars or less`);
+            }
+            if (entry.description != null && typeof entry.description !== 'string') {
+                errors.push(`${prefix}.description must be a string`);
+            }
+        });
+    }
+}
 
 function validateManifest(manifest) {
     const errors = [];
@@ -34,10 +86,7 @@ function validateManifest(manifest) {
             if (value != null && !Array.isArray(value)) errors.push(`permissions.${arrayKey} must be an array`);
         }
     }
-    // Phase 17: forbid arbitrary script payloads.
-    if (isObject(manifest.scripts) || Array.isArray(manifest.scripts)) {
-        errors.push('scripts are not permitted in Phase 17 manifests');
-    }
+    validateScripts(manifest.scripts, errors);
     return { ok: errors.length === 0, errors };
 }
 
@@ -53,4 +102,10 @@ function namespaceAllowed(manifest, namespace) {
     });
 }
 
-module.exports = { validateManifest, namespaceAllowed };
+module.exports = {
+    SCRIPT_REALMS,
+    listScriptRealms,
+    listScriptsForRealm,
+    validateManifest,
+    namespaceAllowed,
+};

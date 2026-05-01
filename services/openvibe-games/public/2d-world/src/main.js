@@ -17,8 +17,44 @@ import { DeathPanel } from './ui/death-panel.js';
 import { ModBrowser } from './ui/mod-browser.js';
 import { LootPanel } from './ui/loot-panel.js';
 import { ShopPanel } from './ui/shop-panel.js';
+import { ConsolePanel } from './ui/console-panel.js';
+import { SettingsPanel } from './ui/settings-panel.js';
 
-const UTILITY_PANELS = ['inventory', 'crafting', 'skills', 'build', 'map', 'mods'];
+const UTILITY_PANELS = ['inventory', 'crafting', 'skills', 'build', 'map', 'mods', 'console', 'settings'];
+const SETTINGS_STORAGE_KEY = 'openvibe.games.2dworld.settings.v1';
+const DEFAULT_SETTINGS = Object.freeze({
+    hudFade: true,
+    showFeed: true,
+    showHotkeys: true,
+    interpolationDelayMs: 75,
+    selfSmoothing: 0.22,
+});
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function sanitizeSettings(value = {}) {
+    return {
+        hudFade: value.hudFade !== false,
+        showFeed: value.showFeed !== false,
+        showHotkeys: value.showHotkeys !== false,
+        interpolationDelayMs: clamp(Math.round(Number(value.interpolationDelayMs) || DEFAULT_SETTINGS.interpolationDelayMs), 40, 160),
+        selfSmoothing: clamp(Number(value.selfSmoothing) || DEFAULT_SETTINGS.selfSmoothing, 0.08, 0.55),
+    };
+}
+
+function loadClientSettings() {
+    try {
+        return sanitizeSettings(JSON.parse(window.localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}'));
+    } catch {
+        return { ...DEFAULT_SETTINGS };
+    }
+}
+
+function saveClientSettings(settings) {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitizeSettings(settings)));
+}
 
 const state = {
     identity: loadIdentity(),
@@ -30,12 +66,18 @@ const state = {
     lastSnapshotCounterAt: performance.now(),
     pendingInputs: [],
     localSelf: null,
+    renderSelf: null,
     latestSnapshot: null,
     buildSelection: null,
-    catalog: { items: [], itemMap: {}, skills: [], definitions: {}, mods: [] },
-    panels: { chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, loot: false, shop: false },
+    catalog: { items: [], itemMap: {}, skills: [], definitions: {}, mods: [], worldDefinition: { bounds: { x: 0, y: 0, w: 8192, h: 8192 } } },
+    panels: { chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, console: false, settings: false, loot: false, shop: false },
     hudActiveUntil: performance.now() + 8000,
     snapshotBuffer: new SnapshotBuffer(45),
+    settings: loadClientSettings(),
+    consoleLogs: [],
+    correctionErrorPx: 0,
+    lastRenderSelfAt: 0,
+    lastOverlayRefreshAt: 0,
 };
 
 const dom = {
@@ -47,6 +89,8 @@ const dom = {
     joinInfo: document.getElementById('join-info'),
     gameCanvas: document.getElementById('game-canvas'),
     hud: document.getElementById('hud-root'),
+    console: document.getElementById('console-root'),
+    settings: document.getElementById('settings-root'),
     chat: document.getElementById('chat-root'),
     inventory: document.getElementById('inventory-root'),
     crafting: document.getElementById('crafting-root'),
@@ -65,6 +109,8 @@ const scene = await new WorldScene(dom.gameCanvas).init();
 const hud = new HudPanel(dom.hud);
 const chat = new ChatPanel(dom.chat);
 const death = new DeathPanel(dom.death);
+const consolePanel = new ConsolePanel(dom.console);
+const settingsPanel = new SettingsPanel(dom.settings);
 let inventory = null;
 let skills = null;
 let mods = null;
@@ -79,8 +125,113 @@ let lastInputAt = performance.now();
 let fpsFrames = 0;
 let fpsAt = performance.now();
 
+function addConsoleLog(message, level = 'info') {
+    state.consoleLogs = [...state.consoleLogs, {
+        level,
+        message,
+        time: new Date().toLocaleTimeString([], { hour12: false }),
+    }].slice(-80);
+}
+
+function applyClientSettings() {
+    document.body.classList.toggle('hide-hud-feed', !state.settings.showFeed);
+    document.body.classList.toggle('hide-panel-hotkeys', !state.settings.showHotkeys);
+    if (!state.settings.hudFade) document.body.classList.remove('hud-resting');
+}
+
+function overlayMeta() {
+    return {
+        connectionText: state.connectionText,
+        pendingInputs: state.pendingInputs.length,
+        pingMs: state.pingMs,
+        fps: state.fps,
+        snapshotRate: state.snapshotRate,
+        interpolationDelayMs: state.settings.interpolationDelayMs,
+        selfSmoothing: state.settings.selfSmoothing,
+        correctionErrorPx: state.correctionErrorPx,
+    };
+}
+
+function refreshOverlayPanels(snapshot = state.latestSnapshot) {
+    if (state.panels.console) {
+        consolePanel.render({
+            snapshot,
+            meta: overlayMeta(),
+            logs: state.consoleLogs,
+            onClear: () => {
+                state.consoleLogs = [];
+                refreshOverlayPanels(snapshot);
+            },
+        });
+    } else {
+        consolePanel.hide();
+    }
+
+    if (state.panels.settings) {
+        settingsPanel.render(state.settings, {
+            onChange: (nextSettings) => {
+                state.settings = sanitizeSettings(nextSettings);
+                saveClientSettings(state.settings);
+                applyClientSettings();
+                refreshOverlayPanels(snapshot);
+            },
+            onReset: () => {
+                state.settings = { ...DEFAULT_SETTINGS };
+                saveClientSettings(state.settings);
+                applyClientSettings();
+                addConsoleLog('Client settings reset to defaults.');
+                refreshOverlayPanels(snapshot);
+            },
+        });
+    } else {
+        settingsPanel.hide();
+    }
+}
+
+function getRenderedSelf(now = performance.now()) {
+    if (!state.localSelf) return null;
+    if (!state.renderSelf || state.renderSelf.user_id !== state.localSelf.user_id) {
+        state.renderSelf = structuredClone(state.localSelf);
+        state.lastRenderSelfAt = now;
+        state.correctionErrorPx = 0;
+        return state.renderSelf;
+    }
+    const dtMs = Math.max(1, now - (state.lastRenderSelfAt || now));
+    state.lastRenderSelfAt = now;
+    const targetX = Number(state.localSelf.x) || 0;
+    const targetY = Number(state.localSelf.y) || 0;
+    const currentX = Number(state.renderSelf.x) || 0;
+    const currentY = Number(state.renderSelf.y) || 0;
+    const dx = targetX - currentX;
+    const dy = targetY - currentY;
+    const error = Math.hypot(dx, dy);
+    state.correctionErrorPx = error;
+    if (!Number.isFinite(error) || error > 280) {
+        state.renderSelf = structuredClone(state.localSelf);
+        state.correctionErrorPx = 0;
+        return state.renderSelf;
+    }
+    const smoothing = clamp(Number(state.settings.selfSmoothing) || DEFAULT_SETTINGS.selfSmoothing, 0.08, 0.55);
+    const blend = 1 - Math.pow(1 - smoothing, Math.min(4, dtMs / 16.667));
+    state.renderSelf = Object.assign({}, state.localSelf, {
+        x: currentX + dx * blend,
+        y: currentY + dy * blend,
+    });
+    return state.renderSelf;
+}
+
 function buildItemMap(items = []) {
     return Object.fromEntries((items || []).map((item) => [item.item_id, item]));
+}
+
+function worldBounds() {
+    const bounds = state.catalog && state.catalog.worldDefinition && state.catalog.worldDefinition.bounds || state.latestSnapshot && state.latestSnapshot.world && state.latestSnapshot.world.bounds;
+    return {
+        x: Number(bounds && bounds.x) || 0,
+        y: Number(bounds && bounds.y) || 0,
+        w: Number(bounds && bounds.w) || 8192,
+        h: Number(bounds && bounds.h) || 8192,
+    };
 }
 
 function markHudActivity(durationMs = 4200) {
@@ -107,6 +258,7 @@ function closeAllPanels() {
     setPanelOpen('shop', false);
     chat.blur();
     if (shopPanel) shopPanel.hide();
+    refreshOverlayPanels();
     return hadOpen;
 }
 
@@ -114,12 +266,14 @@ function toggleChatPanel(forceOpen = !state.panels.chat) {
     setPanelOpen('chat', forceOpen);
     if (forceOpen) chat.focus(); else chat.blur();
     markHudActivity(10000);
+    refreshOverlayPanels();
 }
 
 function toggleUtilityPanel(name) {
     const shouldOpen = !state.panels[name];
     closeUtilityPanels(shouldOpen ? name : null);
     markHudActivity(10000);
+    refreshOverlayPanels();
 }
 
 function renderIdentity() {
@@ -135,13 +289,14 @@ async function loadCatalog() {
         skills: catalog.skills || [],
         definitions: catalog.definitions || {},
         mods: catalog.mods || [],
+        worldDefinition: catalog.world_definition || {},
     };
     scene.setCatalog(state.catalog);
     inventory = new InventoryPanel(dom.inventory, state.catalog.items);
     skills = new SkillsPanel(dom.skills, state.catalog.skills);
     crafting = new CraftingPanel(dom.crafting, catalog.recipes || [], state.catalog.items);
     buildMenu = new BuildMenu(dom.build, (catalog.items || []).filter((item) => item.category === 'build').map((item) => item.item_id), state.catalog.items);
-    mapPanel = new MapPanel(dom.map, catalog.zones || []);
+    mapPanel = new MapPanel(dom.map, catalog.zones || [], catalog.world_definition && catalog.world_definition.travel || []);
     mods = new ModBrowser(dom.mods);
     lootPanel = new LootPanel(dom.loot, state.catalog.items);
     shopPanel = new ShopPanel(dom.shop, state.catalog.items);
@@ -172,9 +327,9 @@ function bindUi() {
         const isTyping = !!(event.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName));
         const shopWasOpen = !!(state.latestSnapshot && state.latestSnapshot.interaction && state.latestSnapshot.interaction.active);
 
-        if (event.repeat && ['enter', 'escape', 'i', 'c', 'k', 'm', 'g', 'o'].includes(key)) return;
+        if (event.repeat && ['enter', 'escape', 'i', 'c', 'k', 'm', 'g', 'o', '`', 'f1'].includes(key)) return;
 
-        if (isTyping && key !== 'escape') return;
+        if (isTyping && !['escape', 'f1'].includes(key)) return;
 
         switch (key) {
         case 'enter':
@@ -213,6 +368,16 @@ function bindUi() {
             if (shopWasOpen && client) await client.closeInteraction();
             toggleUtilityPanel('mods');
             break;
+        case '`':
+            event.preventDefault();
+            if (shopWasOpen && client) await client.closeInteraction();
+            toggleUtilityPanel('console');
+            break;
+        case 'f1':
+            event.preventDefault();
+            if (shopWasOpen && client) await client.closeInteraction();
+            toggleUtilityPanel('settings');
+            break;
         case 'escape': {
             if (isTyping && event.target && typeof event.target.blur === 'function') event.target.blur();
             const closed = closeAllPanels();
@@ -236,14 +401,41 @@ function refreshPanels(snapshot) {
     dom.joinInfo.textContent = `Connected to ${snapshot.world.name} · zone ${snapshot.world.zone_id}`;
     dom.joinInfo.classList.remove('empty');
     dom.welcome.classList.add('connected');
+    dom.welcome.classList.add('playing');
     chat.render(snapshot.chat || []);
     inventory.render(snapshot.self, {
         onDeposit: async (itemId) => {
             await apiJson(`${API_BASE}/bank/${state.identity.userId}/deposit`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity: 1 }) }, state.identity);
+            addConsoleLog(`Deposited ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} into the bank.`);
             markHudActivity(9000);
         },
         onWithdraw: async (itemId) => {
             await apiJson(`${API_BASE}/bank/${state.identity.userId}/withdraw`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity: 1 }) }, state.identity);
+            addConsoleLog(`Withdrew ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} from the bank.`);
+            markHudActivity(9000);
+        },
+        onEquip: async ({ itemId, slot }) => {
+            if (!client) return;
+            const result = await client.equipInventoryItem(itemId, slot);
+            if (result && result.ok === false) {
+                dom.joinInfo.textContent = result.reason || 'Equip failed';
+                dom.joinInfo.classList.remove('empty');
+                addConsoleLog(result.reason || `Could not equip ${itemId}.`, 'warn');
+                return;
+            }
+            addConsoleLog(`Equipped ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} to ${slot}.`);
+            markHudActivity(9000);
+        },
+        onClearSlot: async (slot) => {
+            if (!client) return;
+            const result = await client.clearEquipmentSlot(slot);
+            if (result && result.ok === false) {
+                dom.joinInfo.textContent = result.reason || 'Clear failed';
+                dom.joinInfo.classList.remove('empty');
+                addConsoleLog(result.reason || `Could not clear ${slot}.`, 'warn');
+                return;
+            }
+            addConsoleLog(`Cleared ${slot} loadout slot.`);
             markHudActivity(9000);
         },
     });
@@ -276,6 +468,7 @@ function refreshPanels(snapshot) {
 
     const hasLoot = (snapshot.entities.loot || []).length > 0;
     setPanelOpen('loot', hasLoot && !activeInteraction);
+    refreshOverlayPanels(snapshot);
 }
 
 function refreshHud(snapshot) {
@@ -290,14 +483,18 @@ function refreshHud(snapshot) {
     });
     death.render(snapshot.self);
     const overlayBusy = state.panels.chat || UTILITY_PANELS.some((name) => state.panels[name]) || !!(snapshot.interaction && snapshot.interaction.active) || !!(document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName));
-    document.body.classList.toggle('hud-resting', !overlayBusy && performance.now() > state.hudActiveUntil);
+    document.body.classList.toggle('hud-resting', !!state.settings.hudFade && !overlayBusy && performance.now() > state.hudActiveUntil);
+    if ((state.panels.console || state.panels.settings) && (performance.now() - state.lastOverlayRefreshAt) > 150) {
+        state.lastOverlayRefreshAt = performance.now();
+        refreshOverlayPanels(snapshot);
+    }
 }
 
 function buildRenderSnapshot() {
     if (!state.latestSnapshot) return null;
-    const renderTime = Date.now() - 75;
+    const renderTime = Date.now() - state.settings.interpolationDelayMs;
     const snapshot = structuredClone(state.latestSnapshot);
-    snapshot.self = state.localSelf || snapshot.self;
+    snapshot.self = getRenderedSelf() || snapshot.self;
     snapshot.entities.players = (snapshot.entities.players || []).map((entity) => interpolateEntity(state.snapshotBuffer.get(`player:${entity.id}`), renderTime) || entity);
     snapshot.entities.npcs = (snapshot.entities.npcs || []).map((entity) => interpolateEntity(state.snapshotBuffer.get(`npc:${entity.id}`), renderTime) || entity);
     snapshot.entities.projectiles = (snapshot.entities.projectiles || []).map((entity) => interpolateEntity(state.snapshotBuffer.get(`projectile:${entity.id}`), renderTime) || entity);
@@ -321,8 +518,9 @@ function onSnapshot(snapshot) {
     if (!state.latestSnapshot) {
         state.latestSnapshot = snapshot;
         state.localSelf = structuredClone(snapshot.self);
+        state.renderSelf = structuredClone(snapshot.self);
     } else {
-        const reconciled = reconcileLocalState(state.localSelf || structuredClone(snapshot.self), Object.assign({}, snapshot.self, { lastProcessedInputSeq: snapshot.lastProcessedInputSeq }), state.pendingInputs, { x: 0, y: 0, w: 8192, h: 8192 });
+        const reconciled = reconcileLocalState(state.localSelf || structuredClone(snapshot.self), Object.assign({}, snapshot.self, { lastProcessedInputSeq: snapshot.lastProcessedInputSeq }), state.pendingInputs, worldBounds());
         state.pendingInputs = reconciled.pendingInputs;
         state.localSelf = reconciled.state;
         state.latestSnapshot = snapshot;
@@ -342,20 +540,26 @@ async function connect() {
     dom.joinInfo.textContent = 'Connecting to the starter outpost shard…';
     dom.joinInfo.classList.remove('empty');
     dom.welcome.classList.add('connected');
+    dom.welcome.classList.remove('playing');
+    addConsoleLog(`Connecting as ${state.identity.displayName} (${state.identity.userId})…`);
     await ensureSocketIoClient(REALTIME_PATH);
     client = new RealtimeClient({ path: REALTIME_PATH, identity: state.identity });
     client.connect();
     state.connectionText = 'connecting';
     client.on('connect', async () => {
         state.connectionText = 'connected';
+        addConsoleLog('Realtime link established. Joining 2D World…');
         await client.joinWorld({ worldSlug: '2d-world', userId: state.identity.userId, displayName: state.identity.displayName, zone_id: 'outpost' });
     });
     client.on('disconnect', () => {
         state.connectionText = 'disconnected';
         dom.joinInfo.textContent = 'Disconnected. Press Enter world to reconnect.';
+        dom.welcome.classList.remove('playing');
+        addConsoleLog('Realtime link dropped. Waiting to reconnect…', 'warn');
     });
     client.on('world:joined', (snapshot) => {
         dom.joinInfo.textContent = `Joined ${snapshot.world.name}`;
+        addConsoleLog(`Joined ${snapshot.world.name} in zone ${snapshot.world.zone_id}.`);
         onSnapshot(snapshot);
     });
     client.on('snapshot', onSnapshot);
@@ -386,7 +590,7 @@ function maybeSendInput(now) {
     if (action) Object.assign(payload, action);
     lastInputAt = now;
     state.pendingInputs.push(payload);
-    applyPredictedInput(state.localSelf, payload, payload.dt, { x: 0, y: 0, w: 8192, h: 8192 });
+    applyPredictedInput(state.localSelf, payload, payload.dt, worldBounds());
     markHudActivity(2600);
     const sentAt = performance.now();
     client.sendInput(payload).then(() => {
@@ -424,11 +628,14 @@ function animate(now) {
 renderIdentity();
 await loadCatalog();
 bindUi();
+applyClientSettings();
+refreshOverlayPanels();
 
 dom.connectButton.addEventListener('click', () => {
     connect().catch((error) => {
         dom.joinInfo.textContent = error.message;
         dom.joinInfo.classList.remove('empty');
+        addConsoleLog(error.message || 'Connection failed.', 'error');
     });
 });
 requestAnimationFrame(animate);
