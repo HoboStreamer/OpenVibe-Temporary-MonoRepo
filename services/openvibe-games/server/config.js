@@ -33,6 +33,22 @@ module.exports = {
         url: resolvePublicOrigin({ surface: 'media' }),
     },
 
+    chat: {
+        url: resolvePublicOrigin({ surface: 'chat' }),
+    },
+
+    billing: {
+        url: resolvePublicOrigin({ surface: 'billing' }),
+    },
+
+    ai: {
+        url: resolvePublicOrigin({ surface: 'ai' }),
+    },
+
+    community: {
+        url: resolvePublicOrigin({ surface: 'community' }),
+    },
+
     auth: {
         issuer: resolveAuthIssuer(),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
@@ -44,5 +60,10 @@ module.exports = {
         height: parseInt(process.env.OPENVIBE_GAMES_CANVAS_HEIGHT, 10) || 128,
         tileCooldownSeconds: parseInt(process.env.OPENVIBE_GAMES_CANVAS_TILE_COOLDOWN_SECONDS, 10) || 15,
         placementsPerMinute: parseInt(process.env.OPENVIBE_GAMES_CANVAS_PLACEMENTS_PER_MINUTE, 10) || 8,
+    },
+
+    realtime: {
+        path: process.env.OPENVIBE_GAMES_REALTIME_PATH || '/games/realtime',
+        tickRate: parseInt(process.env.OPENVIBE_GAMES_TICK_RATE, 10) || 20,
     },
 };

@@ -3,9 +3,10 @@
 const express = require('express');
 const model = require('./model');
 const policy = require('./policy');
+const { build2dWorldRouter } = require('./routes-2dworld');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
 
-function buildRouter({ eventBus }) {
+function buildRouter({ eventBus, realtime, config }) {
     const r = express.Router();
     const json = express.json({ limit: '512kb' });
 
@@ -34,6 +35,26 @@ function buildRouter({ eventBus }) {
         if (!eventBus) return;
         eventBus.publishGameEvent(eventType, payload, actorMeta(req));
     }
+
+    r.get('/product/status', (_req, res) => {
+        res.json(Object.assign({}, model.summarizeProduct(), {
+            realtime: realtime ? realtime.summary() : null,
+            seams: {
+                network_url: config && config.network && config.network.url || null,
+                media_url: config && config.media && config.media.url || null,
+                chat_url: config && config.chat && config.chat.url || null,
+                billing_url: config && config.billing && config.billing.url || null,
+                ai_url: config && config.ai && config.ai.url || null,
+                community_url: config && config.community && config.community.url || null,
+            },
+        }));
+    });
+
+    r.get('/realtime/status', (_req, res) => {
+        res.json(realtime ? realtime.summary() : { ok: false, error: 'realtime unavailable' });
+    });
+
+    r.use('/2d-world', build2dWorldRouter({ eventBus, realtime, config }));
 
     r.get('/leaderboard/:type', (req, res) => {
         res.json({ board: req.params.type, items: model.listLeaderboard(req.params.type, req.query.limit) });

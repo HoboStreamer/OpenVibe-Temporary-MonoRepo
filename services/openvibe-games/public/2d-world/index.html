@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenVibe Games · 2D World</title>
+    <link rel="stylesheet" href="./src/styles/game.css" />
+</head>
+<body>
+    <main id="game-shell">
+        <div id="game-canvas"></div>
+        <div id="hud-root"></div>
+        <div id="overlay-ui">
+            <section id="welcome-root" class="hero-card overlay-card welcome-card">
+                <h1>2D World Rebirth</h1>
+                <p>The OpenVibe-native MMO sandbox—now rebuilt around fullscreen play, contextual overlays, server-authoritative shops, and smoother movement/combat feel.</p>
+                <div class="field-row">
+                    <input id="user-id" placeholder="User ID" />
+                    <input id="display-name" placeholder="Display name" />
+                </div>
+                <div class="button-row">
+                    <button id="connect-btn" class="primary">Enter world</button>
+                    <a href="./editor/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Editor</a>
+                    <a href="./status/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Status</a>
+                </div>
+                <div id="join-info" class="empty">Connect to join the starter outpost shard.</div>
+            </section>
+            <section id="chat-root" class="panel overlay-panel left-panel hidden"></section>
+            <section id="inventory-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="crafting-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="skills-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="build-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="map-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="mods-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="shop-root" class="panel overlay-panel right-panel hidden"></section>
+            <section id="loot-root" class="panel overlay-panel loot-panel hidden"></section>
+            <div id="panel-hotkeys" class="panel-hotkeys">Enter chat · I inventory · C craft · K skills · G build · M travel · O mods · Esc close</div>
+        </div>
+        <div id="death-root"></div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

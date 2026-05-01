@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenVibe Games · 2D World Editor</title>
+    <link rel="stylesheet" href="../src/styles/game.css" />
+</head>
+<body>
+    <div id="app" style="grid-template-columns: 360px 1fr;">
+        <aside class="sidebar">
+            <section class="hero-card">
+                <h1>2D World Editor</h1>
+                <p>Prototype tiles, trees, and rocks for publishable OpenVibe shards.</p>
+                <div class="field-row">
+                    <input id="user-id" placeholder="User ID" />
+                    <input id="display-name" placeholder="Display name" />
+                </div>
+                <div class="field-row">
+                    <input id="world-name" placeholder="World name" />
+                    <input id="world-slug" placeholder="world-slug" />
+                </div>
+                <div class="field-row">
+                    <select id="tool-select">
+                        <option value="tile">Paint Tile</option>
+                        <option value="tree">Place Tree</option>
+                        <option value="rock">Place Rock</option>
+                    </select>
+                    <select id="terrain-select">
+                        <option value="grass">Grass</option>
+                        <option value="sand">Sand</option>
+                        <option value="water">Water</option>
+                    </select>
+                </div>
+                <div class="button-row">
+                    <button id="save-world-btn" class="primary">Save draft</button>
+                    <button id="publish-world-btn" class="secondary">Publish</button>
+                </div>
+                <div id="editor-status" class="empty">Click the grid to build your shard.</div>
+            </section>
+            <section class="panel">
+                <div class="panel-header">How it works</div>
+                <p class="empty">Tile clicks are mirrored into the collaborative editor room and can be published to the native Phase 17 world catalog.</p>
+            </section>
+        </aside>
+        <main style="padding: 1rem;">
+            <section class="panel" style="height: calc(100vh - 2rem);">
+                <canvas id="editor-canvas" width="1152" height="768" style="width:100%;height:100%;border-radius:16px;background:#18202d;"></canvas>
+            </section>
+        </main>
+    </div>
+    <script type="module" src="../src/editor-main.js"></script>
+</body>
+</html>

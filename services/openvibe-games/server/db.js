@@ -309,6 +309,173 @@ const SCHEMA_SQL = `
             updated_by TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Phase 17: 2D World rebirth — authoritative MMO runtime, mod registry,
+        -- and asset ledger. Mirrored in
+        -- services/openvibe-games/server/migrations/postgres/002_2d_world_runtime.sql.
+        CREATE TABLE IF NOT EXISTS game_worlds (
+            id TEXT PRIMARY KEY,
+            slug TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            owner_id TEXT,
+            mode TEXT NOT NULL DEFAULT 'sandbox',
+            seed INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'draft',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_worlds_owner ON game_worlds(owner_id);
+
+        CREATE TABLE IF NOT EXISTS game_world_zones (
+            world_id TEXT NOT NULL,
+            zone_id TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'overworld',
+            pvp INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY (world_id, zone_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS game_world_snapshots (
+            id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL DEFAULT 0,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_world_snapshots_world ON game_world_snapshots(world_id, sequence DESC);
+
+        CREATE TABLE IF NOT EXISTS game_runtime_sessions (
+            id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            left_at DATETIME,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_runtime_sessions_world ON game_runtime_sessions(world_id);
+
+        CREATE TABLE IF NOT EXISTS game_runtime_entities (
+            id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL,
+            zone_id TEXT NOT NULL DEFAULT 'outpost',
+            kind TEXT NOT NULL,
+            template_id TEXT,
+            x REAL NOT NULL DEFAULT 0,
+            y REAL NOT NULL DEFAULT 0,
+            hp INTEGER NOT NULL DEFAULT 0,
+            max_hp INTEGER NOT NULL DEFAULT 0,
+            owner_id TEXT,
+            state_version INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_runtime_entities_world ON game_runtime_entities(world_id, zone_id);
+
+        CREATE TABLE IF NOT EXISTS game_resource_nodes (
+            id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL,
+            zone_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            hp INTEGER NOT NULL DEFAULT 1,
+            max_hp INTEGER NOT NULL DEFAULT 1,
+            respawn_at DATETIME,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_resource_nodes_world ON game_resource_nodes(world_id, zone_id);
+
+        CREATE TABLE IF NOT EXISTS game_item_catalog (
+            item_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'misc',
+            stackable INTEGER NOT NULL DEFAULT 1,
+            max_stack INTEGER NOT NULL DEFAULT 999,
+            rarity TEXT NOT NULL DEFAULT 'common',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS game_loot_tables (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            entries_json TEXT NOT NULL DEFAULT '[]',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS game_npc_templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'mob',
+            hp INTEGER NOT NULL DEFAULT 10,
+            damage INTEGER NOT NULL DEFAULT 1,
+            speed REAL NOT NULL DEFAULT 60,
+            aggro_radius REAL NOT NULL DEFAULT 0,
+            loot_table_id TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS game_mods (
+            id TEXT PRIMARY KEY,
+            slug TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            owner_id TEXT,
+            version TEXT NOT NULL DEFAULT '0.0.0',
+            status TEXT NOT NULL DEFAULT 'registered',
+            trust_level TEXT NOT NULL DEFAULT 'untrusted',
+            manifest_json TEXT NOT NULL DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS game_mod_versions (
+            id TEXT PRIMARY KEY,
+            mod_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            manifest_json TEXT NOT NULL DEFAULT '{}',
+            validated_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (mod_id, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS game_mod_assets (
+            id TEXT PRIMARY KEY,
+            mod_id TEXT NOT NULL,
+            namespace TEXT NOT NULL,
+            media_id TEXT,
+            asset_path TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_game_mod_assets_mod ON game_mod_assets(mod_id);
+
+        CREATE TABLE IF NOT EXISTS game_mod_worlds (
+            id TEXT PRIMARY KEY,
+            mod_id TEXT NOT NULL,
+            world_id TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (mod_id, world_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS game_asset_ledger (
+            id TEXT PRIMARY KEY,
+            slug TEXT UNIQUE NOT NULL,
+            source_url TEXT,
+            download_url TEXT,
+            author TEXT,
+            license TEXT NOT NULL,
+            license_url TEXT,
+            retrieved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            files_json TEXT NOT NULL DEFAULT '[]',
+            modifications TEXT,
+            notes TEXT
+        );
     `;
 
 function defaultSqlitePath() {

@@ -1010,6 +1010,40 @@ function lookupLegacy(source, kind, legacyId) {
     return getDb().prepare('SELECT * FROM game_legacy_map WHERE source = ? AND kind = ? AND legacy_id = ?').get(String(source), String(kind), String(legacyId)) || null;
 }
 
+function summarizeProduct() {
+    const count = (table) => {
+        const row = getDb().prepare(`SELECT COUNT(*) AS c FROM ${table}`).get();
+        return Number(row && row.c || 0);
+    };
+    const canvas = getCanvasSettings();
+    return {
+        ok: true,
+        product: 'games',
+        players: {
+            count: count('game_players'),
+            active_recent: Number((getDb().prepare(`SELECT COUNT(*) AS c FROM game_players WHERE updated_at > ?`).get(isoMinutesAgo(30)) || {}).c || 0),
+        },
+        inventory_items: count('game_inventory'),
+        bank_items: count('game_bank'),
+        structures: count('game_structures'),
+        farm_plots: count('game_farm_plots'),
+        achievements: count('game_achievements'),
+        cosmetics: count('game_cosmetics'),
+        worlds: count('game_worlds'),
+        world_snapshots: count('game_world_snapshots'),
+        mods: count('game_mods'),
+        runtime_entities: count('game_runtime_entities'),
+        resources_seeded: count('game_resource_nodes'),
+        canvas: {
+            width: canvas.board_width,
+            height: canvas.board_height,
+            placements: count('canvas_actions'),
+            locked_regions: count('canvas_region_locks'),
+            bans: count('canvas_bans'),
+        },
+    };
+}
+
 module.exports = {
     DEFAULT_PALETTE,
     createCanvasBan,
@@ -1046,6 +1080,7 @@ module.exports = {
     bankDeposit,
     bankWithdraw,
     addInventoryItem,
+    summarizeProduct,
     unlockAchievement,
     upsertCosmetic,
     upsertFarmPlot,

@@ -1,0 +1,1370 @@
+'use strict';
+
+const crypto = require('crypto');
+
+const model = require('../../model');
+const worldStore = require('../world-store');
+const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
+const { visibleWithinAoi } = require('../net/interest-management');
+const { pushHistory } = require('../net/lag-compensation');
+const { defaultWeapon, computeDamage, canAttack, markAttack, findRewoundTarget, targetInRange } = require('../systems/combat-system');
+const { updatePlayerMovement } = require('../systems/movement-system');
+const { applyGatherDamage, maybeRespawn: maybeRespawnResource } = require('../systems/resource-system');
+const { canPlaceStructure } = require('../systems/build-system');
+const { canTravel, spawnForZone } = require('../systems/travel-system');
+const { worldSnapshotPayload } = require('../systems/persistence-system');
+const { validateInput } = require('../systems/anti-cheat-system');
+const { RECIPES_BY_ID } = require('../data/recipes');
+const { ITEMS_BY_ID } = require('../data/item-catalog');
+const { SKILL_KEYS, SKILL_TO_XP_FIELD } = require('../data/skills');
+const { NPC_TEMPLATES_BY_ID } = require('../data/npc-templates');
+const { LOOT_TABLES_BY_ID } = require('../data/loot-tables');
+const { levelForXp, xpRequiredForNext } = require('../engine/skills');
+const { rollLoot } = require('../engine/loot');
+const inventoryUtils = require('../engine/inventory');
+
+const LOOT_PICKUP_RADIUS = 48;
+const NPC_INTERACT_RADIUS = 96;
+const RESOURCE_INTERACT_RADIUS = 72;
+
+function uid(prefix) {
+    return `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+}
+
+function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function asBoolObject(input) {
+    const keys = input && typeof input === 'object' ? input : {};
+    return {
+        up: !!keys.up,
+        down: !!keys.down,
+        left: !!keys.left,
+        right: !!keys.right,
+        sprint: !!keys.sprint,
+        attack: !!keys.attack,
+        interact: !!keys.interact,
+    };
+}
+
+function isHostileNpc(npc) {
+    return npc && (npc.kind === 'mob' || npc.kind === 'boss');
+}
+
+function distanceSq(a, b) {
+    const dx = Number(a && a.x || 0) - Number(b && b.x || 0);
+    const dy = Number(a && a.y || 0) - Number(b && b.y || 0);
+    return (dx * dx) + (dy * dy);
+}
+
+class WorldRoom {
+    constructor(options) {
+        const opts = options || {};
+        this.world = opts.world;
+        this.worldDefinition = opts.worldDefinition;
+        this.publish = typeof opts.publish === 'function' ? opts.publish : () => {};
+        this.emitToSocket = typeof opts.emitToSocket === 'function' ? opts.emitToSocket : () => {};
+        this.tickRate = Number(opts.tickRate) || 20;
+        this.chunkSize = Number((opts.worldDefinition && opts.worldDefinition.chunk_size) || 256);
+        this.aoiRadius = Number(opts.aoiRadius) || 520;
+        this.players = new Map();
+        this.playersBySocket = new Map();
+        this.histories = new Map();
+        this.npcs = new Map();
+        this.resources = new Map();
+        this.loot = new Map();
+        this.projectiles = new Map();
+        this.structures = new Map();
+        this.chat = [];
+        this.feed = [];
+        this.lastPersistAt = 0;
+        this.lastSnapshotAt = 0;
+        this.sequence = 0;
+        this._seed();
+    }
+
+    bounds() {
+        return Object.assign({ x: 0, y: 0, w: 8192, h: 8192 }, this.worldDefinition && this.worldDefinition.bounds || {});
+    }
+
+    _feed(type, payload) {
+        this.feed.push({ type, payload: clone(payload || {}), at: new Date().toISOString() });
+        while (this.feed.length > 50) this.feed.shift();
+    }
+
+    _publish(type, payload) {
+        this.publish(type, payload);
+        this._feed(type, payload);
+    }
+
+    _seed() {
+        const storedResources = worldStore.listResourceNodes(this.world.id);
+        const resources = storedResources.length ? storedResources : ((this.worldDefinition && this.worldDefinition.resources) || []);
+        for (const resource of resources) {
+            const entry = Object.assign({}, resource, {
+                id: resource.id || uid('resource'),
+                zone_id: resource.zone_id || 'outpost',
+                kind: resource.kind,
+                x: Number(resource.x) || 0,
+                y: Number(resource.y) || 0,
+                hp: Number(resource.hp || resource.max_hp || 1),
+                max_hp: Number(resource.max_hp || resource.hp || 1),
+                respawn_ms: Number(resource.respawn_ms || 15000),
+                respawn_at: resource.respawn_at ? Number(resource.respawn_at) : null,
+                loot_table_id: resource.loot_table_id || null,
+            });
+            this.resources.set(entry.id, entry);
+        }
+
+        const worldNpcs = (this.worldDefinition && this.worldDefinition.npcs) || [];
+        for (const seed of worldNpcs) {
+            const template = NPC_TEMPLATES_BY_ID[seed.template_id];
+            if (!template) continue;
+            const npc = Object.assign({}, template, seed, {
+                id: seed.id || uid('npc'),
+                template_id: seed.template_id,
+                zone_id: seed.zone_id || 'outpost',
+                x: Number(seed.x) || 0,
+                y: Number(seed.y) || 0,
+                home_x: Number(seed.x) || 0,
+                home_y: Number(seed.y) || 0,
+                hp: Number(seed.hp || template.hp || 10),
+                max_hp: Number(seed.max_hp || template.hp || 10),
+                respawn_ms: Number(seed.respawn_ms || (template.kind === 'boss' ? 45000 : 15000)),
+                cooldowns: { attack: 0 },
+                interaction: template.interaction ? clone(template.interaction) : null,
+                held_item_id: seed.held_item_id || template.held_item_id || '',
+                facing: Number(seed.facing) || 1,
+                aim_x: Number(seed.x) || 0,
+                aim_y: Number(seed.y) || 0,
+                vx: 0,
+                vy: 0,
+                moving: false,
+                sprinting: false,
+                step_phase: 0,
+                attack_anim_until: 0,
+                hit_flash_until: 0,
+            });
+            this.npcs.set(npc.id, npc);
+        }
+
+        const structures = model.listStructures({ world_id: this.world.id, limit: 500 });
+        for (const structure of structures) {
+            this.structures.set(structure.id, Object.assign({}, structure, {
+                zone_id: structure.data && structure.data.zone_id || 'wilderness',
+                size: Number(structure.data && structure.data.size) || 48,
+            }));
+        }
+
+        const snapshot = worldStore.latestSnapshot(this.world.id);
+        if (snapshot && snapshot.payload && snapshot.payload.version === 1) {
+            this._restoreFromSnapshot(snapshot.payload);
+        }
+    }
+
+    _restoreFromSnapshot(payload) {
+        const resources = Array.isArray(payload.resources) ? payload.resources : [];
+        for (const entry of resources) {
+            if (!this.resources.has(entry.id)) continue;
+            Object.assign(this.resources.get(entry.id), entry);
+        }
+        const npcs = Array.isArray(payload.npcs) ? payload.npcs : [];
+        for (const entry of npcs) {
+            if (!this.npcs.has(entry.id)) continue;
+            Object.assign(this.npcs.get(entry.id), entry);
+        }
+        const loot = Array.isArray(payload.loot) ? payload.loot : [];
+        for (const drop of loot) this.loot.set(drop.id, Object.assign({}, drop));
+    }
+
+    _recordHistory(entity) {
+        const entry = { at: Date.now(), x: entity.x, y: entity.y, zone_id: entity.zone_id };
+        const history = this.histories.get(entity.id) || [];
+        this.histories.set(entity.id, pushHistory(history, entry, { maxEntries: 32 }));
+    }
+
+    _findPlayerByUserId(userId) {
+        return Array.from(this.players.values()).find((player) => player.user_id === userId) || null;
+    }
+
+    _currentWorldChat(zoneId) {
+        return this.chat.filter((item) => !zoneId || !item.zone_id || item.zone_id === zoneId).slice(-20);
+    }
+
+    _skillSnapshot(player) {
+        const levels = {};
+        for (const skill of SKILL_KEYS) {
+            const field = SKILL_TO_XP_FIELD[skill];
+            const xp = field ? Number(player[field] || 0) : 0;
+            levels[skill] = Number(player.levels && player.levels[skill]) || levelForXp(xp);
+        }
+        return levels;
+    }
+
+    _skillXpSnapshot(player) {
+        const xp = {};
+        for (const skill of SKILL_KEYS) {
+            const field = SKILL_TO_XP_FIELD[skill];
+            xp[skill] = field ? Number(player[field] || 0) : 0;
+        }
+        return xp;
+    }
+
+    _skillProgressSnapshot(player) {
+        const progress = {};
+        for (const skill of SKILL_KEYS) {
+            const field = SKILL_TO_XP_FIELD[skill];
+            const xp = field ? Number(player[field] || 0) : 0;
+            const level = Number(player.levels && player.levels[skill]) || levelForXp(xp);
+            progress[skill] = {
+                level,
+                xp,
+                xp_to_next: xpRequiredForNext(xp),
+            };
+        }
+        return progress;
+    }
+
+    _defaultHeldItem(player) {
+        switch (Number(player.quick_slot) || 1) {
+        case 2:
+            return player.equip_axe || player.equip_weapon || '';
+        case 3:
+            return player.equip_pickaxe || player.equip_weapon || '';
+        case 4:
+            return player.equip_rod || player.equip_weapon || '';
+        case 5:
+            return 'hammer';
+        default:
+            return player.equip_weapon || player.equip_axe || player.equip_pickaxe || '';
+        }
+    }
+
+    _setHeldItem(player, itemId, now, holdMs = 320) {
+        player.held_item_id = itemId || this._defaultHeldItem(player);
+        player.hold_until = now + Math.max(100, Number(holdMs) || 320);
+    }
+
+    _shopInteractionPayload(npc) {
+        if (!npc || !npc.interaction || npc.interaction.type !== 'shop') return null;
+        return {
+            type: 'shop',
+            npc_id: npc.id,
+            shop_id: npc.interaction.shop_id || npc.id,
+            npc_name: npc.name,
+            title: npc.interaction.title || npc.name,
+            prompt: npc.interaction.prompt || `Browse ${npc.name}`,
+            description: npc.interaction.description || '',
+            items: (npc.interaction.inventory || []).map((entry) => ({
+                item_id: String(entry.item_id),
+                price: Math.max(0, Number(entry.price) || 0),
+                quantity: Math.max(1, Number(entry.quantity) || 1),
+                note: entry.note || '',
+            })),
+        };
+    }
+
+    _activeInteractionNpc(player) {
+        if (!player || !player.activeInteraction || player.activeInteraction.type !== 'shop') return null;
+        const npc = this.npcs.get(player.activeInteraction.npc_id);
+        if (!npc || npc.zone_id !== player.zone_id || npc.hp <= 0 || distanceSq(player, npc) > (NPC_INTERACT_RADIUS * NPC_INTERACT_RADIUS)) {
+            player.activeInteraction = null;
+            return null;
+        }
+        return npc;
+    }
+
+    _nearestNpcInteraction(player) {
+        let best = null;
+        let bestDistSq = NPC_INTERACT_RADIUS * NPC_INTERACT_RADIUS;
+        for (const npc of this.npcs.values()) {
+            if (npc.zone_id !== player.zone_id || npc.hp <= 0 || !npc.interaction) continue;
+            const distSq = distanceSq(player, npc);
+            if (distSq <= bestDistSq) {
+                bestDistSq = distSq;
+                best = npc;
+            }
+        }
+        return best;
+    }
+
+    _interactionPrompt(player) {
+        const activeNpc = this._activeInteractionNpc(player);
+        if (activeNpc) {
+            const activeShop = this._shopInteractionPayload(activeNpc);
+            return activeShop ? {
+                type: 'shop',
+                target_id: activeNpc.id,
+                x: activeNpc.x,
+                y: activeNpc.y - 58,
+                label: `Esc · close ${activeShop.title}`,
+                description: activeShop.description,
+            } : null;
+        }
+
+        for (const drop of this.loot.values()) {
+            if (drop.zone_id !== player.zone_id) continue;
+            if (distanceSq(player, drop) <= (LOOT_PICKUP_RADIUS * LOOT_PICKUP_RADIUS)) {
+                const item = ITEMS_BY_ID[drop.item_id];
+                return {
+                    type: 'loot',
+                    target_id: drop.id,
+                    x: drop.x,
+                    y: drop.y - 34,
+                    label: `E · pick up ${item && item.name || drop.item_id}`,
+                    description: `Quantity ${drop.quantity}`,
+                };
+            }
+        }
+
+        const npc = this._nearestNpcInteraction(player);
+        if (npc) {
+            const shop = this._shopInteractionPayload(npc);
+            return shop ? {
+                type: 'shop',
+                target_id: npc.id,
+                x: npc.x,
+                y: npc.y - 58,
+                label: `E · ${shop.prompt}`,
+                description: shop.description,
+            } : null;
+        }
+
+        let closest = null;
+        let bestDistSq = RESOURCE_INTERACT_RADIUS * RESOURCE_INTERACT_RADIUS;
+        for (const resource of this.resources.values()) {
+            if (resource.zone_id !== player.zone_id || resource.hp <= 0) continue;
+            const distSq = distanceSq(player, resource);
+            if (distSq <= bestDistSq) {
+                bestDistSq = distSq;
+                closest = resource;
+            }
+        }
+        if (!closest) return null;
+        const verb = closest.kind === 'tree' ? 'chop' : closest.kind === 'rock' ? 'mine' : 'harvest';
+        const name = closest.kind === 'tree' ? 'tree' : closest.kind === 'rock' ? 'ore vein' : 'bush';
+        return {
+            type: 'resource',
+            target_id: closest.id,
+            x: closest.x,
+            y: closest.y - 42,
+            label: `E · ${verb} ${name}`,
+            description: `Gather with your ${closest.kind === 'rock' ? 'pickaxe' : closest.kind === 'tree' ? 'hatchet' : 'hands'}`,
+        };
+    }
+
+    _autoEquipPurchasedItem(player, itemId) {
+        const item = ITEMS_BY_ID[itemId];
+        if (!item) return;
+        const patch = { user_id: player.user_id };
+        let changed = false;
+        if (item.category === 'weapon') {
+            player.equip_weapon = itemId;
+            patch.equip_weapon = itemId;
+            changed = true;
+        } else if (item.category === 'armor') {
+            player.equip_armor = itemId;
+            patch.equip_armor = itemId;
+            changed = true;
+        } else if (item.metadata && item.metadata.skill === 'woodcut') {
+            player.equip_axe = itemId;
+            patch.equip_axe = itemId;
+            changed = true;
+        } else if (item.metadata && item.metadata.skill === 'mining') {
+            player.equip_pickaxe = itemId;
+            patch.equip_pickaxe = itemId;
+            changed = true;
+        } else if (item.metadata && item.metadata.skill === 'fishing') {
+            player.equip_rod = itemId;
+            patch.equip_rod = itemId;
+            changed = true;
+        }
+        if (changed) model.upsertPlayer(patch);
+    }
+
+    closeInteraction(player) {
+        if (!player) return { ok: false, reason: 'player not joined' };
+        player.activeInteraction = null;
+        return { ok: true };
+    }
+
+    handleShopPurchase(player, payload) {
+        const npc = this._activeInteractionNpc(player);
+        if (!npc) return { ok: false, reason: 'no shop is open' };
+        if (payload && payload.npc_id && String(payload.npc_id) !== npc.id) return { ok: false, reason: 'shop mismatch' };
+        const shop = this._shopInteractionPayload(npc);
+        const offer = shop && shop.items.find((entry) => entry.item_id === String(payload && payload.item_id || ''));
+        if (!offer) return { ok: false, reason: 'item not sold here' };
+        const bundles = Math.max(1, Math.min(25, Number(payload && payload.quantity) || 1));
+        const totalPrice = offer.price * bundles;
+        if (Number(player.coins || 0) < totalPrice) return { ok: false, reason: 'not enough coins' };
+        const totalQuantity = offer.quantity * bundles;
+        player.coins -= totalPrice;
+        model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+        model.addInventoryItem({ user_id: player.user_id, item_id: offer.item_id, quantity: totalQuantity, metadata: { source: npc.id, shop_id: shop.shop_id } });
+        this._autoEquipPurchasedItem(player, offer.item_id);
+        this._setHeldItem(player, offer.item_id, Date.now(), 650);
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            item_id: offer.item_id,
+            action: 'shop-buy',
+            quantity: totalQuantity,
+            coins_spent: totalPrice,
+            npc_id: npc.id,
+        });
+        this._feed('shop-purchase', {
+            user_id: player.user_id,
+            npc_id: npc.id,
+            item_id: offer.item_id,
+            quantity: totalQuantity,
+            coins_spent: totalPrice,
+        });
+        return {
+            ok: true,
+            item_id: offer.item_id,
+            quantity: totalQuantity,
+            remaining_coins: player.coins,
+            interaction: this._shopInteractionPayload(npc),
+        };
+    }
+
+    _addSkillXp(player, skill, amount, reason) {
+        const field = SKILL_TO_XP_FIELD[skill];
+        if (!field || !amount) return player;
+        const beforeXp = Number(player[field] || 0);
+        const afterXp = beforeXp + Math.max(0, Math.floor(Number(amount) || 0));
+        const beforeLevel = levelForXp(beforeXp);
+        const afterLevel = levelForXp(afterXp);
+        player[field] = afterXp;
+        player.levels[skill] = afterLevel;
+        model.upsertPlayer({ user_id: player.user_id, [field]: afterXp });
+        this._publish(GAME_EVENT_TYPES.PLAYER_SKILL_XP_ADDED, {
+            user_id: player.user_id,
+            skill,
+            amount,
+            reason: reason || 'gameplay',
+            world_id: this.world.id,
+        });
+        if (afterLevel > beforeLevel) {
+            this._publish(GAME_EVENT_TYPES.PLAYER_LEVEL_UP, {
+                user_id: player.user_id,
+                skill,
+                level: afterLevel,
+                world_id: this.world.id,
+            });
+        }
+        return player;
+    }
+
+    _pickupLoot(player, dropId) {
+        const drop = this.loot.get(dropId);
+        if (!drop || drop.zone_id !== player.zone_id) return { ok: false, reason: 'loot not found' };
+        const dx = player.x - drop.x;
+        const dy = player.y - drop.y;
+        if ((dx * dx + dy * dy) > (48 * 48)) return { ok: false, reason: 'loot out of range' };
+        model.addInventoryItem({ user_id: player.user_id, item_id: drop.item_id, quantity: drop.quantity, metadata: {} });
+        this.loot.delete(drop.id);
+        this._publish(GAME_EVENT_TYPES.ITEM_PICKED_UP, {
+            user_id: player.user_id,
+            item_id: drop.item_id,
+            quantity: drop.quantity,
+            world_id: this.world.id,
+        });
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: drop.item_id, world_id: this.world.id });
+        return { ok: true };
+    }
+
+    _dropLoot(x, y, zone_id, drops, source) {
+        for (const drop of drops || []) {
+            const entity = {
+                id: uid('loot'),
+                zone_id,
+                item_id: drop.item_id,
+                quantity: drop.quantity,
+                x,
+                y,
+                source: source || null,
+                created_at: new Date().toISOString(),
+            };
+            this.loot.set(entity.id, entity);
+            this._publish(GAME_EVENT_TYPES.COMBAT_LOOT_GENERATED, {
+                world_id: this.world.id,
+                zone_id,
+                item_id: entity.item_id,
+                quantity: entity.quantity,
+                source,
+            });
+        }
+    }
+
+    _killNpc(npc, killer, now) {
+        npc.hp = 0;
+        npc.respawn_at = now + npc.respawn_ms;
+        const lootTable = npc.loot_table_id ? LOOT_TABLES_BY_ID[npc.loot_table_id] : null;
+        const drops = lootTable ? rollLoot(lootTable.entries, { seed: now % 0x7fffffff, rolls: npc.kind === 'boss' ? 3 : 1 }) : [];
+        this._dropLoot(npc.x, npc.y, npc.zone_id, drops, { kind: npc.kind, id: npc.id });
+        this._publish(npc.kind === 'boss' ? GAME_EVENT_TYPES.BOSS_DEFEATED : GAME_EVENT_TYPES.NPC_DIED, {
+            npc_id: npc.id,
+            template_id: npc.template_id,
+            killed_by: killer && killer.user_id,
+            world_id: this.world.id,
+            zone_id: npc.zone_id,
+        });
+        if (killer) {
+            this._publish(GAME_EVENT_TYPES.COMBAT_KILL, {
+                killer_id: killer.user_id,
+                target_id: npc.id,
+                target_type: npc.kind,
+                world_id: this.world.id,
+                zone_id: npc.zone_id,
+            });
+            this._addSkillXp(killer, 'attack', npc.kind === 'boss' ? 180 : 32, 'combat.kill');
+            this._addSkillXp(killer, 'strength', npc.kind === 'boss' ? 120 : 18, 'combat.kill');
+            if (drops.length) this._publish(GAME_EVENT_TYPES.NPC_DROP_GENERATED, {
+                npc_id: npc.id,
+                template_id: npc.template_id,
+                drops,
+                world_id: this.world.id,
+            });
+        }
+    }
+
+    _killPlayer(player, source, now) {
+        player.hp = 0;
+        player.dead = true;
+        player.dead_until = now + 3000;
+        player.activeInteraction = null;
+        this._publish(GAME_EVENT_TYPES.PLAYER_DIED, {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+            source: source ? { id: source.id || source.user_id || null, kind: source.kind || 'player' } : null,
+        });
+    }
+
+    _applyDamage(target, source, amount, now) {
+        const damage = Math.max(1, Math.floor(Number(amount) || 0));
+        target.hp = Math.max(0, target.hp - damage);
+        target.hit_flash_until = now + 180;
+        if (target.user_id) {
+            model.upsertPlayer({ user_id: target.user_id, hp: target.hp });
+            this._publish(GAME_EVENT_TYPES.COMBAT_HIT, {
+                world_id: this.world.id,
+                zone_id: target.zone_id,
+                target_id: target.user_id,
+                target_type: 'player',
+                source_id: source && (source.user_id || source.id),
+                damage,
+            });
+            if (target.hp <= 0) this._killPlayer(target, source, now);
+        } else {
+            this._publish(GAME_EVENT_TYPES.COMBAT_HIT, {
+                world_id: this.world.id,
+                zone_id: target.zone_id,
+                target_id: target.id,
+                target_type: target.kind || 'npc',
+                source_id: source && (source.user_id || source.id),
+                damage,
+            });
+            if (target.hp <= 0) this._killNpc(target, source, now);
+        }
+    }
+
+    _spawnProjectile(player, input, weapon, now) {
+        const aim = input.aim && typeof input.aim === 'object' ? input.aim : { x: player.x + 1, y: player.y };
+        const dx = Number(aim.x) - player.x;
+        const dy = Number(aim.y) - player.y;
+        const len = Math.sqrt((dx * dx) + (dy * dy)) || 1;
+        const speed = Number(weapon.projectile_speed) || 360;
+        const projectile = {
+            id: uid('proj'),
+            owner_id: player.user_id,
+            zone_id: player.zone_id,
+            x: player.x,
+            y: player.y,
+            vx: (dx / len) * speed,
+            vy: (dy / len) * speed,
+            damage: computeDamage(player, weapon),
+            target_id: input.targetId || null,
+            expires_at: now + 1300,
+        };
+        player.aim_x = Number(aim.x) || player.x;
+        player.aim_y = Number(aim.y) || player.y;
+        this.projectiles.set(projectile.id, projectile);
+        this._publish(GAME_EVENT_TYPES.COMBAT_PROJECTILE_SPAWNED, {
+            projectile_id: projectile.id,
+            owner_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+        });
+    }
+
+    _nearestTarget(player, range, targetTime) {
+        const candidates = [];
+        for (const other of this.players.values()) {
+            if (other.user_id === player.user_id || other.zone_id !== player.zone_id || other.dead) continue;
+            const zone = ((this.worldDefinition && this.worldDefinition.zones) || []).find((z) => z.zone_id === other.zone_id);
+            if (zone && zone.pvp !== true) continue;
+            candidates.push(other);
+        }
+        for (const npc of this.npcs.values()) {
+            if (npc.zone_id !== player.zone_id || npc.hp <= 0 || !isHostileNpc(npc)) continue;
+            candidates.push(npc);
+        }
+        let best = null;
+        let bestDistSq = range * range;
+        for (const candidate of candidates) {
+            const rewound = Object.assign({}, candidate, candidate.id ? (require('../net/lag-compensation').rewindPosition(this.histories.get(candidate.id), targetTime, candidate)) : candidate);
+            const dx = player.x - rewound.x;
+            const dy = player.y - rewound.y;
+            const distSq = (dx * dx) + (dy * dy);
+            if (distSq <= bestDistSq) {
+                bestDistSq = distSq;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    _handleAttack(player, input, now) {
+        const weapon = defaultWeapon(player);
+        if (!canAttack(now, player, weapon)) return;
+        player.activeInteraction = null;
+        markAttack(now, player, weapon);
+        player.attack_anim_until = now + Math.min(300, Math.max(180, Number(weapon.cooldown_ms || 500) * 0.6));
+        player.aim_x = Number(input && input.aim && input.aim.x) || player.aim_x || player.x + 48;
+        player.aim_y = Number(input && input.aim && input.aim.y) || player.aim_y || player.y;
+        if (Math.abs(player.aim_x - player.x) > 4) player.facing = player.aim_x >= player.x ? 1 : -1;
+        this._setHeldItem(player, weapon.item_id, now, 520);
+        this._publish(GAME_EVENT_TYPES.COMBAT_STARTED, {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+            weapon_id: weapon.item_id,
+        });
+        if (weapon.projectile) {
+            this._spawnProjectile(player, input, weapon, now);
+            return;
+        }
+        const targetTime = now - Math.max(0, Math.min(225, now - (Number(input.sent_at) || now)));
+        const target = findRewoundTarget(
+            now,
+            input,
+            [
+                ...Array.from(this.players.values()).filter((other) => other.user_id !== player.user_id && other.zone_id === player.zone_id && !other.dead),
+                ...Array.from(this.npcs.values()).filter((npc) => npc.zone_id === player.zone_id && npc.hp > 0),
+            ],
+            this.histories,
+            () => this._nearestTarget(player, weapon.range, targetTime)
+        );
+        if (!target || !targetInRange(player, target, weapon.range)) {
+            this._publish(GAME_EVENT_TYPES.COMBAT_MISSED, {
+                user_id: player.user_id,
+                world_id: this.world.id,
+                zone_id: player.zone_id,
+                weapon_id: weapon.item_id,
+            });
+            return;
+        }
+        this._applyDamage(target, player, computeDamage(player, weapon), now);
+    }
+
+    _gatherPower(player, resource) {
+        if (resource.kind === 'tree') {
+            const axe = ITEMS_BY_ID[player.equip_axe] || ITEMS_BY_ID.stone_hatchet || null;
+            return axe && axe.metadata && axe.metadata.tier ? axe.metadata.tier : 1;
+        }
+        if (resource.kind === 'rock') {
+            const pick = ITEMS_BY_ID[player.equip_pickaxe] || ITEMS_BY_ID.stone_pickaxe || null;
+            return pick && pick.metadata && pick.metadata.tier ? pick.metadata.tier : 1;
+        }
+        return 1;
+    }
+
+    _handleInteract(player, now) {
+        for (const drop of this.loot.values()) {
+            if (drop.zone_id !== player.zone_id) continue;
+            if (distanceSq(player, drop) <= (LOOT_PICKUP_RADIUS * LOOT_PICKUP_RADIUS)) return this._pickupLoot(player, drop.id);
+        }
+
+        const interactiveNpc = this._nearestNpcInteraction(player);
+        if (interactiveNpc) {
+            player.activeInteraction = {
+                type: 'shop',
+                npc_id: interactiveNpc.id,
+                opened_at: now,
+            };
+            this._setHeldItem(player, interactiveNpc.held_item_id || this._defaultHeldItem(player), now, 500);
+            return { ok: true, interaction: this._shopInteractionPayload(interactiveNpc) };
+        }
+
+        let closest = null;
+        let bestDistSq = RESOURCE_INTERACT_RADIUS * RESOURCE_INTERACT_RADIUS;
+        for (const resource of this.resources.values()) {
+            if (resource.zone_id !== player.zone_id || resource.hp <= 0) continue;
+            const distSq = distanceSq(player, resource);
+            if (distSq <= bestDistSq) {
+                bestDistSq = distSq;
+                closest = resource;
+            }
+        }
+        if (!closest) return { ok: false, reason: 'nothing to interact with' };
+        player.activeInteraction = null;
+        const power = this._gatherPower(player, closest);
+        closest.hit_flash_until = now + 140;
+        if (closest.kind === 'tree') this._setHeldItem(player, player.equip_axe || 'stone_hatchet', now, 460);
+        else if (closest.kind === 'rock') this._setHeldItem(player, player.equip_pickaxe || 'stone_pickaxe', now, 460);
+        applyGatherDamage(closest, power);
+        this._publish(GAME_EVENT_TYPES.RESOURCE_GATHERED, {
+            user_id: player.user_id,
+            resource_id: closest.id,
+            kind: closest.kind,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+        });
+        if (closest.hp <= 0) {
+            const lootTable = closest.loot_table_id ? LOOT_TABLES_BY_ID[closest.loot_table_id] : null;
+            const drops = lootTable ? rollLoot(lootTable.entries, { seed: now % 0x7fffffff, rolls: 1 }) : [];
+            for (const drop of drops) {
+                model.addInventoryItem({ user_id: player.user_id, item_id: drop.item_id, quantity: drop.quantity, metadata: {} });
+            }
+            if (closest.kind === 'tree') this._addSkillXp(player, 'woodcut', 16, 'resource.gather');
+            if (closest.kind === 'rock') this._addSkillXp(player, 'mining', 18, 'resource.gather');
+            if (closest.kind === 'bush') this._addSkillXp(player, 'farming', 10, 'resource.gather');
+            this._publish(GAME_EVENT_TYPES.RESOURCE_DEPLETED, {
+                user_id: player.user_id,
+                resource_id: closest.id,
+                kind: closest.kind,
+                world_id: this.world.id,
+                zone_id: player.zone_id,
+            });
+            this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, world_id: this.world.id });
+        }
+        return { ok: true };
+    }
+
+    _handleCraft(player, input) {
+        const recipe = RECIPES_BY_ID[input.recipe_id];
+        if (!recipe) return { ok: false, reason: 'recipe not found' };
+        const skillLevel = Number(player.levels[recipe.skill] || 1);
+        if (skillLevel < Number(recipe.level || 1)) return { ok: false, reason: 'skill too low' };
+        const inventory = model.listInventory(player.user_id);
+        if (!inventoryUtils.hasItems(inventory, recipe.inputs)) return { ok: false, reason: 'missing ingredients' };
+        for (const req of recipe.inputs) {
+            model.addInventoryItem({ user_id: player.user_id, item_id: req.item_id, quantity: -Math.abs(req.quantity), metadata: {} });
+        }
+        model.addInventoryItem({ user_id: player.user_id, item_id: recipe.result.item_id, quantity: recipe.result.quantity, metadata: {} });
+        this._addSkillXp(player, recipe.skill, recipe.xp || 10, 'craft');
+        this._publish(GAME_EVENT_TYPES.ITEM_CRAFTED, {
+            user_id: player.user_id,
+            recipe_id: recipe.id,
+            item_id: recipe.result.item_id,
+            quantity: recipe.result.quantity,
+            world_id: this.world.id,
+        });
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, world_id: this.world.id });
+        return { ok: true };
+    }
+
+    _handleBuild(player, input) {
+        const itemId = String(input.item_id || 'build_wall');
+        player.activeInteraction = null;
+        const inventory = model.listInventory(player.user_id);
+        const entry = inventory.find((item) => item.item_id === itemId && item.quantity > 0);
+        if (!entry) return { ok: false, reason: 'missing build item' };
+        const placement = {
+            x: Number(input.x) || player.x + 48,
+            y: Number(input.y) || player.y,
+            zone_id: player.zone_id,
+        };
+        const decision = canPlaceStructure({
+            x: placement.x,
+            y: placement.y,
+            zone_id: placement.zone_id,
+            bounds: this.bounds(),
+            structures: Array.from(this.structures.values()),
+        });
+        if (!decision.ok) return decision;
+        const structure = model.createStructure({
+            type: itemId.replace(/^build_/, ''),
+            world_id: this.world.id,
+            x: placement.x,
+            y: placement.y,
+            owner_id: player.user_id,
+            data: { zone_id: placement.zone_id, size: 48, source_item_id: itemId },
+        });
+        const hydrated = {
+            id: structure.id,
+            type: structure.type,
+            world_id: structure.world_id,
+            owner_id: structure.owner_id,
+            x: Number(structure.x),
+            y: Number(structure.y),
+            zone_id: placement.zone_id,
+            size: 48,
+            data: structure.data || { zone_id: placement.zone_id },
+        };
+        this.structures.set(hydrated.id, hydrated);
+        model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: -1, metadata: {} });
+        this._setHeldItem(player, 'hammer', Date.now(), 540);
+        this._addSkillXp(player, 'construction', 14, 'build');
+        this._publish(GAME_EVENT_TYPES.STRUCTURE_PLACED, {
+            structure_id: hydrated.id,
+            type: hydrated.type,
+            owner_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: placement.zone_id,
+        });
+        return { ok: true, structure: hydrated };
+    }
+
+    _handleTravel(player, input) {
+        const targetZone = String(input.targetZone || input.target_zone || '');
+        if (!targetZone) return { ok: false, reason: 'target zone required' };
+        if (!canTravel(this.worldDefinition, player.zone_id, targetZone)) {
+            return { ok: false, reason: 'travel route unavailable' };
+        }
+        player.activeInteraction = null;
+        const fromZone = player.zone_id;
+        this._publish(GAME_EVENT_TYPES.TRAVEL_STARTED, {
+            user_id: player.user_id,
+            from_zone: fromZone,
+            to_zone: targetZone,
+            world_id: this.world.id,
+        });
+        const spawn = spawnForZone(this.worldDefinition, targetZone);
+        player.zone_id = targetZone;
+        player.x = Number(spawn.x) || player.x;
+        player.y = Number(spawn.y) || player.y;
+        model.upsertPlayer({ user_id: player.user_id, zone: targetZone, x: player.x, y: player.y, world_id: this.world.id });
+        this._publish(GAME_EVENT_TYPES.TRAVEL_COMPLETED, {
+            user_id: player.user_id,
+            from_zone: fromZone,
+            to_zone: targetZone,
+            world_id: this.world.id,
+        });
+        return { ok: true };
+    }
+
+    _respawnPlayer(player) {
+        const spawn = spawnForZone(this.worldDefinition, 'outpost');
+        player.dead = false;
+        player.dead_until = 0;
+        player.activeInteraction = null;
+        player.zone_id = 'outpost';
+        player.hp = player.max_hp;
+        player.stamina = player.max_stamina;
+        player.x = Number(spawn.x) || 4096;
+        player.y = Number(spawn.y) || 4096;
+        player.vx = 0;
+        player.vy = 0;
+        player.facing = 1;
+        player.aim_x = player.x + 72;
+        player.aim_y = player.y;
+        player.hit_flash_until = 0;
+        player.attack_anim_until = 0;
+        player.held_item_id = this._defaultHeldItem(player);
+        model.upsertPlayer({ user_id: player.user_id, zone: player.zone_id, x: player.x, y: player.y, hp: player.hp, stamina: player.stamina, world_id: this.world.id });
+        this._publish(GAME_EVENT_TYPES.PLAYER_RESPAWNED, {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+        });
+    }
+
+    join({ socketId, userId, displayName, zoneId }) {
+        const existing = this._findPlayerByUserId(String(userId));
+        const playerRow = model.ensurePlayer(String(userId), displayName || `Player ${userId}`);
+        const zone = zoneId || playerRow.zone || 'outpost';
+        const spawn = spawnForZone(this.worldDefinition, zone);
+        const player = existing || {
+            id: `player:${String(userId)}`,
+            user_id: String(userId),
+            display_name: displayName || playerRow.display_name,
+            world_id: this.world.id,
+            zone_id: zone,
+            x: Number(playerRow.x || spawn.x || 4096),
+            y: Number(playerRow.y || spawn.y || 4096),
+            vx: 0,
+            vy: 0,
+            coins: Number(playerRow.coins || 0),
+            loyalty_points: Number(playerRow.loyalty_points || 0),
+            hp: Number(playerRow.hp || playerRow.max_hp || 100),
+            max_hp: Number(playerRow.max_hp || 100),
+            stamina: Number(playerRow.stamina || playerRow.max_stamina || 100),
+            max_stamina: Number(playerRow.max_stamina || 100),
+            equip_weapon: playerRow.equip_weapon || 'wooden_club',
+            equip_armor: playerRow.equip_armor || '',
+            equip_axe: playerRow.equip_axe || 'stone_hatchet',
+            equip_pickaxe: playerRow.equip_pickaxe || 'stone_pickaxe',
+            equip_rod: playerRow.equip_rod || 'fishing_rod',
+            levels: clone(playerRow.levels || {}),
+            mining_xp: playerRow.mining_xp,
+            fishing_xp: playerRow.fishing_xp,
+            woodcut_xp: playerRow.woodcut_xp,
+            farming_xp: playerRow.farming_xp,
+            combat_xp: playerRow.combat_xp,
+            crafting_xp: playerRow.crafting_xp,
+            smithing_xp: playerRow.smithing_xp,
+            agility_xp: playerRow.agility_xp,
+            input: { seq: 0, keys: {} },
+            pendingActions: [],
+            lastInputSeq: 0,
+            lastProcessedInputSeq: 0,
+            lastActionSeq: 0,
+            cooldowns: { attack: 0 },
+            dead: false,
+            dead_until: 0,
+            facing: 1,
+            aim_x: Number(playerRow.x || spawn.x || 4096) + 72,
+            aim_y: Number(playerRow.y || spawn.y || 4096),
+            moving: false,
+            sprinting: false,
+            speed: 0,
+            step_phase: 0,
+            attack_anim_until: 0,
+            hit_flash_until: 0,
+            quick_slot: 1,
+            held_item_id: playerRow.equip_weapon || 'wooden_club',
+            hold_until: 0,
+            activeInteraction: null,
+        };
+        player.socketId = socketId;
+        player.zone_id = zone;
+        player.coins = Number(playerRow.coins || player.coins || 0);
+        player.loyalty_points = Number(playerRow.loyalty_points || player.loyalty_points || 0);
+        player.levels = this._skillSnapshot(player);
+        player.quick_slot = Number(player.quick_slot) || 1;
+        player.held_item_id = player.held_item_id || this._defaultHeldItem(player);
+        player.aim_x = Number(player.aim_x) || player.x + ((player.facing || 1) * 72);
+        player.aim_y = Number(player.aim_y) || player.y;
+        if (!existing && (playerRow.zone !== zone || playerRow.world_id !== this.world.id)) {
+            player.x = Number(spawn.x) || player.x;
+            player.y = Number(spawn.y) || player.y;
+        }
+        this.players.set(socketId, player);
+        this.playersBySocket.set(socketId, player.user_id);
+        player.session_id = worldStore.recordSession({ world_id: this.world.id, user_id: player.user_id }).id;
+        this._recordHistory(player);
+        this._publish(GAME_EVENT_TYPES.SESSION_STARTED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        this._publish(GAME_EVENT_TYPES.PLAYER_JOINED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        this._publish(GAME_EVENT_TYPES.PLAYER_SPAWNED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        return this.buildSnapshotForPlayer(player, Date.now());
+    }
+
+    leave(socketId) {
+        const player = this.players.get(socketId);
+        if (!player) return;
+        if (player.session_id) worldStore.endSession(player.session_id);
+        model.upsertPlayer({
+            user_id: player.user_id,
+            x: player.x,
+            y: player.y,
+            zone: player.zone_id,
+            hp: player.hp,
+            stamina: player.stamina,
+            world_id: this.world.id,
+            coins: player.coins,
+            equip_weapon: player.equip_weapon,
+            equip_axe: player.equip_axe,
+            equip_pickaxe: player.equip_pickaxe,
+            equip_rod: player.equip_rod,
+            equip_armor: player.equip_armor,
+        });
+        this.players.delete(socketId);
+        this.playersBySocket.delete(socketId);
+        this._publish(GAME_EVENT_TYPES.PLAYER_LEFT, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        this._publish(GAME_EVENT_TYPES.SESSION_ENDED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+    }
+
+    receiveInput(socketId, input) {
+        const player = this.players.get(socketId);
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const validity = validateInput(input);
+        if (!validity.ok) {
+            this._feed('anti-cheat', { user_id: player.user_id, reason: validity.reason });
+            return validity;
+        }
+        if (validity.seq <= player.lastInputSeq) return { ok: true, duplicate: true };
+        player.lastInputSeq = validity.seq;
+        player.input = {
+            seq: validity.seq,
+            dt: validity.dt,
+            sent_at: Number(input.sent_at) || Date.now(),
+            keys: asBoolObject(input.keys),
+            aim: input.aim && typeof input.aim === 'object' ? { x: Number(input.aim.x) || player.x, y: Number(input.aim.y) || player.y } : null,
+            action: input.action || null,
+            targetId: input.targetId || null,
+            quickSlot: input.quickSlot == null ? null : Number(input.quickSlot),
+            item_id: input.item_id || null,
+            recipe_id: input.recipe_id || null,
+            x: Number(input.x),
+            y: Number(input.y),
+            targetZone: input.targetZone || input.target_zone || null,
+        };
+        if (player.input.quickSlot != null) player.quick_slot = Math.max(1, Math.min(9, player.input.quickSlot));
+        if (player.input.aim) {
+            player.aim_x = player.input.aim.x;
+            player.aim_y = player.input.aim.y;
+            if (Math.abs(player.aim_x - player.x) > 4) player.facing = player.aim_x >= player.x ? 1 : -1;
+        }
+        if (!player.hold_until || Date.now() >= player.hold_until) player.held_item_id = this._defaultHeldItem(player);
+        if (player.input.action && player.lastActionSeq < validity.seq) {
+            player.pendingActions.push(clone(player.input));
+            player.lastActionSeq = validity.seq;
+        }
+        return { ok: true };
+    }
+
+    sendChat(socketId, text) {
+        const player = this.players.get(socketId);
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const message = String(text || '').trim();
+        if (!message) return { ok: false, reason: 'message required' };
+        const item = {
+            id: uid('chat'),
+            user_id: player.user_id,
+            display_name: player.display_name,
+            zone_id: player.zone_id,
+            text: message.slice(0, 240),
+            created_at: new Date().toISOString(),
+        };
+        this.chat.push(item);
+        while (this.chat.length > 80) this.chat.shift();
+        return { ok: true, message: item };
+    }
+
+    _processAction(player, action, now) {
+        switch (action.action) {
+        case 'attack':
+            return this._handleAttack(player, action, now);
+        case 'interact':
+        case 'pickup':
+            return this._handleInteract(player, now);
+        case 'craft':
+            return this._handleCraft(player, action, now);
+        case 'build':
+            return this._handleBuild(player, action, now);
+        case 'travel':
+            return this._handleTravel(player, action, now);
+        case 'close_interaction':
+            return this.closeInteraction(player);
+        case 'respawn':
+            if (player.dead && now >= player.dead_until) this._respawnPlayer(player);
+            return { ok: true };
+        default:
+            return { ok: false, reason: 'unknown action' };
+        }
+    }
+
+    _updateProjectiles(dt, now) {
+        for (const projectile of this.projectiles.values()) {
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
+            if (now >= projectile.expires_at) {
+                this.projectiles.delete(projectile.id);
+                continue;
+            }
+            const owner = this._findPlayerByUserId(projectile.owner_id);
+            let target = projectile.target_id ? this.npcs.get(projectile.target_id) || this._findPlayerByUserId(projectile.target_id) : null;
+            if (!target) {
+                target = Array.from(this.npcs.values()).find((npc) => npc.zone_id === projectile.zone_id && npc.hp > 0 && ((npc.x - projectile.x) ** 2 + (npc.y - projectile.y) ** 2) < (16 * 16))
+                    || Array.from(this.players.values()).find((player) => player.zone_id === projectile.zone_id && player.user_id !== projectile.owner_id && !player.dead && ((player.x - projectile.x) ** 2 + (player.y - projectile.y) ** 2) < (16 * 16));
+            }
+            if (!target) continue;
+            this._applyDamage(target, owner || projectile, projectile.damage, now);
+            this._publish(GAME_EVENT_TYPES.COMBAT_PROJECTILE_HIT, {
+                projectile_id: projectile.id,
+                target_id: target.user_id || target.id,
+                world_id: this.world.id,
+                zone_id: projectile.zone_id,
+            });
+            this.projectiles.delete(projectile.id);
+        }
+    }
+
+    _updateNpcs(dt, now) {
+        for (const npc of this.npcs.values()) {
+            if (npc.hp <= 0) {
+                if (npc.respawn_at && now >= npc.respawn_at) {
+                    npc.hp = npc.max_hp;
+                    npc.x = npc.home_x;
+                    npc.y = npc.home_y;
+                    npc.vx = 0;
+                    npc.vy = 0;
+                    npc.moving = false;
+                    npc.attack_anim_until = 0;
+                    npc.hit_flash_until = 0;
+                    npc.respawn_at = null;
+                    this._publish(npc.kind === 'boss' ? GAME_EVENT_TYPES.BOSS_SPAWNED : GAME_EVENT_TYPES.NPC_SPAWNED, {
+                        npc_id: npc.id,
+                        template_id: npc.template_id,
+                        world_id: this.world.id,
+                        zone_id: npc.zone_id,
+                    });
+                }
+                continue;
+            }
+            const players = Array.from(this.players.values()).filter((player) => player.zone_id === npc.zone_id && !player.dead);
+            if (!players.length) {
+                npc.aggro_target = null;
+                npc.vx = 0;
+                npc.vy = 0;
+                npc.moving = false;
+                continue;
+            }
+            let target = players.find((player) => player.user_id === npc.aggro_target) || null;
+            if (!target) {
+                let best = null;
+                let bestDistSq = (Number(npc.aggro_radius) || 0) ** 2;
+                for (const player of players) {
+                    const dx = npc.x - player.x;
+                    const dy = npc.y - player.y;
+                    const distSq = (dx * dx) + (dy * dy);
+                    if (distSq <= bestDistSq) {
+                        best = player;
+                        bestDistSq = distSq;
+                    }
+                }
+                target = best;
+                if (target && npc.aggro_target !== target.user_id) {
+                    npc.aggro_target = target.user_id;
+                    this._publish(GAME_EVENT_TYPES.NPC_AGGRO, {
+                        npc_id: npc.id,
+                        target_id: target.user_id,
+                        world_id: this.world.id,
+                        zone_id: npc.zone_id,
+                    });
+                }
+            }
+            if (!target) {
+                npc.vx = 0;
+                npc.vy = 0;
+                npc.moving = false;
+                continue;
+            }
+            const dx = target.x - npc.x;
+            const dy = target.y - npc.y;
+            const dist = Math.sqrt((dx * dx) + (dy * dy)) || 1;
+            npc.aim_x = target.x;
+            npc.aim_y = target.y;
+            if (Math.abs(dx) > 2) npc.facing = dx >= 0 ? 1 : -1;
+            if (dist > 28) {
+                const moveSpeed = Number(npc.speed || 60);
+                const stepX = (dx / dist) * (moveSpeed * dt);
+                const stepY = (dy / dist) * (moveSpeed * dt);
+                npc.x += stepX;
+                npc.y += stepY;
+                npc.vx = stepX / Math.max(dt, 1e-6);
+                npc.vy = stepY / Math.max(dt, 1e-6);
+                npc.moving = true;
+                npc.step_phase = Number(npc.step_phase || 0) + (Math.sqrt((npc.vx * npc.vx) + (npc.vy * npc.vy)) * dt * 0.04);
+            } else if (now >= (npc.cooldowns.attack || 0)) {
+                npc.cooldowns.attack = now + 1000;
+                npc.vx = 0;
+                npc.vy = 0;
+                npc.moving = false;
+                npc.attack_anim_until = now + 240;
+                this._applyDamage(target, npc, Number(npc.damage || 1), now);
+            } else {
+                npc.vx = 0;
+                npc.vy = 0;
+                npc.moving = false;
+            }
+            this._recordHistory(npc);
+        }
+    }
+
+    tick(dt, now) {
+        this.sequence += 1;
+        for (const player of this.players.values()) {
+            if (!player.dead) {
+                updatePlayerMovement(player, dt, this.bounds());
+                player.lastProcessedInputSeq = player.input && player.input.seq || player.lastProcessedInputSeq;
+                while (player.pendingActions.length) this._processAction(player, player.pendingActions.shift(), now);
+                if (!player.hold_until || now >= player.hold_until) player.held_item_id = this._defaultHeldItem(player);
+                this._recordHistory(player);
+                model.upsertPlayer({ user_id: player.user_id, x: player.x, y: player.y, zone: player.zone_id, hp: player.hp, stamina: Math.floor(player.stamina), world_id: this.world.id });
+            } else if (now >= player.dead_until && player.input && player.input.action === 'respawn') {
+                this._respawnPlayer(player);
+            }
+        }
+        for (const resource of this.resources.values()) {
+            if (maybeRespawnResource(resource, now)) {
+                this._publish(GAME_EVENT_TYPES.RESOURCE_RESPAWNED, { resource_id: resource.id, kind: resource.kind, world_id: this.world.id, zone_id: resource.zone_id });
+            }
+        }
+        this._updateNpcs(dt, now);
+        this._updateProjectiles(dt, now);
+        if (now - this.lastSnapshotAt >= Math.round(1000 / this.tickRate)) {
+            this.lastSnapshotAt = now;
+            this.broadcastSnapshots(now);
+        }
+        if (now - this.lastPersistAt >= 10000) {
+            this.lastPersistAt = now;
+            const snapshot = worldStore.recordSnapshot(this.world.id, worldSnapshotPayload(this));
+            this._publish(GAME_EVENT_TYPES.WORLD_SNAPSHOT_CREATED, { world_id: this.world.id, snapshot_id: snapshot.id, sequence: snapshot.sequence });
+        }
+    }
+
+    buildSnapshotForPlayer(player, now) {
+        const prompt = this._interactionPrompt(player);
+        const activeNpc = this._activeInteractionNpc(player);
+        const activeInteraction = activeNpc ? this._shopInteractionPayload(activeNpc) : null;
+        const sameZonePlayers = Array.from(this.players.values())
+            .filter((entry) => entry.zone_id === player.zone_id && entry.user_id !== player.user_id && !entry.dead)
+            .map((entry) => ({
+                id: entry.user_id,
+                kind: 'player',
+                display_name: entry.display_name,
+                x: entry.x,
+                y: entry.y,
+                vx: entry.vx,
+                vy: entry.vy,
+                hp: entry.hp,
+                max_hp: entry.max_hp,
+                zone_id: entry.zone_id,
+                facing: entry.facing || 1,
+                aim_x: entry.aim_x || (entry.x + ((entry.facing || 1) * 72)),
+                aim_y: entry.aim_y || entry.y,
+                held_item: entry.held_item_id || this._defaultHeldItem(entry),
+                equip_weapon: entry.equip_weapon || '',
+                attack_anim_until: Number(entry.attack_anim_until || 0),
+                hit_flash_until: Number(entry.hit_flash_until || 0),
+                sprinting: !!entry.sprinting,
+                moving: !!entry.moving,
+                step_phase: Number(entry.step_phase || 0),
+            }));
+        const npcs = Array.from(this.npcs.values())
+            .filter((entry) => entry.zone_id === player.zone_id && entry.hp > 0)
+            .map((entry) => ({
+                id: entry.id,
+                kind: entry.kind,
+                template_id: entry.template_id,
+                name: entry.name,
+                x: entry.x,
+                y: entry.y,
+                vx: entry.vx,
+                vy: entry.vy,
+                hp: entry.hp,
+                max_hp: entry.max_hp,
+                zone_id: entry.zone_id,
+                facing: entry.facing || 1,
+                aim_x: entry.aim_x || entry.x,
+                aim_y: entry.aim_y || entry.y,
+                held_item: entry.held_item_id || '',
+                attack_anim_until: Number(entry.attack_anim_until || 0),
+                hit_flash_until: Number(entry.hit_flash_until || 0),
+                moving: !!entry.moving,
+                step_phase: Number(entry.step_phase || 0),
+                interaction: entry.interaction ? { type: entry.interaction.type, title: entry.interaction.title || entry.name } : null,
+            }));
+        const resources = Array.from(this.resources.values())
+            .filter((entry) => entry.zone_id === player.zone_id && entry.hp > 0)
+            .map((entry) => ({ id: entry.id, kind: entry.kind, x: entry.x, y: entry.y, hp: entry.hp, max_hp: entry.max_hp, zone_id: entry.zone_id, hit_flash_until: Number(entry.hit_flash_until || 0) }));
+        const structures = Array.from(this.structures.values())
+            .filter((entry) => entry.zone_id === player.zone_id)
+            .map((entry) => ({ id: entry.id, kind: entry.type, x: entry.x, y: entry.y, owner_id: entry.owner_id, zone_id: entry.zone_id, size: entry.size || 48 }));
+        const loot = Array.from(this.loot.values())
+            .filter((entry) => entry.zone_id === player.zone_id)
+            .map((entry) => ({ id: entry.id, item_id: entry.item_id, quantity: entry.quantity, x: entry.x, y: entry.y, zone_id: entry.zone_id }));
+        const projectiles = Array.from(this.projectiles.values())
+            .filter((entry) => entry.zone_id === player.zone_id)
+            .map((entry) => ({ id: entry.id, x: entry.x, y: entry.y, vx: entry.vx, vy: entry.vy, owner_id: entry.owner_id, zone_id: entry.zone_id }));
+        return {
+            world: {
+                id: this.world.id,
+                slug: this.world.slug,
+                name: this.world.name,
+                zone_id: player.zone_id,
+                chunk_size: this.chunkSize,
+            },
+            tick: this.sequence,
+            server_time: now,
+            lastProcessedInputSeq: player.lastProcessedInputSeq || 0,
+            self: {
+                id: player.user_id,
+                display_name: player.display_name,
+                x: player.x,
+                y: player.y,
+                vx: player.vx,
+                vy: player.vy,
+                facing: player.facing || 1,
+                aim_x: player.aim_x || (player.x + ((player.facing || 1) * 72)),
+                aim_y: player.aim_y || player.y,
+                hp: player.hp,
+                max_hp: player.max_hp,
+                stamina: Math.round(player.stamina),
+                max_stamina: player.max_stamina,
+                zone_id: player.zone_id,
+                dead: !!player.dead,
+                moving: !!player.moving,
+                sprinting: !!player.sprinting,
+                step_phase: Number(player.step_phase || 0),
+                coins: Number(player.coins || 0),
+                loyalty_points: Number(player.loyalty_points || 0),
+                held_item: player.held_item_id || this._defaultHeldItem(player),
+                attack_anim_until: Number(player.attack_anim_until || 0),
+                hit_flash_until: Number(player.hit_flash_until || 0),
+                equipment: {
+                    weapon: player.equip_weapon || '',
+                    armor: player.equip_armor || '',
+                    axe: player.equip_axe || '',
+                    pickaxe: player.equip_pickaxe || '',
+                    rod: player.equip_rod || '',
+                },
+                levels: this._skillSnapshot(player),
+                skill_xp: this._skillXpSnapshot(player),
+                skill_progress: this._skillProgressSnapshot(player),
+                inventory: model.listInventory(player.user_id),
+                bank: model.listBank(player.user_id),
+                quests: model.listDailyQuests(player.user_id),
+                achievements: model.listAchievements(player.user_id),
+            },
+            interaction: {
+                prompt,
+                active: activeInteraction,
+            },
+            entities: {
+                players: visibleWithinAoi(player, sameZonePlayers, this.aoiRadius, { zone_id: player.zone_id }),
+                npcs: visibleWithinAoi(player, npcs, this.aoiRadius, { zone_id: player.zone_id }),
+                resources: visibleWithinAoi(player, resources, this.aoiRadius, { zone_id: player.zone_id }),
+                structures: visibleWithinAoi(player, structures, this.aoiRadius + 64, { zone_id: player.zone_id }),
+                loot: visibleWithinAoi(player, loot, this.aoiRadius, { zone_id: player.zone_id }),
+                projectiles: visibleWithinAoi(player, projectiles, this.aoiRadius, { zone_id: player.zone_id }),
+            },
+            chat: this._currentWorldChat(player.zone_id),
+            feed: this.feed.slice(-10),
+            performance: {
+                tick_rate: this.tickRate,
+                aoi_radius: this.aoiRadius,
+                players_in_room: this.players.size,
+                entities_visible: sameZonePlayers.length + npcs.length + resources.length + structures.length + loot.length,
+            },
+        };
+    }
+
+    broadcastSnapshots(now) {
+        for (const [socketId, player] of this.players.entries()) {
+            this.emitToSocket(socketId, 'snapshot', this.buildSnapshotForPlayer(player, now));
+        }
+    }
+
+    summary() {
+        return {
+            world_id: this.world.id,
+            world_slug: this.world.slug,
+            tick_rate: this.tickRate,
+            player_count: this.players.size,
+            npc_count: Array.from(this.npcs.values()).filter((npc) => npc.hp > 0).length,
+            resource_count: Array.from(this.resources.values()).filter((resource) => resource.hp > 0).length,
+            structure_count: this.structures.size,
+            loot_count: this.loot.size,
+            latest_feed: this.feed.slice(-5),
+        };
+    }
+}
+
+module.exports = { WorldRoom };

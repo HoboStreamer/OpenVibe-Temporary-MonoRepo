@@ -1,5 +1,6 @@
 'use strict';
 
+const { createServer } = require('http');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -12,12 +13,14 @@ const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
+const { createRealtimeRuntime } = require('./realtime');
 const { serviceActorMiddleware, userContextMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
 
     const eventBus = buildEventBus(config);
+    let realtime = null;
 
     const app = express();
     app.set('trust proxy', 1);
@@ -33,6 +36,7 @@ function buildApp() {
                 width: config.canvas && config.canvas.width,
                 height: config.canvas && config.canvas.height,
             },
+            realtime: realtime ? realtime.summary() : null,
         }),
         getReadiness: () => ({
             persistence: db.describePersistence(),
@@ -49,36 +53,49 @@ function buildApp() {
                     critical: true,
                     details: config.canvas || null,
                 },
+                {
+                    name: 'realtime_runtime',
+                    ok: true,
+                    critical: false,
+                    details: realtime ? realtime.summary() : { ok: false, reason: 'not initialized yet' },
+                },
             ],
         }),
     });
     runtime.attach(app);
 
     attachIconAssets(app, { routePrefix: '/assets' });
+    app.use('/vendor/pixi', express.static(path.resolve(__dirname, '..', '..', '..', 'node_modules', 'pixi.js', 'dist')));
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
-    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus }));
+    const httpServer = createServer(app);
+    realtime = createRealtimeRuntime({ httpServer, eventBus, config });
+    realtime.start();
+
+    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config }));
 
     app.use((err, _req, res, _next) => {
         console.error('[games] unhandled:', err.message);
         res.status(500).json({ error: 'internal error' });
     });
 
-    return { app };
+    return { app, httpServer, realtime };
 }
 
 function start() {
-    const { app } = buildApp();
-    const server = app.listen(config.port, config.host, () => {
+    const { httpServer, realtime } = buildApp();
+    const server = httpServer.listen(config.port, config.host, () => {
         console.log(`[openvibe-games] listening on http://${config.host}:${config.port}`);
     });
     const shutdown = () => {
         console.log('[openvibe-games] shutting down');
-        server.close(() => process.exit(0));
+        Promise.resolve(realtime && realtime.stop ? realtime.stop() : null)
+            .catch((err) => console.warn('[openvibe-games] realtime shutdown warning:', err.message))
+            .finally(() => server.close(() => process.exit(0)));
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
-    return { app, server };
+    return { server: httpServer, realtime };
 }
 
 if (require.main === module) start();

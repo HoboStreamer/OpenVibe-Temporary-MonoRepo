@@ -16,6 +16,8 @@ db.init(config.db.path);
 
 const model = require('../server/model');
 const policy = require('../server/policy');
+const { STARTER_WORLD } = require('../server/realtime/data/starter-world');
+const { WorldRoom } = require('../server/realtime/rooms/world-room');
 
 const player = model.upsertPlayer({
     user_id: '42',
@@ -99,5 +101,76 @@ assert.strictEqual(policy.decideCanvasModeration({ req: reqService }).allow, tru
 
 const leaderboard = model.listLeaderboard('coins', 5);
 assert.strictEqual(leaderboard[0].user_id, '42');
+
+const shopper = model.upsertPlayer({
+    user_id: 'shopper',
+    display_name: 'Quartermaster Fan',
+    coins: 100,
+    zone: 'outpost',
+    x: 4160,
+    y: 4032,
+});
+assert.strictEqual(shopper.coins, 100);
+
+const room = new WorldRoom({
+    world: { id: 'world:test:2d-world', slug: STARTER_WORLD.slug, name: STARTER_WORLD.name },
+    worldDefinition: STARTER_WORLD,
+    publish: () => {},
+    emitToSocket: () => {},
+    tickRate: 20,
+});
+
+room.join({
+    socketId: 'socket-shopper',
+    userId: 'shopper',
+    displayName: 'Quartermaster Fan',
+    zoneId: 'outpost',
+});
+
+const roomPlayer = room.players.get('socket-shopper');
+roomPlayer.x = 4160;
+roomPlayer.y = 4032;
+roomPlayer.zone_id = 'outpost';
+
+const promptSnapshot = room.buildSnapshotForPlayer(roomPlayer, Date.now());
+assert.ok(promptSnapshot.interaction.prompt);
+assert.ok(promptSnapshot.interaction.prompt.label.includes('Browse tools and starter weapons'));
+
+const interactNow = Date.now();
+const interactResult = room.receiveInput('socket-shopper', {
+    seq: 1,
+    dt: 0.05,
+    sent_at: interactNow,
+    keys: {},
+    aim: { x: 4168, y: 4028 },
+    action: 'interact',
+});
+assert.strictEqual(interactResult.ok, true);
+room.tick(0.05, interactNow + 50);
+
+const openSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 60);
+assert.ok(openSnapshot.interaction.active);
+assert.strictEqual(openSnapshot.interaction.active.type, 'shop');
+assert.strictEqual(openSnapshot.interaction.active.npc_id.startsWith('npc_'), true);
+assert.ok(openSnapshot.interaction.active.items.some((entry) => entry.item_id === 'stone_spear'));
+
+const purchaseResult = room.handleShopPurchase(roomPlayer, {
+    npc_id: openSnapshot.interaction.active.npc_id,
+    item_id: 'stone_spear',
+    quantity: 1,
+});
+assert.strictEqual(purchaseResult.ok, true);
+assert.strictEqual(purchaseResult.remaining_coins, 72);
+assert.strictEqual(roomPlayer.coins, 72);
+assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
+assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
+assert.ok(model.listInventory('shopper').some((entry) => entry.item_id === 'stone_spear' && entry.quantity >= 1));
+
+const closeResult = room.closeInteraction(roomPlayer);
+assert.strictEqual(closeResult.ok, true);
+const closedSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 120);
+assert.strictEqual(closedSnapshot.interaction.active, null);
+assert.ok(closedSnapshot.interaction.prompt);
+assert.ok(closedSnapshot.interaction.prompt.label.startsWith('E · '));
 
 console.log('openvibe-games smoke OK');
