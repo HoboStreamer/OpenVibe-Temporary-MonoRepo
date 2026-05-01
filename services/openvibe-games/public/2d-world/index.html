@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OpenVibe Games · 2D World</title>
+    <title>SourceVibe Engine · 2D World</title>
     <link rel="stylesheet" href="./src/styles/game.css" />
 </head>
 <body>
@@ -12,18 +12,19 @@
         <div id="hud-root"></div>
         <div id="overlay-ui">
             <section id="welcome-root" class="hero-card overlay-card welcome-card">
-                <h1>2D World Rebirth</h1>
-                <p>The OpenVibe-native MMO sandbox—now rebuilt around fullscreen play, contextual overlays, server-authoritative shops, and smoother movement/combat feel.</p>
+                <h1>2D World</h1>
+                <p>The flagship <strong>SourceVibe Engine</strong> gamemode for survival, crafting, travel, mods, and fullscreen play.</p>
                 <div class="field-row">
                     <input id="user-id" placeholder="User ID" />
                     <input id="display-name" placeholder="Display name" />
                 </div>
                 <div class="button-row">
                     <button id="connect-btn" class="primary">Enter world</button>
+                    <a href="/sourcevibe" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Launcher</a>
                     <a href="./editor/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Editor</a>
                     <a href="./status/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Status</a>
                 </div>
-                <div id="join-info" class="empty">Connect to join the starter outpost shard.</div>
+                <div id="join-info" class="empty">Connect to join the official 2D World shard, or use the SourceVibe launcher to browse servers.</div>
             </section>
             <section id="console-root" class="panel overlay-panel left-panel hidden"></section>
             <section id="settings-root" class="panel overlay-panel right-panel hidden"></section>

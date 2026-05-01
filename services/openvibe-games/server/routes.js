@@ -4,9 +4,10 @@ const express = require('express');
 const model = require('./model');
 const policy = require('./policy');
 const { build2dWorldRouter } = require('./routes-2dworld');
+const { buildSourceVibeRouter } = require('./routes/sourcevibe-routes');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
 
-function buildRouter({ eventBus, realtime, config }) {
+function buildRouter({ eventBus, realtime, config, sourcevibe }) {
     const r = express.Router();
     const json = express.json({ limit: '512kb' });
 
@@ -53,6 +54,11 @@ function buildRouter({ eventBus, realtime, config }) {
     r.get('/realtime/status', (_req, res) => {
         res.json(realtime ? realtime.summary() : { ok: false, error: 'realtime unavailable' });
     });
+
+    r.use('/sourcevibe', buildSourceVibeRouter({
+        sourcevibe,
+        actorOfReq: actor,
+    }));
 
     r.use('/2d-world', build2dWorldRouter({ eventBus, realtime, config }));
 

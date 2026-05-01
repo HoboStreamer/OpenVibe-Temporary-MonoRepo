@@ -14,6 +14,7 @@ const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { createRealtimeRuntime } = require('./realtime');
+const { createSourceVibeEngine } = require('./sourcevibe');
 const { serviceActorMiddleware, userContextMiddleware } = require('./middleware');
 
 function buildApp() {
@@ -21,6 +22,7 @@ function buildApp() {
 
     const eventBus = buildEventBus(config);
     let realtime = null;
+    let sourcevibe = null;
 
     const app = express();
     app.set('trust proxy', 1);
@@ -37,6 +39,7 @@ function buildApp() {
                 height: config.canvas && config.canvas.height,
             },
             realtime: realtime ? realtime.summary() : null,
+            sourcevibe: sourcevibe ? sourcevibe.summary() : null,
         }),
         getReadiness: () => ({
             persistence: db.describePersistence(),
@@ -59,6 +62,12 @@ function buildApp() {
                     critical: false,
                     details: realtime ? realtime.summary() : { ok: false, reason: 'not initialized yet' },
                 },
+                {
+                    name: 'sourcevibe_runtime',
+                    ok: true,
+                    critical: false,
+                    details: sourcevibe ? sourcevibe.summary() : { ok: false, reason: 'not initialized yet' },
+                },
             ],
         }),
     });
@@ -71,8 +80,9 @@ function buildApp() {
     const httpServer = createServer(app);
     realtime = createRealtimeRuntime({ httpServer, eventBus, config });
     realtime.start();
+    sourcevibe = createSourceVibeEngine({ realtime, eventBus, config });
 
-    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config }));
+    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config, sourcevibe }));
 
     app.use((err, _req, res, _next) => {
         console.error('[games] unhandled:', err.message);

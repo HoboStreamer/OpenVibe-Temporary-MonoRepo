@@ -1,0 +1,32 @@
+{
+  "id": "2dworld_outpost",
+  "name": "2D World Outpost",
+  "title": "2D World Outpost",
+  "kind": "gamemode",
+  "size": {
+    "width": 8192,
+    "height": 8192
+  },
+  "spawnPoints": [
+    { "id": "outpost_spawn", "x": 4096, "y": 4096 },
+    { "id": "woods_spawn", "x": 3300, "y": 4300 }
+  ],
+  "collision": {
+    "solids": [
+      { "x": 3710, "y": 3840, "width": 280, "height": 96 },
+      { "x": 4290, "y": 3840, "width": 300, "height": 96 }
+    ]
+  },
+  "travelNodes": [
+    { "id": "outpost", "name": "Outpost", "x": 4096, "y": 4096 },
+    { "id": "timberfall", "name": "Timberfall", "x": 3320, "y": 4380 },
+    { "id": "ironridge", "name": "Ironridge", "x": 4940, "y": 3700 }
+  ],
+  "layers": {
+    "background": "starter-world",
+    "detail": [
+      { "type": "campfire", "x": 4075, "y": 4090 },
+      { "type": "shop-stall", "x": 4180, "y": 4015 }
+    ]
+  }
+}
