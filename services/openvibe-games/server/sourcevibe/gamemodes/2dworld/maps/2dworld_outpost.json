@@ -1,0 +1,55 @@
+{
+  "id": "2dworld_outpost",
+  "name": "2D World Outpost",
+  "title": "2D World Outpost",
+  "kind": "png_map",
+  "size": {
+    "width": 16384,
+    "height": 16384
+  },
+  "spawnPoints": [
+    { "id": "outpost_spawn", "x": 4096, "y": 4096 },
+    { "id": "woods_spawn", "x": 3300, "y": 4300 }
+  ],
+  "collision": {
+    "solids": [
+      { "x": 3710, "y": 3840, "width": 280, "height": 96 },
+      { "x": 4290, "y": 3840, "width": 300, "height": 96 }
+    ]
+  },
+  "travelNodes": [
+    { "id": "outpost", "name": "Outpost", "x": 4096, "y": 4096 },
+    { "id": "timberfall", "name": "Timberfall", "x": 3320, "y": 4380 },
+    { "id": "ironridge", "name": "Ironridge", "x": 4940, "y": 3700 }
+  ],
+  "layers": {
+    "background": {
+      "id": "classic-map-main",
+      "type": "image",
+      "file": "map-main.png",
+      "alpha": 0.96,
+      "fit": "bounds"
+    },
+    "detail": [
+      { "id": "classic-outpost-bus", "type": "image", "file": "bus.png", "x": 3920, "y": 4016, "w": 168, "h": 104, "anchorX": 0.5, "anchorY": 0.88, "alpha": 0.96 },
+      { "id": "classic-outpost-campfire", "type": "image", "file": "campfire.png", "x": 4078, "y": 4110, "w": 56, "h": 56, "anchorX": 0.5, "anchorY": 0.78, "alpha": 0.95 },
+      { "id": "classic-outpost-furnace", "type": "image", "file": "furnace.png", "x": 4188, "y": 4038, "w": 76, "h": 96, "anchorX": 0.5, "anchorY": 0.9, "alpha": 0.92 },
+      { "id": "classic-dock-boat", "type": "image", "file": "boat-small.png", "x": 2420, "y": 4448, "w": 150, "h": 88, "anchorX": 0.5, "anchorY": 0.82, "alpha": 0.96 },
+      { "id": "classic-glasslake-water", "type": "image", "file": "water.png", "x": 8350, "y": 7420, "w": 1840, "h": 1420, "anchorX": 0.5, "anchorY": 0.5, "alpha": 0.4 },
+      { "id": "classic-outpost-tree-a", "type": "image", "file": "tree.png", "x": 4308, "y": 3920, "w": 108, "h": 136, "anchorX": 0.5, "anchorY": 0.88, "alpha": 0.88 },
+      { "id": "classic-outpost-tree-b", "type": "image", "file": "tree-oak.png", "x": 3852, "y": 3952, "w": 118, "h": 144, "anchorX": 0.5, "anchorY": 0.88, "alpha": 0.9 }
+    ]
+  },
+  "editorPalette": [
+    { "id": "tree", "type": "resource", "label": "Tree", "sprite": "tree-oak.png" },
+    { "id": "rock", "type": "resource", "label": "Rock", "sprite": "rock.png" },
+    { "id": "bush", "type": "resource", "label": "Bush", "sprite": "bush.png" },
+    { "id": "wall", "type": "structure", "label": "Wall", "sprite": "wall-wood.png" },
+    { "id": "door", "type": "structure", "label": "Door", "sprite": "door.png" },
+    { "id": "chest", "type": "structure", "label": "Chest", "sprite": "chest.png" },
+    { "id": "furnace", "type": "structure", "label": "Furnace", "sprite": "furnace.png" },
+    { "id": "campfire", "type": "structure", "label": "Campfire", "sprite": "campfire.png" },
+    { "id": "boat", "type": "prop", "label": "Boat", "sprite": "boat-small.png" },
+    { "id": "bus", "type": "prop", "label": "Bus", "sprite": "bus.png" }
+  ]
+}

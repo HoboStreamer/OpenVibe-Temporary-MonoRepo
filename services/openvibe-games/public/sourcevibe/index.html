@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SourceVibe Engine</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+    <div id="app-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">OpenVibe Games Platform</p>
+                <h1>SourceVibe Engine</h1>
+                <p class="subtitle">A real engine shell for gamemodes, addons, console commands, options, server browsing, and inventory hotbar flow.</p>
+            </div>
+            <form id="identity-form" class="identity-card">
+                <label>
+                    <span>User ID</span>
+                    <input id="identity-user-id" name="userId" autocomplete="off" />
+                </label>
+                <label>
+                    <span>Display name</span>
+                    <input id="identity-display-name" name="displayName" autocomplete="off" />
+                </label>
+                <button type="submit">Apply identity</button>
+            </form>
+        </header>
+
+        <main class="workspace">
+            <nav class="sidebar" id="sidebar-nav">
+                <button data-panel="launcher" class="nav-button active">Launcher</button>
+                <button data-panel="servers" class="nav-button">Servers</button>
+                <button data-panel="gamemodes" class="nav-button">Gamemodes</button>
+                <button data-panel="console" class="nav-button">Console</button>
+                <button data-panel="options" class="nav-button">Options</button>
+                <button data-panel="inventory" class="nav-button">Inventory</button>
+            </nav>
+
+            <section class="viewport">
+                <div id="status-banner" class="status-banner">Booting SourceVibe…</div>
+                <section id="panel-launcher" class="panel-frame"></section>
+                <section id="panel-servers" class="panel-frame hidden"></section>
+                <section id="panel-gamemodes" class="panel-frame hidden"></section>
+                <section id="panel-console" class="panel-frame hidden"></section>
+                <section id="panel-options" class="panel-frame hidden"></section>
+                <section id="panel-inventory" class="panel-frame hidden"></section>
+            </section>
+
+            <aside class="dock">
+                <section class="dock-card">
+                    <h2>Quick launch</h2>
+                    <div id="quick-launch"></div>
+                </section>
+                <section class="dock-card">
+                    <h2>Hotbar</h2>
+                    <div id="hotbar-grid" class="hotbar-grid"></div>
+                </section>
+                <section class="dock-card">
+                    <h2>Engine stats</h2>
+                    <div id="engine-stats" class="stats-list"></div>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -147,6 +147,8 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
         }
     };
 
+    let sourcevibe = null;
+
     const rootWorld = seedStarterContent({ publish });
     const worldRooms = new Map();
     const dungeonRooms = new Map();
@@ -202,7 +204,18 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
             return dungeonRooms.get(key);
         }
         if (!worldRooms.has(key)) {
-            worldRooms.set(key, new WorldRoom({
+            const host = sourcevibe && typeof sourcevibe.createRoomHost === 'function'
+                ? sourcevibe.createRoomHost({
+                    world,
+                    roomType,
+                    worldDefinition: catalog.world_definition,
+                    catalog,
+                    publish,
+                    emitToSocket,
+                    tickRate: Number(process.env.OPENVIBE_GAMES_TICK_RATE) || 20,
+                })
+                : null;
+            worldRooms.set(key, host || new WorldRoom({
                 world,
                 worldDefinition: catalog.world_definition,
                 catalog,
@@ -214,6 +227,10 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
             worldRooms.get(key).setCatalog(catalog);
         }
         return worldRooms.get(key);
+    }
+
+    function currentRoom(socket) {
+        return worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey) || null;
     }
 
     io.on('connection', (socket) => {
@@ -250,71 +267,95 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
         });
 
         socket.on('input', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
+            const room = currentRoom(socket);
             const result = room ? room.receiveInput(socket.id, payload) : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('chat:send', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
+            const room = currentRoom(socket);
             const result = room ? room.sendChat(socket.id, payload && payload.message) : { ok: false, reason: 'room not joined' };
             if (result.ok) io.to(socket.data.roomKey).emit('chat:message', result.message);
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('craft', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room._handleCraft(player, { recipe_id: payload && payload.recipe_id || payload && payload.recipeId }) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.craft === 'function'
+                ? room.craft(socket.id, { recipe_id: payload && payload.recipe_id || payload && payload.recipeId })
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('build', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room._handleBuild(player, payload || {}) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.build === 'function'
+                ? room.build(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('shop:buy', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room.handleShopPurchase(player, payload || {}) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.buyFromShop === 'function'
+                ? room.buyFromShop(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('inventory:equip', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room.handleInventoryEquip(player, payload || {}) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.equipInventory === 'function'
+                ? room.equipInventory(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
+            if (typeof callback === 'function') callback(result);
+        });
+
+        socket.on('hotbar:update', (payload, callback) => {
+            const room = currentRoom(socket);
+            const result = room && typeof room.updateHotbar === 'function'
+                ? room.updateHotbar(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
+            if (typeof callback === 'function') callback(result);
+        });
+
+        socket.on('inventory:drop', (payload, callback) => {
+            const room = currentRoom(socket);
+            const result = room && typeof room.dropInventory === 'function'
+                ? room.dropInventory(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('interaction:close', (_payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room.closeInteraction(player) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.closeInteraction === 'function'
+                ? room.closeInteraction(socket.id)
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('travel', (payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room._handleTravel(player, payload || {}) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.travel === 'function'
+                ? room.travel(socket.id, payload || {})
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('pickup', (_payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room._handleInteract(player, Date.now()) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.pickup === 'function'
+                ? room.pickup(socket.id)
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
         socket.on('respawn', (_payload, callback) => {
-            const room = worldRooms.get(socket.data.roomKey) || dungeonRooms.get(socket.data.roomKey);
-            const player = room && room.players.get(socket.id);
-            const result = player ? room._processAction(player, { action: 'respawn' }, Date.now()) : { ok: false, reason: 'room not joined' };
+            const room = currentRoom(socket);
+            const result = room && typeof room.respawn === 'function'
+                ? room.respawn(socket.id)
+                : { ok: false, reason: 'room not joined' };
             if (typeof callback === 'function') callback(result);
         });
 
@@ -370,6 +411,10 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
         editorRoom,
         ticker,
         rootWorld,
+        attachSourceVibe(engine) {
+            sourcevibe = engine || null;
+            return sourcevibe;
+        },
         get catalog() {
             return getCatalog(rootWorld.id);
         },

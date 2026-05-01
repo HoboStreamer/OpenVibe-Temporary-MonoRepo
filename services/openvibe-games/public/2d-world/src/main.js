@@ -8,7 +8,7 @@ import { reconcileLocalState } from './net/reconciliation.js';
 import { interpolateEntity } from './engine/interpolation.js';
 import { HudPanel } from './ui/hud.js';
 import { ChatPanel } from './ui/chat-panel.js';
-import { InventoryPanel } from './ui/inventory-panel.js';
+import { InventoryPanel } from './gamemodes/2dworld/ui/inventory-panel.js';
 import { CraftingPanel } from './ui/crafting-panel.js';
 import { SkillsPanel } from './ui/skills-panel.js';
 import { BuildMenu } from './ui/build-menu.js';
@@ -17,17 +17,27 @@ import { DeathPanel } from './ui/death-panel.js';
 import { ModBrowser } from './ui/mod-browser.js';
 import { LootPanel } from './ui/loot-panel.js';
 import { ShopPanel } from './ui/shop-panel.js';
-import { ConsolePanel } from './ui/console-panel.js';
+import { ConsolePanel } from './gamemodes/2dworld/ui/console-panel.js';
 import { SettingsPanel } from './ui/settings-panel.js';
+import { MenuPanel } from './gamemodes/2dworld/ui/menu-panel.js';
+import { createSourceVibeGlobal } from './sourcevibe-global.js';
 
 const UTILITY_PANELS = ['inventory', 'crafting', 'skills', 'build', 'map', 'mods', 'console', 'settings'];
 const SETTINGS_STORAGE_KEY = 'openvibe.games.2dworld.settings.v1';
 const DEFAULT_SETTINGS = Object.freeze({
     hudFade: true,
-    showFeed: true,
-    showHotkeys: true,
+    showFeed: false,
+    showHotkeys: false,
     interpolationDelayMs: 75,
     selfSmoothing: 0.22,
+    mouseSensitivity: 1,
+});
+
+const query = new URLSearchParams(window.location.search);
+const queryState = Object.freeze({
+    serverId: query.get('server') || query.get('world') || '2d-world',
+    gamemodeId: query.get('gamemode') || '2dworld',
+    zoneId: query.get('zone') || 'outpost',
 });
 
 function clamp(value, min, max) {
@@ -37,10 +47,11 @@ function clamp(value, min, max) {
 function sanitizeSettings(value = {}) {
     return {
         hudFade: value.hudFade !== false,
-        showFeed: value.showFeed !== false,
-        showHotkeys: value.showHotkeys !== false,
+        showFeed: value.showFeed === true,
+        showHotkeys: value.showHotkeys === true,
         interpolationDelayMs: clamp(Math.round(Number(value.interpolationDelayMs) || DEFAULT_SETTINGS.interpolationDelayMs), 40, 160),
         selfSmoothing: clamp(Number(value.selfSmoothing) || DEFAULT_SETTINGS.selfSmoothing, 0.08, 0.55),
+        mouseSensitivity: clamp(Number(value.mouseSensitivity) || DEFAULT_SETTINGS.mouseSensitivity, 0.4, 2.5),
     };
 }
 
@@ -58,6 +69,7 @@ function saveClientSettings(settings) {
 
 const state = {
     identity: loadIdentity(),
+    query: queryState,
     connectionText: 'disconnected',
     pingMs: 0,
     fps: 0,
@@ -70,11 +82,19 @@ const state = {
     latestSnapshot: null,
     buildSelection: null,
     catalog: { items: [], itemMap: {}, skills: [], definitions: {}, mods: [], worldDefinition: { bounds: { x: 0, y: 0, w: 8192, h: 8192 } } },
-    panels: { chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, console: false, settings: false, loot: false, shop: false },
+    panels: { menu: false, chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, console: false, settings: false, loot: false, shop: false },
     hudActiveUntil: performance.now() + 8000,
     snapshotBuffer: new SnapshotBuffer(45),
     settings: loadClientSettings(),
+    settingsDraft: null,
+    settingsUi: { activeTab: 'keyboard', bindEdits: {}, cvarEdits: {} },
+    sourcevibeBootstrap: null,
     consoleLogs: [],
+    consoleCommand: '',
+    consoleFilter: '',
+    consoleSuggestions: [],
+    consoleHistory: [],
+    consoleHistoryIndex: -1,
     correctionErrorPx: 0,
     lastRenderSelfAt: 0,
     lastOverlayRefreshAt: 0,
@@ -89,6 +109,7 @@ const dom = {
     joinInfo: document.getElementById('join-info'),
     gameCanvas: document.getElementById('game-canvas'),
     hud: document.getElementById('hud-root'),
+    menu: document.getElementById('menu-root'),
     console: document.getElementById('console-root'),
     settings: document.getElementById('settings-root'),
     chat: document.getElementById('chat-root'),
@@ -111,6 +132,7 @@ const chat = new ChatPanel(dom.chat);
 const death = new DeathPanel(dom.death);
 const consolePanel = new ConsolePanel(dom.console);
 const settingsPanel = new SettingsPanel(dom.settings);
+const menuPanel = new MenuPanel(dom.menu);
 let inventory = null;
 let skills = null;
 let mods = null;
@@ -133,9 +155,147 @@ function addConsoleLog(message, level = 'info') {
     }].slice(-80);
 }
 
+function sourcevibeConsole() {
+    return state.sourcevibeBootstrap && state.sourcevibeBootstrap.console || { commands: [], cvars: [], binds: [], suggestions: [] };
+}
+
+function sourcevibeInventoryLayout() {
+    const layout = state.sourcevibeBootstrap && state.sourcevibeBootstrap.inventory && state.sourcevibeBootstrap.inventory.layout
+        || state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemodeUi && state.sourcevibeBootstrap.gamemodeUi.inventory
+        || {};
+    return {
+        rows: Number(layout.rows) || 5,
+        cols: Number(layout.cols) || 8,
+        hotbarSlots: Number(layout.hotbar || layout.hotbarSlots) || 9,
+        owner: layout.owner || null,
+        showBankOnInteractionOnly: layout.showBankOnInteractionOnly === true || layout.bank_interaction_only === true,
+    };
+}
+
+function normalizeKeyToken(value) {
+    const token = String(value == null ? '' : value).trim().toLowerCase();
+    if (!token) return '';
+    if (token === ' ') return 'space';
+    if (token === 'spacebar') return 'space';
+    return token;
+}
+
+function eventKeyToken(event) {
+    return normalizeKeyToken(event && event.key === ' ' ? 'space' : event && event.key);
+}
+
+function isSourceVibeBound(event, command) {
+    const key = eventKeyToken(event);
+    return sourcevibeConsole().binds.some((entry) => normalizeKeyToken(entry.key) === key && String(entry.command || '').toLowerCase() === String(command || '').toLowerCase());
+}
+
+function buildHotkeyLegend() {
+    const bindMap = new Map(sourcevibeConsole().binds.map((entry) => [String(entry.command || '').toLowerCase(), entry.key]));
+    return [
+        `${bindMap.get('toggleinventory') || 'I'} inventory`,
+        `${bindMap.get('togglecrafting') || 'C'} craft`,
+        'K skills',
+        'G build',
+        `${bindMap.get('togglemap') || 'M'} map`,
+        `${bindMap.get('toggleconsole') || '`'} console`,
+        `${bindMap.get('showmenu') || 'Esc'} menu`,
+        'F1 options',
+    ].join(' · ');
+}
+
+function refreshConsoleSuggestions() {
+    const needle = String(state.consoleCommand || '').trim().toLowerCase();
+    const suggestions = [];
+    for (const entry of sourcevibeConsole().commands || []) {
+        suggestions.push({ name: entry.name, description: entry.description || entry.help || 'command', source: 'command' });
+    }
+    for (const entry of sourcevibeConsole().cvars || []) {
+        suggestions.push({ name: entry.name, description: entry.description || entry.help || 'cvar', source: 'cvar' });
+    }
+    for (const entry of state.sourcevibeBootstrap && state.sourcevibeBootstrap.console && state.sourcevibeBootstrap.console.suggestions || []) {
+        suggestions.push(typeof entry === 'string' ? { name: entry, description: 'suggestion', source: 'suggestion' } : entry);
+    }
+    const deduped = [];
+    const seen = new Set();
+    for (const entry of suggestions) {
+        const key = String(entry && entry.name || '').toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(entry);
+    }
+    state.consoleSuggestions = deduped.filter((entry) => !needle || String(entry.name || '').toLowerCase().includes(needle)).slice(0, 12);
+}
+
+function syncSettingsDraft(force = false) {
+    if (force || !state.settingsDraft) state.settingsDraft = sanitizeSettings(state.settings);
+    if (force || !Object.keys(state.settingsUi.bindEdits || {}).length) {
+        state.settingsUi.bindEdits = Object.fromEntries((sourcevibeConsole().binds || []).map((entry) => [entry.command, entry.key || '']));
+    }
+    if (force || !Object.keys(state.settingsUi.cvarEdits || {}).length) {
+        state.settingsUi.cvarEdits = Object.fromEntries((sourcevibeConsole().cvars || []).map((entry) => [entry.name, entry.value]));
+    }
+}
+
+function installSourceVibeGlobal() {
+    window.SV = createSourceVibeGlobal({
+        getBootstrap: () => state.sourcevibeBootstrap,
+        getSnapshot: () => state.latestSnapshot,
+        runCommand: (command) => runSourceVibeCommand(command),
+        openPanel: (name) => openSourceVibePanel(name),
+        closePanel: (name) => closeSourceVibePanel(name),
+        togglePanel: (name) => toggleSourceVibePanel(name),
+        sendNetPacket: (packet) => {
+            addConsoleLog(`net packet queued locally: ${packet && packet.name || 'unnamed'}`);
+            return { ok: true, packet };
+        },
+    });
+    window._G = window.SV.compat.createLegacyGlobalForGamemode(state.query.gamemodeId);
+}
+
+async function loadSourceVibeBootstrap() {
+    const params = new URLSearchParams({
+        gamemode: state.query.gamemodeId,
+        server: state.query.serverId,
+        userId: state.identity.userId,
+        displayName: state.identity.displayName,
+    });
+    state.sourcevibeBootstrap = await apiJson(`${API_BASE}/sourcevibe/bootstrap?${params.toString()}`, {}, state.identity);
+    syncSettingsDraft(true);
+    refreshConsoleSuggestions();
+    installSourceVibeGlobal();
+    document.title = `${state.sourcevibeBootstrap && state.sourcevibeBootstrap.engine && state.sourcevibeBootstrap.engine.name || 'SourceVibe Engine'} · ${state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemode && state.sourcevibeBootstrap.gamemode.title || '2D World'}`;
+    if (dom.hotkeys) dom.hotkeys.textContent = buildHotkeyLegend();
+    const welcomeTitle = dom.welcome && dom.welcome.querySelector('h1');
+    const welcomeBody = dom.welcome && dom.welcome.querySelector('p');
+    if (welcomeTitle) welcomeTitle.textContent = state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemode && state.sourcevibeBootstrap.gamemode.title || '2D World';
+    if (welcomeBody) welcomeBody.innerHTML = `The flagship <strong>${state.sourcevibeBootstrap && state.sourcevibeBootstrap.engine && state.sourcevibeBootstrap.engine.name || 'SourceVibe Engine'}</strong> gamemode for survival, crafting, travel, mods, and fullscreen play.`;
+    return state.sourcevibeBootstrap;
+}
+
+function currentMenuButtons() {
+    const menu = state.sourcevibeBootstrap && state.sourcevibeBootstrap.menu || {};
+    const labels = client ? (menu.connected || []) : (menu.disconnected || []);
+    return labels.map((label) => ({
+        id: String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        label,
+        description: label === 'Resume Game'
+            ? 'Return to live play.'
+            : label === 'Find Servers'
+                ? 'Browse SourceVibe servers in the launcher.'
+                : label === 'Create Server'
+                    ? 'Jump to the launcher and spin up a shard.'
+                    : label === 'Console'
+                        ? 'Open the SourceVibe command console.'
+                        : label === 'Options'
+                            ? 'Tune binds, cvars, and client presentation.'
+                            : '',
+    }));
+}
+
 function applyClientSettings() {
     document.body.classList.toggle('hide-hud-feed', !state.settings.showFeed);
     document.body.classList.toggle('hide-panel-hotkeys', !state.settings.showHotkeys);
+    if (dom.hotkeys) dom.hotkeys.textContent = buildHotkeyLegend();
     if (!state.settings.hudFade) document.body.classList.remove('hud-resting');
 }
 
@@ -149,15 +309,189 @@ function overlayMeta() {
         interpolationDelayMs: state.settings.interpolationDelayMs,
         selfSmoothing: state.settings.selfSmoothing,
         correctionErrorPx: state.correctionErrorPx,
+        showPos: Number(state.settingsUi.cvarEdits.cl_showpos || 0) > 0,
     };
 }
 
+function openSourceVibePanel(name) {
+    const id = String(name || '').toLowerCase();
+    if (id === 'menu' || id === 'mainmenu') return toggleMenuPanel(true);
+    if (id === 'console') return toggleUtilityPanel('console', true);
+    if (id === 'settings' || id === 'options') return toggleUtilityPanel('settings', true);
+    if (id === 'inventory') return toggleUtilityPanel('inventory', true);
+    if (id === 'crafting') return toggleUtilityPanel('crafting', true);
+    if (id === 'map') return toggleUtilityPanel('map', true);
+    if (id === 'mods' || id === 'addons') return toggleUtilityPanel('mods', true);
+    return null;
+}
+
+function closeSourceVibePanel(name) {
+    const id = String(name || '').toLowerCase();
+    if (id === 'menu' || id === 'mainmenu') return toggleMenuPanel(false);
+    if (id === 'console') return toggleUtilityPanel('console', false);
+    if (id === 'settings' || id === 'options') return toggleUtilityPanel('settings', false);
+    if (UTILITY_PANELS.includes(id)) return toggleUtilityPanel(id, false);
+    return null;
+}
+
+function toggleSourceVibePanel(name) {
+    const id = String(name || '').toLowerCase();
+    if (id === 'menu' || id === 'mainmenu') return toggleMenuPanel(!state.panels.menu);
+    if (UTILITY_PANELS.includes(id)) return toggleUtilityPanel(id, !state.panels[id]);
+    return openSourceVibePanel(id);
+}
+
+async function disconnectClient() {
+    if (client && client.socket) client.socket.disconnect();
+    client = null;
+    state.connectionText = 'disconnected';
+    state.pendingInputs = [];
+    state.localSelf = null;
+    state.renderSelf = null;
+    state.latestSnapshot = null;
+    state.buildSelection = null;
+    closeAllPanels();
+    dom.joinInfo.textContent = 'Disconnected. Choose a server from the launcher or reconnect here.';
+    dom.joinInfo.classList.remove('empty');
+    dom.welcome.classList.remove('playing');
+    dom.welcome.classList.add('connected');
+    addConsoleLog('Disconnected from the active server.', 'warn');
+}
+
+async function handleMenuAction(actionId) {
+    switch (actionId) {
+    case 'resume-game':
+        toggleMenuPanel(false);
+        break;
+    case 'disconnect':
+        await disconnectClient();
+        break;
+    case 'player-list':
+        addConsoleLog('Player list is available in-world via snapshots; richer scoreboard pass still pending.', 'info');
+        toggleMenuPanel(false);
+        break;
+    case 'find-servers':
+    case 'create-server':
+    case 'gamemodes':
+    case 'addons':
+    case 'quit':
+        window.location.assign('/sourcevibe');
+        break;
+    case 'options':
+        toggleMenuPanel(false);
+        toggleUtilityPanel('settings', true);
+        break;
+    case 'console':
+        toggleMenuPanel(false);
+        toggleUtilityPanel('console', true);
+        break;
+    default:
+        break;
+    }
+}
+
+async function runSourceVibeCommand(command) {
+    const raw = String(command || '').trim();
+    if (!raw) return { ok: false, reason: 'empty command' };
+    state.consoleHistory = [...state.consoleHistory.filter((entry) => entry !== raw), raw].slice(-40);
+    state.consoleHistoryIndex = state.consoleHistory.length;
+    addConsoleLog(`] ${raw}`);
+    state.consoleCommand = '';
+    refreshConsoleSuggestions();
+    const result = await apiJson(`${API_BASE}/sourcevibe/console/run`, {
+        method: 'POST',
+        body: JSON.stringify({
+            command: raw,
+            lastServerId: state.query.serverId,
+        }),
+    }, state.identity);
+    const output = result && result.output;
+    if (output === '__CLEAR__') {
+        state.consoleLogs = [];
+    } else if (Array.isArray(output)) {
+        output.forEach((line) => addConsoleLog(String(line), result.ok === false ? 'warn' : 'info'));
+    } else if (typeof output === 'string' && output.trim()) {
+        if (output === 'toggleconsole') {
+            toggleUtilityPanel('console', !state.panels.console);
+        } else if (output === 'showmenu') {
+            toggleMenuPanel(true);
+        } else if (output.startsWith('hidepanel ')) {
+            closeSourceVibePanel(output.slice('hidepanel '.length));
+        } else if (output === 'disconnect acknowledged') {
+            await disconnectClient();
+        } else if (/^(\/|https?:)/.test(output)) {
+            addConsoleLog(output);
+            window.location.assign(output);
+        } else {
+            output.split('\n').forEach((line) => addConsoleLog(line, result.ok === false ? 'warn' : 'info'));
+        }
+    } else if (result && result.ok === false && result.code) {
+        addConsoleLog(result.code, 'warn');
+    }
+    await loadSourceVibeBootstrap();
+    refreshOverlayPanels(state.latestSnapshot);
+    return result;
+}
+
 function refreshOverlayPanels(snapshot = state.latestSnapshot) {
+    if (state.panels.menu) {
+        menuPanel.render({
+            title: state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemode && state.sourcevibeBootstrap.gamemode.title || 'SourceVibe',
+            subtitle: state.sourcevibeBootstrap && state.sourcevibeBootstrap.engine && state.sourcevibeBootstrap.engine.name || 'SourceVibe Engine',
+            connected: !!client,
+            buttons: currentMenuButtons(),
+            server: state.query.serverId,
+        }, {
+            onAction: (actionId) => {
+                handleMenuAction(actionId).catch((error) => addConsoleLog(error.message || 'Menu action failed.', 'error'));
+            },
+            onClose: () => toggleMenuPanel(false),
+        });
+    } else {
+        menuPanel.hide();
+    }
+
     if (state.panels.console) {
         consolePanel.render({
             snapshot,
             meta: overlayMeta(),
             logs: state.consoleLogs,
+            filter: state.consoleFilter,
+            command: state.consoleCommand,
+            suggestions: state.consoleSuggestions,
+        }, {
+            onSetFilter: (value) => {
+                state.consoleFilter = value;
+                refreshOverlayPanels(snapshot);
+            },
+            onChangeCommand: (value) => {
+                state.consoleCommand = value;
+                refreshConsoleSuggestions();
+                refreshOverlayPanels(snapshot);
+            },
+            onUseSuggestion: (value) => {
+                state.consoleCommand = value;
+                refreshConsoleSuggestions();
+                refreshOverlayPanels(snapshot);
+            },
+            onHistoryUp: () => {
+                if (!state.consoleHistory.length) return;
+                state.consoleHistoryIndex = Math.max(0, state.consoleHistoryIndex - 1);
+                state.consoleCommand = state.consoleHistory[state.consoleHistoryIndex] || '';
+                refreshConsoleSuggestions();
+                refreshOverlayPanels(snapshot);
+            },
+            onHistoryDown: () => {
+                if (!state.consoleHistory.length) return;
+                state.consoleHistoryIndex = Math.min(state.consoleHistory.length, state.consoleHistoryIndex + 1);
+                state.consoleCommand = state.consoleHistory[state.consoleHistoryIndex] || '';
+                refreshConsoleSuggestions();
+                refreshOverlayPanels(snapshot);
+            },
+            onRun: (value) => {
+                runSourceVibeCommand(value).catch((error) => addConsoleLog(error.message || 'Command failed.', 'error'));
+            },
+            onClose: () => toggleUtilityPanel('console', false),
             onClear: () => {
                 state.consoleLogs = [];
                 refreshOverlayPanels(snapshot);
@@ -168,20 +502,65 @@ function refreshOverlayPanels(snapshot = state.latestSnapshot) {
     }
 
     if (state.panels.settings) {
-        settingsPanel.render(state.settings, {
-            onChange: (nextSettings) => {
-                state.settings = sanitizeSettings(nextSettings);
+        syncSettingsDraft();
+        settingsPanel.render({
+            activeTab: state.settingsUi.activeTab,
+            settings: state.settingsDraft,
+            binds: (sourcevibeConsole().binds || []).map((entry) => ({
+                command: entry.command,
+                key: state.settingsUi.bindEdits[entry.command] != null ? state.settingsUi.bindEdits[entry.command] : entry.key,
+                description: entry.description || entry.help || 'Key binding',
+            })),
+            cvars: (sourcevibeConsole().cvars || []).map((entry) => ({
+                ...entry,
+                value: state.settingsUi.cvarEdits[entry.name] != null ? state.settingsUi.cvarEdits[entry.name] : entry.value,
+            })),
+        }, {
+            onTabChange: (tabId) => {
+                state.settingsUi.activeTab = tabId;
+                refreshOverlayPanels(snapshot);
+            },
+            onSettingChange: (key, value) => {
+                state.settingsDraft = sanitizeSettings({ ...state.settingsDraft, [key]: value });
+                refreshOverlayPanels(snapshot);
+            },
+            onBindChange: (command, key) => {
+                state.settingsUi.bindEdits = { ...state.settingsUi.bindEdits, [command]: key.trim().toLowerCase() };
+            },
+            onCvarChange: (name, value) => {
+                state.settingsUi.cvarEdits = { ...state.settingsUi.cvarEdits, [name]: value };
+            },
+            onApply: async () => {
+                state.settings = sanitizeSettings(state.settingsDraft);
                 saveClientSettings(state.settings);
                 applyClientSettings();
+                for (const entry of sourcevibeConsole().binds || []) {
+                    const nextKey = normalizeKeyToken(state.settingsUi.bindEdits[entry.command]);
+                    const currentKey = normalizeKeyToken(entry.key);
+                    if (nextKey === currentKey) continue;
+                    if (currentKey) await runSourceVibeCommand(`unbind ${currentKey}`);
+                    if (nextKey) await runSourceVibeCommand(`bind ${nextKey} ${entry.command}`);
+                }
+                for (const entry of sourcevibeConsole().cvars || []) {
+                    const nextValue = state.settingsUi.cvarEdits[entry.name];
+                    if (String(nextValue) === String(entry.value)) continue;
+                    await runSourceVibeCommand(`${entry.name} ${nextValue}`);
+                }
+                addConsoleLog('Applied SourceVibe options.');
+                syncSettingsDraft(true);
                 refreshOverlayPanels(snapshot);
+            },
+            onCancel: () => {
+                syncSettingsDraft(true);
+                toggleUtilityPanel('settings', false);
             },
             onReset: () => {
-                state.settings = { ...DEFAULT_SETTINGS };
-                saveClientSettings(state.settings);
-                applyClientSettings();
-                addConsoleLog('Client settings reset to defaults.');
+                state.settingsDraft = { ...DEFAULT_SETTINGS };
+                state.settingsUi.bindEdits = Object.fromEntries((sourcevibeConsole().binds || []).map((entry) => [entry.command, entry.key || '']));
+                state.settingsUi.cvarEdits = Object.fromEntries((sourcevibeConsole().cvars || []).map((entry) => [entry.name, entry.default_value != null ? entry.default_value : entry.defaultValue != null ? entry.defaultValue : entry.value]));
                 refreshOverlayPanels(snapshot);
             },
+            onClose: () => toggleUtilityPanel('settings', false),
         });
     } else {
         settingsPanel.hide();
@@ -242,6 +621,9 @@ function markHudActivity(durationMs = 4200) {
 function setPanelOpen(name, open) {
     state.panels[name] = !!open;
     if (dom[name]) dom[name].classList.toggle('hidden', !open);
+    if (open && ['menu', 'inventory', 'crafting', 'skills', 'build', 'map', 'mods', 'console', 'settings', 'chat', 'shop'].includes(name)) {
+        input.reset();
+    }
 }
 
 function closeUtilityPanels(except = null) {
@@ -252,6 +634,7 @@ function closeUtilityPanels(except = null) {
 
 function closeAllPanels() {
     const hadOpen = Object.values(state.panels).some(Boolean);
+    setPanelOpen('menu', false);
     setPanelOpen('chat', false);
     closeUtilityPanels(null);
     setPanelOpen('loot', false);
@@ -263,17 +646,39 @@ function closeAllPanels() {
 }
 
 function toggleChatPanel(forceOpen = !state.panels.chat) {
+    setPanelOpen('menu', false);
     setPanelOpen('chat', forceOpen);
     if (forceOpen) chat.focus(); else chat.blur();
     markHudActivity(10000);
     refreshOverlayPanels();
 }
 
-function toggleUtilityPanel(name) {
-    const shouldOpen = !state.panels[name];
+function toggleUtilityPanel(name, forceOpen = !state.panels[name]) {
+    const shouldOpen = !!forceOpen;
+    setPanelOpen('menu', false);
     closeUtilityPanels(shouldOpen ? name : null);
     markHudActivity(10000);
     refreshOverlayPanels();
+}
+
+function toggleMenuPanel(forceOpen = !state.panels.menu) {
+    const shouldOpen = !!forceOpen;
+    setPanelOpen('chat', false);
+    closeUtilityPanels(null);
+    setPanelOpen('menu', shouldOpen);
+    if (!shouldOpen) chat.blur();
+    markHudActivity(10000);
+    refreshOverlayPanels();
+}
+
+function gameplayInputBlocked(snapshot = state.latestSnapshot) {
+    return !!(
+        state.panels.menu
+        || state.panels.chat
+        || UTILITY_PANELS.some((name) => state.panels[name])
+        || !!(snapshot && snapshot.interaction && snapshot.interaction.active)
+        || !!(document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName))
+    );
 }
 
 function renderIdentity() {
@@ -331,32 +736,61 @@ function bindUi() {
 
         if (isTyping && !['escape', 'f1'].includes(key)) return;
 
-        switch (key) {
-        case 'enter':
+        if (key === 'enter') {
             if (!isTyping) {
                 event.preventDefault();
                 toggleChatPanel(true);
             }
-            break;
-        case 'i':
+            return;
+        }
+
+        if (isSourceVibeBound(event, 'showmenu')) {
+            event.preventDefault();
+            if (isTyping && event.target && typeof event.target.blur === 'function') event.target.blur();
+            if (state.panels.menu) {
+                toggleMenuPanel(false);
+            } else if (state.panels.chat || UTILITY_PANELS.some((name) => state.panels[name])) {
+                closeAllPanels();
+            } else {
+                if (shopWasOpen && client) await client.closeInteraction();
+                toggleMenuPanel(true);
+            }
+            return;
+        }
+
+        if (isSourceVibeBound(event, 'toggleinventory')) {
             event.preventDefault();
             if (shopWasOpen && client) await client.closeInteraction();
             toggleUtilityPanel('inventory');
-            break;
-        case 'c':
+            return;
+        }
+
+        if (isSourceVibeBound(event, 'togglecrafting')) {
             event.preventDefault();
             if (shopWasOpen && client) await client.closeInteraction();
             toggleUtilityPanel('crafting');
-            break;
+            return;
+        }
+
+        if (isSourceVibeBound(event, 'togglemap')) {
+            event.preventDefault();
+            if (shopWasOpen && client) await client.closeInteraction();
+            toggleUtilityPanel('map');
+            return;
+        }
+
+        if (isSourceVibeBound(event, 'toggleconsole')) {
+            event.preventDefault();
+            if (shopWasOpen && client) await client.closeInteraction();
+            toggleUtilityPanel('console');
+            return;
+        }
+
+        switch (key) {
         case 'k':
             event.preventDefault();
             if (shopWasOpen && client) await client.closeInteraction();
             toggleUtilityPanel('skills');
-            break;
-        case 'm':
-            event.preventDefault();
-            if (shopWasOpen && client) await client.closeInteraction();
-            toggleUtilityPanel('map');
             break;
         case 'g':
             event.preventDefault();
@@ -368,11 +802,6 @@ function bindUi() {
             if (shopWasOpen && client) await client.closeInteraction();
             toggleUtilityPanel('mods');
             break;
-        case '`':
-            event.preventDefault();
-            if (shopWasOpen && client) await client.closeInteraction();
-            toggleUtilityPanel('console');
-            break;
         case 'f1':
             event.preventDefault();
             if (shopWasOpen && client) await client.closeInteraction();
@@ -380,8 +809,10 @@ function bindUi() {
             break;
         case 'escape': {
             if (isTyping && event.target && typeof event.target.blur === 'function') event.target.blur();
-            const closed = closeAllPanels();
-            if ((shopWasOpen || !closed) && client) await client.closeInteraction();
+            if (!isSourceVibeBound(event, 'showmenu')) {
+                const closed = closeAllPanels();
+                if ((shopWasOpen || !closed) && client) await client.closeInteraction();
+            }
             break;
         }
         default:
@@ -398,59 +829,91 @@ function bindUi() {
 
 function refreshPanels(snapshot) {
     if (!snapshot || !inventory || !crafting || !buildMenu || !mapPanel || !skills || !mods || !lootPanel || !shopPanel) return;
+    const activeInteraction = snapshot.interaction && snapshot.interaction.active;
+    const inventoryLayout = sourcevibeInventoryLayout();
+    const showBank = !!(activeInteraction && activeInteraction.type === 'bank')
+        || (!inventoryLayout.showBankOnInteractionOnly && Array.isArray(snapshot.self && snapshot.self.bank) && snapshot.self.bank.length > 0);
     dom.joinInfo.textContent = `Connected to ${snapshot.world.name} · zone ${snapshot.world.zone_id}`;
     dom.joinInfo.classList.remove('empty');
     dom.welcome.classList.add('connected');
     dom.welcome.classList.add('playing');
     chat.render(snapshot.chat || []);
-    inventory.render(snapshot.self, {
-        onDeposit: async (itemId) => {
-            await apiJson(`${API_BASE}/bank/${state.identity.userId}/deposit`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity: 1 }) }, state.identity);
-            addConsoleLog(`Deposited ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} into the bank.`);
-            markHudActivity(9000);
-        },
-        onWithdraw: async (itemId) => {
-            await apiJson(`${API_BASE}/bank/${state.identity.userId}/withdraw`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity: 1 }) }, state.identity);
-            addConsoleLog(`Withdrew ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} from the bank.`);
-            markHudActivity(9000);
-        },
-        onEquip: async ({ itemId, slot }) => {
-            if (!client) return;
-            const result = await client.equipInventoryItem(itemId, slot);
-            if (result && result.ok === false) {
-                dom.joinInfo.textContent = result.reason || 'Equip failed';
-                dom.joinInfo.classList.remove('empty');
-                addConsoleLog(result.reason || `Could not equip ${itemId}.`, 'warn');
-                return;
-            }
-            addConsoleLog(`Equipped ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} to ${slot}.`);
-            markHudActivity(9000);
-        },
-        onClearSlot: async (slot) => {
-            if (!client) return;
-            const result = await client.clearEquipmentSlot(slot);
-            if (result && result.ok === false) {
-                dom.joinInfo.textContent = result.reason || 'Clear failed';
-                dom.joinInfo.classList.remove('empty');
-                addConsoleLog(result.reason || `Could not clear ${slot}.`, 'warn');
-                return;
-            }
-            addConsoleLog(`Cleared ${slot} loadout slot.`);
-            markHudActivity(9000);
-        },
-    });
-    skills.render(snapshot.self);
-    crafting.render(snapshot.self, async (recipeId) => client && client.craft(recipeId));
-    buildMenu.render((item) => {
-        state.buildSelection = item;
-    });
-    mapPanel.render(snapshot.world.zone_id, async (zoneId) => client && client.travel(zoneId));
+    if (state.panels.inventory) {
+        inventory.render(snapshot.self, {
+            layout: inventoryLayout,
+            showBank,
+            onDeposit: async (itemId, quantity = 1) => {
+                await apiJson(`${API_BASE}/bank/${state.identity.userId}/deposit`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
+                addConsoleLog(`Deposited ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} into the bank.`);
+                markHudActivity(9000);
+            },
+            onWithdraw: async (itemId, quantity = 1) => {
+                await apiJson(`${API_BASE}/bank/${state.identity.userId}/withdraw`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
+                addConsoleLog(`Withdrew ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} from the bank.`);
+                markHudActivity(9000);
+            },
+            onHotbarAssign: async (slot, itemId) => {
+                if (!client) return;
+                const result = await client.updateHotbar(slot, itemId, { select: false });
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Hotbar update failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not assign ${itemId} to slot ${slot}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Assigned ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} to hotbar slot ${slot}.`);
+                markHudActivity(9000);
+            },
+            onHotbarClear: async (slot) => {
+                if (!client) return;
+                const result = await client.clearHotbar(slot);
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Clear failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not clear ${slot}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Cleared hotbar slot ${slot}.`);
+                markHudActivity(9000);
+            },
+            onDropItem: async (itemId, quantity) => {
+                if (!client) return;
+                const result = await client.dropInventory(itemId, quantity);
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Drop failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not drop ${itemId}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Dropped ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId}.`);
+                markHudActivity(9000);
+            },
+            onSelectHotbar: (slot) => {
+                input.quickSlot = slot;
+                if (state.localSelf) state.localSelf.quick_slot = slot;
+                if (state.renderSelf) state.renderSelf.quick_slot = slot;
+                markHudActivity(9000);
+            },
+        });
+    } else {
+        inventory.hide();
+    }
+    if (state.panels.skills) skills.render(snapshot.self); else if (skills && typeof skills.hide === 'function') skills.hide();
+    if (state.panels.crafting) crafting.render(snapshot.self, async (recipeId) => client && client.craft(recipeId)); else if (crafting && typeof crafting.hide === 'function') crafting.hide();
+    if (state.panels.build) {
+        buildMenu.render((item) => {
+            state.buildSelection = item;
+        });
+    } else if (buildMenu && typeof buildMenu.hide === 'function') {
+        buildMenu.hide();
+    }
+    if (state.panels.map) mapPanel.render(snapshot.world.zone_id, async (zoneId) => client && client.travel(zoneId)); else if (mapPanel && typeof mapPanel.hide === 'function') mapPanel.hide();
     death.render(snapshot.self);
     lootPanel.render(snapshot.entities.loot || []);
 
-    const activeInteraction = snapshot.interaction && snapshot.interaction.active;
     if (activeInteraction && activeInteraction.type === 'shop') {
         closeUtilityPanels(null);
+        setPanelOpen('menu', false);
         setPanelOpen('shop', true);
         shopPanel.render(activeInteraction, snapshot.self, async ({ npcId, itemId, quantity }) => {
             if (!client) return;
@@ -480,14 +943,10 @@ function refreshHud(snapshot) {
         fps: state.fps,
         snapshotRate: state.snapshotRate,
         quickSlot: input.quickSlot,
-    });
+    }, state.settings);
     death.render(snapshot.self);
-    const overlayBusy = state.panels.chat || UTILITY_PANELS.some((name) => state.panels[name]) || !!(snapshot.interaction && snapshot.interaction.active) || !!(document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName));
+    const overlayBusy = gameplayInputBlocked(snapshot);
     document.body.classList.toggle('hud-resting', !!state.settings.hudFade && !overlayBusy && performance.now() > state.hudActiveUntil);
-    if ((state.panels.console || state.panels.settings) && (performance.now() - state.lastOverlayRefreshAt) > 150) {
-        state.lastOverlayRefreshAt = performance.now();
-        refreshOverlayPanels(snapshot);
-    }
 }
 
 function buildRenderSnapshot() {
@@ -515,6 +974,7 @@ function bufferSnapshotEntities(snapshot) {
 function onSnapshot(snapshot) {
     state.snapshotCount += 1;
     bufferSnapshotEntities(snapshot);
+    if (snapshot && snapshot.self && snapshot.self.quick_slot) input.quickSlot = Number(snapshot.self.quick_slot) || input.quickSlot;
     if (!state.latestSnapshot) {
         state.latestSnapshot = snapshot;
         state.localSelf = structuredClone(snapshot.self);
@@ -537,7 +997,8 @@ async function connect() {
         role: 'user',
     };
     saveIdentity(state.identity);
-    dom.joinInfo.textContent = 'Connecting to the starter outpost shard…';
+    await loadSourceVibeBootstrap();
+    dom.joinInfo.textContent = `Connecting to ${state.query.serverId}…`;
     dom.joinInfo.classList.remove('empty');
     dom.welcome.classList.add('connected');
     dom.welcome.classList.remove('playing');
@@ -548,8 +1009,14 @@ async function connect() {
     state.connectionText = 'connecting';
     client.on('connect', async () => {
         state.connectionText = 'connected';
-        addConsoleLog('Realtime link established. Joining 2D World…');
-        await client.joinWorld({ worldSlug: '2d-world', userId: state.identity.userId, displayName: state.identity.displayName, zone_id: 'outpost' });
+        addConsoleLog(`Realtime link established. Joining ${state.query.serverId}…`);
+        await client.joinWorld({
+            worldSlug: state.query.serverId,
+            gamemode: state.query.gamemodeId,
+            userId: state.identity.userId,
+            displayName: state.identity.displayName,
+            zone_id: state.query.zoneId,
+        });
     });
     client.on('disconnect', () => {
         state.connectionText = 'disconnected';
@@ -560,6 +1027,7 @@ async function connect() {
     client.on('world:joined', (snapshot) => {
         dom.joinInfo.textContent = `Joined ${snapshot.world.name}`;
         addConsoleLog(`Joined ${snapshot.world.name} in zone ${snapshot.world.zone_id}.`);
+        toggleMenuPanel(false);
         onSnapshot(snapshot);
     });
     client.on('snapshot', onSnapshot);
@@ -626,6 +1094,7 @@ function animate(now) {
 }
 
 renderIdentity();
+await loadSourceVibeBootstrap();
 await loadCatalog();
 bindUi();
 applyClientSettings();

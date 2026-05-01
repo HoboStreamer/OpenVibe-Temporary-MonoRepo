@@ -1,0 +1,20 @@
+{
+  "id": "flatgrass",
+  "name": "Flatgrass",
+  "title": "Flatgrass",
+  "kind": "sandbox",
+  "size": {
+    "width": 8192,
+    "height": 8192
+  },
+  "spawnPoints": [
+    { "id": "spawn_main", "x": 4096, "y": 4096 }
+  ],
+  "collision": {
+    "solids": []
+  },
+  "layers": {
+    "background": "grid",
+    "detail": []
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "2dworld",
+  "name": "2D World",
+  "title": "2D World",
+  "engine_version": "sourcevibe-1",
+  "version": "1.0.0",
+  "base": "base",
+  "description": "Flagship SourceVibe survival/sandbox gamemode built on the base engine shell.",
+  "routes": {
+    "play": "/2d-world",
+    "launcher": "/sourcevibe?gamemode=2dworld",
+    "status": "/2d-world/status",
+    "editor": "/2d-world/editor"
+  },
+  "maps": [
+    "2dworld_outpost"
+  ]
+}

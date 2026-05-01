@@ -1,8 +1,8 @@
-import { PixiWorldRenderer } from '../engine/renderer.js';
+import { TwoDWorldRenderer } from '../gamemodes/2dworld/renderer.js';
 
 export class WorldScene {
     constructor(mount) {
-        this.renderer = new PixiWorldRenderer(mount);
+        this.renderer = new TwoDWorldRenderer(mount);
     }
 
     async init() {

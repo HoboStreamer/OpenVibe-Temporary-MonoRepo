@@ -1,0 +1,15 @@
+{
+  "id": "base",
+  "name": "SourceVibe Base",
+  "title": "SourceVibe Engine Base",
+  "engine_version": "sourcevibe-1",
+  "version": "1.0.0",
+  "base": null,
+  "description": "Shared engine-level defaults, entities, hooks, inventory layout, console surfaces, and launcher metadata for SourceVibe gamemodes.",
+  "surfaces": {
+    "launcher": true,
+    "console": true,
+    "options": true,
+    "server_browser": true
+  }
+}

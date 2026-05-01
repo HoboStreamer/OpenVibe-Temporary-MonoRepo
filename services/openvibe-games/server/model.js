@@ -453,6 +453,16 @@ function ensurePlayer(userId, displayName) {
     return getPlayer(userId) || upsertPlayer({ user_id: userId, display_name: displayName || `Player ${userId}` });
 }
 
+function setPlayerSourceVibeMetadata(userId, patch = {}) {
+    const player = ensurePlayer(String(userId));
+    const metadata = Object.assign({}, player && player.metadata || {});
+    metadata.sourcevibe = Object.assign({}, metadata.sourcevibe || {}, patch || {});
+    return upsertPlayer({
+        user_id: String(userId),
+        metadata,
+    });
+}
+
 function listPlayers(limit) {
     const rows = getDb().prepare('SELECT * FROM game_players ORDER BY updated_at DESC LIMIT ?').all(toInt(limit, 500));
     return rows.map(hydratePlayer);
@@ -1080,6 +1090,7 @@ module.exports = {
     bankDeposit,
     bankWithdraw,
     addInventoryItem,
+    setPlayerSourceVibeMetadata,
     summarizeProduct,
     unlockAchievement,
     upsertCosmetic,

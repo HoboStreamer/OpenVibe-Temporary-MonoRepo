@@ -26,6 +26,9 @@ assert.ok(STARTER_WORLD.zones.some((zone) => zone.zone_id === 'ember_basin'));
 assert.ok(Array.isArray(STARTER_WORLD.terrain_patches) && STARTER_WORLD.terrain_patches.length >= 10);
 assert.ok(STARTER_WORLD.resources.length > 40);
 assert.ok(STARTER_WORLD.travel.some((link) => link.from === 'pine_watch' && link.to === 'outpost'));
+assert.strictEqual(STARTER_WORLD.style_id, '2dworld_classic');
+assert.ok(STARTER_WORLD.presentation && STARTER_WORLD.presentation.sprite_layers && STARTER_WORLD.presentation.sprite_layers.background.length >= 1);
+assert.ok(Array.isArray(STARTER_WORLD.editor_palette) && STARTER_WORLD.editor_palette.length >= 8);
 
 const player = model.upsertPlayer({
     user_id: '42',
@@ -198,6 +201,48 @@ assert.strictEqual(reEquipResult.slot, 'weapon');
 assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
 assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
 
+const hotbarAssignResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 1,
+    item_id: 'stone_spear',
+});
+assert.strictEqual(hotbarAssignResult.ok, true);
+assert.strictEqual(hotbarAssignResult.hotbar[0].item_id, 'stone_spear');
+
+const coinsHotbarResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 2,
+    item_id: 'coins',
+    select: false,
+});
+assert.strictEqual(coinsHotbarResult.ok, true);
+assert.strictEqual(coinsHotbarResult.hotbar[1].item_id, 'coins');
+
+const hotbarSnapshot = room.buildSnapshotForPlayer(roomPlayer, Date.now());
+assert.ok(Array.isArray(hotbarSnapshot.self.hotbar));
+assert.strictEqual(hotbarSnapshot.self.hotbar[0].item_id, 'stone_spear');
+assert.strictEqual(hotbarSnapshot.self.hotbar[1].item_id, 'coins');
+
+const coinDropResult = room.handleInventoryDrop(roomPlayer, {
+    item_id: 'coins',
+    quantity: 5,
+}, Date.now());
+assert.strictEqual(coinDropResult.ok, true);
+assert.strictEqual(roomPlayer.coins, 67);
+const coinDrop = [...room.loot.values()].find((entry) => entry.item_id === 'coins');
+assert.ok(coinDrop);
+roomPlayer.x = coinDrop.x;
+roomPlayer.y = coinDrop.y;
+const coinPickupResult = room._pickupLoot(roomPlayer, coinDrop.id);
+assert.strictEqual(coinPickupResult.ok, true);
+assert.strictEqual(roomPlayer.coins, 72);
+
+const spearDropResult = room.handleInventoryDrop(roomPlayer, {
+    item_id: 'stone_spear',
+    quantity: 1,
+}, Date.now());
+assert.strictEqual(spearDropResult.ok, true);
+assert.strictEqual(roomPlayer.equip_weapon, '');
+assert.strictEqual(room.buildSnapshotForPlayer(roomPlayer, Date.now()).self.hotbar[0].item_id, null);
+
 const closeResult = room.closeInteraction(roomPlayer);
 assert.strictEqual(closeResult.ok, true);
 const closedSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 120);
@@ -350,6 +395,10 @@ assert.ok(moddedCatalog.items.some((item) => item.item_id === 'ember_blade'));
 assert.ok(moddedCatalog.recipes.some((recipe) => recipe.id === 'recipe.ember_blade'));
 assert.ok(moddedCatalog.zones.some((zone) => zone.zone_id === 'ember_camp'));
 assert.ok(moddedCatalog.world_definition.npcs.some((npc) => npc.template_id === 'npc.firekeep.merchant'));
+assert.ok(moddedCatalog.world_definition.presentation && moddedCatalog.world_definition.presentation.player_render);
+assert.ok(moddedCatalog.world_definition.presentation.sprite_layers.detail.some((entry) => entry.src && entry.src.includes('/assets/2dworld-legacy/')));
+assert.ok(moddedCatalog.definitions.items.stone_hatchet.render.icon.includes('/assets/2dworld-legacy/hatchet.png'));
+assert.ok(moddedCatalog.definitions.resources.tree.render.sprite.src.includes('/assets/2dworld-legacy/tree-oak.png'));
 assert.strictEqual(moddedCatalog.definitions.items.ember_blade.render.weapon_type, 'blade');
 assert.strictEqual(moddedCatalog.engine.scripting.active_script_mod_count, 0);
 assert.ok(moddedCatalog.mods.some((mod) => mod.id === registeredMod.id && mod.has_scripts === true));

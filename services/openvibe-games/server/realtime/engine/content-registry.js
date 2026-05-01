@@ -6,6 +6,14 @@ const { LOOT_TABLES } = require('../catalog/loot-tables');
 const { NPC_TEMPLATES } = require('../catalog/npc-templates');
 const { SKILL_KEYS } = require('../catalog/skills');
 const { listScriptRealms } = require('../../mods/manifest-schema');
+const {
+    CLASSIC_STYLE_ID,
+    CLASSIC_ITEM_RENDER,
+    CLASSIC_RESOURCE_RENDER,
+    CLASSIC_STRUCTURE_RENDER,
+    CLASSIC_NPC_RENDER,
+    CLASSIC_PLAYER_RENDER,
+} = require('../../sourcevibe/gamemodes/2dworld/legacy-style');
 
 const HOOK_SURFACES = Object.freeze([
     'player:join',
@@ -298,6 +306,7 @@ function defaultStructureRender(id) {
 }
 
 function buildStructureDefinitions(structures) {
+    const classicTheme = arguments[1] || null;
     const definitions = {};
     for (const structure of structures || []) {
         const id = String(structure.id || structure.type || 'structure');
@@ -306,13 +315,14 @@ function buildStructureDefinitions(structures) {
             id,
             name: structure.name || humanizeId(id),
             size: Number(structure.size) || 48,
-            render: Object.assign({}, defaultStructureRender(id), render),
+            render: Object.assign({}, defaultStructureRender(id), classicTheme && classicTheme[id] || {}, render),
         };
     }
     return definitions;
 }
 
 function buildItemDefinitions(items, structureDefinitions) {
+    const classicTheme = arguments[2] || null;
     const definitions = {};
     for (const item of items || []) {
         const metadata = isObject(item.metadata) ? clone(item.metadata) : {};
@@ -333,13 +343,14 @@ function buildItemDefinitions(items, structureDefinitions) {
                 structure_kind: buildKind,
                 size: Number(item.size || metadata.size || structureDefinition && structureDefinition.size) || 48,
             } : null,
-            render: Object.assign({}, defaultItemRender(item), render),
+            render: Object.assign({}, defaultItemRender(item), classicTheme && classicTheme[item.item_id] || {}, render),
         };
     }
     return definitions;
 }
 
 function buildNpcDefinitions(templates) {
+    const classicTheme = arguments[1] || null;
     const definitions = {};
     for (const template of templates || []) {
         const render = isObject(template.render) ? clone(template.render) : {};
@@ -349,13 +360,14 @@ function buildNpcDefinitions(templates) {
             kind: template.kind,
             held_item_id: template.held_item_id || '',
             interaction: template.interaction ? clone(template.interaction) : null,
-            render: Object.assign({}, defaultNpcRender(template), render),
+            render: Object.assign({}, defaultNpcRender(template), classicTheme && classicTheme[template.id] || {}, render),
         };
     }
     return definitions;
 }
 
 function buildResourceDefinitions(resourceTypes) {
+    const classicTheme = arguments[1] || null;
     const defaults = buildIndex(BASE_RESOURCE_TYPES, 'kind');
     const definitions = {};
     for (const resourceType of resourceTypes || []) {
@@ -365,7 +377,7 @@ function buildResourceDefinitions(resourceTypes) {
             kind,
             name: resourceType.name || base.name,
             interaction: Object.assign({}, base.interaction || {}, clone(resourceType.interaction || {})),
-            render: Object.assign({}, base.render || {}, clone(resourceType.render || {})),
+            render: Object.assign({}, base.render || {}, classicTheme && classicTheme[kind] || {}, clone(resourceType.render || {})),
         };
     }
     return definitions;
@@ -385,6 +397,8 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
     let worldNpcs = clone(sourceWorldDefinition.npcs || []);
 
     const enabledMods = [];
+
+    const useClassicTheme = sourceWorldDefinition && sourceWorldDefinition.style_id === CLASSIC_STYLE_ID;
 
     for (const mod of mods || []) {
         const manifest = mod && isObject(mod.manifest) ? mod.manifest : {};
@@ -431,16 +445,17 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
         });
     }
 
-    const structureDefinitions = buildStructureDefinitions(structureTypes);
-    const itemDefinitions = buildItemDefinitions(items, structureDefinitions);
-    const npcDefinitions = buildNpcDefinitions(npcTemplates);
-    const resourceDefinitions = buildResourceDefinitions(resourceTypes);
+    const structureDefinitions = buildStructureDefinitions(structureTypes, useClassicTheme ? CLASSIC_STRUCTURE_RENDER : null);
+    const itemDefinitions = buildItemDefinitions(items, structureDefinitions, useClassicTheme ? CLASSIC_ITEM_RENDER : null);
+    const npcDefinitions = buildNpcDefinitions(npcTemplates, useClassicTheme ? CLASSIC_NPC_RENDER : null);
+    const resourceDefinitions = buildResourceDefinitions(resourceTypes, useClassicTheme ? CLASSIC_RESOURCE_RENDER : null);
 
     const mergedWorldDefinition = Object.assign({}, sourceWorldDefinition, {
         zones,
         travel,
         resources: worldResources,
         npcs: worldNpcs,
+        player_render: useClassicTheme ? clone(CLASSIC_PLAYER_RENDER) : clone(sourceWorldDefinition.player_render || {}),
     });
 
     return {

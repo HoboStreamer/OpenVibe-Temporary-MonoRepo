@@ -5,6 +5,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const fs = require('fs');
 const path = require('path');
 const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
@@ -14,6 +15,7 @@ const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { createRealtimeRuntime } = require('./realtime');
+const { createSourceVibeEngine } = require('./sourcevibe');
 const { serviceActorMiddleware, userContextMiddleware } = require('./middleware');
 
 function buildApp() {
@@ -21,6 +23,7 @@ function buildApp() {
 
     const eventBus = buildEventBus(config);
     let realtime = null;
+    let sourcevibe = null;
 
     const app = express();
     app.set('trust proxy', 1);
@@ -37,6 +40,7 @@ function buildApp() {
                 height: config.canvas && config.canvas.height,
             },
             realtime: realtime ? realtime.summary() : null,
+            sourcevibe: sourcevibe ? sourcevibe.summary() : null,
         }),
         getReadiness: () => ({
             persistence: db.describePersistence(),
@@ -59,6 +63,12 @@ function buildApp() {
                     critical: false,
                     details: realtime ? realtime.summary() : { ok: false, reason: 'not initialized yet' },
                 },
+                {
+                    name: 'sourcevibe_runtime',
+                    ok: true,
+                    critical: false,
+                    details: sourcevibe ? sourcevibe.summary() : { ok: false, reason: 'not initialized yet' },
+                },
             ],
         }),
     });
@@ -66,13 +76,23 @@ function buildApp() {
 
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use('/vendor/pixi', express.static(path.resolve(__dirname, '..', '..', '..', 'node_modules', 'pixi.js', 'dist')));
+    const legacy2dWorldAssetRoot = [
+        process.env.OPENVIBE_GAMES_2DWORLD_LEGACY_ASSETS,
+        path.join(__dirname, '..', 'public', 'assets', '2dworld-legacy'),
+        '/opt/legacy/2dworld/public/img',
+    ].find((candidate) => candidate && fs.existsSync(candidate));
+    if (legacy2dWorldAssetRoot) {
+        app.use('/assets/2dworld-legacy', express.static(legacy2dWorldAssetRoot));
+    }
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     const httpServer = createServer(app);
     realtime = createRealtimeRuntime({ httpServer, eventBus, config });
+    sourcevibe = createSourceVibeEngine({ realtime, eventBus, config });
+    if (typeof realtime.attachSourceVibe === 'function') realtime.attachSourceVibe(sourcevibe);
     realtime.start();
 
-    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config }));
+    app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config, sourcevibe }));
 
     app.use((err, _req, res, _next) => {
         console.error('[games] unhandled:', err.message);

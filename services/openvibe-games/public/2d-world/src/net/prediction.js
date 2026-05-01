@@ -18,7 +18,23 @@ function approach(current, target, maxDelta) {
     return target;
 }
 
+function activeHotbarEntry(state) {
+    const hotbar = Array.isArray(state && state.hotbar) ? state.hotbar : [];
+    const slotIndex = Math.max(0, Math.min(8, (Number(state && state.quick_slot) || 1) - 1));
+    const entry = hotbar[slotIndex];
+    return entry && entry.item_id && Number(entry.quantity || 0) > 0 ? entry : null;
+}
+
+function heldItemFromHotbar(state) {
+    const entry = activeHotbarEntry(state);
+    if (!entry) return null;
+    if (entry.item_id === 'coins') return 'coins';
+    return entry.hold_type === 'build' ? 'hammer' : entry.item_id;
+}
+
 function defaultHeldItem(state) {
+    const hotbarHeld = heldItemFromHotbar(state);
+    if (hotbarHeld) return hotbarHeld;
     const equipment = state && state.equipment || {};
     switch (Number(state && state.quick_slot) || 1) {
     case 2: return equipment.axe || state.equip_axe || equipment.weapon || state.equip_weapon || 'hands';
@@ -75,7 +91,7 @@ export function applyPredictedInput(state, input, dtMs, bounds = { x: 0, y: 0, w
 
     if (input.action === 'attack') {
         state.attack_anim_until = now + 240;
-        state.held_item = state.equipment && state.equipment.weapon || state.equip_weapon || defaultHeldItem(state);
+        state.held_item = heldItemFromHotbar(state) || state.equipment && state.equipment.weapon || state.equip_weapon || defaultHeldItem(state);
         state.hold_until = now + 420;
     } else if (input.action === 'build') {
         state.held_item = 'hammer';

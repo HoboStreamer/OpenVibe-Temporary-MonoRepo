@@ -1,11 +1,3 @@
-const EQUIPMENT_SLOTS = [
-    { id: 'weapon', label: 'Weapon' },
-    { id: 'armor', label: 'Armor' },
-    { id: 'axe', label: 'Hatchet' },
-    { id: 'pickaxe', label: 'Pickaxe' },
-    { id: 'rod', label: 'Fishing Rod' },
-];
-
 function escapeHtml(value) {
     return String(value == null ? '' : value)
         .replaceAll('&', '&amp;')
@@ -15,6 +7,31 @@ function escapeHtml(value) {
         .replaceAll("'", '&#39;');
 }
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function itemIcon(itemId, item) {
+    const icon = item && (item.icon || item.metadata && item.metadata.icon || item.render && item.render.icon);
+    if (icon && icon.length <= 2) return icon;
+    if (icon === 'coins' || itemId === 'coins') return '🪙';
+    if (item && item.category === 'weapon') return '⚔';
+    if (item && item.category === 'tool') {
+        const skill = item.metadata && item.metadata.skill;
+        if (skill === 'woodcut') return '🪓';
+        if (skill === 'mining') return '⛏';
+        if (skill === 'fishing') return '🎣';
+    }
+    if (item && item.category === 'resource') return '📦';
+    if (item && item.category === 'build') return '🧱';
+    if (item && item.category === 'consumable') return '🧪';
+    return icon || '⬢';
+}
+
+function quantityLabel(quantity) {
+    return Number(quantity || 0) > 9999 ? `${Math.round(Number(quantity || 0) / 1000)}k` : `${Math.round(quantity || 0)}`;
+}
+
 export class InventoryPanel {
     constructor(root, items = []) {
         this.root = root;
@@ -22,15 +39,28 @@ export class InventoryPanel {
         this.dragPayload = null;
         this.setItemCatalog(items);
         this.root.innerHTML = `
-            <div class="panel-header">Inventory & Bank</div>
+            <div class="panel-header">Inventory</div>
             <div class="inventory-summary"></div>
-            <div class="equipment-grid"></div>
+            <div class="inventory-hotbar"></div>
             <div class="inventory-grid"></div>
             <div class="bank-grid"></div>`;
         this.summaryEl = this.root.querySelector('.inventory-summary');
-        this.equipmentEl = this.root.querySelector('.equipment-grid');
+        this.hotbarEl = this.root.querySelector('.inventory-hotbar');
         this.inventoryEl = this.root.querySelector('.inventory-grid');
         this.bankEl = this.root.querySelector('.bank-grid');
+        this.contextMenu = document.createElement('div');
+        this.contextMenu.className = 'inventory-context-menu hidden';
+        this.root.appendChild(this.contextMenu);
+        this.tooltip = document.createElement('div');
+        this.tooltip.className = 'inventory-tooltip hidden';
+        this.root.appendChild(this.tooltip);
+        document.addEventListener('click', () => this.hideContextMenu());
+    }
+
+    hide() {
+        this.root.classList.add('hidden');
+        this.hideContextMenu();
+        this.hideTooltip();
     }
 
     setItemCatalog(items = []) {
@@ -42,29 +72,9 @@ export class InventoryPanel {
         return this.itemMap && this.itemMap[itemId] && this.itemMap[itemId].name || itemId;
     }
 
-    itemEquipSlot(itemId) {
-        const item = this.itemMap && this.itemMap[itemId];
-        if (!item || !item.category) return null;
-        if (item.category === 'weapon') return 'weapon';
-        if (item.category === 'armor') return 'armor';
-        if (item.category === 'tool') {
-            const skill = item.metadata && item.metadata.skill;
-            if (skill === 'woodcut') return 'axe';
-            if (skill === 'mining') return 'pickaxe';
-            if (skill === 'fishing') return 'rod';
-        }
-        return null;
-    }
-
-    slotLabel(slotId) {
-        const slot = EQUIPMENT_SLOTS.find((entry) => entry.id === slotId);
-        return slot ? slot.label : slotId;
-    }
-
     itemMetaLabel(itemId) {
         const item = this.itemMap && this.itemMap[itemId];
-        const slot = this.itemEquipSlot(itemId);
-        if (slot) return `Equip: ${this.slotLabel(slot)}`;
+        if (itemId === 'coins') return 'Currency';
         return item && item.category ? `Type: ${item.category}` : 'Stored item';
     }
 
@@ -78,13 +88,71 @@ export class InventoryPanel {
         return this.dragPayload;
     }
 
-    render(self, { onDeposit, onWithdraw, onEquip, onClearSlot } = {}) {
-        const inventory = self && self.inventory || [];
+    showTooltip(text, x, y) {
+        if (!text) return this.hideTooltip();
+        this.tooltip.classList.remove('hidden');
+        this.tooltip.textContent = text;
+        this.tooltip.style.left = `${x + 16}px`;
+        this.tooltip.style.top = `${y + 16}px`;
+    }
+
+    hideTooltip() {
+        this.tooltip.classList.add('hidden');
+    }
+
+    showContextMenu(x, y, actions = []) {
+        this.contextMenu.classList.remove('hidden');
+        this.contextMenu.style.left = `${x}px`;
+        this.contextMenu.style.top = `${y}px`;
+        this.contextMenu.innerHTML = actions.map((action) => {
+            if (action.type === 'slots') {
+                return `<div class="inventory-context-menu__slots">${action.slots.map((slot) => `<button type="button" data-menu-action="${escapeHtml(action.id)}" data-menu-slot="${slot}">${slot}</button>`).join('')}</div>`;
+            }
+            return `<button type="button" data-menu-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`;
+        }).join('');
+    }
+
+    hideContextMenu() {
+        this.contextMenu.classList.add('hidden');
+    }
+
+    inventoryEntries(self) {
+        const backpack = Array.isArray(self && self.inventory) ? self.inventory.map((entry) => ({ ...entry })) : [];
+        if (Number(self && self.coins || 0) > 0) backpack.unshift({ item_id: 'coins', quantity: Number(self.coins || 0), synthetic: true });
+        return backpack;
+    }
+
+    renderSlot(item, { source, slot = null, active = false } = {}) {
+        if (!item || !item.item_id) {
+            return `<button type="button" class="inventory-slot inventory-slot--empty" ${slot ? `data-hotbar-slot="${slot}"` : ''}>${slot ? `<span class="inventory-slot__index">${slot}</span>` : ''}</button>`;
+        }
+        const definition = this.itemMap[item.item_id] || { item_id: item.item_id, name: item.item_id, category: item.category || 'misc', metadata: {} };
+        const tooltip = `${this.itemName(item.item_id)} · ${this.itemMetaLabel(item.item_id)} · Qty ${Math.round(item.quantity || 0)}`;
+        return `
+            <button
+                type="button"
+                class="inventory-slot ${active ? 'active' : ''}"
+                data-source="${escapeHtml(source)}"
+                data-item-id="${escapeHtml(item.item_id)}"
+                data-quantity="${escapeHtml(item.quantity || 0)}"
+                ${slot ? `data-hotbar-slot="${slot}"` : ''}
+                title="${escapeHtml(tooltip)}"
+                draggable="true">
+                ${slot ? `<span class="inventory-slot__index">${slot}</span>` : ''}
+                <span class="inventory-slot__icon">${escapeHtml(itemIcon(item.item_id, definition))}</span>
+                <span class="inventory-slot__name">${escapeHtml(this.itemName(item.item_id))}</span>
+                <span class="inventory-slot__qty">${escapeHtml(quantityLabel(item.quantity || 0))}</span>
+            </button>`;
+    }
+
+    render(self, { layout, onDeposit, onWithdraw, onHotbarAssign, onHotbarClear, onDropItem, onSelectHotbar } = {}) {
+        const inventory = this.inventoryEntries(self);
         const bank = self && self.bank || [];
-        const equipment = self && self.equipment || {};
+        const hotbar = Array.isArray(self && self.hotbar) ? self.hotbar : [];
+        const inventoryLayout = Object.assign({ rows: 5, cols: 8, hotbarSlots: 9 }, layout || {});
         const signature = JSON.stringify({
             coins: Math.round(self && self.coins || 0),
-            equipment,
+            hotbar,
             inventory,
             bank,
         });
@@ -93,91 +161,84 @@ export class InventoryPanel {
 
         this.summaryEl.innerHTML = `
             <div class="inventory-chip"><span>Coins</span><strong>${Math.round(self && self.coins || 0)}</strong></div>
-            <div class="inventory-chip"><span>Weapon</span><strong>${escapeHtml(this.itemName(equipment.weapon || 'fists'))}</strong></div>
-            <div class="inventory-chip"><span>Tooling</span><strong>${escapeHtml(this.itemName(equipment.axe || equipment.pickaxe || equipment.rod || 'hands'))}</strong></div>`;
+            <div class="inventory-chip"><span>Backpack</span><strong>${inventory.reduce((sum, entry) => sum + Number(entry.quantity || 0), 0)}</strong></div>
+            <div class="inventory-chip"><span>Bank</span><strong>${bank.reduce((sum, entry) => sum + Number(entry.quantity || 0), 0)}</strong></div>`;
 
-        this.equipmentEl.innerHTML = `<h4>Loadout</h4>
-            <div class="equipment-slot-grid">${EQUIPMENT_SLOTS.map((slot) => {
-                const equippedId = equipment[slot.id] || '';
-                const equippedName = equippedId ? this.itemName(equippedId) : 'Drop a matching item here';
-                return `
-                    <div class="equipment-slot ${equippedId ? 'filled' : ''}" data-slot="${slot.id}" ${equippedId ? `draggable="true" data-id="${equippedId}" data-drag-kind="equipment"` : ''}>
-                        <div class="equipment-slot__label">${escapeHtml(slot.label)}</div>
-                        <div class="equipment-slot__name">${escapeHtml(equippedName)}</div>
-                        <div class="equipment-slot__meta">
-                            <span>${equippedId ? escapeHtml(this.itemMetaLabel(equippedId)) : 'Drag from backpack'}</span>
-                            ${equippedId ? `<button type="button" class="mini-button" data-action="clear-slot" data-slot="${slot.id}">Clear</button>` : ''}
-                        </div>
-                    </div>`;
-            }).join('')}</div>
-            <div class="inventory-help">Drag backpack items into loadout slots, or double-click an equippable item to snap it into place.</div>`;
+        this.hotbarEl.innerHTML = `<h4>Hotbar</h4>
+            <div class="inventory-hotbar-grid">${Array.from({ length: clamp(inventoryLayout.hotbarSlots || 9, 1, 12) }).map((_, index) => this.renderSlot(hotbar[index], { source: 'hotbar', slot: index + 1, active: hotbar[index] && hotbar[index].active })).join('')}</div>
+            <div class="inventory-help">Drag backpack slots onto the hotbar, right-click for slot actions, and use the mouse wheel or number keys to select slots.</div>`;
 
-        this.inventoryEl.innerHTML = `<h4>Backpack</h4>
-            <div class="inventory-dropzone" data-dropzone="backpack">Drop an equipped slot here to clear it.</div>
-            ${inventory.map((item) => `
-                <div class="item-row item-row--inventory" draggable="true" data-kind="inventory" data-id="${item.item_id}">
-                    <div class="item-row-body">
-                        <strong>${escapeHtml(this.itemName(item.item_id))}</strong>
-                        <small>${escapeHtml(this.itemMetaLabel(item.item_id))}</small>
-                    </div>
-                    <div class="item-actions">
-                        <strong>x${item.quantity}</strong>
-                        <button type="button" class="mini-button" data-action="deposit" data-id="${item.item_id}">Bank</button>
-                    </div>
-                </div>`).join('') || '<div class="empty">No items</div>'}`;
+        const inventorySlots = inventory.map((entry) => this.renderSlot(entry, { source: 'inventory' }));
+        while (inventorySlots.length < (inventoryLayout.rows * inventoryLayout.cols)) {
+            inventorySlots.push(this.renderSlot(null, { source: 'inventory' }));
+        }
+        this.inventoryEl.innerHTML = `<h4>Backpack</h4><div class="inventory-slot-grid">${inventorySlots.join('')}</div>`;
+        this.bankEl.innerHTML = `<h4>Bank</h4><div class="inventory-slot-grid inventory-slot-grid--bank">${(bank.length ? bank : Array.from({ length: inventoryLayout.cols })).map((entry) => this.renderSlot(entry || null, { source: 'bank' })).join('')}</div>`;
 
-        this.bankEl.innerHTML = `<h4>Bank</h4>${bank.map((item) => `
-            <div class="item-row">
-                <div class="item-row-body">
-                    <strong>${escapeHtml(this.itemName(item.item_id))}</strong>
-                    <small>Withdraw back to backpack</small>
-                </div>
-                <div class="item-actions">
-                    <strong>x${item.quantity}</strong>
-                    <button type="button" class="mini-button" data-action="withdraw" data-id="${item.item_id}">Withdraw</button>
-                </div>
-            </div>`).join('') || '<div class="empty">No bank items</div>'}`;
-
-        this.root.querySelectorAll('[data-action="deposit"]').forEach((button) => {
-            button.onclick = () => onDeposit && onDeposit(button.dataset.id);
-        });
-        this.root.querySelectorAll('[data-action="withdraw"]').forEach((button) => {
-            button.onclick = () => onWithdraw && onWithdraw(button.dataset.id);
-        });
-        this.root.querySelectorAll('[data-action="clear-slot"]').forEach((button) => {
-            button.onclick = () => onClearSlot && onClearSlot(button.dataset.slot);
-        });
-
-        this.root.querySelectorAll('[data-kind="inventory"]').forEach((row) => {
-            row.addEventListener('dragstart', (event) => {
-                this.dragPayload = { source: 'inventory', itemId: row.dataset.id };
-                if (event.dataTransfer) {
-                    event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('application/json', JSON.stringify(this.dragPayload));
-                }
-            });
-            row.addEventListener('dblclick', () => {
-                const slot = this.itemEquipSlot(row.dataset.id);
-                if (slot && onEquip) onEquip({ itemId: row.dataset.id, slot });
-            });
-        });
-
-        this.root.querySelectorAll('[data-drag-kind="equipment"]').forEach((slotEl) => {
+        this.root.querySelectorAll('.inventory-slot[data-item-id]').forEach((slotEl) => {
             slotEl.addEventListener('dragstart', (event) => {
-                this.dragPayload = { source: 'equipment', slot: slotEl.dataset.slot, itemId: slotEl.dataset.id };
+                const payload = {
+                    source: slotEl.dataset.source,
+                    itemId: slotEl.dataset.itemId,
+                    slot: slotEl.dataset.hotbarSlot ? Number(slotEl.dataset.hotbarSlot) : null,
+                };
+                this.dragPayload = payload;
                 if (event.dataTransfer) {
                     event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('application/json', JSON.stringify(this.dragPayload));
+                    event.dataTransfer.setData('application/json', JSON.stringify(payload));
                 }
+            });
+            slotEl.addEventListener('mouseenter', (event) => this.showTooltip(slotEl.title, event.clientX, event.clientY));
+            slotEl.addEventListener('mousemove', (event) => this.showTooltip(slotEl.title, event.clientX, event.clientY));
+            slotEl.addEventListener('mouseleave', () => this.hideTooltip());
+            slotEl.addEventListener('click', () => {
+                if (slotEl.dataset.source === 'hotbar' && slotEl.dataset.hotbarSlot) {
+                    onSelectHotbar && onSelectHotbar(Number(slotEl.dataset.hotbarSlot));
+                }
+            });
+            slotEl.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                const source = slotEl.dataset.source;
+                const itemId = slotEl.dataset.itemId;
+                const itemQuantity = Number(slotEl.dataset.quantity || 0);
+                const actions = [];
+                if (source === 'inventory') {
+                    actions.push({ id: 'assign-slot', type: 'slots', slots: Array.from({ length: 9 }, (_, index) => index + 1) });
+                    if (itemId !== 'coins') actions.push({ id: 'deposit-stack', label: 'Send stack to bank' });
+                    actions.push({ id: 'drop-one', label: 'Drop 1' });
+                    if (itemQuantity > 1) actions.push({ id: 'drop-stack', label: 'Drop stack' });
+                } else if (source === 'bank') {
+                    actions.push({ id: 'withdraw-stack', label: 'Withdraw stack' });
+                } else if (source === 'hotbar') {
+                    actions.push({ id: 'select-slot', label: 'Select slot' });
+                    actions.push({ id: 'clear-slot', label: 'Clear slot' });
+                    if (itemId) {
+                        actions.push({ id: 'drop-one', label: 'Drop 1' });
+                        if (itemQuantity > 1) actions.push({ id: 'drop-stack', label: 'Drop stack' });
+                    }
+                }
+                this.showContextMenu(event.clientX - this.root.getBoundingClientRect().left, event.clientY - this.root.getBoundingClientRect().top, actions);
+                this.contextMenu.querySelectorAll('[data-menu-action]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const action = button.dataset.menuAction;
+                        const slotNumber = Number(button.dataset.menuSlot || slotEl.dataset.hotbarSlot || 0) || null;
+                        this.hideContextMenu();
+                        if (action === 'assign-slot' && slotNumber) onHotbarAssign && onHotbarAssign(slotNumber, itemId);
+                        if (action === 'deposit-stack') onDeposit && onDeposit(itemId, itemQuantity);
+                        if (action === 'withdraw-stack') onWithdraw && onWithdraw(itemId, itemQuantity);
+                        if (action === 'clear-slot' && slotNumber) onHotbarClear && onHotbarClear(slotNumber);
+                        if (action === 'select-slot' && slotNumber) onSelectHotbar && onSelectHotbar(slotNumber);
+                        if (action === 'drop-one') onDropItem && onDropItem(itemId, 1);
+                        if (action === 'drop-stack') onDropItem && onDropItem(itemId, itemQuantity);
+                    });
+                });
             });
         });
 
-        this.root.querySelectorAll('.equipment-slot').forEach((slotEl) => {
-            const slotId = slotEl.dataset.slot;
+        this.root.querySelectorAll('.inventory-slot[data-hotbar-slot]').forEach((slotEl) => {
             slotEl.addEventListener('dragover', (event) => {
                 const payload = this.readDragPayload(event);
-                if (!payload || payload.source !== 'inventory') return;
-                if (this.itemEquipSlot(payload.itemId) !== slotId) return;
+                if (!payload || !payload.itemId) return;
                 event.preventDefault();
                 slotEl.classList.add('drag-over');
             });
@@ -185,27 +246,15 @@ export class InventoryPanel {
             slotEl.addEventListener('drop', (event) => {
                 slotEl.classList.remove('drag-over');
                 const payload = this.readDragPayload(event);
-                if (!payload || payload.source !== 'inventory') return;
-                if (this.itemEquipSlot(payload.itemId) !== slotId) return;
+                if (!payload || !payload.itemId) return;
                 event.preventDefault();
-                if (onEquip) onEquip({ itemId: payload.itemId, slot: slotId });
-            });
-        });
-
-        this.root.querySelectorAll('[data-dropzone="backpack"]').forEach((dropzone) => {
-            dropzone.addEventListener('dragover', (event) => {
-                const payload = this.readDragPayload(event);
-                if (!payload || payload.source !== 'equipment' || !payload.slot) return;
-                event.preventDefault();
-                dropzone.classList.add('drag-over');
-            });
-            dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-            dropzone.addEventListener('drop', (event) => {
-                dropzone.classList.remove('drag-over');
-                const payload = this.readDragPayload(event);
-                if (!payload || payload.source !== 'equipment' || !payload.slot) return;
-                event.preventDefault();
-                if (onClearSlot) onClearSlot(payload.slot);
+                const targetSlot = Number(slotEl.dataset.hotbarSlot);
+                if (payload.source === 'hotbar' && payload.slot && payload.slot !== targetSlot) {
+                    onHotbarAssign && onHotbarAssign(targetSlot, payload.itemId);
+                    onHotbarClear && onHotbarClear(payload.slot);
+                    return;
+                }
+                onHotbarAssign && onHotbarAssign(targetSlot, payload.itemId);
             });
         });
     }
