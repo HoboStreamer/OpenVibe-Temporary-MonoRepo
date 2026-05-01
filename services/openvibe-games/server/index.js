@@ -79,8 +79,9 @@ function buildApp() {
 
     const httpServer = createServer(app);
     realtime = createRealtimeRuntime({ httpServer, eventBus, config });
-    realtime.start();
     sourcevibe = createSourceVibeEngine({ realtime, eventBus, config });
+    if (typeof realtime.attachSourceVibe === 'function') realtime.attachSourceVibe(sourcevibe);
+    realtime.start();
 
     app.use('/api/games', serviceActorMiddleware(config.internalKey), userContextMiddleware(), buildRouter({ eventBus, realtime, config, sourcevibe }));
 

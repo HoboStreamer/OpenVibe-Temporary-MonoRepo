@@ -23,6 +23,7 @@ const { NetgraphMetrics } = require('./prediction/netgraph-metrics');
 const { WorldStateStore } = require('./persistence/world-state-store');
 const { ServerStore } = require('./persistence/server-store');
 const { PlayerStateStore } = require('./persistence/player-state-store');
+const { SourceVibeRoomHost } = require('./room-host');
 
 function sanitizeSlug(value, fallback = 'sourcevibe-server') {
     const slug = String(value || fallback)
@@ -39,6 +40,30 @@ function summarizeCommand(entry) {
         description: entry.description,
         usage: entry.usage,
         aliases: entry.aliases,
+    };
+}
+
+function withQuery(route, params = {}) {
+    const rawRoute = String(route || '').trim();
+    if (!rawRoute) return null;
+    const [pathname, search = ''] = rawRoute.split('?');
+    const query = new URLSearchParams(search);
+    for (const [key, value] of Object.entries(params || {})) {
+        if (value == null || value === '') continue;
+        if (!query.has(key)) query.set(key, String(value));
+    }
+    const serialized = query.toString();
+    return serialized ? `${pathname}?${serialized}` : pathname;
+}
+
+function buildServerRoutes(gamemode, serverId, gamemodeId) {
+    const routes = Object.assign({}, gamemode && gamemode.manifest && gamemode.manifest.routes || {});
+    const extra = { server: serverId, gamemode: gamemodeId };
+    return {
+        play: withQuery(routes.play || '/sourcevibe', extra),
+        launcher: withQuery(routes.launcher || '/sourcevibe', extra),
+        status: withQuery(routes.status || '/sourcevibe', Object.assign({ panel: 'status' }, extra)),
+        editor: routes.editor ? withQuery(routes.editor, extra) : null,
     };
 }
 
@@ -62,6 +87,34 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     const worldStates = new WorldStateStore();
     const serverStore = new ServerStore();
     const playerStates = new PlayerStateStore();
+    const serviceActor = {
+        actor_type: 'service',
+        actor_id: config && config.serviceId || 'openvibe-games',
+    };
+
+    function publishEngineEvent(type, payload = {}) {
+        if (!eventBus || typeof eventBus.publishGameEvent !== 'function') return;
+        eventBus.publishGameEvent(type, payload, serviceActor);
+    }
+
+    function runConsoleCommand(input, context = {}) {
+        const raw = String(input || '').trim();
+        const result = consoleExecutor.Run(raw, context);
+        publishEngineEvent('sourcevibe.command.executed', {
+            command: raw,
+            ok: result.ok !== false,
+            code: result.code || null,
+            user_id: context.userId ? String(context.userId) : null,
+        });
+        if (result && result.cvar) {
+            publishEngineEvent('sourcevibe.cvar.changed', {
+                name: result.cvar.name,
+                value: result.cvar.value,
+                user_id: context.userId ? String(context.userId) : null,
+            });
+        }
+        return result;
+    }
 
     const api = {
         name: 'SourceVibe Engine',
@@ -81,7 +134,7 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
             cvars,
             binds,
             run(input, context) {
-                return consoleExecutor.Run(input, context);
+                return runConsoleCommand(input, context);
             },
             autocomplete(input) {
                 return consoleExecutor.Autocomplete(input);
@@ -110,12 +163,17 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         cvars.Create('net_graph', 0, ['archive'], 'Show basic SourceVibe network graph diagnostics.');
         cvars.Create('cl_showfps', 0, ['archive'], 'Show the client FPS counter.');
         cvars.Create('cl_showerror', 0, ['archive'], 'Show client-side prediction errors.');
+        cvars.Create('cl_showpos', 0, ['archive'], 'Show client-side position diagnostics.');
         cvars.Create('cl_pdump', 0, ['archive'], 'Prediction dump toggle.');
         cvars.Create('cl_predictionlist', 0, ['archive'], 'Prediction list toggle.');
+        cvars.Create('cl_smooth', 1, ['archive'], 'Smooth prediction corrections when enabled.');
+        cvars.Create('cl_smoothtime', 0.1, ['archive'], 'Seconds spent smoothing prediction corrections.');
         cvars.Create('cl_interp', DEFAULT_RATE_LIMITS.cl_interp, ['archive'], 'Interpolation amount in seconds.');
         cvars.Create('cl_interp_ratio', DEFAULT_RATE_LIMITS.cl_interp_ratio, ['archive'], 'Interpolation ratio.');
         cvars.Create('cl_updaterate', DEFAULT_RATE_LIMITS.cl_updaterate, ['archive'], 'Snapshot update rate.');
         cvars.Create('cl_cmdrate', DEFAULT_RATE_LIMITS.cl_cmdrate, ['archive'], 'Command send rate.');
+        cvars.Create('cl_extrapolate', 0, ['archive'], 'Allow limited client extrapolation.');
+        cvars.Create('cl_extrapolate_amount', 0.25, ['archive'], 'Maximum extrapolation amount in seconds.');
         cvars.Create('rate', DEFAULT_RATE_LIMITS.rate, ['archive'], 'Requested bandwidth rate.');
         cvars.Create('sv_tickrate', DEFAULT_RATE_LIMITS.sv_tickrate, ['replicated'], 'Authoritative server tickrate.');
         cvars.Create('sv_snapshotrate', DEFAULT_RATE_LIMITS.sv_snapshotrate, ['replicated'], 'Snapshot broadcast rate.');
@@ -197,7 +255,14 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     function syncWorldServer(world) {
         const gamemodeId = resolveGamemodeIdFromWorld(world);
         const gm = gamemodes.Get(gamemodeId) || activeGamemode();
-        const routes = Object.assign({}, gm && gm.manifest && gm.manifest.routes || {}, world && world.metadata && world.metadata.routes || {});
+        const featured = gm && gm.server && typeof gm.server.buildFeaturedServer === 'function'
+            ? gm.server.buildFeaturedServer({ realtime, world, gamemode: gm, engine: api })
+            : null;
+        const routes = Object.assign({}, buildServerRoutes(gm, world && (world.slug || world.id), gamemodeId), world && world.metadata && world.metadata.routes || {}, featured ? {
+            play: featured.route,
+            status: featured.statusRoute,
+            editor: featured.editorRoute,
+        } : {});
         const liveRoom = realtime && realtime.summary ? (realtime.summary().world_rooms || []).find((room) => room.world_id === world.id) : null;
         const entry = Object.assign({}, serverStore.get(world.id) || {}, {
             id: world.id,
@@ -206,14 +271,14 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
             name: world.name,
             gamemode: gamemodeId,
             map: world && world.metadata && world.metadata.map || gm && gm.manifest && Array.isArray(gm.manifest.maps) && gm.manifest.maps[0] || 'flatgrass',
-            route: routes.play || `/sourcevibe?server=${world.id}&gamemode=${gamemodeId}`,
-            statusRoute: routes.status || `/sourcevibe?server=${world.id}&panel=status`,
+            route: routes.play || withQuery('/sourcevibe', { server: world.id, gamemode: gamemodeId }),
+            statusRoute: routes.status || withQuery('/sourcevibe', { server: world.id, panel: 'status', gamemode: gamemodeId }),
             editorRoute: routes.editor || null,
             players: liveRoom ? Number(liveRoom.player_count || 0) : 0,
             maxPlayers: Number(world && world.metadata && world.metadata.maxPlayers) || 64,
             official: !!(realtime && realtime.rootWorld && realtime.rootWorld.id === world.id),
-            tags: Array.from(new Set([gamemodeId].concat(realtime && realtime.rootWorld && realtime.rootWorld.id === world.id ? ['official'] : []).concat(world && world.status ? [world.status] : []))),
-            metadata: Object.assign({}, world && world.metadata || {}),
+            tags: Array.from(new Set([gamemodeId].concat(realtime && realtime.rootWorld && realtime.rootWorld.id === world.id ? ['official'] : []).concat(featured && featured.tags || []).concat(world && world.status ? [world.status] : []))),
+            metadata: Object.assign({}, featured && featured.metadata || {}, world && world.metadata || {}),
         });
         if (serverStore.get(entry.id)) return serverStore.update(entry.id, entry);
         return serverStore.create(entry);
@@ -255,7 +320,13 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     };
 
     api.listGamemodes = function listGamemodes() {
-        return gamemodes.List().map((entry) => summarizeGamemode(entry));
+        return gamemodes.List()
+            .sort((a, b) => {
+                if (a.id === '2dworld' && b.id !== '2dworld') return -1;
+                if (b.id === '2dworld' && a.id !== '2dworld') return 1;
+                return a.id.localeCompare(b.id);
+            })
+            .map((entry) => summarizeGamemode(entry));
     };
 
     api.getGamemode = function getGamemode(id) {
@@ -265,7 +336,15 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     api.activeGamemode = activeGamemode;
 
     api.setActiveGamemode = function setActiveGamemode(id) {
-        return summarizeGamemode(gamemodes.Activate(id));
+        const next = summarizeGamemode(gamemodes.Activate(id));
+        publishEngineEvent('sourcevibe.gamemode.loaded', { gamemode: next && next.id || null, active: true });
+        return next;
+    };
+
+    api.resolveWorldGamemode = resolveGamemodeIdFromWorld;
+
+    api.getGamemodeDescriptor = function getGamemodeDescriptor(id) {
+        return gamemodes.Get(id);
     };
 
     api.listMaps = function listMaps() {
@@ -293,6 +372,7 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         const gm = gamemodes.Get(gamemodeId) || activeGamemode();
         const slug = sanitizeSlug(payload.slug || payload.name || `${gamemodeId}-server`);
         const mapId = payload.map || gm && gm.manifest && Array.isArray(gm.manifest.maps) && gm.manifest.maps[0] || 'flatgrass';
+        const routes = buildServerRoutes(gm, slug, gamemodeId);
         const world = worldStates.upsert({
             slug,
             name: payload.name || `${gm && gm.manifest && gm.manifest.name || 'SourceVibe'} Server`,
@@ -305,17 +385,21 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 map: mapId,
                 maxPlayers: Number(payload.maxPlayers) || 32,
                 description: payload.description || '',
-                routes: {
-                    play: `/sourcevibe?server=${slug}&gamemode=${gamemodeId}`,
-                    status: `/sourcevibe?server=${slug}&panel=status`,
-                },
+                routes,
                 sourcevibe: {
                     created_from_launcher: true,
                     gamemode: gamemodeId,
                 },
             },
         });
-        return syncWorldServer(world);
+        const server = syncWorldServer(world);
+        publishEngineEvent('sourcevibe.server.created', {
+            world_id: world.id,
+            slug: world.slug,
+            gamemode: gamemodeId,
+            owner_id: payload.ownerId || null,
+        });
+        return server;
     };
 
     api.connect = function connect(payload = {}) {
@@ -362,6 +446,7 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 realtimePath: '/games/realtime',
             },
             gamemode: summarizeGamemode(gamemode),
+            gamemodeUi: JSON.parse(JSON.stringify(gamemode && gamemode.ui || {})),
             gamemodes: api.listGamemodes(),
             maps: api.listMaps(),
             addons: api.listAddons(worldId),
@@ -371,6 +456,10 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 commands: commands.List().map((entry) => summarizeCommand(entry)),
                 cvars: cvars.List(),
                 binds: binds.List(),
+                suggestions: [].concat(
+                    gamemodes.Get('base') && gamemodes.Get('base').client && gamemodes.Get('base').client.ui && gamemodes.Get('base').client.ui.console && gamemodes.Get('base').client.ui.console.suggestions || [],
+                    gamemode && gamemode.client && gamemode.client.ui && gamemode.client.ui.console && gamemode.client.ui.console.suggestions || []
+                ).filter(Boolean),
             },
             prediction: {
                 interpolation: computeInterpolationPeriod(rates),
@@ -383,6 +472,13 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 hotbar: player && player.metadata && player.metadata.sourcevibe && player.metadata.sourcevibe.hotbar || [],
             },
             player: player || null,
+            menu: {
+                connected: ['Resume Game', 'Disconnect', 'Player List', 'Find Servers', 'Create Server', 'Gamemodes', 'Addons', 'Options', 'Console', 'Quit'],
+                disconnected: ['Gamemodes', 'Find Servers', 'Create Server', 'Options', 'Console', 'Quit'],
+            },
+            options: {
+                tabs: ['Keyboard', 'Mouse', 'Audio', 'Video', 'Voice', 'Multiplayer', 'Advanced'],
+            },
             launcher: {
                 route: '/sourcevibe',
                 legacyPlayRoute: '/2d-world',
@@ -390,9 +486,43 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         };
     };
 
+    api.setPlayerHotbar = function setPlayerHotbar(userId, hotbar) {
+        return playerStates.setHotbar(userId, hotbar);
+    };
+
+    api.setPlayerInventoryLayout = function setPlayerInventoryLayout(userId, layout) {
+        return playerStates.setInventoryLayout(userId, layout);
+    };
+
+    api.createRoomHost = function createRoomHost(options = {}) {
+        const world = options.world || {};
+        const gamemodeId = options.gamemodeId || resolveGamemodeIdFromWorld(world);
+        const descriptor = gamemodes.Get(gamemodeId) || activeGamemode();
+        if (!descriptor || !descriptor.server) return null;
+        if (typeof descriptor.server.createRoomHost === 'function') {
+            return descriptor.server.createRoomHost(Object.assign({}, options, {
+                engine: api,
+                gamemode: descriptor,
+            }));
+        }
+        if (typeof descriptor.server.createRoom !== 'function') return null;
+        const room = descriptor.server.createRoom(Object.assign({}, options, {
+            engine: api,
+            gamemode: descriptor,
+        }));
+        if (!room) return null;
+        return room instanceof SourceVibeRoomHost
+            ? room
+            : new SourceVibeRoomHost({ engine: api, gamemodeId: descriptor.id, descriptor, room });
+    };
+
     api.reloadContent = function reloadContent() {
         gamemodeLoader.registerBuiltins({ gamemodeRegistry: gamemodes, entityRegistry: ents });
         mapLoader.loadBuiltins().forEach((map) => maps.Register(map));
+        gamemodes.List().forEach((entry) => publishEngineEvent('sourcevibe.gamemode.loaded', {
+            gamemode: entry.id,
+            active: activeGamemode() && activeGamemode().id === entry.id,
+        }));
         return api.summary();
     };
 
@@ -404,6 +534,10 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         commands.Add('echo', ({ args }) => ({ ok: true, output: args.join(' ') }), {
             description: 'Print text to the SourceVibe console.',
             usage: 'echo <text>',
+        });
+        commands.Add('clear', () => ({ ok: true, output: '__CLEAR__' }), {
+            description: 'Clear the SourceVibe console scrollback.',
+            usage: 'clear',
         });
         commands.Add('status', () => ({ ok: true, output: JSON.stringify(api.summary(), null, 2) }), {
             description: 'Show SourceVibe engine status.',
@@ -496,6 +630,10 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
             description: 'Summarize addon state for the active world.',
             usage: 'addons_reload',
         });
+        commands.Add('cl_fullupdate', () => ({ ok: true, output: 'requested full snapshot refresh' }), {
+            description: 'Request a fresh full update from the current server.',
+            usage: 'cl_fullupdate',
+        });
         commands.Add('toggleconsole', () => ({ ok: true, output: 'toggleconsole' }), { description: 'Toggle the SourceVibe console.', usage: 'toggleconsole' });
         commands.Add('showmenu', () => ({ ok: true, output: 'showmenu' }), { description: 'Open the SourceVibe launcher menu.', usage: 'showmenu' });
         commands.Add('hidepanel', ({ args }) => ({ ok: true, output: `hidepanel ${args[0] || ''}`.trim() }), { description: 'Hide a launcher panel.', usage: 'hidepanel <panel>' });
@@ -510,6 +648,10 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     if (gamemodes.Get('2dworld')) gamemodes.Activate('2dworld');
 
     hook.SetBase('SVGetEngineSummary', () => api.summary());
+    publishEngineEvent('sourcevibe.engine.started', {
+        version: api.version,
+        active_gamemode: api.activeGamemode() && api.activeGamemode().id || null,
+    });
 
     return api;
 }

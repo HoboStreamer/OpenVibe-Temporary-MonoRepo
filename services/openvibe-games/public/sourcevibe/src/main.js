@@ -76,6 +76,22 @@ function createHookLibrary() {
     };
 }
 
+function sortGamemodes(gamemodes = []) {
+    return [...gamemodes].sort((left, right) => {
+        if (left.id === '2dworld' && right.id !== '2dworld') return -1;
+        if (right.id === '2dworld' && left.id !== '2dworld') return 1;
+        return String(left.title || left.id).localeCompare(String(right.title || right.id));
+    });
+}
+
+function sortServers(servers = []) {
+    return [...servers].sort((left, right) => {
+        if (left.gamemode === '2dworld' && right.gamemode !== '2dworld') return -1;
+        if (right.gamemode === '2dworld' && left.gamemode !== '2dworld') return 1;
+        return String(left.name || left.id).localeCompare(String(right.name || right.id));
+    });
+}
+
 const state = {
     identity: loadIdentity(),
     bootstrap: null,
@@ -272,7 +288,7 @@ function renderEngineStats() {
 }
 
 function renderQuickLaunch() {
-    const activeServer = state.bootstrap.activeServer || (state.bootstrap.servers || [])[0] || null;
+    const activeServer = state.bootstrap.activeServer || sortServers(state.bootstrap.servers || []).find((server) => server.gamemode === '2dworld') || sortServers(state.bootstrap.servers || [])[0] || null;
     if (!activeServer) {
         dom.quickLaunch.innerHTML = '<p class="muted">No SourceVibe servers are registered yet.</p>';
         return;
@@ -306,23 +322,24 @@ function renderHotbar() {
 
 function renderLauncherPanel() {
     const gm = state.bootstrap.gamemode;
-    const activeServer = state.bootstrap.activeServer || (state.bootstrap.servers || [])[0] || null;
+    const featuredGamemode = sortGamemodes(state.bootstrap.gamemodes || []).find((entry) => entry.id === '2dworld') || gm;
+    const activeServer = state.bootstrap.activeServer || sortServers(state.bootstrap.servers || []).find((server) => server.gamemode === '2dworld') || sortServers(state.bootstrap.servers || [])[0] || null;
     const launcherRoute = gm && gm.routes && gm.routes.launcher ? gm.routes.launcher : '/sourcevibe';
     dom.panels.launcher.innerHTML = `
         <div class="hero-card">
             <div>
-                <p class="eyebrow">Engine shell online</p>
-                <h2>${gm ? gm.title : 'Unknown gamemode'}</h2>
-                <p class="muted">${gm ? gm.description : 'No active gamemode is loaded.'}</p>
+                <p class="eyebrow">Featured SourceVibe experience</p>
+                <h2>${featuredGamemode ? featuredGamemode.title : gm ? gm.title : 'Unknown gamemode'}</h2>
+                <p class="muted">${featuredGamemode ? featuredGamemode.description : gm ? gm.description : 'No active gamemode is loaded.'}</p>
             </div>
             <div class="chip-row">
-                ${(state.bootstrap.gamemodes || []).map((entry) => `<span class="chip">${entry.title}</span>`).join('')}
+                ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `<span class="chip">${entry.title}</span>`).join('')}
             </div>
             <div class="hero-actions">
                 ${activeServer ? `<button class="cta-button" data-action="launch-server" data-server-id="${activeServer.id}">Play ${activeServer.name}</button>` : ''}
-                ${gm && gm.routes && gm.routes.play ? `<a class="cta-button" href="${gm.routes.play}">Open play route</a>` : ''}
-                ${gm && gm.routes && gm.routes.status ? `<a class="table-button" href="${gm.routes.status}">Status</a>` : ''}
-                ${gm && gm.routes && gm.routes.editor ? `<a class="table-button" href="${gm.routes.editor}">Editor</a>` : ''}
+                ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.play ? `<a class="cta-button" href="${featuredGamemode.routes.play}">Open play route</a>` : gm && gm.routes && gm.routes.play ? `<a class="cta-button" href="${gm.routes.play}">Open play route</a>` : ''}
+                ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.status ? `<a class="table-button" href="${featuredGamemode.routes.status}">Status</a>` : gm && gm.routes && gm.routes.status ? `<a class="table-button" href="${gm.routes.status}">Status</a>` : ''}
+                ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.editor ? `<a class="table-button" href="${featuredGamemode.routes.editor}">Editor</a>` : gm && gm.routes && gm.routes.editor ? `<a class="table-button" href="${gm.routes.editor}">Editor</a>` : ''}
                 <a class="table-button" href="${launcherRoute}">Refresh launcher</a>
             </div>
         </div>
@@ -336,7 +353,7 @@ function renderLauncherPanel() {
             <article class="feature-card">
                 <p class="stat-label">Registered gamemodes</p>
                 <div class="feature-value">${(state.bootstrap.gamemodes || []).length}</div>
-                <p class="muted">Base engine plus runtime-specific child gamemodes.</p>
+                <p class="muted">2D World is pinned first, with other SourceVibe gamemodes listed below it.</p>
             </article>
             <article class="feature-card">
                 <p class="stat-label">Installed addons</p>
@@ -356,7 +373,7 @@ function renderLauncherPanel() {
                     <label>
                         <span class="muted">Gamemode</span>
                         <select name="gamemode">
-                            ${(state.bootstrap.gamemodes || []).map((entry) => `<option value="${entry.id}" ${gm && gm.id === entry.id ? 'selected' : ''}>${entry.title}</option>`).join('')}
+                            ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `<option value="${entry.id}" ${(featuredGamemode && featuredGamemode.id === entry.id) || (gm && gm.id === entry.id) ? 'selected' : ''}>${entry.title}</option>`).join('')}
                         </select>
                     </label>
                     <label>
@@ -391,7 +408,7 @@ function renderLauncherPanel() {
 }
 
 function renderServersPanel() {
-    const rows = (state.bootstrap.servers || []).map((server) => `
+    const rows = sortServers(state.bootstrap.servers || []).map((server) => `
         <tr>
             <td>
                 <strong>${server.name}</strong><br />
@@ -432,9 +449,9 @@ function renderServersPanel() {
 function renderGamemodesPanel() {
     dom.panels.gamemodes.innerHTML = `
         <div class="grid-two">
-            ${(state.bootstrap.gamemodes || []).map((entry) => `
+            ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `
                 <article class="gamemode-card">
-                    <p class="eyebrow">${entry.active ? 'Active gamemode' : 'Available gamemode'}</p>
+                    <p class="eyebrow">${entry.id === '2dworld' ? 'Featured gamemode' : entry.active ? 'Active gamemode' : 'Available gamemode'}</p>
                     <h3>${entry.title}</h3>
                     <p class="muted">${entry.description}</p>
                     <div class="chip-row">

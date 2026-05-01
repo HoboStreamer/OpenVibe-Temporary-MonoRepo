@@ -61,6 +61,10 @@ async function main() {
         assert.ok(gamemodes.items.some((entry) => entry.id === '2dworld'));
         assert.strictEqual(gamemodes.active.id, '2dworld');
 
+        const gamemodeDetail = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld`);
+        assert.strictEqual(gamemodeDetail.gamemode.id, '2dworld');
+        assert.ok(gamemodeDetail.gamemode.routes.play.includes('/2d-world'));
+
         const created = await jsonFetch(`${baseUrl}/api/games/sourcevibe/servers`, {
             method: 'POST',
             body: JSON.stringify({

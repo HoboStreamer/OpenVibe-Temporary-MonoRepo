@@ -5,6 +5,8 @@
 // consumable / cosmetic. `stackable=0` items get one slot per unit.
 
 const ITEMS = Object.freeze([
+    { item_id: 'coins', name: 'Coins', category: 'currency', max_stack: 999999, metadata: { icon: 'coins', droppable: true } },
+
     // resources
     { item_id: 'wood', name: 'Wood', category: 'resource', max_stack: 9999 },
     { item_id: 'oak_log', name: 'Oak Log', category: 'resource', max_stack: 9999 },

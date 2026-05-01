@@ -25,6 +25,8 @@ const inventoryUtils = require('../engine/inventory');
 const LOOT_PICKUP_RADIUS = 48;
 const NPC_INTERACT_RADIUS = 96;
 const RESOURCE_INTERACT_RADIUS = 72;
+const HOTBAR_SIZE = 9;
+const HOTBAR_ASSIGNABLE_CATEGORIES = new Set(['weapon', 'tool', 'build', 'consumable', 'resource', 'currency']);
 
 function uid(prefix) {
     return `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
@@ -329,7 +331,104 @@ class WorldRoom {
         return progress;
     }
 
-    _defaultHeldItem(player) {
+    _normalizeHotbarEntry(entry) {
+        if (!entry) return null;
+        const itemId = String(entry && (entry.item_id || entry.itemId) || entry || '').trim();
+        return itemId ? { item_id: itemId } : null;
+    }
+
+    _hotbarDefaults(player) {
+        const defaults = Array.from({ length: HOTBAR_SIZE }, () => null);
+        const preferred = [
+            player && (player.equip_weapon || 'wooden_club'),
+            player && (player.equip_axe || 'stone_hatchet'),
+            player && (player.equip_pickaxe || 'stone_pickaxe'),
+            player && (player.equip_rod || 'fishing_rod'),
+            'hammer',
+        ];
+        preferred.forEach((itemId, index) => {
+            if (itemId) defaults[index] = { item_id: itemId };
+        });
+        return defaults;
+    }
+
+    _coerceHotbar(entries, player) {
+        const next = this._hotbarDefaults(player);
+        const incoming = Array.isArray(entries) ? entries : [];
+        for (let index = 0; index < HOTBAR_SIZE; index += 1) {
+            if (incoming[index] === null) {
+                next[index] = null;
+                continue;
+            }
+            const normalized = this._normalizeHotbarEntry(incoming[index]);
+            if (normalized) next[index] = normalized;
+        }
+        return next.slice(0, HOTBAR_SIZE);
+    }
+
+    _persistHotbar(player) {
+        const updated = model.setPlayerSourceVibeMetadata(player.user_id, {
+            hotbar: Array.isArray(player.hotbar) ? player.hotbar : [],
+        });
+        if (updated && updated.metadata) player.metadata = clone(updated.metadata);
+        return player.hotbar;
+    }
+
+    _inventoryMapForPlayer(player) {
+        return new Map(model.listInventory(player.user_id).map((entry) => [String(entry.item_id), entry]));
+    }
+
+    _hotbarEntryForSlot(player, slotNumber, inventoryMap = null) {
+        const hotbar = Array.isArray(player && player.hotbar) ? player.hotbar : [];
+        const slotIndex = Math.max(0, Math.min(HOTBAR_SIZE - 1, (Number(slotNumber || player && player.quick_slot) || 1) - 1));
+        const normalized = this._normalizeHotbarEntry(hotbar[slotIndex]);
+        if (!normalized) return null;
+        if (normalized.item_id === 'coins') {
+            const quantity = Math.max(0, Number(player && player.coins || 0));
+            return quantity > 0 ? { item_id: 'coins', quantity, metadata: { icon: 'coins' } } : null;
+        }
+        const inventory = inventoryMap || this._inventoryMapForPlayer(player);
+        const entry = inventory.get(normalized.item_id);
+        return entry && Number(entry.quantity || 0) > 0 ? entry : null;
+    }
+
+    _buildHotbarSnapshot(player) {
+        const inventory = this._inventoryMapForPlayer(player);
+        return Array.from({ length: HOTBAR_SIZE }, (_, index) => {
+            const slot = index + 1;
+            const normalized = this._normalizeHotbarEntry(Array.isArray(player.hotbar) ? player.hotbar[index] : null);
+            const active = slot === Number(player.quick_slot || 1);
+            if (!normalized) return { slot, item_id: null, quantity: 0, active };
+            const itemDefinition = normalized.item_id === 'coins'
+                ? this.itemDefinitions.coins || this.itemMap.coins || { item_id: 'coins', name: 'Coins', category: 'currency', metadata: { icon: 'coins' } }
+                : this.itemDefinitions[normalized.item_id] || this.itemMap[normalized.item_id] || { item_id: normalized.item_id, name: normalized.item_id, category: 'misc', metadata: {} };
+            const quantity = normalized.item_id === 'coins'
+                ? Math.max(0, Number(player.coins || 0))
+                : Math.max(0, Number(inventory.get(normalized.item_id) && inventory.get(normalized.item_id).quantity || 0));
+            if (quantity <= 0) return { slot, item_id: null, quantity: 0, active };
+            return {
+                slot,
+                item_id: normalized.item_id,
+                name: itemDefinition.name || normalized.item_id,
+                category: itemDefinition.category || null,
+                quantity,
+                active,
+                icon: itemDefinition.icon || itemDefinition.metadata && itemDefinition.metadata.icon || itemDefinition.render && itemDefinition.render.icon || null,
+                droppable: normalized.item_id === 'coins' || !(itemDefinition.metadata && itemDefinition.metadata.droppable === false),
+                hold_type: itemDefinition.category === 'weapon'
+                    ? 'weapon'
+                    : itemDefinition.category === 'tool'
+                        ? 'tool'
+                        : itemDefinition.category === 'build'
+                            ? 'build'
+                            : itemDefinition.category === 'consumable'
+                                ? 'consumable'
+                                : 'misc',
+            };
+        });
+    }
+
+    _legacyHeldItem(player) {
         switch (Number(player.quick_slot) || 1) {
         case 2:
             return player.equip_axe || player.equip_weapon || '';
@@ -342,6 +441,78 @@ class WorldRoom {
         default:
             return player.equip_weapon || player.equip_axe || player.equip_pickaxe || '';
         }
+    }
+
+    _applyHotbarSelection(player, slotNumber) {
+        const nextSlot = Math.max(1, Math.min(HOTBAR_SIZE, Number(slotNumber) || 1));
+        const inventory = this._inventoryMapForPlayer(player);
+        const activeEntry = this._hotbarEntryForSlot(player, nextSlot, inventory);
+        const patch = { user_id: player.user_id };
+        let changed = false;
+        player.quick_slot = nextSlot;
+
+        if (activeEntry && activeEntry.item_id !== 'coins') {
+            const item = this.itemDefinitions[activeEntry.item_id] || this.itemMap[activeEntry.item_id] || null;
+            if (item && item.equip_slot) {
+                const field = this._equipmentFieldForSlot(item.equip_slot);
+                if (field && player[field] !== activeEntry.item_id) {
+                    player[field] = activeEntry.item_id;
+                    patch[field] = activeEntry.item_id;
+                    changed = true;
+                }
+            }
+            player.held_item_id = item && item.category === 'build' ? 'hammer' : activeEntry.item_id;
+        } else if (activeEntry && activeEntry.item_id === 'coins') {
+            player.held_item_id = 'coins';
+        } else {
+            player.held_item_id = this._legacyHeldItem(player);
+        }
+
+        if (changed) model.upsertPlayer(patch);
+        return player.held_item_id;
+    }
+
+    _clearItemReferences(player, itemId) {
+        const clearValues = {
+            equip_weapon: '',
+            equip_armor: '',
+            equip_axe: null,
+            equip_pickaxe: null,
+            equip_rod: null,
+        };
+        const patch = { user_id: player.user_id };
+        let changed = false;
+        for (const [field, emptyValue] of Object.entries(clearValues)) {
+            if (player[field] === itemId) {
+                player[field] = emptyValue;
+                patch[field] = emptyValue;
+                changed = true;
+            }
+        }
+        if (Array.isArray(player.hotbar)) {
+            let hotbarChanged = false;
+            player.hotbar = player.hotbar.map((entry) => {
+                const normalized = this._normalizeHotbarEntry(entry);
+                if (normalized && normalized.item_id === itemId) {
+                    hotbarChanged = true;
+                    return null;
+                }
+                return normalized;
+            });
+            if (hotbarChanged) this._persistHotbar(player);
+        }
+        if (changed) model.upsertPlayer(patch);
+        this._applyHotbarSelection(player, player.quick_slot);
+    }
+
+    _defaultHeldItem(player) {
+        const activeEntry = this._hotbarEntryForSlot(player, player && player.quick_slot);
+        if (activeEntry) {
+            if (activeEntry.item_id === 'coins') return 'coins';
+            const item = this.itemDefinitions[activeEntry.item_id] || this.itemMap[activeEntry.item_id] || null;
+            return item && item.category === 'build' ? 'hammer' : activeEntry.item_id;
+        }
+        return this._legacyHeldItem(player);
     }
 
     _setHeldItem(player, itemId, now, holdMs = 320) {
@@ -611,6 +782,99 @@ class WorldRoom {
         };
     }
 
+    handleHotbarUpdate(player, payload) {
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const slot = Math.max(1, Math.min(HOTBAR_SIZE, Number(payload && payload.slot) || 0));
+        if (!slot) return { ok: false, reason: 'slot required' };
+        if (!Array.isArray(player.hotbar)) player.hotbar = this._coerceHotbar(null, player);
+
+        if (payload && payload.clear) {
+            player.hotbar[slot - 1] = null;
+            this._persistHotbar(player);
+            this._applyHotbarSelection(player, player.quick_slot);
+            this._publish('game.2dworld.hotbar.updated', {
+                user_id: player.user_id,
+                world_id: this.world.id,
+                slot,
+                item_id: null,
+            });
+            return { ok: true, slot, item_id: null, hotbar: this._buildHotbarSnapshot(player) };
+        }
+
+        const itemId = String(payload && (payload.item_id || payload.itemId) || '').trim();
+        if (!itemId) return { ok: false, reason: 'item_id required' };
+        if (itemId === 'coins') {
+            if (Number(player.coins || 0) <= 0) return { ok: false, reason: 'no coins available' };
+        } else {
+            const inventory = model.listInventory(player.user_id);
+            const inventoryEntry = inventory.find((entry) => entry.item_id === itemId && Number(entry.quantity || 0) > 0);
+            if (!inventoryEntry) return { ok: false, reason: 'item not in backpack' };
+            const item = this.itemDefinitions[itemId] || this.itemMap[itemId] || null;
+            if (!item || !HOTBAR_ASSIGNABLE_CATEGORIES.has(String(item.category || '').toLowerCase())) {
+                return { ok: false, reason: 'item cannot be added to the hotbar' };
+            }
+        }
+
+        player.hotbar[slot - 1] = { item_id: itemId };
+        this._persistHotbar(player);
+        this._applyHotbarSelection(player, payload && payload.select === false ? player.quick_slot : slot);
+        this._publish('game.2dworld.hotbar.updated', {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            slot,
+            item_id: itemId,
+        });
+        return { ok: true, slot, item_id: itemId, hotbar: this._buildHotbarSnapshot(player) };
+    }
+
+    handleInventoryDrop(player, payload, now = Date.now()) {
+        if (!player) return { ok: false, reason: 'player not joined' };
+        const itemId = String(payload && payload.item_id || '').trim();
+        const requestedQuantity = Math.max(1, Math.floor(Number(payload && payload.quantity) || 1));
+        if (!itemId) return { ok: false, reason: 'item_id required' };
+        const dropX = Number.isFinite(Number(payload && payload.x)) ? Number(payload.x) : player.x + ((player.facing || 1) * 28);
+        const dropY = Number.isFinite(Number(payload && payload.y)) ? Number(payload.y) : player.y + 12;
+
+        if (itemId === 'coins') {
+            const amount = Math.min(requestedQuantity, Math.max(0, Number(player.coins || 0)));
+            if (amount <= 0) return { ok: false, reason: 'not enough coins' };
+            player.coins -= amount;
+            model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+            this._dropLoot(dropX, dropY, player.zone_id, [{ item_id: 'coins', quantity: amount }], { kind: 'player', id: player.user_id, action: 'drop' });
+            this._publish('game.2dworld.item.dropped', {
+                user_id: player.user_id,
+                world_id: this.world.id,
+                zone_id: player.zone_id,
+                item_id: 'coins',
+                quantity: amount,
+            });
+            this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: 'coins', world_id: this.world.id });
+            return { ok: true, item_id: 'coins', quantity: amount, remaining_coins: player.coins, hotbar: this._buildHotbarSnapshot(player) };
+        }
+
+        const inventory = model.listInventory(player.user_id);
+        const entry = inventory.find((item) => item.item_id === itemId && Number(item.quantity || 0) > 0);
+        if (!entry) return { ok: false, reason: 'item not in backpack' };
+        const amount = Math.min(requestedQuantity, Math.max(0, Number(entry.quantity || 0)));
+        if (amount <= 0) return { ok: false, reason: 'invalid quantity' };
+        model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: -amount, metadata: {} });
+        this._dropLoot(dropX, dropY, player.zone_id, [{ item_id: itemId, quantity: amount }], { kind: 'player', id: player.user_id, action: 'drop' });
+        if (!model.listInventory(player.user_id).some((item) => item.item_id === itemId && Number(item.quantity || 0) > 0)) {
+            this._clearItemReferences(player, itemId);
+        } else {
+            this._applyHotbarSelection(player, player.quick_slot);
+        }
+        this._publish('game.2dworld.item.dropped', {
+            user_id: player.user_id,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
+            item_id: itemId,
+            quantity: amount,
+        });
+        this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: itemId, world_id: this.world.id });
+        return { ok: true, item_id: itemId, quantity: amount, hotbar: this._buildHotbarSnapshot(player) };
+    }
+
     _addSkillXp(player, skill, amount, reason) {
         const field = SKILL_TO_XP_FIELD[skill];
         if (!field || !amount) return player;
@@ -645,13 +909,25 @@ class WorldRoom {
         const dx = player.x - drop.x;
         const dy = player.y - drop.y;
         if ((dx * dx + dy * dy) > (48 * 48)) return { ok: false, reason: 'loot out of range' };
-        model.addInventoryItem({ user_id: player.user_id, item_id: drop.item_id, quantity: drop.quantity, metadata: {} });
+        if (drop.item_id === 'coins') {
+            player.coins += Math.max(0, Number(drop.quantity || 0));
+            model.upsertPlayer({ user_id: player.user_id, coins: player.coins });
+        } else {
+            model.addInventoryItem({ user_id: player.user_id, item_id: drop.item_id, quantity: drop.quantity, metadata: {} });
+        }
         this.loot.delete(drop.id);
         this._publish(GAME_EVENT_TYPES.ITEM_PICKED_UP, {
             user_id: player.user_id,
             item_id: drop.item_id,
             quantity: drop.quantity,
             world_id: this.world.id,
+        });
+        this._publish('game.2dworld.item.picked_up', {
+            user_id: player.user_id,
+            item_id: drop.item_id,
+            quantity: drop.quantity,
+            world_id: this.world.id,
+            zone_id: player.zone_id,
         });
         this._publish(GAME_EVENT_TYPES.INVENTORY_UPDATED, { user_id: player.user_id, item_id: drop.item_id, world_id: this.world.id });
         return { ok: true };
@@ -1075,6 +1351,7 @@ class WorldRoom {
             id: `player:${String(userId)}`,
             user_id: String(userId),
             display_name: displayName || playerRow.display_name,
+            metadata: clone(playerRow.metadata || {}),
             world_id: this.world.id,
             zone_id: zone,
             x: Number(playerRow.x || spawn.x || 4096),
@@ -1126,9 +1403,12 @@ class WorldRoom {
         player.socketId = socketId;
         player.zone_id = zone;
         player.coins = Number(playerRow.coins || player.coins || 0);
+        player.metadata = clone(playerRow.metadata || player.metadata || {});
         player.loyalty_points = Number(playerRow.loyalty_points || player.loyalty_points || 0);
         player.levels = this._skillSnapshot(player);
         player.quick_slot = Number(player.quick_slot) || 1;
+        player.hotbar = this._coerceHotbar(player.metadata && player.metadata.sourcevibe && player.metadata.sourcevibe.hotbar, player);
+        this._applyHotbarSelection(player, player.quick_slot);
         player.held_item_id = player.held_item_id || this._defaultHeldItem(player);
         player.aim_x = Number(player.aim_x) || player.x + ((player.facing || 1) * 72);
         player.aim_y = Number(player.aim_y) || player.y;
@@ -1198,7 +1478,7 @@ class WorldRoom {
             y: Number(input.y),
             targetZone: input.targetZone || input.target_zone || null,
         };
-        if (player.input.quickSlot != null) player.quick_slot = Math.max(1, Math.min(9, player.input.quickSlot));
+        if (player.input.quickSlot != null) this._applyHotbarSelection(player, Math.max(1, Math.min(HOTBAR_SIZE, player.input.quickSlot)));
         if (player.input.aim) {
             player.aim_x = player.input.aim.x;
             player.aim_y = player.input.aim.y;
@@ -1531,6 +1811,7 @@ class WorldRoom {
                 skill_xp: this._skillXpSnapshot(player),
                 skill_progress: this._skillProgressSnapshot(player),
                 inventory: model.listInventory(player.user_id),
+                hotbar: this._buildHotbarSnapshot(player),
                 bank: model.listBank(player.user_id),
                 quests: model.listDailyQuests(player.user_id),
                 achievements: model.listAchievements(player.user_id),

@@ -49,6 +49,13 @@ export class RealtimeClient {
     buyFromShop(npcId, itemId, quantity = 1) { return this.request('shop:buy', { npc_id: npcId, item_id: itemId, quantity }); }
     equipInventoryItem(itemId, slot) { return this.request('inventory:equip', { item_id: itemId, slot }); }
     clearEquipmentSlot(slot) { return this.request('inventory:equip', { slot, clear: true }); }
+    updateHotbar(slot, itemId, options = {}) {
+        return this.request('hotbar:update', { slot, item_id: itemId, ...options });
+    }
+    clearHotbar(slot) { return this.request('hotbar:update', { slot, clear: true }); }
+    dropInventory(itemId, quantity = 1, extra = {}) {
+        return this.request('inventory:drop', { item_id: itemId, quantity, ...extra });
+    }
     closeInteraction() { return this.request('interaction:close', {}); }
     travel(targetZone) { return this.request('travel', { targetZone }); }
     pickup() { return this.request('pickup'); }

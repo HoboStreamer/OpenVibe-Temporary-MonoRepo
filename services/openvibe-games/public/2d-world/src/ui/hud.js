@@ -14,7 +14,8 @@ export class HudPanel {
             </div>
             <div class="interaction-prompt"></div>
             <div class="quickbar"></div>
-            <div class="event-feed"></div>`;
+            <div class="event-feed"></div>
+            <div class="hud-help"></div>`;
         this.hpFill = this.root.querySelector('.hp-fill');
         this.hpLabel = this.root.querySelector('.hp-label');
         this.staminaFill = this.root.querySelector('.stamina-fill');
@@ -26,9 +27,10 @@ export class HudPanel {
         this.promptLabel = this.root.querySelector('.interaction-prompt');
         this.quickbar = this.root.querySelector('.quickbar');
         this.feed = this.root.querySelector('.event-feed');
+        this.help = this.root.querySelector('.hud-help');
     }
 
-    update(snapshot, meta) {
+    update(snapshot, meta, settings = {}) {
         const self = snapshot && snapshot.self || {};
         const hpRatio = self.max_hp ? Math.max(0, Math.min(1, self.hp / self.max_hp)) : 0;
         const staminaRatio = self.max_stamina ? Math.max(0, Math.min(1, self.stamina / self.max_stamina)) : 0;
@@ -43,7 +45,22 @@ export class HudPanel {
         const prompt = snapshot && snapshot.interaction && snapshot.interaction.prompt;
         this.promptLabel.textContent = prompt ? `${prompt.label}${prompt.description ? ` · ${prompt.description}` : ''}` : '';
         this.promptLabel.classList.toggle('visible', !!prompt);
-        this.quickbar.innerHTML = Array.from({ length: 9 }).map((_, index) => `<span class="slot ${meta && meta.quickSlot === index + 1 ? 'active' : ''}">${index + 1}</span>`).join('');
-        this.feed.innerHTML = (snapshot && snapshot.feed || []).slice(-6).map((item) => `<div class="feed-item"><strong>${item.type}</strong><span>${item.at}</span></div>`).join('');
+        const hotbar = Array.isArray(self.hotbar) ? self.hotbar : [];
+        this.quickbar.innerHTML = Array.from({ length: 9 }).map((_, index) => {
+            const slot = hotbar[index];
+            return `
+                <div class="slot ${slot && slot.active ? 'active' : ''}">
+                    <span class="slot-index">${index + 1}</span>
+                    <span class="slot-icon">${slot && slot.icon ? slot.icon : slot && slot.item_id === 'coins' ? '🪙' : slot && slot.item_id ? '⬢' : ''}</span>
+                    <span class="slot-name">${slot && slot.name ? slot.name : ''}</span>
+                    <span class="slot-qty">${slot && slot.quantity ? slot.quantity : ''}</span>
+                </div>`;
+        }).join('');
+        this.feed.innerHTML = settings.showFeed
+            ? (snapshot && snapshot.feed || []).slice(-6).map((item) => `<div class="feed-item"><strong>${item.type}</strong><span>${item.at}</span></div>`).join('')
+            : '';
+        this.feed.classList.toggle('hidden', !settings.showFeed);
+        this.help.textContent = settings.showHotkeys ? 'I Inventory · C Craft · K Skills · B Build · M Map · ` Console · Esc Menu' : '';
+        this.help.classList.toggle('hidden', !settings.showHotkeys);
     }
 }

@@ -46,6 +46,14 @@ export class InputController {
         this.root.addEventListener('pointerup', () => {
             this.mouse.down = false;
         });
+        this.root.addEventListener('wheel', (event) => {
+            if (event.target && event.target.closest('input, textarea, select, .panel, .window-panel, .sourcevibe-menu__panel')) return;
+            const direction = Math.sign(event.deltaY || 0);
+            if (!direction) return;
+            event.preventDefault();
+            const next = this.quickSlot + direction;
+            this.quickSlot = next < 1 ? 9 : next > 9 ? 1 : next;
+        }, { passive: false });
     }
 
     queueAction(action, extra = {}) {
@@ -54,5 +62,11 @@ export class InputController {
 
     nextAction() {
         return this.pendingActions.shift() || null;
+    }
+
+    reset() {
+        this.keys = { up: false, down: false, left: false, right: false, sprint: false };
+        this.mouse.down = false;
+        this.pendingActions = [];
     }
 }

@@ -1,6 +1,7 @@
 'use strict';
 
-const { STARTER_WORLD } = require('../../realtime/catalog/starter-world');
+const { STARTER_WORLD } = require('../../../realtime/catalog/starter-world');
+const { WorldRoom } = require('../../../realtime/rooms/world-room');
 
 function buildFeaturedServer({ realtime }) {
     const world = realtime && realtime.rootWorld ? realtime.rootWorld : {
@@ -25,6 +26,16 @@ function buildFeaturedServer({ realtime }) {
 }
 
 module.exports = {
+    createRoom(options = {}) {
+        return new WorldRoom({
+            world: options.world,
+            worldDefinition: options.worldDefinition || STARTER_WORLD,
+            catalog: options.catalog,
+            publish: options.publish,
+            emitToSocket: options.emitToSocket,
+            tickRate: options.tickRate,
+        });
+    },
     buildFeaturedServer,
     hooks: {
         ResolveDefaultMap() {

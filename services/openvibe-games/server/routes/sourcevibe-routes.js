@@ -28,6 +28,12 @@ function buildSourceVibeRouter({ sourcevibe, actorOfReq }) {
         res.json({ items: sourcevibe.listGamemodes(), active: sourcevibe.getGamemode(sourcevibe.activeGamemode() && sourcevibe.activeGamemode().id) });
     });
 
+    r.get('/gamemodes/:id', (req, res) => {
+        const gamemode = sourcevibe.getGamemode(req.params.id);
+        if (!gamemode) return res.status(404).json({ error: 'gamemode not found' });
+        return res.json({ gamemode });
+    });
+
     r.get('/maps', (_req, res) => {
         res.json({ items: sourcevibe.listMaps() });
     });

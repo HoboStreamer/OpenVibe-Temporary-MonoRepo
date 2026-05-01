@@ -198,6 +198,48 @@ assert.strictEqual(reEquipResult.slot, 'weapon');
 assert.strictEqual(roomPlayer.equip_weapon, 'stone_spear');
 assert.strictEqual(roomPlayer.held_item_id, 'stone_spear');
 
+const hotbarAssignResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 1,
+    item_id: 'stone_spear',
+});
+assert.strictEqual(hotbarAssignResult.ok, true);
+assert.strictEqual(hotbarAssignResult.hotbar[0].item_id, 'stone_spear');
+
+const coinsHotbarResult = room.handleHotbarUpdate(roomPlayer, {
+    slot: 2,
+    item_id: 'coins',
+    select: false,
+});
+assert.strictEqual(coinsHotbarResult.ok, true);
+assert.strictEqual(coinsHotbarResult.hotbar[1].item_id, 'coins');
+
+const hotbarSnapshot = room.buildSnapshotForPlayer(roomPlayer, Date.now());
+assert.ok(Array.isArray(hotbarSnapshot.self.hotbar));
+assert.strictEqual(hotbarSnapshot.self.hotbar[0].item_id, 'stone_spear');
+assert.strictEqual(hotbarSnapshot.self.hotbar[1].item_id, 'coins');
+
+const coinDropResult = room.handleInventoryDrop(roomPlayer, {
+    item_id: 'coins',
+    quantity: 5,
+}, Date.now());
+assert.strictEqual(coinDropResult.ok, true);
+assert.strictEqual(roomPlayer.coins, 67);
+const coinDrop = [...room.loot.values()].find((entry) => entry.item_id === 'coins');
+assert.ok(coinDrop);
+roomPlayer.x = coinDrop.x;
+roomPlayer.y = coinDrop.y;
+const coinPickupResult = room._pickupLoot(roomPlayer, coinDrop.id);
+assert.strictEqual(coinPickupResult.ok, true);
+assert.strictEqual(roomPlayer.coins, 72);
+
+const spearDropResult = room.handleInventoryDrop(roomPlayer, {
+    item_id: 'stone_spear',
+    quantity: 1,
+}, Date.now());
+assert.strictEqual(spearDropResult.ok, true);
+assert.strictEqual(roomPlayer.equip_weapon, '');
+assert.strictEqual(room.buildSnapshotForPlayer(roomPlayer, Date.now()).self.hotbar[0].item_id, null);
+
 const closeResult = room.closeInteraction(roomPlayer);
 assert.strictEqual(closeResult.ok, true);
 const closedSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 120);
