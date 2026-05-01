@@ -33,11 +33,14 @@ async function main() {
         publicBaseUrl: args.publicBaseUrl || process.env.OPENVIBE_MEDIA_PUBLIC_BASE_URL || 'http://127.0.0.1:4500',
         providerName: args.providerName || args.storageProvider || null,
         dryRun: !!args.dryRun,
+        prune: !!args.prune,
         strict: !!args.strict,
         logger,
     });
 
     logger.info(`Copied records: ${report.copied_records}`);
+    logger.info(`Verified records: ${report.verified_records}`);
+    logger.info(`Pruned records: ${report.pruned_records}`);
     logger.info(`Missing files: ${report.missing_files.length}`);
 }
 

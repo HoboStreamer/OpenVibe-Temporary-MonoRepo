@@ -25,6 +25,7 @@ const capabilityRegistry = require('./api/capability-registry');
 const capabilityInvoke = require('./api/capability-invoke');
 const contractRegistry = require('./api/contract-registry');
 const urlRegistry = require('./api/url-registry');
+const runtimeParity = require('./api/runtime-parity');
 const staff = require('./api/staff');
 const { seedCapabilityRegistry } = require('./capabilities');
 
@@ -108,6 +109,7 @@ function buildApp() {
     apiRouter.use(capabilityInvoke.buildRouter({ events, config }));
     apiRouter.use(contractRegistry.buildRouter({ events }));
     apiRouter.use(urlRegistry.buildRouter({ config }));
+    apiRouter.use(runtimeParity.buildRouter({ events }));
     apiRouter.use(staff.buildRouter({ config }));
     apiRouter.use(nativeAuth.buildAccountRouter());
 

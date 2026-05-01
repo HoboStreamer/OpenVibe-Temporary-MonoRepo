@@ -158,6 +158,66 @@ async function main() {
     writeNdjson(path.join(bundleDir, 'identity', 'linked-accounts.ndjson'), [
         { id: 'linked-account:hobotools:10', user_id: 'user:hobotools:1', service: 'hobostreamer', service_user_id: '42' },
     ]);
+    writeNdjson(path.join(bundleDir, 'control-plane', 'oauth-clients.ndjson'), [
+        {
+            id: 'oauth-client:hobostreamer:openvibe-web',
+            source: 'hobostreamer',
+            client_id: 'openvibe-web',
+            name: 'OpenVibe Web',
+            redirect_uris: ['http://localhost/callback', 'https://hobo.quest/auth/callback'],
+            is_first_party: true,
+            client_secret_redacted: true,
+            legacy_ref: { source: 'hobostreamer', legacy_id: 'openvibe-web' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'control-plane', 'notifications.ndjson'), [
+        {
+            id: 'notification:hobostreamer:501',
+            source: 'hobostreamer',
+            user_id: 'user:hobotools:1',
+            sender_user_id: 'user:hobotools:1',
+            type: 'follow.created',
+            category: 'social',
+            priority: 'normal',
+            title: 'Alice followed you',
+            message: 'Alice is now following you',
+            service: 'openvibe-network',
+            url: '/u/alice',
+            rich_content: { follower_user_id: 'user:hobotools:1' },
+            is_read: false,
+            is_dismissed: false,
+            is_emailed: false,
+            created_at: '2026-01-02T12:00:00Z',
+            legacy_ref: { source: 'hobostreamer', legacy_id: '501' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'control-plane', 'notification-preferences.ndjson'), [
+        {
+            id: 'notification-preference:hobostreamer:mentions',
+            source: 'hobostreamer',
+            user_id: 'user:hobotools:1',
+            category: 'mentions',
+            enabled: true,
+            email: true,
+            browser: true,
+            sound: false,
+            created_at: '2026-01-03T12:00:00Z',
+            legacy_ref: { source: 'hobostreamer', legacy_id: 'mentions' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'social', 'follows.ndjson'), [
+        {
+            id: 'follow:hobostreamer:601',
+            source: 'hobostreamer',
+            scope: 'network',
+            follower_user_id: 'user:hobotools:1',
+            followed_user_id: 'user:hobotools:2',
+            email_notify: true,
+            push_notify: false,
+            created_at: '2026-01-04T12:00:00Z',
+            legacy_ref: { source: 'hobostreamer', legacy_id: '601' },
+        },
+    ]);
     writeNdjson(path.join(bundleDir, 'live', 'channels.ndjson'), [
         {
             id: 'channel:hobostreamer:11',
@@ -355,6 +415,10 @@ async function main() {
             'identity/users': {},
             'identity/anon-users': {},
             'identity/linked-accounts': {},
+            'control-plane/oauth-clients': {},
+            'control-plane/notifications': {},
+            'control-plane/notification-preferences': {},
+            'social/follows': {},
             'live/channels': {},
             'live/stream-sessions': {},
             'chat/messages': {},
@@ -482,6 +546,29 @@ async function main() {
         assert.ok(Array.isArray(authMetadata.linked_accounts), 'expected linked accounts to be merged into auth user metadata');
         assert.deepStrictEqual(authMetadata.linked_accounts[0].service, 'hobostreamer');
         assert.deepStrictEqual(authMetadata.source_profiles.hobostreamer.legacy_id, '42');
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT client_id, name, is_first_party, client_secret_redacted FROM control_oauth_clients WHERE client_id = 'openvibe-web'").get(),
+            { client_id: 'openvibe-web', name: 'OpenVibe Web', is_first_party: 1, client_secret_redacted: 1 }
+        );
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT type, category, title, is_read FROM control_notifications WHERE id = 'notification:hobostreamer:501'").get(),
+            { type: 'follow.created', category: 'social', title: 'Alice followed you', is_read: 0 }
+        );
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT follower_user_id, followed_user_id, email_notify, push_notify FROM social_follows WHERE id = 'follow:hobostreamer:601'").get(),
+            {
+                follower_user_id: 'user:hobotools:1',
+                followed_user_id: 'user:hobotools:2',
+                email_notify: 1,
+                push_notify: 0,
+            }
+        );
+        const notificationPrefs = JSON.parse(
+            networkDb.prepare("SELECT data_json FROM user_modules WHERE user_id = 'user:hobotools:1' AND namespace = 'control.notification_preferences'").get().data_json
+        );
+        assert.strictEqual(notificationPrefs.mentions, true);
+        assert.strictEqual(notificationPrefs.channels.mentions.email, true);
+        assert.strictEqual(notificationPrefs.channels.mentions.browser, true);
         assert.strictEqual(restreamDb.prepare('SELECT COUNT(*) AS count FROM channels').get().count, 1);
         assert.strictEqual(restreamDb.prepare('SELECT COUNT(*) AS count FROM streams').get().count, 2);
         assert.strictEqual(

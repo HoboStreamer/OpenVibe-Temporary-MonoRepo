@@ -439,8 +439,51 @@ function buildNativeAuth({ config, identity }) {
         }
     }
 
-    function isAllowedRedirectUri(redirectUri) {
+    function getOauthClientManifest(clientId) {
+        if (!clientId) return null;
+        try {
+            const row = db.get().prepare(`
+                SELECT client_id, redirect_uris_json, is_first_party
+                  FROM control_oauth_clients
+                 WHERE client_id = ?
+                 LIMIT 1
+            `).get(String(clientId));
+            if (!row) return null;
+            return {
+                client_id: row.client_id,
+                redirect_uris: parseJson(row.redirect_uris_json, []),
+                is_first_party: Boolean(row.is_first_party),
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    function normalizeAbsoluteUrl(value) {
+        try {
+            return new URL(String(value || '')).toString();
+        } catch {
+            return null;
+        }
+    }
+
+    function manifestAllowsRedirectUri(clientId, redirectUri) {
+        const manifest = getOauthClientManifest(clientId);
+        if (!manifest) return null;
+        const normalizedRedirect = normalizeAbsoluteUrl(redirectUri);
+        if (!normalizedRedirect) return false;
+        const allowed = new Set(
+            Array.isArray(manifest.redirect_uris)
+                ? manifest.redirect_uris.map(normalizeAbsoluteUrl).filter(Boolean)
+                : []
+        );
+        return allowed.has(normalizedRedirect);
+    }
+
+    function isAllowedRedirectUri(redirectUri, clientId) {
         if (!redirectUri) return false;
+        const manifestDecision = manifestAllowsRedirectUri(clientId, redirectUri);
+        if (manifestDecision != null) return manifestDecision;
         try {
             const parsed = new URL(String(redirectUri));
             const allowedHosts = new Set(
@@ -956,7 +999,7 @@ function buildNativeAuth({ config, identity }) {
             if (!request.client_id || !request.redirect_uri) {
                 return res.status(400).send(renderAuthorizePage({ config, request, sessionUser: user, errorMessage: 'client_id and redirect_uri are both required for authorization-code flows.' }));
             }
-            if (!isAllowedRedirectUri(request.redirect_uri)) {
+            if (!isAllowedRedirectUri(request.redirect_uri, request.client_id)) {
                 return res.status(400).send(renderAuthorizePage({ config, request, sessionUser: user, errorMessage: 'That redirect URI is not allowed in this environment.' }));
             }
             const code = mintAuthorizationCode({

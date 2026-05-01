@@ -511,6 +511,288 @@ function upsertNetworkAnonUser(context, row) {
     return true;
 }
 
+function normalizeBoolean(value, fallbackValue = false) {
+    if (value == null || value === '') return fallbackValue;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const normalized = String(value).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallbackValue;
+}
+
+function normalizeStringArray(value) {
+    if (Array.isArray(value)) {
+        return value.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    if (typeof value !== 'string') return [];
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+            return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+        }
+    } catch {
+        // fall back to comma / whitespace splitting below.
+    }
+    return trimmed.split(/[\s,]+/g).map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeRichContent(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return { text: value };
+        }
+    }
+    return value;
+}
+
+function getUserModuleRow(db, userId, namespace) {
+    return db.prepare(`
+        SELECT user_id, namespace, owner, schema_version, data_json, updated_at
+          FROM user_modules
+         WHERE user_id = ? AND namespace = ?
+         LIMIT 1
+    `).get(String(userId), String(namespace));
+}
+
+function upsertNetworkUserModule(context, { userId, namespace, owner, data, schemaVersion, updatedAt }) {
+    if (!userId || !namespace) return false;
+    const existing = getUserModuleRow(context.dbs.network, userId, namespace);
+    const nextSchemaVersion = Math.max(Number(schemaVersion) || 1, Number(existing && existing.schema_version) || 1);
+    const payloadJson = toJson(data || {}, {});
+    context.dbs.network.prepare(`
+        INSERT INTO user_modules (
+            user_id, namespace, owner, schema_version, data_json,
+            updated_by_actor_type, updated_by_actor_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'service', 'staging-loader', CURRENT_TIMESTAMP, COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(user_id, namespace) DO UPDATE SET
+            owner = excluded.owner,
+            schema_version = excluded.schema_version,
+            data_json = excluded.data_json,
+            updated_by_actor_type = excluded.updated_by_actor_type,
+            updated_by_actor_id = excluded.updated_by_actor_id,
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        String(userId),
+        String(namespace),
+        String(owner || 'openvibe-network'),
+        nextSchemaVersion,
+        payloadJson,
+        updatedAt || null
+    );
+    if (hasTable(context.dbs.network, 'user_modules_history')) {
+        context.dbs.network.prepare(`
+            INSERT INTO user_modules_history (user_id, namespace, schema_version, data_json, actor_type, actor_id, recorded_at)
+            VALUES (?, ?, ?, ?, 'service', 'staging-loader', COALESCE(?, CURRENT_TIMESTAMP))
+        `).run(String(userId), String(namespace), nextSchemaVersion, payloadJson, updatedAt || null);
+    }
+    return true;
+}
+
+function upsertNetworkNotificationPreferenceModule(context, row) {
+    if (!row || !row.user_id) return false;
+    const existing = getUserModuleRow(context.dbs.network, row.user_id, 'control.notification_preferences');
+    const base = parseJsonValue(existing && existing.data_json, {});
+    const next = Object.assign({}, base);
+    const nestedChannels = Object.assign({}, next.channels || {});
+
+    if (row.preferences && typeof row.preferences === 'object' && !Array.isArray(row.preferences)) {
+        Object.assign(next, row.preferences);
+    }
+
+    if (row.category) {
+        const category = String(row.category).trim();
+        if (category) {
+            const enabled = normalizeBoolean(
+                row.enabled,
+                normalizeBoolean(row.is_enabled, normalizeBoolean(row.receive, normalizeBoolean(row.receive_notifications, true)))
+            );
+            next[category] = enabled;
+            nestedChannels[category] = Object.assign({}, nestedChannels[category] || {}, {
+                enabled,
+                email: normalizeBoolean(row.email, nestedChannels[category] && nestedChannels[category].email || false),
+                browser: normalizeBoolean(row.browser, normalizeBoolean(row.toasts, nestedChannels[category] && nestedChannels[category].browser || false)),
+                live: normalizeBoolean(row.live, nestedChannels[category] && nestedChannels[category].live || false),
+                sound: normalizeBoolean(row.sound, nestedChannels[category] && nestedChannels[category].sound || false),
+                push: normalizeBoolean(row.push, nestedChannels[category] && nestedChannels[category].push || false),
+            });
+        }
+    }
+
+    if (Object.keys(nestedChannels).length > 0) {
+        next.channels = nestedChannels;
+    }
+
+    next._legacy_notification_preferences = Object.assign(
+        {},
+        next._legacy_notification_preferences || {},
+        row.id ? { [String(row.id)]: row } : {}
+    );
+
+    return upsertNetworkUserModule(context, {
+        userId: row.user_id,
+        namespace: 'control.notification_preferences',
+        owner: 'openvibe-network',
+        data: next,
+        schemaVersion: existing && existing.schema_version || 1,
+        updatedAt: row.updated_at || row.created_at || null,
+    });
+}
+
+function upsertNetworkOauthClient(context, row) {
+    const clientId = row && row.client_id ? String(row.client_id) : '';
+    if (!clientId) return false;
+    const redirectUris = normalizeStringArray(row.redirect_uris);
+    const existing = context.dbs.network.prepare('SELECT metadata_json FROM control_oauth_clients WHERE client_id = ? LIMIT 1').get(clientId);
+    const existingMetadata = parseJsonValue(existing && existing.metadata_json, {});
+    const metadata = Object.assign({}, existingMetadata, row.metadata || {}, {
+        source: row.source || existingMetadata.source || null,
+        legacy_ref: row.legacy_ref || existingMetadata.legacy_ref || null,
+    });
+    const id = row.id ? String(row.id) : buildEntityId('oauth-client', row.source || 'legacy', clientId);
+    context.dbs.network.prepare(`
+        INSERT INTO control_oauth_clients (
+            id, client_id, name, redirect_uris_json, is_first_party,
+            client_secret_redacted, metadata_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(client_id) DO UPDATE SET
+            id = excluded.id,
+            name = excluded.name,
+            redirect_uris_json = excluded.redirect_uris_json,
+            is_first_party = excluded.is_first_party,
+            client_secret_redacted = excluded.client_secret_redacted,
+            metadata_json = excluded.metadata_json,
+            created_at = COALESCE(control_oauth_clients.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        id,
+        clientId,
+        String(row.name || clientId),
+        toJson(redirectUris, []),
+        normalizeBoolean(row.is_first_party, false) ? 1 : 0,
+        normalizeBoolean(row.client_secret_redacted, true) ? 1 : 0,
+        toJson(metadata, {}),
+        row.created_at || null,
+        row.updated_at || row.created_at || null
+    );
+    return true;
+}
+
+function upsertNetworkNotification(context, row) {
+    if (!row || !row.user_id) return false;
+    const id = row.id
+        ? String(row.id)
+        : buildEntityId(
+            'notification',
+            row.source || row.service || 'legacy',
+            row.legacy_ref && row.legacy_ref.legacy_id || `${row.user_id}:${row.created_at || row.type || row.title || 'notice'}`
+        );
+    context.dbs.network.prepare(`
+        INSERT INTO control_notifications (
+            id, user_id, sender_user_id, type, category, priority, title, message,
+            icon, sender_name, sender_avatar, service, url, rich_content_json,
+            is_read, is_dismissed, is_emailed, read_at, dismissed_at, expires_at,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(id) DO UPDATE SET
+            user_id = excluded.user_id,
+            sender_user_id = excluded.sender_user_id,
+            type = excluded.type,
+            category = excluded.category,
+            priority = excluded.priority,
+            title = excluded.title,
+            message = excluded.message,
+            icon = excluded.icon,
+            sender_name = excluded.sender_name,
+            sender_avatar = excluded.sender_avatar,
+            service = excluded.service,
+            url = excluded.url,
+            rich_content_json = excluded.rich_content_json,
+            is_read = excluded.is_read,
+            is_dismissed = excluded.is_dismissed,
+            is_emailed = excluded.is_emailed,
+            read_at = excluded.read_at,
+            dismissed_at = excluded.dismissed_at,
+            expires_at = excluded.expires_at,
+            created_at = COALESCE(control_notifications.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        id,
+        String(row.user_id),
+        row.sender_user_id == null ? null : String(row.sender_user_id),
+        String(row.type || 'legacy.notification'),
+        row.category == null ? null : String(row.category),
+        String(row.priority || 'normal'),
+        String(row.title || row.message || 'Notification'),
+        row.message == null ? null : String(row.message),
+        row.icon == null ? null : String(row.icon),
+        row.sender_name == null ? null : String(row.sender_name),
+        row.sender_avatar == null ? null : String(row.sender_avatar),
+        row.service == null ? null : String(row.service),
+        row.url == null ? null : String(row.url),
+        toJson(normalizeRichContent(row.rich_content), null),
+        normalizeBoolean(row.is_read, false) ? 1 : 0,
+        normalizeBoolean(row.is_dismissed, false) ? 1 : 0,
+        normalizeBoolean(row.is_emailed, false) ? 1 : 0,
+        row.read_at || null,
+        row.dismissed_at || null,
+        row.expires_at || null,
+        row.created_at || null,
+        row.updated_at || row.created_at || null
+    );
+    return true;
+}
+
+function upsertNetworkFollow(context, row) {
+    if (!row || !row.follower_user_id || !row.followed_user_id) return false;
+    if (String(row.follower_user_id) === String(row.followed_user_id)) return false;
+    const scope = String(row.scope || 'network');
+    const source = String(row.source || 'legacy');
+    const id = row.id
+        ? String(row.id)
+        : buildEntityId('follow', source, `${scope}:${row.follower_user_id}:${row.followed_user_id}`);
+    const existing = context.dbs.network.prepare(`
+        SELECT metadata_json
+          FROM social_follows
+         WHERE follower_user_id = ? AND followed_user_id = ? AND scope = ?
+         LIMIT 1
+    `).get(String(row.follower_user_id), String(row.followed_user_id), scope);
+    const metadata = Object.assign({}, parseJsonValue(existing && existing.metadata_json, {}), row.metadata || {}, {
+        legacy_ref: row.legacy_ref || parseJsonValue(existing && existing.metadata_json, {}).legacy_ref || null,
+    });
+    context.dbs.network.prepare(`
+        INSERT INTO social_follows (
+            id, source, scope, follower_user_id, followed_user_id,
+            email_notify, push_notify, metadata_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(follower_user_id, followed_user_id, scope) DO UPDATE SET
+            id = excluded.id,
+            source = excluded.source,
+            email_notify = excluded.email_notify,
+            push_notify = excluded.push_notify,
+            metadata_json = excluded.metadata_json,
+            created_at = COALESCE(social_follows.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        id,
+        source,
+        scope,
+        String(row.follower_user_id),
+        String(row.followed_user_id),
+        normalizeBoolean(row.email_notify, false) ? 1 : 0,
+        normalizeBoolean(row.push_notify, false) ? 1 : 0,
+        toJson(metadata, {}),
+        row.created_at || null,
+        row.updated_at || row.created_at || null
+    );
+    return true;
+}
+
 function normalizeLiveStatus(status) {
     if (status === 'live' || status === 'started') return 'started';
     if (status === 'ended') return 'ended';
@@ -1959,10 +2241,6 @@ function loadDatasetRow(context, dataset, row) {
         case 'themes/catalog':
         case 'themes/preferences':
         case 'control-plane/user-preferences':
-        case 'control-plane/oauth-clients':
-        case 'control-plane/notifications':
-        case 'control-plane/notification-preferences':
-        case 'social/follows':
             if (shouldWriteService(context, 'network')) {
                 loadIntoNetworkHolding(context, dataset, row);
                 context.addManualAction('Non-login identity/control-plane datasets remain mirrored in openvibe-network staging_import_records until dedicated runtime tables are expanded further.');
@@ -1982,6 +2260,42 @@ function loadDatasetRow(context, dataset, row) {
                 loadIntoNetworkHolding(context, dataset, row);
                 upsertNetworkUrlOverlay(context.dbs.network, row);
                 bumpLoadReport(context.report, dataset, 'network', 'url_registry_overlay', 'direct', context.dbPaths.network);
+            }
+            return;
+        case 'control-plane/oauth-clients':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkOauthClient(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'control_oauth_clients', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('OAuth client manifests are now projected into openvibe-network control_oauth_clients so native authorization flows can validate migrated redirect URIs, but redacted client secrets still require operator reconfiguration during cutover.');
+            }
+            return;
+        case 'control-plane/notifications':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkNotification(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'control_notifications', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Migrated notification history is projected into openvibe-network control_notifications while the raw source payload remains mirrored in staging_import_records for audit and future enrichment.');
+            }
+            return;
+        case 'control-plane/notification-preferences':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkNotificationPreferenceModule(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'user_modules', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Migrated notification preferences are folded into the control.notification_preferences user module so the native account UI can read them directly, while the raw import row remains mirrored in staging_import_records.');
+            }
+            return;
+        case 'social/follows':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkFollow(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'social_follows', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Migrated follow edges are projected into openvibe-network social_follows so native follower/following APIs can serve them directly, while the raw payload remains mirrored in staging_import_records for audit.');
             }
             return;
         case 'live/channels':

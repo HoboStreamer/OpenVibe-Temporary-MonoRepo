@@ -16,13 +16,6 @@ const pool = createPostgresPool({
     allowExitOnIdle: true,
 });
 
-pool.on('connect', (client) => {
-    client.query('SET search_path TO public').catch(() => {
-        // Ignore search_path setup failures here; the actual query path will
-        // surface a concrete error if the session is unusable.
-    });
-});
-
 let replyPort = null;
 let activeClient = null;
 const savepointStack = [];

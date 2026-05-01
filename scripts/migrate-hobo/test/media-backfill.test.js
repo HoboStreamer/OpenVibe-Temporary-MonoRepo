@@ -99,13 +99,20 @@ async function main() {
                 publicBaseUrl: 'http://127.0.0.1:4500',
             },
         },
+        prune: true,
         dryRun: false,
         logger: { info() {}, warn() {}, error() {} },
     });
 
     assert.strictEqual(report.copied_records, 2, 'expected two copied media files');
+    assert.strictEqual(report.verified_records, 2, 'expected both copied media files to be verified on the target provider');
+    assert.strictEqual(report.pruned_records, 2, 'expected both verified legacy source files to be pruned');
+    assert.strictEqual(report.verification_failures.length, 0, 'expected no verification failures');
+    assert.strictEqual(report.prune_failures.length, 0, 'expected no prune failures');
     assert.strictEqual(report.missing_files.length, 0, 'expected no missing media files');
     assert.ok(fs.existsSync(path.join(bundleDir, 'audit', 'media-backfill-report.json')));
+    assert.strictEqual(fs.existsSync(sourceFile), false, 'expected relative legacy source file to be pruned after verification');
+    assert.strictEqual(fs.existsSync(absoluteSourceFile), false, 'expected absolute legacy source file to be pruned after verification');
 
     const verifyDb = new Database(mediaDbPath, { readonly: true });
     try {

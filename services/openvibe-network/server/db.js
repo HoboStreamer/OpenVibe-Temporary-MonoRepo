@@ -15,6 +15,9 @@
 //   auth_authorization_codes — OAuth authorization code staging
 //   auth_refresh_tokens  — native refresh token rotation store
 //   auth_sessions        — browser/device session inventory
+//   control_notifications — durable in-app notification history
+//   control_oauth_clients — sanitized OAuth client manifests used by native auth
+//   social_follows       — network and live follow edges with runtime toggles
 
 const path = require('path');
 const {
@@ -104,6 +107,62 @@ const AUTH_SCHEMA_SQL = `
             metadata_json TEXT NOT NULL DEFAULT '{}'
         );
         CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS control_notifications (
+            id             TEXT PRIMARY KEY,
+            user_id        TEXT NOT NULL,
+            sender_user_id TEXT,
+            type           TEXT NOT NULL,
+            category       TEXT,
+            priority       TEXT NOT NULL DEFAULT 'normal',
+            title          TEXT NOT NULL,
+            message        TEXT,
+            icon           TEXT,
+            sender_name    TEXT,
+            sender_avatar  TEXT,
+            service        TEXT,
+            url            TEXT,
+            rich_content_json TEXT,
+            is_read        INTEGER NOT NULL DEFAULT 0,
+            is_dismissed   INTEGER NOT NULL DEFAULT 0,
+            is_emailed     INTEGER NOT NULL DEFAULT 0,
+            read_at        DATETIME,
+            dismissed_at   DATETIME,
+            expires_at     DATETIME,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_notifications_user ON control_notifications(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_control_notifications_unread ON control_notifications(user_id, is_read, is_dismissed, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS control_oauth_clients (
+            id             TEXT PRIMARY KEY,
+            client_id      TEXT NOT NULL UNIQUE,
+            name           TEXT NOT NULL,
+            redirect_uris_json TEXT NOT NULL DEFAULT '[]',
+            is_first_party INTEGER NOT NULL DEFAULT 0,
+            client_secret_redacted INTEGER NOT NULL DEFAULT 1,
+            metadata_json  TEXT NOT NULL DEFAULT '{}',
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_oauth_clients_name ON control_oauth_clients(name);
+
+        CREATE TABLE IF NOT EXISTS social_follows (
+            id               TEXT PRIMARY KEY,
+            source           TEXT NOT NULL,
+            scope            TEXT NOT NULL DEFAULT 'network',
+            follower_user_id TEXT NOT NULL,
+            followed_user_id TEXT NOT NULL,
+            email_notify     INTEGER NOT NULL DEFAULT 0,
+            push_notify      INTEGER NOT NULL DEFAULT 0,
+            metadata_json    TEXT NOT NULL DEFAULT '{}',
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(follower_user_id, followed_user_id, scope)
+        );
+        CREATE INDEX IF NOT EXISTS idx_social_follows_follower ON social_follows(follower_user_id, scope, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_social_follows_followed ON social_follows(followed_user_id, scope, created_at DESC);
     `;
 const SCHEMA_SQL = `
         CREATE TABLE IF NOT EXISTS user_modules (
@@ -293,6 +352,62 @@ const SCHEMA_SQL = `
             metadata_json TEXT NOT NULL DEFAULT '{}'
         );
         CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS control_notifications (
+            id             TEXT PRIMARY KEY,
+            user_id        TEXT NOT NULL,
+            sender_user_id TEXT,
+            type           TEXT NOT NULL,
+            category       TEXT,
+            priority       TEXT NOT NULL DEFAULT 'normal',
+            title          TEXT NOT NULL,
+            message        TEXT,
+            icon           TEXT,
+            sender_name    TEXT,
+            sender_avatar  TEXT,
+            service        TEXT,
+            url            TEXT,
+            rich_content_json TEXT,
+            is_read        INTEGER NOT NULL DEFAULT 0,
+            is_dismissed   INTEGER NOT NULL DEFAULT 0,
+            is_emailed     INTEGER NOT NULL DEFAULT 0,
+            read_at        DATETIME,
+            dismissed_at   DATETIME,
+            expires_at     DATETIME,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_notifications_user ON control_notifications(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_control_notifications_unread ON control_notifications(user_id, is_read, is_dismissed, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS control_oauth_clients (
+            id             TEXT PRIMARY KEY,
+            client_id      TEXT NOT NULL UNIQUE,
+            name           TEXT NOT NULL,
+            redirect_uris_json TEXT NOT NULL DEFAULT '[]',
+            is_first_party INTEGER NOT NULL DEFAULT 0,
+            client_secret_redacted INTEGER NOT NULL DEFAULT 1,
+            metadata_json  TEXT NOT NULL DEFAULT '{}',
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_control_oauth_clients_name ON control_oauth_clients(name);
+
+        CREATE TABLE IF NOT EXISTS social_follows (
+            id               TEXT PRIMARY KEY,
+            source           TEXT NOT NULL,
+            scope            TEXT NOT NULL DEFAULT 'network',
+            follower_user_id TEXT NOT NULL,
+            followed_user_id TEXT NOT NULL,
+            email_notify     INTEGER NOT NULL DEFAULT 0,
+            push_notify      INTEGER NOT NULL DEFAULT 0,
+            metadata_json    TEXT NOT NULL DEFAULT '{}',
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(follower_user_id, followed_user_id, scope)
+        );
+        CREATE INDEX IF NOT EXISTS idx_social_follows_follower ON social_follows(follower_user_id, scope, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_social_follows_followed ON social_follows(followed_user_id, scope, created_at DESC);
     `;
 
 function defaultSqlitePath() {

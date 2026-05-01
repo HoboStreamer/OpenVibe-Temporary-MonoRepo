@@ -173,6 +173,7 @@ async function backfillMedia(options) {
         providerName,
         storageConfig,
         dryRun,
+        prune,
         logger,
         // strict=true means missing legacy media files cause the run to throw.
         // Default is non-fatal: missing files are recorded in the report and
@@ -202,10 +203,16 @@ async function backfillMedia(options) {
         canonical_provider_name: storage.canonicalProviderName || storage.name(),
         provider_policy: storage.providerPolicy || null,
         dry_run: !!dryRun,
+        prune_requested: !!prune,
         copied_records: 0,
         copied_bytes: 0,
+        verified_records: 0,
+        pruned_records: 0,
+        pruned_bytes: 0,
         missing_files: [],
         skipped_records: [],
+        verification_failures: [],
+        prune_failures: [],
         legacy_media_inventory: inventoryLegacyMediaDirs(resolvedLegacyRoot),
     };
 
@@ -265,6 +272,38 @@ async function backfillMedia(options) {
                     legacy_path: candidatePath,
                 },
             });
+            const verification = await storage.verifyObjectOnProvider({
+                providerName: copied.providerName,
+                storageKey: copied.storageKey,
+                expectedSizeBytes: copied.sizeBytes,
+                expectedSha256: copied.sha256,
+            });
+            if (!verification.ok) {
+                const detail = {
+                    media_id: row.id,
+                    source_path: candidatePath,
+                    resolved_path: resolved.resolvedPath,
+                    provider_name: copied.providerName,
+                    storage_key: copied.storageKey,
+                    reason: verification.reason || 'verification-failed',
+                    expected_size_bytes: copied.sizeBytes,
+                    actual_size_bytes: verification.sizeBytes == null ? null : Number(verification.sizeBytes),
+                    expected_sha256: copied.sha256 || null,
+                    actual_sha256: verification.sha256 || null,
+                };
+                report.verification_failures.push(detail);
+                if (strict) {
+                    throw new Error(`Media backfill verification failed for ${row.id}: ${detail.reason}`);
+                }
+                if (logger) {
+                    logger.warn(`[media-backfill] verification failed for ${row.id}: ${detail.reason}`);
+                }
+                return;
+            }
+
+            const verifiedSizeBytes = verification.sizeBytes == null ? copied.sizeBytes : Number(verification.sizeBytes);
+            const verifiedSha256 = verification.sha256 || copied.sha256 || null;
+            report.verified_records += 1;
             const requiresSignedPlayback = media.visibility !== 'public' || !copied.publicUrl;
             const nextStorageTier = current.storage_tier || (copied.role === 'hot' ? 'hot' : 'warm');
 
@@ -279,7 +318,7 @@ async function backfillMedia(options) {
                     sha256 = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            `).run(nextStorageTier, copied.providerName, copied.storageKey, copied.publicUrl || null, copied.sizeBytes, copied.sha256, String(row.id));
+            `).run(nextStorageTier, copied.providerName, copied.storageKey, copied.publicUrl || null, verifiedSizeBytes, verifiedSha256, String(row.id));
 
             storageModel.recordLocation({
                 mediaId: media.id,
@@ -291,16 +330,53 @@ async function backfillMedia(options) {
                 region: copied.providerDetails.region || null,
                 publicUrl: copied.publicUrl || null,
                 signedUrlRequired: requiresSignedPlayback,
-                checksumSha256: copied.sha256 || null,
-                sizeBytes: copied.sizeBytes || 0,
+                checksumSha256: verifiedSha256,
+                sizeBytes: verifiedSizeBytes || 0,
                 status: 'active',
                 metadata: {
                     migration_source: 'hobo',
                     legacy_table: row.legacy_table || null,
                     source_path: candidatePath,
                     resolved_path: resolved.resolvedPath,
+                    verification: {
+                        provider_name: copied.providerName,
+                        reason: verification.reason || 'verified',
+                        size_bytes: verifiedSizeBytes,
+                        sha256: verifiedSha256,
+                    },
                 },
             });
+
+            let prunedSource = false;
+            if (prune) {
+                try {
+                    const providerPath = storage.pathFor(copied.storageKey, { providerName: copied.providerName });
+                    const sourcePath = path.resolve(resolved.resolvedPath);
+                    if (providerPath && path.resolve(providerPath) === sourcePath) {
+                        throw new Error('refusing to prune source because provider target path matches the legacy source path');
+                    }
+                    fs.unlinkSync(sourcePath);
+                    report.pruned_records += 1;
+                    report.pruned_bytes += verifiedSizeBytes;
+                    prunedSource = true;
+                } catch (error) {
+                    const detail = {
+                        media_id: row.id,
+                        source_path: candidatePath,
+                        resolved_path: resolved.resolvedPath,
+                        provider_name: copied.providerName,
+                        storage_key: copied.storageKey,
+                        error: error.message,
+                    };
+                    report.prune_failures.push(detail);
+                    if (strict) {
+                        throw new Error(`Media source prune failed for ${row.id}: ${error.message}`);
+                    }
+                    if (logger) {
+                        logger.warn(`[media-backfill] prune failed for ${row.id}: ${error.message}`);
+                    }
+                }
+            }
 
             recordLifecycle(db, row.id, current && current.status, 'ready', {
                 source_path: candidatePath,
@@ -308,9 +384,15 @@ async function backfillMedia(options) {
                 storage_key: copied.storageKey,
                 storage_provider: copied.providerName,
                 role: copied.role || 'canonical',
+                verification: {
+                    reason: verification.reason || 'verified',
+                    size_bytes: verifiedSizeBytes,
+                    sha256: verifiedSha256,
+                },
+                source_pruned: prunedSource,
             });
             report.copied_records += 1;
-            report.copied_bytes += copied.sizeBytes;
+            report.copied_bytes += verifiedSizeBytes;
         });
 
         if (!dryRun && report.missing_files.length > 0) {

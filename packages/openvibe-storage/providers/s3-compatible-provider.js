@@ -14,6 +14,7 @@ const {
     S3Client,
     UploadPartCommand,
 } = require('@aws-sdk/client-s3');
+const { Upload } = require('@aws-sdk/lib-storage');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const { sha256Buffer, sha256FileAsync, sha256ReadableStream, verifyChecksum } = require('../checksum');
@@ -62,7 +63,8 @@ class S3CompatibleStorageProvider {
         this.endpoint = opts.endpoint || null;
         this.publicBaseUrl = String(opts.publicBaseUrl || '').replace(/\/$/, '');
         this.forcePathStyle = !!opts.forcePathStyle;
-        this.client = buildS3Client(opts);
+        this.client = opts.client || buildS3Client(opts);
+        this.uploadFactory = opts.uploadFactory || Upload;
     }
 
     name() {
@@ -162,14 +164,30 @@ class S3CompatibleStorageProvider {
         const storageKey = opts.storageKey || this.keyFor(namespace, mediaId, opts.extension, opts);
         const stat = fs.statSync(filePath);
         const body = fs.createReadStream(filePath);
-        const response = await this.client.send(new PutObjectCommand({
-            Bucket: this.bucket,
-            Key: storageKey,
-            Body: body,
-            ContentLength: stat.size,
-            ContentType: opts.mimeType || undefined,
-            Metadata: sanitizeMetadata(opts.metadata),
-        }));
+        const minMultipartPartSize = 5 * 1024 * 1024;
+        const requestedPartSize = Number(opts.partSize || opts.multipartPartSize || 0);
+        const partSize = Number.isFinite(requestedPartSize) && requestedPartSize >= minMultipartPartSize
+            ? requestedPartSize
+            : Math.max(minMultipartPartSize, Math.min(stat.size || minMultipartPartSize, 64 * 1024 * 1024));
+        const requestedQueueSize = Number(opts.queueSize || opts.multipartQueueSize || 4);
+        const queueSize = Number.isFinite(requestedQueueSize) && requestedQueueSize > 0
+            ? Math.trunc(requestedQueueSize)
+            : 4;
+        const uploader = new this.uploadFactory({
+            client: this.client,
+            params: {
+                Bucket: this.bucket,
+                Key: storageKey,
+                Body: body,
+                ContentLength: stat.size,
+                ContentType: opts.mimeType || undefined,
+                Metadata: sanitizeMetadata(opts.metadata),
+            },
+            partSize,
+            queueSize,
+            leavePartsOnError: false,
+        });
+        const response = await uploader.done();
         const sha256 = await sha256FileAsync(filePath);
         return {
             provider: this.name(),

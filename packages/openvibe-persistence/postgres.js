@@ -174,6 +174,7 @@ function createPostgresPool(options) {
         connectionTimeoutMillis: opts.connectionTimeoutMillis || 5000,
         statement_timeout: opts.statementTimeoutMillis || 10000,
         application_name: opts.applicationName || opts.serviceName || 'openvibe-service',
+        options: '-c search_path=public',
         ssl: opts.ssl === undefined ? undefined : opts.ssl,
         allowExitOnIdle: !!opts.allowExitOnIdle,
     });

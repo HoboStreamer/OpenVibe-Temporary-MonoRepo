@@ -282,7 +282,13 @@ as `OPENVIBE_MEDIA_B2_*` and staging gates such as
 without manually exporting them first. Backfill stays on local storage unless
 you explicitly choose a canonical provider, for example:
 
-`node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --provider-name b2`
+`node scripts/migrate-hobo/backfill-media.js --source ./data/migrations/hobo-production-staging --bundle ./data/migrations/hobo-production-staging/openvibe-target --provider-name b2 --prune`
+
+When `--prune` is supplied, the backfill now performs a provider-level verify
+step (size + checksum when available) before deleting the legacy source file.
+That makes it suitable for production B2 offload runs where the old
+`/opt/hobostreamer/data/{vods,clips,thumbnails}` files should only disappear
+after the canonical B2 object is confirmed.
 
 If the bundle was prepared without a colocated `production-source/hobostreamer`
 tree, pass the shared fallback root explicitly:
