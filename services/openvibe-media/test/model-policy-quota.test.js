@@ -9,6 +9,9 @@ const os = require('os');
 const path = require('path');
 
 process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-media-test-')), 'media.db');
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
 process.env.STORAGE_ROOT = path.join(path.dirname(process.env.DB_PATH), 'storage');
 process.env.PUBLIC_BASE_URL = 'http://test';
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';   // unreachable on purpose

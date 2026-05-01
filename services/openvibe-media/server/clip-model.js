@@ -114,6 +114,12 @@ function deleteClip(id) {
     return updateClip(id, { status: 'deleted', metadata: { deleted_at: new Date().toISOString() } });
 }
 
+function listClipsByMediaId(mediaId) {
+    return db.get().prepare(`
+        SELECT * FROM clip_projects WHERE source_media_id = ? OR playback_media_id = ? ORDER BY created_at DESC
+    `).all(String(mediaId), String(mediaId)).map(hydrateClip);
+}
+
 function listClipsByStreamId(streamId) {
     return db.get().prepare(`
         SELECT * FROM clip_projects WHERE source_stream_id = ? ORDER BY created_at DESC
@@ -139,6 +145,28 @@ function getClipExportById(id) {
     return hydrateClipExport(db.get().prepare(`SELECT * FROM clip_exports WHERE id = ?`).get(Number(id)));
 }
 
+function updateClipExport(id, patch) {
+    const current = getClipExportById(id);
+    if (!current) return null;
+    const next = Object.assign({}, current, patch || {});
+    db.get().prepare(`
+        UPDATE clip_exports SET
+            job_id = ?,
+            status = ?,
+            media_id = ?,
+            error = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(
+        next.job_id || null,
+        String(next.status || 'queued'),
+        next.media_id || null,
+        next.error || null,
+        Number(id),
+    );
+    return getClipExportById(id);
+}
+
 function listClipExports(clipId) {
     return db.get().prepare(`
         SELECT * FROM clip_exports WHERE clip_id = ? ORDER BY created_at DESC
@@ -151,6 +179,12 @@ function getLatestClipExport(clipId) {
     `).get(String(clipId)));
 }
 
+function listClipExportsByMediaId(mediaId) {
+    return db.get().prepare(`
+        SELECT * FROM clip_exports WHERE media_id = ? ORDER BY created_at DESC
+    `).all(String(mediaId)).map(hydrateClipExport);
+}
+
 module.exports = {
     createClip,
     createClipExport,
@@ -158,7 +192,10 @@ module.exports = {
     getClipById,
     getClipExportById,
     getLatestClipExport,
+    listClipExportsByMediaId,
     listClipExports,
+    listClipsByMediaId,
     listClipsByStreamId,
+    updateClipExport,
     updateClip,
 };

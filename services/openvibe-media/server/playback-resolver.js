@@ -9,18 +9,51 @@ const {
 
 function resolveLocation(media, locations, storage, options) {
     const source = options || {};
-    const provider = storage.choosePlaybackProvider({
-        visibility: media.visibility,
-        signed: requiresSignedPlayback({ visibility: media.visibility }),
-        preferHot: source.preferHot !== false,
-        locations,
-    });
-    return locations.find((location) => location.provider_name === provider.name()) || locations[0] || null;
+    const selection = storage.choosePlaybackSelection
+        ? storage.choosePlaybackSelection({
+            visibility: media.visibility,
+            signed: requiresSignedPlayback({ visibility: media.visibility }),
+            preferHot: source.preferHot !== false,
+            locations,
+            promotionStatus: source.promotionStatus,
+            adminForce: source.adminForce,
+        })
+        : {
+            provider: storage.choosePlaybackProvider({
+                visibility: media.visibility,
+                signed: requiresSignedPlayback({ visibility: media.visibility }),
+                preferHot: source.preferHot !== false,
+                locations,
+            }),
+            providerName: storage.choosePlaybackProvider({
+                visibility: media.visibility,
+                signed: requiresSignedPlayback({ visibility: media.visibility }),
+                preferHot: source.preferHot !== false,
+                locations,
+            }).name(),
+            role: null,
+            location: null,
+            hotTierActive: false,
+            promotionStatus: 'not_hot',
+            providerPolicy: storage.providerPolicy || null,
+            canonicalProvider: storage.canonicalProviderName || null,
+        };
+    const provider = selection.provider;
+    const location = selection.location
+        || locations.find((row) => row.provider_name === provider.name())
+        || locations[0]
+        || null;
+    return {
+        location,
+        selection,
+    };
 }
 
 async function resolvePlayback(media, locations, storage, options) {
     const source = options || {};
-    const location = resolveLocation(media, locations, storage, source);
+    const resolution = resolveLocation(media, locations, storage, source);
+    const location = resolution.location;
+    const selection = resolution.selection || {};
     if (!location) {
         return {
             ok: false,
@@ -63,6 +96,12 @@ async function resolvePlayback(media, locations, storage, options) {
         media_id: media.id,
         provider_name: location.provider_name,
         role: location.role,
+        selected_provider: selection.providerName || location.provider_name,
+        selected_role: selection.role || location.role,
+        hot_tier_active: !!selection.hotTierActive,
+        canonical_provider: selection.canonicalProvider || storage.canonicalProviderName || null,
+        provider_policy: selection.providerPolicy || storage.providerPolicy || null,
+        promotion_status: selection.promotionStatus || 'not_hot',
         storage_key: location.storage_key,
         signed,
         url: download.url,

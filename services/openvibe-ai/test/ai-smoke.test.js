@@ -11,10 +11,16 @@ const assert = require('assert');
 
 const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-ai-'));
 process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
 process.env.PORT = '0';
 process.env.DB_PATH = path.join(tmpdir, 'ai.db');
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
 process.env.INTERNAL_API_KEY = 'test-internal-key';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_AI_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_AI_DATABASE_URL = '';
 
 const config = require('../server/config');
 const db = require('../server/db');

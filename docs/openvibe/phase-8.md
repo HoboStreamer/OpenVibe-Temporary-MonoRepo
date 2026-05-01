@@ -19,7 +19,9 @@ MMORPG progression, cosmetics, daily quests, and collaborative canvas support.
 * `OPENVIBE_ENV=local`
 * `OPENVIBE_LEGACY_COMPAT_MODE=false`
 * `OPENVIBE_PERSISTENCE_MODE=sqlite`
-* `OPENVIBE_MEDIA_COLD_PROVIDER=none`
+* `OPENVIBE_MEDIA_PROVIDER_POLICY=b2-default-r2-on-demand`
+* `OPENVIBE_MEDIA_CANONICAL_PROVIDER=b2`
+* `OPENVIBE_MEDIA_HOT_PROVIDER=r2` (disabled for normal writes until promoted)
 * `OPENVIBE_ALLOW_STAGING_LOAD=false`
 
 OpenVibe is OpenVibe-native by default. Legacy Hobo services are migration

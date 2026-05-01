@@ -16,7 +16,7 @@ const {
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
-const { sha256Buffer } = require('../checksum');
+const { sha256Buffer, sha256FileAsync, sha256ReadableStream, verifyChecksum } = require('../checksum');
 const { buildObjectKey } = require('../object-keys');
 
 function buildCredentials(options) {
@@ -42,6 +42,15 @@ function buildContentDisposition(fileName) {
     if (!fileName) return undefined;
     const safe = String(fileName).replace(/[\r\n"]/g, '_');
     return `inline; filename="${safe}"`;
+}
+
+function sanitizeMetadata(input) {
+    const source = input || {};
+    return Object.entries(source).reduce((acc, [key, value]) => {
+        if (value == null) return acc;
+        acc[String(key).toLowerCase()] = String(value);
+        return acc;
+    }, {});
 }
 
 class S3CompatibleStorageProvider {
@@ -131,26 +140,66 @@ class S3CompatibleStorageProvider {
     async writeBuffer(namespace, mediaId, buffer, options) {
         const opts = options || {};
         const storageKey = opts.storageKey || this.keyFor(namespace, mediaId, opts.extension, opts);
-        await this.client.send(new PutObjectCommand({
+        const response = await this.client.send(new PutObjectCommand({
             Bucket: this.bucket,
             Key: storageKey,
             Body: buffer,
             ContentType: opts.mimeType || undefined,
+            Metadata: sanitizeMetadata(opts.metadata),
         }));
         return {
             provider: this.name(),
             storageKey,
             sizeBytes: Buffer.byteLength(buffer || Buffer.alloc(0)),
             sha256: sha256Buffer(buffer),
+            etag: response.ETag || null,
+            publicUrl: this.publicUrlFor(mediaId, { storageKey }),
+        };
+    }
+
+    async writeFile(namespace, mediaId, filePath, options) {
+        const opts = options || {};
+        const storageKey = opts.storageKey || this.keyFor(namespace, mediaId, opts.extension, opts);
+        const stat = fs.statSync(filePath);
+        const body = fs.createReadStream(filePath);
+        const response = await this.client.send(new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+            Body: body,
+            ContentLength: stat.size,
+            ContentType: opts.mimeType || undefined,
+            Metadata: sanitizeMetadata(opts.metadata),
+        }));
+        const sha256 = await sha256FileAsync(filePath);
+        return {
+            provider: this.name(),
+            storageKey,
+            sizeBytes: stat.size,
+            sha256,
+            etag: response.ETag || null,
             publicUrl: this.publicUrlFor(mediaId, { storageKey }),
         };
     }
 
     async moveTempFile(namespace, mediaId, srcPath, options) {
-        const buffer = fs.readFileSync(srcPath);
-        const result = await this.writeBuffer(namespace, mediaId, buffer, options);
+        const result = await this.writeFile(namespace, mediaId, srcPath, options);
         try { fs.unlinkSync(srcPath); } catch { /* ignore */ }
         return result;
+    }
+
+    async openReadStream(storageKey) {
+        const response = await this.client.send(new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+        }));
+        return {
+            provider: this.name(),
+            storageKey,
+            sizeBytes: response.ContentLength != null ? Number(response.ContentLength) : 0,
+            etag: response.ETag || null,
+            contentType: response.ContentType || null,
+            stream: response.Body,
+        };
     }
 
     readStream() {
@@ -174,6 +223,41 @@ class S3CompatibleStorageProvider {
         if (!storageKey) return false;
         await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey }));
         return true;
+    }
+
+    async deleteObject(storageKey) {
+        return this.softDelete(storageKey);
+    }
+
+    async verifyObject(storageKey, options) {
+        const source = options || {};
+        const stat = await this.stat(storageKey);
+        if (!stat) {
+            return {
+                ok: false,
+                provider: this.name(),
+                storageKey,
+                reason: 'missing',
+            };
+        }
+        let sha256 = null;
+        if (source.expectedSha256) {
+            const opened = await this.openReadStream(storageKey);
+            sha256 = await sha256ReadableStream(opened.stream);
+        }
+        const sizeMatches = source.expectedSizeBytes == null || Number(source.expectedSizeBytes) === Number(stat.size);
+        const checksumMatches = !source.expectedSha256 || verifyChecksum(source.expectedSha256, sha256);
+        return {
+            ok: sizeMatches && checksumMatches,
+            provider: this.name(),
+            storageKey,
+            sizeBytes: Number(stat.size || 0),
+            etag: stat.etag || null,
+            sha256,
+            expectedSizeBytes: source.expectedSizeBytes == null ? null : Number(source.expectedSizeBytes),
+            expectedSha256: source.expectedSha256 || null,
+            reason: sizeMatches && checksumMatches ? 'verified' : checksumMatches ? 'size_mismatch' : 'checksum_mismatch',
+        };
     }
 
     async createMultipartUpload(input) {

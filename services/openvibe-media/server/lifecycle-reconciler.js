@@ -1,9 +1,11 @@
 'use strict';
 
-function reconcileLifecycle(deps, body) {
+async function reconcileLifecycle(deps, body) {
     const {
         database,
+        lifecyclePolicy,
         quotas,
+        storage,
         processing,
         storageModel,
     } = deps;
@@ -60,6 +62,25 @@ function reconcileLifecycle(deps, body) {
     `).get().count;
     const sizeViolationCount = database.prepare('SELECT COUNT(*) AS count FROM media_size_violations').get().count;
 
+    let storageReconcile = null;
+    if (lifecyclePolicy && storage && input.reconcile_storage !== false) {
+        const results = [];
+        for (const media of mediaRows) {
+            results.push(await lifecyclePolicy.reconcileMediaStorage(storage, media, {
+                dryRun: input.dry_run === true,
+                adminForce: input.admin_force === true ? true : input.admin_force === 'demote' ? 'demote' : false,
+            }));
+        }
+        storageReconcile = {
+            ok: true,
+            result_count: results.length,
+            promoted_count: results.filter((result) => result && result.action === 'promoted').length,
+            demoted_count: results.filter((result) => result && result.action === 'demoted').length,
+            kept_count: results.filter((result) => result && (result.action === 'kept-hot' || result.action === 'kept-canonical' || result.action === 'dry-run')).length,
+            results,
+        };
+    }
+
     return {
         ok: true,
         media_count: mediaRows.length,
@@ -74,6 +95,7 @@ function reconcileLifecycle(deps, body) {
             owner_id: input.owner_id || null,
             limit,
         },
+        storage_reconcile: storageReconcile,
         processing: processing.describeProcessingMode(),
     };
 }

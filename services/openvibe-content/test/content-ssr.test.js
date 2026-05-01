@@ -1,7 +1,20 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
+const path = require('path');
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-content-ssr-'));
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_CONTENT_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_CONTENT_DB_PATH = path.join(tmpDir, 'content-ssr.db');
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_CONTENT_DATABASE_URL = '';
 
 const { buildApp } = require('../server/index');
 

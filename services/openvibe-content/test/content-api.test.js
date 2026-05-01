@@ -7,9 +7,15 @@ const os = require('os');
 const path = require('path');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-content-api-'));
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
 process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_CONTENT_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_CONTENT_DB_PATH = path.join(tmpDir, 'content-api.db');
 process.env.INTERNAL_API_KEY = 'test-internal';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_CONTENT_DATABASE_URL = '';
 
 const { buildApp } = require('../server/index');
 
