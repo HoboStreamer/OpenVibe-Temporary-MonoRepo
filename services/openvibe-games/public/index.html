@@ -2,470 +2,62 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>OpenVibe Games</title>
+<title>OpenVibe Games · SourceVibe Front Door</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<link rel="stylesheet" href="/assets/openvibe.css" />
-<style>
-.dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:1rem; }
-@media (max-width: 960px) { .dashboard-grid { grid-template-columns: 1fr; } }
-.panel { background:var(--ov-bg-elev); border:1px solid var(--ov-border); border-radius:var(--ov-radius); padding:1rem 1.1rem; }
-.panel h3 { margin:0 0 .35rem; }
-.controls { display:grid; gap:1rem; grid-template-columns: 1.4fr .8fr auto; align-items:end; }
-@media (max-width: 760px) { .controls { grid-template-columns: 1fr; } }
-.detail-list { display:grid; gap:.55rem; }
-.detail-item { display:flex; justify-content:space-between; gap:1rem; padding:.45rem 0; border-bottom:1px solid var(--ov-border); }
-.detail-item:last-child { border-bottom:none; }
-.mono { font-family: var(--ov-mono); }
-.board-wrap { display:grid; gap:1rem; grid-template-columns: minmax(0, 540px) minmax(260px, 1fr); align-items:start; }
-@media (max-width: 1100px) { .board-wrap { grid-template-columns: 1fr; } }
-.board-shell { display:grid; gap:1rem; }
-.canvas-frame { background:#05070b; border:1px solid var(--ov-border); border-radius: var(--ov-radius); padding:1rem; overflow:auto; }
-#board { width:min(100%, 512px); height:auto; image-rendering: pixelated; border:1px solid var(--ov-border); background:#080a0f; display:block; }
-.palette { display:grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap:.4rem; }
-.palette button { border:1px solid var(--ov-border); border-radius:8px; min-height:2.4rem; cursor:pointer; }
-.palette button.active { outline:2px solid var(--ov-text); }
-.feed { max-height: 480px; overflow:auto; }
-.feed-item { padding:.6rem 0; border-bottom:1px solid var(--ov-border); }
-.feed-item:last-child { border-bottom:none; }
-.quest.complete { border-color: var(--ov-ok); }
-.quest.claimed { opacity:.7; }
-.small { color: var(--ov-text-dim); font-size:.9rem; }
-</style>
+<link rel="stylesheet" href="/sourcevibe-shared/ui/source-ui.css" />
+<link rel="stylesheet" href="/homepage.css" />
 </head>
-<body>
-<div id="nav-mount"></div>
-<main class="ov-shell">
-    <section class="ov-hero">
-        <h1>OpenVibe Games</h1>
-        <p>Native progression, shared world state, cosmetics, and a collaborative canvas — all on the OpenVibe runtime, no Hobo sidecar required.</p>
-        <div class="ov-cta-row">
-            <a class="ov-btn ov-btn-primary" href="#canvas">Jump to canvas</a>
-            <a class="ov-btn" href="/api/games/leaderboard/total_level">Leaderboard API</a>
-            <a class="ov-btn" href="/health">Service health</a>
+<body class="games-homepage">
+<main class="homepage-shell">
+    <header class="homepage-topbar">
+        <div class="homepage-brand">
+            <span class="eyebrow">OpenVibe Games</span>
+            <strong>SourceVibe front door</strong>
+            <span class="homepage-meta">Unified directory, session-aware launch, and real 2D World surfaces.</span>
         </div>
-    </section>
-
-    <div class="ov-stat-strip" id="stats-strip">
-        <div class="ov-stat"><div class="n">—</div><div class="l">Total level</div></div>
-        <div class="ov-stat"><div class="n">—</div><div class="l">Coins</div></div>
-        <div class="ov-stat"><div class="n">—</div><div class="l">Inventory slots</div></div>
-        <div class="ov-stat"><div class="n">—</div><div class="l">Canvas cooldown</div></div>
-    </div>
-
-    <section class="panel">
-        <h2>Operator / player controls</h2>
-        <p class="ov-section-sub">Use a user id to view player-private data and place pixels as that actor. Leave it blank to place anonymously.</p>
-        <div class="controls">
-            <label>
-                <div class="small">Active user id</div>
-                <input class="ov-input mono" id="user-id" value="demo-player" placeholder="demo-player" />
-            </label>
-            <label>
-                <div class="small">Leaderboard</div>
-                <select class="ov-input" id="leaderboard-type">
-                    <option value="total_level">Total level</option>
-                    <option value="coins">Coins</option>
-                    <option value="combat">Combat</option>
-                    <option value="mining">Mining</option>
-                    <option value="fishing">Fishing</option>
-                    <option value="woodcut">Woodcut</option>
-                    <option value="farming">Farming</option>
-                    <option value="crafting">Crafting</option>
-                    <option value="smithing">Smithing</option>
-                    <option value="agility">Agility</option>
-                </select>
-            </label>
-            <button class="ov-btn ov-btn-primary" id="reload-btn" type="button">Reload</button>
+        <div class="homepage-link-row">
+            <a class="homepage-link" href="/sourcevibe">Engine shell</a>
+            <a class="homepage-link" href="/2d-world">2D World</a>
+            <a class="homepage-link" href="/2d-world/editor">Editor</a>
+            <a class="homepage-link" href="/2d-world/status">Status</a>
         </div>
-        <div id="banner"></div>
-    </section>
+    </header>
 
-    <section class="ov-section dashboard-grid">
-        <article class="panel">
-            <h3>Player snapshot</h3>
-            <div id="player-card" class="detail-list"><div class="small">Loading player…</div></div>
-        </article>
-        <article class="panel">
-            <h3>Leaderboard</h3>
-            <table class="ov-table">
-                <thead><tr><th>#</th><th>Player</th><th>Value</th></tr></thead>
-                <tbody id="leaderboard-body"><tr><td colspan="3" class="small">Loading leaderboard…</td></tr></tbody>
-            </table>
-        </article>
-        <article class="panel">
-            <h3>Inventory</h3>
-            <div id="inventory-list" class="detail-list"><div class="small">Loading inventory…</div></div>
-        </article>
-        <article class="panel">
-            <h3>Daily quests & achievements</h3>
-            <div id="quest-list" class="detail-list"><div class="small">Loading quests…</div></div>
-            <hr style="border-color:var(--ov-border);margin:1rem 0" />
-            <div id="achievement-list" class="detail-list"><div class="small">Loading achievements…</div></div>
-        </article>
-    </section>
+    <section id="homepage-session" class="homepage-session"></section>
 
-    <section class="ov-section" id="canvas">
-        <h2>Collaborative canvas</h2>
-        <p class="ov-section-sub">Pick a color, click the board, and the sparse pixel map updates live on reload. Staff routes exist for region locks and bans.</p>
-        <div class="board-wrap">
-            <div class="board-shell panel">
-                <div class="canvas-frame">
-                    <canvas id="board" width="512" height="512"></canvas>
-                </div>
-                <div>
-                    <div class="small" style="margin-bottom:.45rem">Palette</div>
-                    <div class="palette" id="palette"></div>
-                </div>
-                <div id="cooldown-note" class="ov-banner">Canvas cooldown loading…</div>
+    <div id="homepage-status-strip" class="homepage-status-strip"></div>
+
+    <section id="homepage-hero" class="homepage-hero"></section>
+
+    <section class="homepage-section">
+        <div class="homepage-section__header">
+            <div>
+                <span class="eyebrow">Directory</span>
+                <h2>Gamemode packages</h2>
             </div>
-            <aside class="panel">
-                <h3>Recent canvas activity</h3>
-                <div id="canvas-feed" class="feed"><div class="small">Loading activity…</div></div>
-            </aside>
+            <a class="homepage-link" href="/sourcevibe">Open full launcher directory</a>
         </div>
+        <div id="homepage-directory" class="homepage-grid homepage-grid--directory"></div>
     </section>
 
-    <section class="ov-section">
-        <h2>Native OpenVibe hooks</h2>
-        <div class="ov-grid">
-            <a class="ov-card" href="/api/games/player/demo-player"><div class="title">Progression API</div><div class="desc">Profiles, inventory, bank, farm plots, cosmetics, and achievements.</div></a>
-            <a class="ov-card" href="/api/games/canvas/state"><div class="title">Canvas API</div><div class="desc">Sparse board state, history, place flow, staff bans, and region locks.</div></a>
-            <a class="ov-card" id="games-assets-link" href="#"><div class="title">Games assets namespace</div><div class="desc"><code>games.assets</code> is reserved in OpenVibe Media for sprites, maps, and audio packs.</div></a>
-            <a class="ov-card" id="games-platform-link" href="#"><div class="title">Platform hub</div><div class="desc">The network registry will surface this service as <code>openvibe-games</code>.</div></a>
+    <section class="homepage-section">
+        <div class="homepage-section__header">
+            <div>
+                <span class="eyebrow">Platform notes</span>
+                <h2>Why this page changed</h2>
+            </div>
         </div>
+        <div id="homepage-notes" class="homepage-grid homepage-grid--directory"></div>
     </section>
+
+    <footer class="homepage-footer">
+        <span class="homepage-muted">SourceVibe owns engine launch, console, and options. 2D World owns in-world UI, inventory, HUD, and content workflows.</span>
+        <div class="homepage-link-row">
+            <a class="homepage-link" href="/health">Service health</a>
+            <a class="homepage-link" href="/api/games/sourcevibe/product/status">Product status</a>
+        </div>
+    </footer>
 </main>
-<div id="footer-mount"></div>
-<script src="/assets/openvibe-icons.js"></script>
-<script src="/assets/openvibe.js"></script>
-<script>
-(async function () {
-    const state = {
-        services: [],
-        paletteIndex: 0,
-        canvasState: null,
-        player: null,
-        inventory: [],
-        achievements: [],
-        quests: [],
-    };
-
-    if (OpenVibe.renderChrome) {
-        await OpenVibe.renderChrome('games');
-    } else {
-        document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('games');
-        document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
-    }
-    state.services = OpenVibe.mergedServices(await OpenVibe.loadServices());
-    OpenVibe.attachLauncher(() => state.services);
-    document.getElementById('games-assets-link').href = OpenVibe.resolveSurfaceUrl('media');
-    document.getElementById('games-platform-link').href = OpenVibe.resolveSurfaceUrl('network');
-
-    const userInput = document.getElementById('user-id');
-    const leaderboardSelect = document.getElementById('leaderboard-type');
-    const banner = document.getElementById('banner');
-    const board = document.getElementById('board');
-    const ctx = board.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-
-    function actorHeaders() {
-        const userId = userInput.value.trim();
-        if (!userId) return {};
-        return {
-            'X-OpenVibe-User-Id': userId,
-            'X-OpenVibe-Display-Name': userId,
-        };
-    }
-
-    async function fetchJson(url, opts) {
-        const merged = Object.assign({}, opts || {}, {
-            headers: Object.assign({ 'Accept': 'application/json' }, actorHeaders(), opts && opts.headers ? opts.headers : {}),
-            credentials: 'include',
-        });
-        if (OpenVibe.fetchJson) {
-            return OpenVibe.fetchJson(url, merged);
-        }
-        const res = await fetch(url, merged);
-        const text = await res.text();
-        let body = null;
-        try { body = text ? JSON.parse(text) : null; } catch { body = { error: text || 'request failed' }; }
-        if (!res.ok) {
-            const error = new Error(body && body.error ? body.error : `request failed: ${res.status}`);
-            error.status = res.status;
-            error.body = body;
-            throw error;
-        }
-        return body;
-    }
-
-    function setBanner(message, kind) {
-        banner.innerHTML = message ? `<div class="ov-banner ${kind || ''}">${OpenVibe.escapeHtml(message)}</div>` : '';
-    }
-
-    function renderStats() {
-        const stats = document.getElementById('stats-strip');
-        const cooldown = state.canvasState && state.canvasState.cooldown ? state.canvasState.cooldown : null;
-        const totalLevel = state.player ? state.player.total_level : '—';
-        const coins = state.player ? state.player.coins : '—';
-        const inventorySlots = state.inventory ? state.inventory.length : '—';
-        const cooldownLabel = cooldown ? `${cooldown.cooldown_seconds}s / ${cooldown.placements_per_minute} per min` : '—';
-        stats.innerHTML = `
-            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(totalLevel)}</div><div class="l">Total level</div></div>
-            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(coins)}</div><div class="l">Coins</div></div>
-            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(inventorySlots)}</div><div class="l">Inventory slots</div></div>
-            <div class="ov-stat"><div class="n">${OpenVibe.escapeHtml(cooldownLabel)}</div><div class="l">Canvas cooldown</div></div>`;
-    }
-
-    function renderPlayer() {
-        const el = document.getElementById('player-card');
-        if (!state.player) {
-            el.innerHTML = '<div class="small">No player loaded.</div>';
-            return;
-        }
-        const p = state.player;
-        const levels = Object.entries(p.levels || {})
-            .map(([key, value]) => `<div class="detail-item"><span>${OpenVibe.escapeHtml(key)}</span><strong>${OpenVibe.escapeHtml(value)}</strong></div>`)
-            .join('');
-        el.innerHTML = `
-            <div class="detail-item"><span>Name</span><strong>${OpenVibe.escapeHtml(p.display_name)}</strong></div>
-            <div class="detail-item"><span>Class</span><strong>${OpenVibe.escapeHtml(p.class_name)}</strong></div>
-            <div class="detail-item"><span>World / zone</span><strong>${OpenVibe.escapeHtml(p.world_id)} · ${OpenVibe.escapeHtml(p.zone)}</strong></div>
-            <div class="detail-item"><span>Coordinates</span><strong class="mono">${OpenVibe.escapeHtml(p.x.toFixed(1))}, ${OpenVibe.escapeHtml(p.y.toFixed(1))}</strong></div>
-            <div class="detail-item"><span>HP / stamina</span><strong>${OpenVibe.escapeHtml(`${p.hp}/${p.max_hp}`)} · ${OpenVibe.escapeHtml(`${p.stamina}/${p.max_stamina}`)}</strong></div>
-            <div class="detail-item"><span>Total level</span><strong>${OpenVibe.escapeHtml(p.total_level)}</strong></div>
-            <div>${levels}</div>`;
-    }
-
-    function renderInventory() {
-        const el = document.getElementById('inventory-list');
-        if (!state.inventory || !state.inventory.length) {
-            el.innerHTML = '<div class="small">No items yet. Use the API to seed inventory.</div>';
-            return;
-        }
-        el.innerHTML = state.inventory.map((item) => `
-            <div class="detail-item">
-                <span class="mono">${OpenVibe.escapeHtml(item.item_id)}</span>
-                <strong>x${OpenVibe.escapeHtml(item.quantity)}</strong>
-            </div>`).join('');
-    }
-
-    function renderQuests() {
-        const el = document.getElementById('quest-list');
-        if (!state.quests || !state.quests.length) {
-            el.innerHTML = '<div class="small">No quests loaded.</div>';
-            return;
-        }
-        el.innerHTML = state.quests.map((quest) => {
-            const complete = quest.progress >= quest.goal;
-            const claimed = !!quest.claimed_at;
-            return `
-                <div class="ov-card quest ${complete ? 'complete' : ''} ${claimed ? 'claimed' : ''}">
-                    <div class="title">${OpenVibe.escapeHtml(quest.title)}</div>
-                    <div class="desc">${OpenVibe.escapeHtml(quest.description || '')}</div>
-                    <div class="meta">
-                        <span class="ov-tag ${complete ? 'ok' : ''}">${OpenVibe.escapeHtml(`${quest.progress}/${quest.goal}`)}</span>
-                        <span class="ov-tag">coins ${OpenVibe.escapeHtml((quest.reward && quest.reward.coins) || 0)}</span>
-                        <span class="ov-tag">loyalty ${OpenVibe.escapeHtml((quest.reward && quest.reward.loyalty_points) || 0)}</span>
-                        ${claimed ? '<span class="ov-tag ok">claimed</span>' : ''}
-                    </div>
-                </div>`;
-        }).join('');
-    }
-
-    function renderAchievements() {
-        const el = document.getElementById('achievement-list');
-        if (!state.achievements || !state.achievements.length) {
-            el.innerHTML = '<div class="small">No achievements unlocked yet.</div>';
-            return;
-        }
-        el.innerHTML = state.achievements.map((item) => `
-            <div class="detail-item">
-                <span>${OpenVibe.escapeHtml(item.title || item.achievement_id)}</span>
-                <strong class="mono">${OpenVibe.escapeHtml(item.achievement_id)}</strong>
-            </div>`).join('');
-    }
-
-    function renderLeaderboard(items) {
-        const body = document.getElementById('leaderboard-body');
-        if (!items || !items.length) {
-            body.innerHTML = '<tr><td colspan="3" class="small">No ranked players yet.</td></tr>';
-            return;
-        }
-        body.innerHTML = items.map((item) => `
-            <tr>
-                <td>${OpenVibe.escapeHtml(item.rank)}</td>
-                <td>${OpenVibe.escapeHtml(item.display_name)}</td>
-                <td>${OpenVibe.escapeHtml(item.value)}</td>
-            </tr>`).join('');
-    }
-
-    function renderPalette() {
-        const paletteRoot = document.getElementById('palette');
-        const palette = (state.canvasState && state.canvasState.board && state.canvasState.board.palette) || [];
-        paletteRoot.innerHTML = palette.map((color, index) => `
-            <button type="button" data-index="${index}" title="${OpenVibe.escapeHtml(color)}" style="background:${OpenVibe.escapeHtml(color)}"></button>`).join('');
-        paletteRoot.querySelectorAll('button').forEach((button) => {
-            button.classList.toggle('active', Number(button.dataset.index) === state.paletteIndex);
-            button.addEventListener('click', () => {
-                state.paletteIndex = Number(button.dataset.index);
-                renderPalette();
-            });
-        });
-    }
-
-    function renderCanvasBoard() {
-        if (!state.canvasState) return;
-        const boardState = state.canvasState.board;
-        const pixelWidth = board.width / boardState.width;
-        const pixelHeight = board.height / boardState.height;
-        ctx.fillStyle = '#080a0f';
-        ctx.fillRect(0, 0, board.width, board.height);
-        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-        for (let x = 0; x <= boardState.width; x += 1) {
-            ctx.beginPath();
-            ctx.moveTo(x * pixelWidth, 0);
-            ctx.lineTo(x * pixelWidth, board.height);
-            ctx.stroke();
-        }
-        for (let y = 0; y <= boardState.height; y += 1) {
-            ctx.beginPath();
-            ctx.moveTo(0, y * pixelHeight);
-            ctx.lineTo(board.width, y * pixelHeight);
-            ctx.stroke();
-        }
-        for (const tile of state.canvasState.tiles || []) {
-            const color = boardState.palette[tile.color_index] || '#ffffff';
-            ctx.fillStyle = color;
-            ctx.fillRect(tile.x * pixelWidth, tile.y * pixelHeight, pixelWidth, pixelHeight);
-        }
-        renderPalette();
-    }
-
-    function renderCanvasFeed() {
-        const el = document.getElementById('canvas-feed');
-        const actions = state.canvasState && state.canvasState.recent_actions ? state.canvasState.recent_actions : [];
-        if (!actions.length) {
-            el.innerHTML = '<div class="small">No canvas activity yet.</div>';
-            return;
-        }
-        el.innerHTML = actions.map((action) => `
-            <div class="feed-item">
-                <div><strong>${OpenVibe.escapeHtml(action.username || action.user_id || 'anon')}</strong> placed <span class="mono">${OpenVibe.escapeHtml(action.x)},${OpenVibe.escapeHtml(action.y)}</span></div>
-                <div class="small">color ${OpenVibe.escapeHtml(action.color_index)} · ${OpenVibe.escapeHtml(action.created_at || '')}</div>
-            </div>`).join('');
-    }
-
-    function renderCooldown() {
-        const note = document.getElementById('cooldown-note');
-        const cooldown = state.canvasState && state.canvasState.cooldown;
-        if (!cooldown) {
-            note.className = 'ov-banner';
-            note.textContent = 'Anonymous mode: the canvas still accepts placements, but cooldown data is limited.';
-            return;
-        }
-        note.className = `ov-banner ${cooldown.remaining_ms > 0 ? 'warn' : 'ok'}`;
-        note.textContent = cooldown.remaining_ms > 0
-            ? `Next placement in ${Math.ceil(cooldown.remaining_ms / 1000)}s · ${cooldown.placements_last_minute}/${cooldown.placements_per_minute} placements used this minute.`
-            : `Ready to place · ${cooldown.placements_last_minute}/${cooldown.placements_per_minute} placements used this minute.`;
-    }
-
-    async function loadPlayerData() {
-        const userId = userInput.value.trim();
-        if (!userId) {
-            state.player = null;
-            state.inventory = [];
-            state.quests = [];
-            state.achievements = [];
-            renderPlayer();
-            renderInventory();
-            renderQuests();
-            renderAchievements();
-            return;
-        }
-        const [playerData, inventoryData, questsData, achievementsData] = await Promise.all([
-            fetchJson(`/api/games/player/${encodeURIComponent(userId)}`),
-            fetchJson(`/api/games/inventory/${encodeURIComponent(userId)}`),
-            fetchJson(`/api/games/daily-quests/${encodeURIComponent(userId)}`),
-            fetchJson(`/api/games/achievements/${encodeURIComponent(userId)}`),
-        ]);
-        state.player = playerData.player;
-        state.inventory = inventoryData.items || [];
-        state.quests = questsData.items || [];
-        state.achievements = achievementsData.items || [];
-        renderPlayer();
-        renderInventory();
-        renderQuests();
-        renderAchievements();
-    }
-
-    async function loadLeaderboard() {
-        const data = await fetchJson(`/api/games/leaderboard/${encodeURIComponent(leaderboardSelect.value)}`);
-        renderLeaderboard(data.items || []);
-    }
-
-    async function loadCanvas() {
-        state.canvasState = await fetchJson('/api/games/canvas/state');
-        renderCanvasBoard();
-        renderCanvasFeed();
-        renderCooldown();
-    }
-
-    async function reloadAll() {
-        setBanner('');
-        try {
-            await Promise.all([loadPlayerData(), loadLeaderboard(), loadCanvas()]);
-            renderStats();
-        } catch (err) {
-            setBanner(err.message || 'Failed to load games data.', 'warn');
-        }
-    }
-
-    board.addEventListener('click', async (event) => {
-        if (!state.canvasState || !state.canvasState.board) return;
-        const rect = board.getBoundingClientRect();
-        const boardState = state.canvasState.board;
-        const x = Math.floor((event.clientX - rect.left) / (rect.width / boardState.width));
-        const y = Math.floor((event.clientY - rect.top) / (rect.height / boardState.height));
-        try {
-            await fetchJson('/api/games/canvas/place', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ x, y, color_index: state.paletteIndex }),
-            });
-            setBanner(`Placed pixel at ${x},${y}.`, 'ok');
-            await reloadAll();
-        } catch (err) {
-            setBanner(err.message || 'Canvas placement failed.', 'warn');
-        }
-    });
-
-    document.getElementById('reload-btn').addEventListener('click', reloadAll);
-    leaderboardSelect.addEventListener('change', loadLeaderboard);
-    userInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            reloadAll();
-        }
-    });
-
-    if (OpenVibe.loadSession) {
-        try {
-            const session = await OpenVibe.loadSession();
-            if (session && session.authenticated && session.user && userInput.value.trim() === 'demo-player') {
-                userInput.value = String(session.user.id || session.user.username || 'demo-player');
-                setBanner(`Signed in as @${session.user.username || session.user.id}. Using your account by default for private player routes.`, 'ok');
-            } else if (session && session.anonymous && userInput.value.trim() === 'demo-player') {
-                userInput.value = '';
-                setBanner('Anonymous mode active. Leave the user id blank to place canvas pixels anonymously, or sign in to load your player profile.', 'warn');
-            }
-        } catch {
-            // ignore auth bootstrap failures here; the page still works in guest mode
-        }
-    }
-
-    await reloadAll();
-    setInterval(loadCanvas, 15000);
-})();
-</script>
+<script type="module" src="/homepage.js"></script>
 </body>
 </html>

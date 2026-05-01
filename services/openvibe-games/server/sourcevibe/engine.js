@@ -243,6 +243,88 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         };
     }
 
+    function actorCapabilities(actor = {}) {
+        const type = String(actor.type || actor.actor_type || (actor.id || actor.actor_id ? 'user' : 'anonymous')).toLowerCase();
+        const role = String(actor.role || (type === 'service' ? 'service' : type === 'user' ? 'user' : 'anonymous')).toLowerCase();
+        const id = actor.id || actor.actor_id || null;
+        const displayName = actor.display_name || actor.displayName || actor.username || actor.actor_username || null;
+        return {
+            type,
+            role,
+            id: id ? String(id) : null,
+            displayName: displayName ? String(displayName) : null,
+            authenticated: type === 'service' || type === 'user',
+            privileged: type === 'service' || role === 'admin' || role === 'global_mod' || role === 'mod',
+        };
+    }
+
+    function syncedServers() {
+        syncServers();
+        return serverStore.list();
+    }
+
+    function featuredServerForGamemode(gamemodeId, cachedServers = null) {
+        const servers = Array.isArray(cachedServers) ? cachedServers : syncedServers();
+        const official = servers.find((entry) => entry.gamemode === gamemodeId && entry.official)
+            || servers.find((entry) => entry.gamemode === gamemodeId && Array.isArray(entry.tags) && entry.tags.includes('official'))
+            || null;
+        if (official) return official;
+        const descriptor = gamemodes.Get(gamemodeId);
+        if (!descriptor || !descriptor.server || typeof descriptor.server.buildFeaturedServer !== 'function') return null;
+        const featured = descriptor.server.buildFeaturedServer({ realtime, gamemode: descriptor, engine: api });
+        if (!featured) return null;
+        return Object.assign({
+            id: featured.id || `${gamemodeId}-featured`,
+            slug: featured.slug || featured.id || `${gamemodeId}-featured`,
+            gamemode: gamemodeId,
+            official: true,
+            players: Number(featured.players || 0),
+            maxPlayers: Number(featured.maxPlayers || 64),
+            tags: [],
+            metadata: {},
+        }, featured, {
+            gamemode: featured.gamemode || gamemodeId,
+            official: true,
+            tags: Array.from(new Set(['official', gamemodeId].concat(featured.tags || []))),
+            metadata: Object.assign({}, featured.metadata || {}),
+        });
+    }
+
+    function buildGamemodePermissions(gamemode, actor, officialServer = null) {
+        const caps = actorCapabilities(actor);
+        const hasPlaySurface = !!(officialServer && officialServer.route) || !!(gamemode && gamemode.routes && gamemode.routes.play);
+        return {
+            gamemode: gamemode && gamemode.id || null,
+            authenticated: caps.authenticated,
+            privileged: caps.privileged,
+            canView: !!gamemode,
+            canPlay: caps.authenticated && hasPlaySurface,
+            canLocalTest: caps.authenticated,
+            canOpenEditor: !!(officialServer && officialServer.editorRoute) || !!(gamemode && gamemode.routes && gamemode.routes.editor),
+            canManage: caps.privileged,
+            playReason: caps.authenticated ? 'Launch the official gamemode surface with your OpenVibe session.' : 'Sign in with OpenVibe to launch gameplay surfaces.',
+            localTestReason: caps.authenticated ? 'Create a launcher-managed local test shard tied to your account.' : 'Sign in before creating local test shards.',
+        };
+    }
+
+    function buildDirectoryEntry(gamemode, actor, cachedServers = null) {
+        if (!gamemode) return null;
+        const officialServer = featuredServerForGamemode(gamemode.id, cachedServers);
+        const permissions = buildGamemodePermissions(gamemode, actor, officialServer);
+        const surfaces = {
+            launcher: withQuery(gamemode.routes && gamemode.routes.launcher || '/sourcevibe', { gamemode: gamemode.id }),
+            play: officialServer && officialServer.route || gamemode.routes && gamemode.routes.play || null,
+            status: officialServer && officialServer.statusRoute || gamemode.routes && gamemode.routes.status || null,
+            editor: officialServer && officialServer.editorRoute || gamemode.routes && gamemode.routes.editor || null,
+        };
+        return Object.assign({}, gamemode, {
+            featured: gamemode.id === '2dworld' || !!(officialServer && officialServer.official),
+            officialServer,
+            permissions,
+            surfaces,
+        });
+    }
+
     function resolveGamemodeIdFromWorld(world) {
         const metadata = world && world.metadata || {};
         const explicit = metadata.gamemode || metadata.sourcevibe && metadata.sourcevibe.gamemode;
@@ -356,7 +438,7 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
     };
 
     api.listServers = function listServers() {
-        return syncServers();
+        return syncedServers();
     };
 
     api.getServer = function getServer(id) {
@@ -365,6 +447,17 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         if (direct) return direct;
         const needle = String(id || '').trim().toLowerCase();
         return serverStore.list().find((entry) => entry.id === needle || String(entry.slug || '').toLowerCase() === needle) || null;
+    };
+
+    api.getGamemodePermissions = function getGamemodePermissions(id, actor) {
+        const gamemode = api.getGamemode(id);
+        if (!gamemode) return null;
+        return buildGamemodePermissions(gamemode, actor, featuredServerForGamemode(gamemode.id));
+    };
+
+    api.listDirectory = function listDirectory(actor) {
+        const servers = syncedServers();
+        return api.listGamemodes().map((gamemode) => buildDirectoryEntry(gamemode, actor, servers));
     };
 
     api.createServer = function createServer(payload = {}) {
@@ -402,6 +495,70 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         return server;
     };
 
+    api.playGamemode = function playGamemode(id, actor) {
+        const gamemode = api.getGamemode(id);
+        if (!gamemode) return { ok: false, status: 404, error: 'gamemode not found' };
+        const caps = actorCapabilities(actor);
+        const officialServer = featuredServerForGamemode(gamemode.id);
+        const permissions = buildGamemodePermissions(gamemode, actor, officialServer);
+        if (!permissions.canPlay) {
+            return { ok: false, status: 401, error: permissions.playReason };
+        }
+        const storedOfficial = officialServer && api.getServer(officialServer.id || officialServer.slug);
+        if (storedOfficial) {
+            return api.connect({
+                id: storedOfficial.id,
+                userId: caps.id,
+                displayName: caps.displayName,
+            });
+        }
+        const launchUrl = officialServer && officialServer.route || gamemode.routes && gamemode.routes.play || withQuery('/sourcevibe', { gamemode: gamemode.id });
+        return {
+            ok: true,
+            gamemode,
+            server: officialServer || null,
+            launch: {
+                url: launchUrl,
+                realtimePath: '/games/realtime',
+                auth: {
+                    worldId: officialServer && officialServer.worldId || null,
+                    worldSlug: officialServer && officialServer.slug || null,
+                    gamemode: gamemode.id,
+                    userId: caps.id,
+                    displayName: caps.displayName,
+                },
+            },
+        };
+    };
+
+    api.localTestGamemode = function localTestGamemode(id, actor, payload = {}) {
+        const gamemode = api.getGamemode(id);
+        if (!gamemode) return { ok: false, status: 404, error: 'gamemode not found' };
+        const caps = actorCapabilities(actor);
+        const permissions = buildGamemodePermissions(gamemode, actor, featuredServerForGamemode(gamemode.id));
+        if (!permissions.canLocalTest) {
+            return { ok: false, status: 401, error: permissions.localTestReason };
+        }
+        const suffix = Date.now().toString(36).slice(-6);
+        const slug = sanitizeSlug(payload.slug || `${gamemode.id}-${caps.id || 'player'}-local-${suffix}`);
+        const server = api.createServer({
+            slug,
+            gamemode: gamemode.id,
+            name: payload.name || `${gamemode.title} Local Test`,
+            map: payload.map || gamemode.maps && gamemode.maps[0] || 'flatgrass',
+            maxPlayers: Number(payload.maxPlayers) || 12,
+            description: payload.description || `Launcher-managed local test shard for ${gamemode.title}.`,
+            ownerId: caps.id,
+            status: 'test',
+        });
+        const launch = api.connect({
+            id: server.id,
+            userId: caps.id,
+            displayName: caps.displayName,
+        });
+        return Object.assign({}, launch, { server });
+    };
+
     api.connect = function connect(payload = {}) {
         const server = api.getServer(payload.id || payload.serverId || payload.worldId || payload.world_id);
         if (!server) {
@@ -434,6 +591,13 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
         const gamemode = gamemodes.Get(requestedGamemode) || activeGamemode();
         const userId = options.userId || options.user_id || null;
         const displayName = options.displayName || options.display_name || undefined;
+        const actor = {
+            type: userId ? 'user' : 'anonymous',
+            id: userId ? String(userId) : null,
+            role: options.role || (userId ? 'user' : 'anonymous'),
+            display_name: displayName || null,
+            username: displayName || null,
+        };
         const player = userId ? playerStates.ensure(String(userId), displayName) : null;
         const worldId = server && server.worldId || realtime && realtime.rootWorld && realtime.rootWorld.id || null;
         const rates = buildEngineRates();
@@ -444,14 +608,17 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 version: api.version,
                 api: ['hook', 'net', 'ents', 'gamemode', 'addon', 'console', 'cvar', 'bind'],
                 realtimePath: '/games/realtime',
+                sharedWindows: ['console', 'options'],
             },
             gamemode: summarizeGamemode(gamemode),
             gamemodeUi: JSON.parse(JSON.stringify(gamemode && gamemode.ui || {})),
             gamemodes: api.listGamemodes(),
+            directory: api.listDirectory(actor),
             maps: api.listMaps(),
             addons: api.listAddons(worldId),
             servers: api.listServers(),
             activeServer: server,
+            permissions: gamemode ? api.getGamemodePermissions(gamemode.id, actor) : null,
             console: {
                 commands: commands.List().map((entry) => summarizeCommand(entry)),
                 cvars: cvars.List(),
@@ -473,8 +640,8 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
             },
             player: player || null,
             menu: {
-                connected: ['Resume Game', 'Disconnect', 'Player List', 'Find Servers', 'Create Server', 'Gamemodes', 'Addons', 'Options', 'Console', 'Quit'],
-                disconnected: ['Gamemodes', 'Find Servers', 'Create Server', 'Options', 'Console', 'Quit'],
+                connected: ['Resume Game', 'Directory', 'Console', 'Options', 'Leave World', 'Return to Homepage'],
+                disconnected: ['Directory', 'Console', 'Options', 'Return to Homepage'],
             },
             options: {
                 tabs: ['Keyboard', 'Mouse', 'Audio', 'Video', 'Voice', 'Multiplayer', 'Advanced'],

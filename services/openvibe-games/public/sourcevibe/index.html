@@ -4,51 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SourceVibe Engine</title>
+    <link rel="stylesheet" href="/sourcevibe-shared/ui/source-ui.css" />
     <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
-    <div id="app-shell">
-        <header class="topbar">
-            <div>
+    <div id="app-shell" class="launcher-shell">
+        <header class="launcher-topbar">
+            <div class="launcher-brand">
                 <p class="eyebrow">OpenVibe Games Platform</p>
                 <h1>SourceVibe Engine</h1>
-                <p class="subtitle">A real engine shell for gamemodes, console commands, options, session-aware server browsing, and clean boundaries between the engine and the 2D World gamemode.</p>
+                <p class="subtitle">The base runtime owns the directory, account-aware launch flow, shared console, and shared options. <strong>2D World</strong> is a flagship gamemode package, not the engine.</p>
             </div>
-            <aside id="session-card" class="identity-card"></aside>
+            <nav class="launcher-nav" id="sidebar-nav">
+                <button data-view="home" class="nav-button active">Home</button>
+                <button data-view="directory" class="nav-button">Directory</button>
+                <button data-view="addons" class="nav-button">Addons</button>
+                <button data-view="diagnostics" class="nav-button">Diagnostics</button>
+            </nav>
+            <div class="launcher-actions">
+                <button class="toolbar-button" data-action="open-console">Console</button>
+                <button class="toolbar-button" data-action="open-options">Options</button>
+                <button class="toolbar-button" data-action="open-account">Account</button>
+            </div>
         </header>
 
-        <main class="workspace">
-            <nav class="sidebar" id="sidebar-nav">
-                <button data-panel="launcher" class="nav-button active">Launcher</button>
-                <button data-panel="servers" class="nav-button">Servers</button>
-                <button data-panel="gamemodes" class="nav-button">Gamemodes</button>
-                <button data-panel="console" class="nav-button">Console</button>
-                <button data-panel="options" class="nav-button">Options</button>
-            </nav>
+        <section id="status-banner" class="status-banner">Booting SourceVibe…</section>
 
-            <section class="viewport">
-                <div id="status-banner" class="status-banner">Booting SourceVibe…</div>
-                <section id="panel-launcher" class="panel-frame"></section>
-                <section id="panel-servers" class="panel-frame hidden"></section>
-                <section id="panel-gamemodes" class="panel-frame hidden"></section>
-                <section id="panel-console" class="panel-frame hidden"></section>
-                <section id="panel-options" class="panel-frame hidden"></section>
+        <main class="launcher-main">
+            <aside id="session-card" class="identity-card launcher-identity"></aside>
+            <section class="launcher-content">
+                <section id="status-strip" class="status-strip"></section>
+                <section id="view-home" class="panel-frame"></section>
+                <section id="view-directory" class="panel-frame hidden"></section>
+                <section id="view-addons" class="panel-frame hidden"></section>
+                <section id="view-diagnostics" class="panel-frame hidden"></section>
             </section>
-
-            <aside class="dock">
-                <section class="dock-card">
-                    <h2>Quick launch</h2>
-                    <div id="quick-launch"></div>
-                </section>
-                <section class="dock-card">
-                    <h2>Session</h2>
-                    <div id="account-dock"></div>
-                </section>
-                <section class="dock-card">
-                    <h2>Engine stats</h2>
-                    <div id="engine-stats" class="stats-list"></div>
-                </section>
-            </aside>
         </main>
     </div>
 

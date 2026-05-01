@@ -53,26 +53,68 @@ async function main() {
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
     try {
+        const homepageHtml = await fetch(`${baseUrl}/`, { headers: headers() }).then((response) => response.text());
+        assert.ok(homepageHtml.includes('SourceVibe front door'));
+        assert.ok(homepageHtml.includes('Gamemode packages'));
+        assert.ok(!homepageHtml.includes('user-id'));
+
         const launcherHtml = await fetch(`${baseUrl}/sourcevibe/`, { headers: headers() }).then((response) => response.text());
         assert.ok(launcherHtml.includes('SourceVibe Engine'));
+        assert.ok(launcherHtml.includes('Directory'));
+        assert.ok(launcherHtml.includes('Console'));
 
         const bootstrap = await jsonFetch(`${baseUrl}/api/games/sourcevibe/bootstrap`);
         assert.strictEqual(bootstrap.engine.name, 'SourceVibe Engine');
         assert.ok(Array.isArray(bootstrap.engine.api) && bootstrap.engine.api.includes('hook'));
+        assert.ok(Array.isArray(bootstrap.engine.sharedWindows) && bootstrap.engine.sharedWindows.includes('console'));
         assert.strictEqual(bootstrap.gamemode.id, '2dworld');
         assert.strictEqual(bootstrap.gamemodeUi.theme, '2dworld-classic');
         assert.strictEqual(bootstrap.gamemodeUi.inventory.owner, 'gamemode');
         assert.strictEqual(bootstrap.gamemodeUi.inventory.showBankOnInteractionOnly, true);
         assert.ok(Array.isArray(bootstrap.gamemodes) && bootstrap.gamemodes.some((entry) => entry.id === 'base'));
         assert.ok(Array.isArray(bootstrap.maps) && bootstrap.maps.some((entry) => entry.id === '2dworld_outpost'));
+        assert.ok(Array.isArray(bootstrap.directory) && bootstrap.directory.some((entry) => entry.id === '2dworld'));
+        assert.deepStrictEqual(bootstrap.menu.connected, ['Resume Game', 'Directory', 'Console', 'Options', 'Leave World', 'Return to Homepage']);
 
         const gamemodes = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes`);
         assert.ok(gamemodes.items.some((entry) => entry.id === '2dworld'));
         assert.strictEqual(gamemodes.active.id, '2dworld');
+        assert.ok(Array.isArray(gamemodes.directory) && gamemodes.directory.some((entry) => entry.id === '2dworld'));
 
         const gamemodeDetail = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld`);
         assert.strictEqual(gamemodeDetail.gamemode.id, '2dworld');
         assert.ok(gamemodeDetail.gamemode.routes.play.includes('/2d-world'));
+        assert.strictEqual(gamemodeDetail.permissions.canPlay, true);
+
+        const directory = await jsonFetch(`${baseUrl}/api/games/sourcevibe/directory`);
+        const directoryEntry = directory.items.find((entry) => entry.id === '2dworld');
+        assert.ok(directoryEntry);
+        assert.strictEqual(directoryEntry.featured, true);
+        assert.strictEqual(directoryEntry.permissions.canPlay, true);
+        assert.strictEqual(directoryEntry.permissions.canLocalTest, true);
+        assert.ok(directoryEntry.surfaces.play.includes('/2d-world'));
+
+        const permissions = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld/permissions`);
+        assert.strictEqual(permissions.permissions.gamemode, '2dworld');
+        assert.strictEqual(permissions.permissions.canPlay, true);
+        assert.strictEqual(permissions.permissions.canLocalTest, true);
+
+        const play = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld/play`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(play.ok, true);
+        assert.strictEqual(play.launch.auth.userId, 'sv-user-1');
+        assert.ok(play.launch.url.includes('/2d-world'));
+
+        const localTest = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld/local-test`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(localTest.ok, true);
+        assert.strictEqual(localTest.server.gamemode, '2dworld');
+        assert.ok(localTest.server.slug.includes('local'));
+        assert.strictEqual(localTest.launch.auth.userId, 'sv-user-1');
 
         const created = await jsonFetch(`${baseUrl}/api/games/sourcevibe/servers`, {
             method: 'POST',

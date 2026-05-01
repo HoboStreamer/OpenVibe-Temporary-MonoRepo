@@ -10,6 +10,11 @@ function buildSourceVibeRouter({ sourcevibe, actorOfReq }) {
         return typeof actorOfReq === 'function' ? actorOfReq(req) : { type: 'anonymous', id: null, display_name: 'Anonymous' };
     }
 
+    function displayNameOf(req) {
+        const a = actor(req);
+        return a.display_name || a.displayName || a.username || 'Player';
+    }
+
     r.get('/product/status', (_req, res) => {
         res.json(sourcevibe.summary());
     });
@@ -20,18 +25,48 @@ function buildSourceVibeRouter({ sourcevibe, actorOfReq }) {
             gamemode: req.query.gamemode,
             serverId: req.query.server || req.query.server_id || req.query.world_id,
             userId: a.id,
-            displayName: a.display_name || a.username,
+            displayName: displayNameOf(req),
+            role: a.role,
         }));
     });
 
-    r.get('/gamemodes', (_req, res) => {
-        res.json({ items: sourcevibe.listGamemodes(), active: sourcevibe.getGamemode(sourcevibe.activeGamemode() && sourcevibe.activeGamemode().id) });
+    r.get('/directory', (req, res) => {
+        res.json({ items: sourcevibe.listDirectory(actor(req)) });
+    });
+
+    r.get('/gamemodes', (req, res) => {
+        res.json({
+            items: sourcevibe.listGamemodes(),
+            active: sourcevibe.getGamemode(sourcevibe.activeGamemode() && sourcevibe.activeGamemode().id),
+            directory: sourcevibe.listDirectory(actor(req)),
+        });
     });
 
     r.get('/gamemodes/:id', (req, res) => {
         const gamemode = sourcevibe.getGamemode(req.params.id);
         if (!gamemode) return res.status(404).json({ error: 'gamemode not found' });
-        return res.json({ gamemode });
+        return res.json({
+            gamemode,
+            permissions: sourcevibe.getGamemodePermissions(req.params.id, actor(req)),
+        });
+    });
+
+    r.get('/gamemodes/:id/permissions', (req, res) => {
+        const permissions = sourcevibe.getGamemodePermissions(req.params.id, actor(req));
+        if (!permissions) return res.status(404).json({ error: 'gamemode not found' });
+        return res.json({ permissions });
+    });
+
+    r.post('/gamemodes/:id/play', json, (req, res) => {
+        const result = sourcevibe.playGamemode(req.params.id, actor(req));
+        if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+        return res.json(result);
+    });
+
+    r.post('/gamemodes/:id/local-test', json, (req, res) => {
+        const result = sourcevibe.localTestGamemode(req.params.id, actor(req), req.body || {});
+        if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+        return res.status(201).json(result);
     });
 
     r.get('/maps', (_req, res) => {
@@ -72,7 +107,7 @@ function buildSourceVibeRouter({ sourcevibe, actorOfReq }) {
         const result = sourcevibe.connect({
             id: req.body && (req.body.id || req.body.serverId || req.body.worldId || req.body.world_id),
             userId: a.id,
-            displayName: a.display_name || a.username,
+            displayName: displayNameOf(req),
         });
         if (!result.ok) return res.status(404).json({ error: result.error });
         return res.json(result);
@@ -82,7 +117,7 @@ function buildSourceVibeRouter({ sourcevibe, actorOfReq }) {
         const a = actor(req);
         const result = sourcevibe.console.run(req.body && req.body.command, {
             userId: a.id,
-            displayName: a.display_name || a.username,
+            displayName: displayNameOf(req),
             lastServerId: req.body && req.body.lastServerId,
         });
         res.json(result);
