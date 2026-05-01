@@ -21,7 +21,7 @@ async function materializeClipProject(deps, clip, actor, mode) {
             error: 'source media unavailable',
         });
         const updatedClip = clipModel.updateClip(clip.id, {
-            status: 'import_hold',
+            status: 'failed',
             metadata: {
                 last_materialization_error: 'source media unavailable',
                 materialization_mode: mode,
@@ -50,6 +50,10 @@ async function materializeClipProject(deps, clip, actor, mode) {
         }
     }
 
+    const workflowStatus = mode === 'frame-perfect'
+        ? 'frame_perfect_ready'
+        : 'materialized_ready';
+
     const createdMedia = model.create({
         owner_type: clip.owner_user_id ? 'user' : (actor.actor_type === 'service' ? 'service' : 'user'),
         owner_id: clip.owner_user_id || actor.actor_id || 'openvibe-workers',
@@ -73,6 +77,7 @@ async function materializeClipProject(deps, clip, actor, mode) {
                 end_ms: clip.end_ms,
             },
             materialization_mode: mode,
+            clip_workflow_status: workflowStatus,
             virtual_materialization: true,
         }),
         actor_type: actor.actor_type,
@@ -116,14 +121,15 @@ async function materializeClipProject(deps, clip, actor, mode) {
 
     const exportRow = clipModel.createClipExport({
         clipId: clip.id,
-        status: 'ready',
+        status: workflowStatus,
         mediaId: createdMedia.id,
     });
     const updatedClip = clipModel.updateClip(clip.id, {
-        status: 'ready',
+        status: workflowStatus,
         playback_media_id: createdMedia.id,
         metadata: {
             materialization_mode: mode,
+            clip_workflow_status: workflowStatus,
             materialized_at: new Date().toISOString(),
         },
     });

@@ -24,9 +24,14 @@ const publicBaseUrl = resolvePublicOrigin({
     envKeys: ['OPENVIBE_MEDIA_PUBLIC_BASE_URL', 'PUBLIC_BASE_URL', 'OPENVIBE_MEDIA_URL'],
 });
 const defaultProvider = (process.env.OPENVIBE_MEDIA_PROVIDER || process.env.STORAGE_PROVIDER || 'local').toLowerCase();
+const providerPolicy = (process.env.OPENVIBE_MEDIA_PROVIDER_POLICY
+    || (process.env.OPENVIBE_MEDIA_CANONICAL_PROVIDER === 'b2' || process.env.OPENVIBE_MEDIA_COLD_PROVIDER === 'b2'
+        ? 'b2-default-r2-on-demand'
+        : 'legacy-auto-hot')).toLowerCase();
 const canonicalProvider = (process.env.OPENVIBE_MEDIA_CANONICAL_PROVIDER
     || process.env.OPENVIBE_MEDIA_COLD_PROVIDER
     || defaultProvider).toLowerCase();
+const defaultPlaybackProvider = (process.env.OPENVIBE_MEDIA_DEFAULT_PLAYBACK_PROVIDER || canonicalProvider).toLowerCase();
 const hotProvider = (process.env.OPENVIBE_MEDIA_HOT_PROVIDER || defaultProvider).toLowerCase();
 const assetOriginProvider = (process.env.OPENVIBE_MEDIA_ASSET_ORIGIN_PROVIDER || hotProvider || canonicalProvider).toLowerCase();
 
@@ -54,8 +59,13 @@ module.exports = {
 
     storage: {
         provider: defaultProvider,
+        providerPolicy,
         canonicalProvider,
+        defaultPlaybackProvider,
         hotProvider,
+        hotProviderEnabled: boolFromEnv(process.env.OPENVIBE_MEDIA_HOT_PROVIDER_ENABLED, providerPolicy !== 'b2-default-r2-on-demand'),
+        r2AutoPromotionEnabled: boolFromEnv(process.env.OPENVIBE_MEDIA_R2_AUTO_PROMOTION_ENABLED, providerPolicy === 'b2-default-r2-on-demand'),
+        r2RequireSiteHot: boolFromEnv(process.env.OPENVIBE_MEDIA_R2_REQUIRE_SITE_HOT, true),
         assetOriginProvider,
         root: hotRoot,
         hotRoot,
@@ -68,6 +78,34 @@ module.exports = {
         targetPublicObjectBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_TARGET_PUBLIC_OBJECT_BYTES, TARGET_PUBLIC_OBJECT_MAX_BYTES),
         warnPublicObjectBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_WARN_PUBLIC_OBJECT_BYTES, WARN_PUBLIC_OBJECT_BYTES),
         signedUrlTtlSeconds: numberFromEnv(process.env.OPENVIBE_MEDIA_SIGNED_URL_TTL_SECONDS, 900),
+        thresholds: {
+            site: {
+                minUniqueVideoViewers7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_SITE_MIN_UNIQUE_VIDEO_VIEWERS_7D, 500),
+                minWatchMinutes7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_SITE_MIN_WATCH_MINUTES_7D, 25000),
+                minOriginEgressGb7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_SITE_MIN_ORIGIN_EGRESS_GB_7D, 500),
+                minConcurrentViewers: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_SITE_MIN_CONCURRENT_VIEWERS, 75),
+            },
+            vod: {
+                minUniqueViewers24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_UNIQUE_VIEWERS_24H, 75),
+                minUniqueViewers7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_UNIQUE_VIEWERS_7D, 250),
+                minWatchMinutes24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_WATCH_MINUTES_24H, 1500),
+                minWatchMinutes7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_WATCH_MINUTES_7D, 5000),
+                minCacheMissGb24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_CACHE_MISS_GB_24H, 25),
+                minCacheMissGb7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_VOD_MIN_CACHE_MISS_GB_7D, 100),
+            },
+            clip: {
+                minUniqueViewers24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_CLIP_MIN_UNIQUE_VIEWERS_24H, 40),
+                minUniqueViewers7d: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_CLIP_MIN_UNIQUE_VIEWERS_7D, 150),
+                minWatchMinutes24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_CLIP_MIN_WATCH_MINUTES_24H, 300),
+                minCacheMissGb24h: numberFromEnv(process.env.OPENVIBE_MEDIA_R2_CLIP_MIN_CACHE_MISS_GB_24H, 10),
+            },
+        },
+        parting: {
+            targetBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_VOD_PART_TARGET_BYTES, TARGET_PUBLIC_OBJECT_MAX_BYTES),
+            maxBytes: numberFromEnv(process.env.OPENVIBE_MEDIA_VOD_PART_MAX_BYTES, PUBLIC_MEDIA_OBJECT_MAX_BYTES),
+            targetSeconds: numberFromEnv(process.env.OPENVIBE_MEDIA_VOD_PART_TARGET_SECONDS, 1800),
+            maxSeconds: numberFromEnv(process.env.OPENVIBE_MEDIA_VOD_PART_MAX_SECONDS, 3600),
+        },
         local: {
             root: hotRoot,
             multipartRoot,

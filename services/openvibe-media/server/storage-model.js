@@ -34,6 +34,17 @@ function hydrateLocation(row) {
     };
 }
 
+function hydrateSizeViolation(row) {
+    if (!row) return null;
+    return {
+        id: Number(row.id),
+        media_id: row.media_id,
+        violation_type: row.violation_type,
+        detail: safeJson(row.detail_json, {}),
+        created_at: row.created_at,
+    };
+}
+
 function hydrateUploadSession(row) {
     if (!row) return null;
     return {
@@ -113,17 +124,46 @@ function recordLocation(input) {
     }) || null;
 }
 
-function listLocations(mediaId) {
+function getLocationById(id) {
+    return hydrateLocation(db.get().prepare(`SELECT * FROM media_object_locations WHERE id = ?`).get(Number(id)));
+}
+
+function listLocations(mediaId, options) {
+    const source = options || {};
+    const where = ['media_id = ?'];
+    const args = [String(mediaId)];
+    if (source.role) {
+        where.push('role = ?');
+        args.push(String(source.role));
+    }
+    if (source.providerName) {
+        where.push('provider_name = ?');
+        args.push(String(source.providerName));
+    }
+    if (source.status) {
+        where.push('status = ?');
+        args.push(String(source.status));
+    }
+    const limit = source.limit ? `LIMIT ${Math.min(Math.max(Number(source.limit) || 1, 1), 500)}` : '';
     return db.get().prepare(`
-        SELECT * FROM media_object_locations WHERE media_id = ? ORDER BY role ASC, created_at DESC
-    `).all(String(mediaId)).map(hydrateLocation);
+        SELECT * FROM media_object_locations
+        WHERE ${where.join(' AND ')}
+        ORDER BY
+            CASE role WHEN 'hot' THEN 0 WHEN 'canonical' THEN 1 WHEN 'asset-origin' THEN 2 ELSE 3 END,
+            updated_at DESC,
+            created_at DESC
+        ${limit}
+    `).all(...args).map(hydrateLocation);
+}
+
+function findLocation(mediaId, options) {
+    return listLocations(mediaId, Object.assign({}, options || {}, { limit: 1 }))[0] || null;
 }
 
 function getPreferredLocation(mediaId, role) {
-    const rows = role
-        ? db.get().prepare(`SELECT * FROM media_object_locations WHERE media_id = ? AND role = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`).all(String(mediaId), String(role))
-        : db.get().prepare(`SELECT * FROM media_object_locations WHERE media_id = ? AND status = 'active' ORDER BY role ASC, updated_at DESC`).all(String(mediaId));
-    return rows.length ? hydrateLocation(rows[0]) : null;
+    return role
+        ? findLocation(mediaId, { role, status: 'active' })
+        : findLocation(mediaId, { status: 'active' });
 }
 
 function createUploadSession(input) {
@@ -229,13 +269,70 @@ function recordSizeViolation(input) {
     `).run(String(source.mediaId), String(source.violationType), JSON.stringify(source.detail || {}));
 }
 
+function listSizeViolations(filters) {
+    const source = filters || {};
+    const where = [];
+    const args = [];
+    if (source.mediaId) {
+        where.push('media_id = ?');
+        args.push(String(source.mediaId));
+    }
+    if (source.violationType) {
+        where.push('violation_type = ?');
+        args.push(String(source.violationType));
+    }
+    const limit = Math.min(Math.max(Number(source.limit) || 100, 1), 500);
+    const sql = where.length
+        ? `SELECT * FROM media_size_violations WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`
+        : `SELECT * FROM media_size_violations ORDER BY created_at DESC, id DESC LIMIT ?`;
+    return db.get().prepare(sql).all(...args, limit).map(hydrateSizeViolation);
+}
+
+function markLocationStatus(locationId, status, metadataPatch) {
+    const current = getLocationById(locationId);
+    if (!current) return null;
+    const metadata = Object.assign({}, current.metadata || {}, metadataPatch || {});
+    db.get().prepare(`
+        UPDATE media_object_locations SET
+            status = ?,
+            metadata_json = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(String(status), JSON.stringify(metadata), Number(locationId));
+    return getLocationById(locationId);
+}
+
+function countLocations(filters) {
+    const source = filters || {};
+    const where = ['1 = 1'];
+    const args = [];
+    if (source.role) {
+        where.push('role = ?');
+        args.push(String(source.role));
+    }
+    if (source.providerName) {
+        where.push('provider_name = ?');
+        args.push(String(source.providerName));
+    }
+    if (source.status) {
+        where.push('status = ?');
+        args.push(String(source.status));
+    }
+    return Number(db.get().prepare(`SELECT COUNT(*) AS count FROM media_object_locations WHERE ${where.join(' AND ')}`).get(...args).count || 0);
+}
+
 module.exports = {
     createUploadSession,
+    countLocations,
+    findLocation,
+    getLocationById,
     getPreferredLocation,
     getUploadPart,
     getUploadSession,
     listLocations,
+    listSizeViolations,
     listUploadParts,
+    markLocationStatus,
     recordLocation,
     recordSizeViolation,
     updateUploadSession,

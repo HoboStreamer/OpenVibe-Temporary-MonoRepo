@@ -12,6 +12,19 @@ function sha256File(filePath) {
     return sha256Buffer(buffer);
 }
 
+function sha256ReadableStream(readable) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        readable.on('data', (chunk) => hash.update(chunk));
+        readable.on('end', () => resolve(hash.digest('hex')));
+        readable.on('error', reject);
+    });
+}
+
+function sha256FileAsync(filePath) {
+    return sha256ReadableStream(fs.createReadStream(filePath));
+}
+
 function verifyChecksum(expected, actual) {
     if (!expected || !actual) return false;
     return String(expected).trim().toLowerCase() === String(actual).trim().toLowerCase();
@@ -20,5 +33,7 @@ function verifyChecksum(expected, actual) {
 module.exports = {
     sha256Buffer,
     sha256File,
+    sha256FileAsync,
+    sha256ReadableStream,
     verifyChecksum,
 };

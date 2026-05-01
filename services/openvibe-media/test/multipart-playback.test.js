@@ -6,6 +6,9 @@ const os = require('os');
 const path = require('path');
 
 process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-media-multipart-test-')), 'media.db');
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
 process.env.OPENVIBE_MEDIA_HOT_ROOT = path.join(path.dirname(process.env.DB_PATH), 'storage');
 process.env.OPENVIBE_MEDIA_MULTIPART_ROOT = path.join(path.dirname(process.env.DB_PATH), 'multipart');
 process.env.PUBLIC_BASE_URL = 'http://media.test';

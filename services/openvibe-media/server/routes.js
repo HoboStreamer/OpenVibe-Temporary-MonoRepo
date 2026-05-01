@@ -10,9 +10,13 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const db = require('./db');
+const accessRollupModel = require('./access-rollup-model');
 const clipModel = require('./clip-model');
+const lifecyclePolicy = require('./lifecycle-policy');
 const model = require('./model');
 const policy = require('./policy');
+const promotionModel = require('./promotion-model');
+const promotionWorker = require('./promotion-worker');
 const quotas = require('./quotas');
 const processing = require('./processing');
 const storageModel = require('./storage-model');
@@ -46,8 +50,18 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         };
     }
 
-    function chooseStorageProvider(input) {
-        return storage.chooseWriteProvider(input || {});
+    function chooseStorageTarget(input) {
+        if (typeof storage.chooseWriteTarget === 'function') {
+            return storage.chooseWriteTarget(input || {});
+        }
+        const provider = storage.chooseWriteProvider(input || {});
+        return {
+            provider,
+            providerName: provider.name(),
+            role: inferLocationRoleForStorage(storage, provider.name()),
+            reason: 'legacy-provider-selection',
+            providerPolicy: storage.providerPolicy || null,
+        };
     }
 
     function ensureLocation(media, writeResult, options) {
@@ -55,7 +69,9 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         return storageModel.recordLocation({
             mediaId: media.id,
             providerName: writeResult.provider || media.storage_provider,
-            role: opts.role || inferLocationRoleForStorage(storage, writeResult.provider || media.storage_provider),
+            role: opts.role
+                || media.metadata && media.metadata.storage_target && media.metadata.storage_target.role
+                || inferLocationRoleForStorage(storage, writeResult.provider || media.storage_provider),
             storageKey: writeResult.storageKey || media.storage_key,
             publicUrl: writeResult.publicUrl || media.public_url,
             signedUrlRequired: media.visibility !== 'public',
@@ -66,10 +82,23 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
     }
 
     function applyPlaybackSizeGuard(media) {
+        const recording = vodModel.getRecordingByMediaId(media.id);
+        const context = {
+            locations: storageModel.listLocations(media.id, { status: 'active' }),
+            segments: recording ? vodModel.listSegmentsByRecordingId(recording.id) : [],
+            parts: recording ? vodModel.listPartsByRecordingId(recording.id) : [],
+            partialSegments: recording ? vodModel.listPartialSegmentsByRecordingId(recording.id) : [],
+            clipExports: clipModel.listClipExportsByMediaId ? clipModel.listClipExportsByMediaId(media.id) : [],
+        };
         const decision = validatePublicPlaybackSize(media, {
             publicPlaybackMaxBytes: storage.config && storage.config.publicPlaybackMaxBytes,
             targetPublicObjectBytes: storage.config && storage.config.targetPublicObjectBytes,
             warnPublicObjectBytes: storage.config && storage.config.warnPublicObjectBytes,
+            locations: context.locations,
+            segments: context.segments,
+            parts: context.parts,
+            partialSegments: context.partialSegments,
+            clipExports: context.clipExports,
         });
         if (!decision.ok) {
             storageModel.recordSizeViolation({
@@ -339,13 +368,19 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         }, clip, actor, mode);
     }
 
-    function reconcileLifecycle(body) {
+    async function reconcileLifecycle(body) {
         return sharedReconcileLifecycle({
             database: db.get(),
+            lifecyclePolicy,
             quotas,
+            storage,
             processing,
             storageModel,
         }, body);
+    }
+
+    function assertAdminAction(req, action) {
+        policy.assert(policy.decideAdmin({ req }), { ...actorMeta(req), action });
     }
 
     function validateUploadInitBody(body) {
@@ -383,11 +418,12 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         }
 
         const a = actorMeta(req);
-        const provider = chooseStorageProvider({
+        const target = chooseStorageTarget({
             namespace: ns,
             type: b.type,
             sizeBytes: b.size_bytes,
         });
+        const provider = target.provider;
         const created = model.create({
             owner_type: b.owner_type, owner_id: String(b.owner_id),
             namespace: ns, type: b.type,
@@ -396,7 +432,15 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             storage_provider: provider.name(),
             mime_type: b.mime_type || null,
             size_bytes: b.size_bytes || 0,
-            metadata: b.metadata || {},
+            metadata: Object.assign({}, b.metadata || {}, {
+                storage_target: {
+                    requested_provider: target.providerName,
+                    resolved_provider: provider.name(),
+                    role: target.role,
+                    reason: target.reason,
+                    provider_policy: target.providerPolicy || storage.providerPolicy || null,
+                },
+            }),
             actor_type: a.actor_type, actor_id: a.actor_id,
         });
         eventBus.publishMediaEvent(MEDIA_EVENT_TYPES.UPLOAD_INITIALIZED, created, { actor_type: a.actor_type, actor_id: a.actor_id });
@@ -437,11 +481,12 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         }
 
         const a = actorMeta(req);
-        const provider = chooseStorageProvider({
+        const target = chooseStorageTarget({
             namespace: ns,
             type: b.type,
             sizeBytes: b.size_bytes,
         });
+        const provider = target.provider;
         const created = model.create({
             owner_type: b.owner_type,
             owner_id: String(b.owner_id),
@@ -453,7 +498,16 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             mime_type: b.mime_type || null,
             size_bytes: b.size_bytes || 0,
             status: 'uploading',
-            metadata: Object.assign({}, b.metadata || {}, { upload_strategy: 'multipart' }),
+            metadata: Object.assign({}, b.metadata || {}, {
+                upload_strategy: 'multipart',
+                storage_target: {
+                    requested_provider: target.providerName,
+                    resolved_provider: provider.name(),
+                    role: target.role,
+                    reason: target.reason,
+                    provider_policy: target.providerPolicy || storage.providerPolicy || null,
+                },
+            }),
             actor_type: a.actor_type,
             actor_id: a.actor_id,
         });
@@ -809,6 +863,8 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             stream_id: req.params.streamId,
             recording,
             items: vodModel.listSegmentsByRecordingId(recording.id),
+            parts: vodModel.listPartsByRecordingId(recording.id),
+            partial_segments: vodModel.listPartialSegmentsByRecordingId(recording.id),
         });
     }));
 
@@ -839,12 +895,12 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         const timeline = vodModel.buildTimeline(req.params.streamId);
         const startMs = Math.max(0, Number(body.start_ms || 0));
         const endMs = Math.max(startMs + 1000, Number(body.end_ms || Math.min(timeline.duration_ms || 30000, startMs + 30000)));
-        const clip = clipModel.createClip({
+        const requestedClip = clipModel.createClip({
             sourceStreamId: req.params.streamId,
             sourceMediaId: recording.media_id,
             ownerUserId: actor.actor_type === 'user' ? actor.actor_id : (body.owner_user_id || null),
             title: body.title || `Clip from ${req.params.streamId}`,
-            status: 'virtual',
+            status: 'requested',
             startMs,
             endMs,
             metadata: {
@@ -853,6 +909,21 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
                 created_by_actor_id: actor.actor_id,
             },
         });
+        const clip = clipModel.updateClip(requestedClip.id, {
+            status: 'virtual_ready',
+            metadata: {
+                clip_workflow_status: 'virtual_ready',
+                virtualized_at: new Date().toISOString(),
+            },
+        });
+        if (recording.media_id) {
+            promotionModel.createRetentionHold({
+                mediaId: recording.media_id,
+                holdType: 'virtual-clip-dependency',
+                reason: 'Virtual clip depends on parent media segments',
+                referenceId: clip.id,
+            });
+        }
         eventBus.publishMediaEvent('clip:virtual:ready', model.getById(recording.media_id) || { id: recording.media_id }, {
             actor_type: actor.actor_type,
             actor_id: actor.actor_id,
@@ -918,7 +989,8 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
             return res.status(401).json({ error: 'authentication required' });
         }
         const deleted = clipModel.deleteClip(clip.id);
-        res.json({ clip: deleted });
+        const released = promotionModel.releaseRetentionHoldsByReference(clip.id, 'virtual-clip-dependency');
+        res.json({ clip: deleted, released_holds: released.length });
     }));
 
     r.get('/clips/:clipId/playback', asyncRoute(async (req, res) => {
@@ -1047,12 +1119,12 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         }
 
         const body = req.body || {};
-        const clip = clipModel.createClip({
+        const requestedClip = clipModel.createClip({
             sourceStreamId: recording.stream_id,
             sourceMediaId: media.id,
             ownerUserId: actor.actor_type === 'user' ? actor.actor_id : (body.owner_user_id || null),
             title: body.title || candidate.rationale && candidate.rationale.label || `Clip candidate ${candidate.id}`,
-            status: 'virtual',
+            status: 'requested',
             startMs: candidate.start_ms,
             endMs: candidate.end_ms,
             metadata: {
@@ -1060,6 +1132,19 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
                 candidate_score: candidate.score,
                 candidate_rationale: candidate.rationale,
             },
+        });
+        const clip = clipModel.updateClip(requestedClip.id, {
+            status: 'virtual_ready',
+            metadata: {
+                clip_workflow_status: 'virtual_ready',
+                virtualized_at: new Date().toISOString(),
+            },
+        });
+        promotionModel.createRetentionHold({
+            mediaId: media.id,
+            holdType: 'virtual-clip-dependency',
+            reason: 'Virtual clip depends on analyzed parent media',
+            referenceId: clip.id,
         });
         eventBus.publishMediaEvent('clip:virtual:ready', media, {
             actor_type: actor.actor_type,
@@ -1069,6 +1154,33 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         });
         res.status(201).json({ clip, candidate });
     }));
+
+    r.get('/media/:id/locations', (req, res) => {
+        const media = model.getById(req.params.id);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        try {
+            policy.assert(policy.decideRead({ req, media }),
+                { ...actorMeta(req), action: 'read-locations', resource: `media:${media.id}` });
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json({
+            media,
+            locations: storageModel.listLocations(media.id),
+        });
+    });
+
+    r.get('/media/:id/promotion-status', (req, res) => {
+        const media = model.getById(req.params.id);
+        if (!media) return res.status(404).json({ error: 'media not found' });
+        try {
+            policy.assert(policy.decideRead({ req, media }),
+                { ...actorMeta(req), action: 'read-promotion-status', resource: `media:${media.id}` });
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json(lifecyclePolicy.getPromotionStatus(storage, media.id));
+    });
 
     // ── read ─────────────────────────────────────────────────
     r.get('/media/:id', (req, res) => {
@@ -1175,6 +1287,106 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         res.json({ items: rows });
     });
 
+    r.get('/admin/media/storage-plan', (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-storage-plan');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json({
+            plan: storage.describePlan(),
+            hot_tier_status: lifecyclePolicy.getHotTierStatus(storage),
+        });
+    });
+
+    r.get('/admin/media/hot-tier/status', (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-hot-tier-status');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json(lifecyclePolicy.getHotTierStatus(storage));
+    });
+
+    r.get('/admin/media/hot-tier/candidates', asyncRoute(async (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-hot-tier-candidates');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json({
+            items: await lifecyclePolicy.listHotTierCandidates(storage, { limit: req.query.limit }),
+        });
+    }));
+
+    r.post('/admin/media/lifecycle/reconcile', express.json({ limit: '64kb' }), asyncRoute(async (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-lifecycle-reconcile');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json(await reconcileLifecycle(Object.assign({}, req.body || {}, { reconcile_storage: true })));
+    }));
+
+    r.post('/admin/media/:id/promote-r2', express.json({ limit: '16kb' }), asyncRoute(async (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-promote-r2');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        const result = await promotionWorker.reconcileSingleMedia(storage, req.params.id, {
+            forcePromote: true,
+            adminForce: true,
+            actorType: actorMeta(req).actor_type,
+            actorId: actorMeta(req).actor_id,
+        });
+        if (!result.ok) return res.status(result.status || 409).json(result);
+        res.json(result);
+    }));
+
+    r.post('/admin/media/:id/demote-r2', express.json({ limit: '16kb' }), asyncRoute(async (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-demote-r2');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        const result = await promotionWorker.reconcileSingleMedia(storage, req.params.id, {
+            forceDemote: true,
+            adminForce: 'demote',
+            actorType: actorMeta(req).actor_type,
+            actorId: actorMeta(req).actor_id,
+        });
+        if (!result.ok) return res.status(result.status || 409).json(result);
+        res.json(result);
+    }));
+
+    r.post('/admin/media/:id/reconcile-storage', express.json({ limit: '16kb' }), asyncRoute(async (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-reconcile-storage');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        const result = await promotionWorker.reconcileSingleMedia(storage, req.params.id, {
+            dryRun: req.body && req.body.dry_run === true,
+            adminForce: req.body && req.body.admin_force === true ? true : req.body && req.body.admin_force === 'demote' ? 'demote' : false,
+            actorType: actorMeta(req).actor_type,
+            actorId: actorMeta(req).actor_id,
+        });
+        if (!result.ok) return res.status(result.status || 409).json(result);
+        res.json(result);
+    }));
+
+    r.get('/admin/media/size-violations', (req, res) => {
+        try {
+            assertAdminAction(req, 'admin-media-size-violations');
+        } catch (err) {
+            return res.status(err.status || 403).json({ error: err.message, reason: err.reason });
+        }
+        res.json({
+            items: storageModel.listSizeViolations({ mediaId: req.query.media_id, violationType: req.query.violation_type, limit: req.query.limit }),
+        });
+    });
+
     r.post('/internal/processing/run', express.json({ limit: '64kb' }), asyncRoute(async (req, res) => {
         if (!req.serviceActor) {
             return res.status(403).json({ error: 'internal service actor required' });
@@ -1219,7 +1431,7 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
         if (!req.serviceActor) {
             return res.status(403).json({ error: 'internal service actor required' });
         }
-        res.json(Object.assign({ requested_by_service: serviceActorMeta(req).actor_id }, reconcileLifecycle(req.body || {})));
+        res.json(Object.assign({ requested_by_service: serviceActorMeta(req).actor_id }, await reconcileLifecycle(req.body || {})));
     }));
 
     // ── legacy id lookup (HoboStreamer migration helper) ─────
@@ -1243,7 +1455,8 @@ function buildFilesRouter({ storage }) {
         if (!locations.length && media.storage_key) {
             locations.push({
                 provider_name: media.storage_provider,
-                role: inferLocationRoleForStorage(storage, media.storage_provider),
+                role: media.metadata && media.metadata.storage_target && media.metadata.storage_target.role
+                    || inferLocationRoleForStorage(storage, media.storage_provider),
                 storage_key: media.storage_key,
                 public_url: media.public_url,
                 signed_url_required: media.visibility !== 'public',

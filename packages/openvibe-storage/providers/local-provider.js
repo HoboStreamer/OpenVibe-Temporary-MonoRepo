@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { sha256Buffer } = require('../checksum');
+const { sha256Buffer, sha256FileAsync, verifyChecksum } = require('../checksum');
 const { buildObjectKey } = require('../object-keys');
 
 function ensureDir(dirPath) {
@@ -99,11 +99,42 @@ class LocalStorageProvider {
         };
     }
 
+    async writeFile(namespace, mediaId, filePath, options) {
+        const opts = options || {};
+        const storageKey = opts.storageKey || this.keyFor(namespace, mediaId, opts.extension, opts);
+        const fullPath = this.pathFor(storageKey);
+        ensureDir(path.dirname(fullPath));
+        fs.copyFileSync(filePath, fullPath);
+        const stat = fs.statSync(fullPath);
+        const sha256 = await sha256FileAsync(fullPath);
+        return {
+            provider: this.name(),
+            storageKey,
+            sizeBytes: stat.size,
+            sha256,
+            etag: `local-${sha256.slice(0, 16)}`,
+            publicUrl: this.publicUrlFor(mediaId, { mediaId, storageKey }),
+        };
+    }
+
     async moveTempFile(namespace, mediaId, srcPath, options) {
-        const buffer = fs.readFileSync(srcPath);
-        const result = await this.writeBuffer(namespace, mediaId, buffer, options);
+        const result = await this.writeFile(namespace, mediaId, srcPath, options);
         try { fs.unlinkSync(srcPath); } catch { /* ignore */ }
         return result;
+    }
+
+    async openReadStream(storageKey) {
+        const fullPath = this.pathFor(storageKey);
+        if (!fs.existsSync(fullPath)) {
+            throw new Error(`Storage key not found: ${storageKey}`);
+        }
+        const stat = fs.statSync(fullPath);
+        return {
+            provider: this.name(),
+            storageKey,
+            sizeBytes: stat.size,
+            stream: fs.createReadStream(fullPath),
+        };
     }
 
     readStream(storageKey) {
@@ -128,6 +159,43 @@ class LocalStorageProvider {
         } catch {
             return false;
         }
+    }
+
+    async deleteObject(storageKey) {
+        try {
+            const fullPath = this.pathFor(storageKey);
+            if (!fs.existsSync(fullPath)) return false;
+            fs.rmSync(fullPath, { force: true });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async verifyObject(storageKey, options) {
+        const source = options || {};
+        const stat = await this.stat(storageKey);
+        if (!stat) {
+            return {
+                ok: false,
+                provider: this.name(),
+                storageKey,
+                reason: 'missing',
+            };
+        }
+        const sha256 = source.expectedSha256 ? await sha256FileAsync(this.pathFor(storageKey)) : null;
+        const sizeMatches = source.expectedSizeBytes == null || Number(source.expectedSizeBytes) === Number(stat.size);
+        const checksumMatches = !source.expectedSha256 || verifyChecksum(source.expectedSha256, sha256);
+        return {
+            ok: sizeMatches && checksumMatches,
+            provider: this.name(),
+            storageKey,
+            sizeBytes: Number(stat.size || 0),
+            sha256,
+            expectedSizeBytes: source.expectedSizeBytes == null ? null : Number(source.expectedSizeBytes),
+            expectedSha256: source.expectedSha256 || null,
+            reason: sizeMatches && checksumMatches ? 'verified' : checksumMatches ? 'size_mismatch' : 'checksum_mismatch',
+        };
     }
 
     async createMultipartUpload(input) {

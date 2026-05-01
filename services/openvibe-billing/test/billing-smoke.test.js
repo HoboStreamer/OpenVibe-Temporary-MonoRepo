@@ -7,8 +7,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
 process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-billing-test-')), 'billing.db');
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_BILLING_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_BILLING_DATABASE_URL = '';
 process.env.PLATFORM_FEE_BPS = '500'; // 5%
 
 const config = require('../server/config');

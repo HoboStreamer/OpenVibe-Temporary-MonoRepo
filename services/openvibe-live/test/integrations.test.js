@@ -14,8 +14,15 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
 process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-live-int-test-')), 'live.db');
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_LIVE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_LIVE_DATABASE_URL = '';
 delete process.env.OPENVIBE_CHAT_URL;
 delete process.env.OPENVIBE_BILLING_URL;
 delete process.env.OPENVIBE_AI_URL;

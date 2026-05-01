@@ -8,6 +8,9 @@ const path = require('path');
 
 const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-media-pipeline-'));
 process.env.DB_PATH = path.join(rootDir, 'media.db');
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
 process.env.OPENVIBE_MEDIA_HOT_ROOT = path.join(rootDir, 'storage');
 process.env.OPENVIBE_MEDIA_MULTIPART_ROOT = path.join(rootDir, 'multipart');
 process.env.PUBLIC_BASE_URL = 'http://media.test';
@@ -127,6 +130,16 @@ function request(server, method, requestPath, body, extraHeaders) {
         assert.strictEqual(playback.stream_id, 'stream_1');
         assert.strictEqual(playback.playback.url, `http://media.test/files/${encodeURIComponent(media.id)}`);
 
+        const locationsResponse = await request(server, 'GET', `/api/v1/media/${encodeURIComponent(media.id)}/locations`);
+        assert.strictEqual(locationsResponse.status, 200);
+        const locationsPayload = JSON.parse(locationsResponse.body);
+        assert.strictEqual(locationsPayload.locations.length, 1);
+
+        const promotionStatusResponse = await request(server, 'GET', `/api/v1/media/${encodeURIComponent(media.id)}/promotion-status`);
+        assert.strictEqual(promotionStatusResponse.status, 200);
+        const promotionStatus = JSON.parse(promotionStatusResponse.body);
+        assert.strictEqual(promotionStatus.media_id, media.id);
+
         const timelineResponse = await request(server, 'GET', '/api/v1/streams/stream_1/timeline');
         assert.strictEqual(timelineResponse.status, 200);
         const timeline = JSON.parse(timelineResponse.body);
@@ -164,7 +177,7 @@ function request(server, method, requestPath, body, extraHeaders) {
         });
         assert.strictEqual(internalMaterializeResponse.status, 201);
         const internalMaterialized = JSON.parse(internalMaterializeResponse.body);
-        assert.strictEqual(internalMaterialized.clip.status, 'ready');
+        assert.strictEqual(internalMaterialized.clip.status, 'materialized_ready');
         assert.ok(internalMaterialized.media.id);
 
         const materializeResponse = await request(server, 'POST', `/api/v1/clips/${encodeURIComponent(createdClip.id)}/materialize`, {
@@ -175,8 +188,42 @@ function request(server, method, requestPath, body, extraHeaders) {
         });
         assert.strictEqual(materializeResponse.status, 200);
         const materialized = JSON.parse(materializeResponse.body);
-        assert.strictEqual(materialized.clip.status, 'ready');
+        assert.strictEqual(materialized.clip.status, 'materialized_ready');
         assert.ok(materialized.media.id);
+
+        const storagePlanResponse = await request(server, 'GET', '/api/v1/admin/media/storage-plan', null, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(storagePlanResponse.status, 200);
+        const storagePlan = JSON.parse(storagePlanResponse.body);
+        assert.ok(storagePlan.plan.provider_policy);
+
+        const hotTierStatusResponse = await request(server, 'GET', '/api/v1/admin/media/hot-tier/status', null, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(hotTierStatusResponse.status, 200);
+
+        const hotTierCandidatesResponse = await request(server, 'GET', '/api/v1/admin/media/hot-tier/candidates', null, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(hotTierCandidatesResponse.status, 200);
+
+        const reconcileStorageResponse = await request(server, 'POST', `/api/v1/admin/media/${encodeURIComponent(media.id)}/reconcile-storage`, {
+            dry_run: true,
+        }, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(reconcileStorageResponse.status, 200);
+
+        const sizeViolationsResponse = await request(server, 'GET', '/api/v1/admin/media/size-violations', null, {
+            'x-internal-key': config.internalKey,
+            'x-openvibe-service': 'openvibe-workers',
+        });
+        assert.strictEqual(sizeViolationsResponse.status, 200);
 
         const reconcileResponse = await request(server, 'POST', '/api/v1/internal/lifecycle/reconcile', {
             namespace: 'live.vods',

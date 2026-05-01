@@ -251,7 +251,10 @@ function listDmsForActor(actor_type, actor_id) {
                    WHERE m.room_id = r.id
                      AND m.deleted_at IS NULL
                      AND NOT (m.sender_type = p.actor_type AND COALESCE(m.sender_id, '') = COALESCE(p.actor_id, ''))
-                     AND julianday(m.created_at) > julianday(COALESCE(p.last_read_at, p.joined_at, '1970-01-01 00:00:00'))
+                     AND (
+                         (p.last_read_at IS NOT NULL AND julianday(m.created_at) > julianday(p.last_read_at))
+                         OR (p.last_read_at IS NULL AND julianday(m.created_at) >= julianday(COALESCE(p.joined_at, '1970-01-01 00:00:00')))
+                     )
                ), 0) AS unread_count
         FROM chat_rooms r
         INNER JOIN chat_participants p ON p.room_id = r.id

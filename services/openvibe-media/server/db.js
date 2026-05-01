@@ -201,6 +201,68 @@ const SCHEMA_SQL = `
             created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS media_access_rollups (
+            media_id          TEXT PRIMARY KEY,
+            media_kind        TEXT,
+            views_1h          INTEGER NOT NULL DEFAULT 0,
+            views_24h         INTEGER NOT NULL DEFAULT 0,
+            views_7d          INTEGER NOT NULL DEFAULT 0,
+            views_30d         INTEGER NOT NULL DEFAULT 0,
+            unique_viewers_1h INTEGER NOT NULL DEFAULT 0,
+            unique_viewers_24h INTEGER NOT NULL DEFAULT 0,
+            unique_viewers_7d INTEGER NOT NULL DEFAULT 0,
+            unique_viewers_30d INTEGER NOT NULL DEFAULT 0,
+            watch_minutes_24h REAL NOT NULL DEFAULT 0,
+            watch_minutes_7d  REAL NOT NULL DEFAULT 0,
+            bytes_served_24h  INTEGER NOT NULL DEFAULT 0,
+            bytes_served_7d   INTEGER NOT NULL DEFAULT 0,
+            cache_miss_bytes_24h INTEGER NOT NULL DEFAULT 0,
+            cache_miss_bytes_7d INTEGER NOT NULL DEFAULT 0,
+            concurrent_viewers_peak_24h INTEGER NOT NULL DEFAULT 0,
+            last_viewed_at    DATETIME,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_access_rollups_kind ON media_access_rollups(media_kind, updated_at);
+
+        CREATE TABLE IF NOT EXISTS media_site_heat_rollups (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            window_name       TEXT NOT NULL,
+            unique_video_viewers INTEGER NOT NULL DEFAULT 0,
+            video_watch_minutes REAL NOT NULL DEFAULT 0,
+            media_origin_egress_bytes INTEGER NOT NULL DEFAULT 0,
+            media_cache_miss_bytes INTEGER NOT NULL DEFAULT 0,
+            concurrent_viewers_peak INTEGER NOT NULL DEFAULT 0,
+            calculated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_site_heat_rollups_window ON media_site_heat_rollups(window_name, calculated_at);
+
+        CREATE TABLE IF NOT EXISTS media_promotion_decisions (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            decision          TEXT NOT NULL,
+            from_provider     TEXT,
+            to_provider       TEXT,
+            reason            TEXT NOT NULL,
+            score             REAL NOT NULL DEFAULT 0,
+            metrics_json      TEXT NOT NULL DEFAULT '{}',
+            state             TEXT NOT NULL DEFAULT 'queued',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            applied_at        DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_promotion_decisions_media ON media_promotion_decisions(media_id, state, created_at);
+
+        CREATE TABLE IF NOT EXISTS media_retention_holds (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            object_key        TEXT,
+            hold_type         TEXT NOT NULL,
+            reason            TEXT NOT NULL,
+            reference_id      TEXT,
+            expires_at        DATETIME,
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_retention_holds_media ON media_retention_holds(media_id, object_key, expires_at);
+
         CREATE TABLE IF NOT EXISTS stream_recordings (
             id                TEXT PRIMARY KEY,
             stream_id         TEXT NOT NULL,
@@ -232,6 +294,62 @@ const SCHEMA_SQL = `
             updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(recording_id, segment_index)
         );
+
+        CREATE TABLE IF NOT EXISTS vod_parts (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            recording_id      TEXT NOT NULL,
+            media_id          TEXT NOT NULL,
+            part_number       INTEGER NOT NULL,
+            variant           TEXT NOT NULL DEFAULT 'source',
+            status            TEXT NOT NULL DEFAULT 'open',
+            started_offset_ms INTEGER NOT NULL DEFAULT 0,
+            ended_offset_ms   INTEGER,
+            duration_ms       INTEGER NOT NULL DEFAULT 0,
+            total_bytes       INTEGER NOT NULL DEFAULT 0,
+            segment_count     INTEGER NOT NULL DEFAULT 0,
+            provider_name     TEXT NOT NULL DEFAULT 'b2',
+            playlist_storage_key TEXT,
+            part_index_storage_key TEXT,
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            closed_at         DATETIME,
+            verified_at       DATETIME,
+            UNIQUE(recording_id, variant, part_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_vod_parts_recording ON vod_parts(recording_id, variant, part_number);
+
+        CREATE TABLE IF NOT EXISTS vod_partial_segments (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            segment_id        TEXT NOT NULL,
+            recording_id      TEXT NOT NULL,
+            variant           TEXT NOT NULL DEFAULT 'source',
+            segment_index     INTEGER NOT NULL,
+            part_number       INTEGER NOT NULL,
+            stream_offset_ms  INTEGER NOT NULL DEFAULT 0,
+            duration_ms       INTEGER NOT NULL DEFAULT 0,
+            provider_name     TEXT NOT NULL DEFAULT 'b2',
+            storage_key       TEXT NOT NULL,
+            size_bytes        INTEGER NOT NULL DEFAULT 0,
+            sha256            TEXT,
+            status            TEXT NOT NULL DEFAULT 'ready',
+            created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            verified_at       DATETIME,
+            UNIQUE(recording_id, variant, segment_index, part_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_vod_partial_segments_recording ON vod_partial_segments(recording_id, variant, part_number, segment_index);
+
+        CREATE TABLE IF NOT EXISTS media_part_access_rollups (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id          TEXT NOT NULL,
+            part_id           INTEGER NOT NULL,
+            views_24h         INTEGER NOT NULL DEFAULT 0,
+            unique_viewers_24h INTEGER NOT NULL DEFAULT 0,
+            watch_minutes_24h REAL NOT NULL DEFAULT 0,
+            bytes_served_24h  INTEGER NOT NULL DEFAULT 0,
+            cache_miss_bytes_24h INTEGER NOT NULL DEFAULT 0,
+            updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(media_id, part_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_part_access_rollups_media ON media_part_access_rollups(media_id, updated_at);
 
         CREATE TABLE IF NOT EXISTS clip_projects (
             id                TEXT PRIMARY KEY,

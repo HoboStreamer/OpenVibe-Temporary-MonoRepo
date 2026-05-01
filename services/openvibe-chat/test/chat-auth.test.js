@@ -20,10 +20,17 @@ const keyPair = crypto.generateKeyPairSync('rsa', {
 
 fs.writeFileSync(publicKeyPath, keyPair.publicKey, 'utf8');
 
+process.env.NODE_ENV = 'development';
+process.env.OPENVIBE_ENV = 'development';
 process.env.DB_PATH = dbPath;
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
 process.env.OPENVIBE_AUTH_ISSUER = 'http://auth.openvibe.network.localhost:4100';
 process.env.OPENVIBE_AUTH_PUBLIC_KEY = publicKeyPath;
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_CHAT_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_CHAT_DATABASE_URL = '';
 
 const { buildApp } = require('../server/index');
 

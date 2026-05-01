@@ -2,7 +2,10 @@
 
 const crypto = require('crypto');
 
+const config = require('./config');
 const db = require('./db');
+const model = require('./model');
+const partModel = require('./part-model');
 
 function safeJson(value, fallbackValue) {
     try {
@@ -129,7 +132,49 @@ function upsertSegment(input) {
         source.status || 'ready',
         JSON.stringify(source.metadata || {}),
     );
-    return listSegmentsByRecordingId(source.recordingId).find((segment) => segment.segment_index === Number(source.segmentIndex || 0)) || null;
+    let segment = listSegmentsByRecordingId(source.recordingId).find((item) => item.segment_index === Number(source.segmentIndex || 0)) || null;
+    const recording = getRecordingById(source.recordingId);
+    const recordingMedia = recording && recording.media_id ? model.getById(recording.media_id) : null;
+    const parting = config.storage && config.storage.parting || {};
+    if (segment && (source.mediaId || recording && recording.media_id)) {
+        const partResult = partModel.rollPartForSegment({
+            segmentId: segment.id,
+            recordingId: source.recordingId,
+            mediaId: source.mediaId || recording && recording.media_id,
+            variant: source.variant || 'source',
+            segmentIndex: segment.segment_index,
+            streamOffsetMs: segment.start_ms,
+            durationMs: segment.duration_ms,
+            providerName: source.providerName
+                || source.provider_name
+                || source.storageProvider
+                || recordingMedia && recordingMedia.storage_provider
+                || 'b2',
+            storageKey: segment.storage_key,
+            sizeBytes: segment.size_bytes,
+            sha256: source.sha256 || null,
+            playlistStorageKey: source.playlistKey || segment.playlist_key || null,
+            partIndexStorageKey: source.partIndexStorageKey || null,
+            targetBytes: parting.targetBytes,
+            maxBytes: parting.maxBytes,
+            targetDurationMs: Number(parting.targetSeconds || 1800) * 1000,
+            maxDurationMs: Number(parting.maxSeconds || 3600) * 1000,
+            status: segment.status,
+        });
+        if (partResult && partResult.partialSegment) {
+            const metadata = Object.assign({}, segment.metadata || {}, {
+                part_id: partResult.part && partResult.part.id || null,
+                part_number: partResult.partialSegment.part_number,
+                part_rollover: !!partResult.rollover,
+                part_rollover_reason: partResult.rollover_reason || null,
+            });
+            db.get().prepare(`
+                UPDATE recording_segments SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+            `).run(JSON.stringify(metadata), String(segment.id));
+            segment = hydrateSegment(db.get().prepare(`SELECT * FROM recording_segments WHERE id = ?`).get(String(segment.id)));
+        }
+    }
+    return segment;
 }
 
 function listSegmentsByRecordingId(recordingId) {
@@ -151,6 +196,7 @@ function listSegmentsByStreamId(streamId) {
 function buildTimeline(streamId) {
     const recording = getLatestRecordingByStreamId(streamId);
     const segments = recording ? listSegmentsByRecordingId(recording.id) : [];
+    const parts = recording ? partModel.listPartsByRecordingId(recording.id) : [];
     const durationMs = segments.reduce((maxValue, segment) => {
         return Math.max(maxValue, Number(segment.start_ms || 0) + Number(segment.duration_ms || 0));
     }, 0);
@@ -162,6 +208,8 @@ function buildTimeline(streamId) {
         segment_count: segments.length,
         ready_segment_count: readySegments,
         missing_segment_count: segments.length - readySegments,
+        part_count: parts.length,
+        open_part_number: parts.find((part) => part.status === 'open') && parts.find((part) => part.status === 'open').part_number || null,
         started_at: recording && recording.started_at || null,
         ended_at: recording && recording.ended_at || null,
     };
@@ -183,9 +231,13 @@ module.exports = {
     buildTimeline,
     createRecording,
     getLatestRecordingByStreamId,
+    getOpenPart: partModel.getOpenPart,
+    getPartById: partModel.getPartById,
     getRecordingById,
     getRecordingByMediaId,
     listPreviewSprites,
+    listPartialSegmentsByRecordingId: partModel.listPartialSegmentsByRecordingId,
+    listPartsByRecordingId: partModel.listPartsByRecordingId,
     listRecordingsByStreamId,
     listSegmentsByRecordingId,
     listSegmentsByStreamId,

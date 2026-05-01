@@ -6,11 +6,11 @@ data/migrations/
 **/.env
 **/.env.*
 !**/.env.example
-**/data/
 **/node_modules/
 **/tmp/
 **/temp/
 **/.cache/
+**/data/
 
 # Runtime database artifacts
 **/*.db
