@@ -2,16 +2,27 @@
 
 module.exports = {
     ui: {
+        theme: '2dworld-classic',
         inventory: {
             rows: 5,
             cols: 8,
             hotbar: 9,
             coinSlot: true,
+            owner: 'gamemode',
+            showBankOnInteractionOnly: true,
         },
         panels: ['inventory', 'crafting', 'skills', 'build', 'map', 'mods', 'shop'],
         hud: {
             showEventFeedByDefault: false,
             layout: '2dworld',
+        },
+        menu: {
+            owner: 'gamemode',
+            style: 'source-classic',
+        },
+        console: {
+            owner: 'gamemode',
+            style: 'source-classic',
         },
     },
     hooks: {

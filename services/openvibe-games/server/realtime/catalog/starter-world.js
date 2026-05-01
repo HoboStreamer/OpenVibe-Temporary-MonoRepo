@@ -1,5 +1,7 @@
 'use strict';
 
+const { buildClassicWorldPresentation } = require('../../sourcevibe/gamemodes/2dworld/legacy-style');
+
 // Starter world for the 2D World vertical slice. The original fixed layout is
 // preserved around the classic outpost/wilderness cluster, but the runtime now
 // grows that into a larger deterministic world with extra biomes, generated
@@ -508,7 +510,11 @@ function buildStarterWorld(seed = 20260430) {
         { type: 'label', label: 'Lowwater Causeway', x: 3440, y: 4830, size: 14, color: '#e6ffe2' },
     );
 
-    return {
+    const classicPresentation = buildClassicWorldPresentation({
+        bounds: { x: 0, y: 0, w: 16384, h: 16384 },
+    });
+
+    return Object.assign({
         slug: '2d-world',
         name: '2D World',
         mode: 'mmo',
@@ -550,7 +556,7 @@ function buildStarterWorld(seed = 20260430) {
             { from: 'glass_lake', to: 'ember_basin', kind: 'ferry' },
             { from: 'ember_basin', to: 'glass_lake', kind: 'ferry' },
         ],
-    };
+    }, classicPresentation);
 }
 
 const STARTER_WORLD = Object.freeze(buildStarterWorld());

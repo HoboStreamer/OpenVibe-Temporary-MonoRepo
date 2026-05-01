@@ -1,3 +1,25 @@
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function isImageIcon(icon) {
+    return typeof icon === 'string' && (icon.includes('/') || /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(icon));
+}
+
+function slotIconMarkup(slot) {
+    const icon = slot && slot.icon;
+    if (isImageIcon(icon)) return `<img class="hud-slot__image" src="${escapeHtml(icon)}" alt="" />`;
+    if (icon) return escapeHtml(icon);
+    if (slot && slot.item_id === 'coins') return '🪙';
+    if (slot && slot.item_id) return '⬢';
+    return '';
+}
+
 export class HudPanel {
     constructor(root) {
         this.root = root;
@@ -38,10 +60,10 @@ export class HudPanel {
         this.hpLabel.textContent = `${Math.round(self.hp || 0)}/${Math.round(self.max_hp || 0)}`;
         this.staminaFill.style.width = `${staminaRatio * 100}%`;
         this.staminaLabel.textContent = `${Math.round(self.stamina || 0)}/${Math.round(self.max_stamina || 0)}`;
-        this.zoneLabel.textContent = `Zone: ${snapshot && snapshot.world ? snapshot.world.zone_id : '—'}`;
+        this.zoneLabel.textContent = snapshot && snapshot.world ? snapshot.world.zone_id : '—';
         this.connectionLabel.textContent = meta && meta.connectionText || 'offline';
-        this.coinsLabel.textContent = `Coins: ${Math.round(self.coins || 0)}`;
-        this.weaponLabel.textContent = `Held: ${self.held_item || self.equipment && self.equipment.weapon || 'hands'}`;
+        this.coinsLabel.textContent = `${Math.round(self.coins || 0)} coins`;
+        this.weaponLabel.textContent = self.held_item || self.equipment && self.equipment.weapon || 'hands';
         const prompt = snapshot && snapshot.interaction && snapshot.interaction.prompt;
         this.promptLabel.textContent = prompt ? `${prompt.label}${prompt.description ? ` · ${prompt.description}` : ''}` : '';
         this.promptLabel.classList.toggle('visible', !!prompt);
@@ -51,7 +73,7 @@ export class HudPanel {
             return `
                 <div class="slot ${slot && slot.active ? 'active' : ''}">
                     <span class="slot-index">${index + 1}</span>
-                    <span class="slot-icon">${slot && slot.icon ? slot.icon : slot && slot.item_id === 'coins' ? '🪙' : slot && slot.item_id ? '⬢' : ''}</span>
+                    <span class="slot-icon">${slotIconMarkup(slot)}</span>
                     <span class="slot-name">${slot && slot.name ? slot.name : ''}</span>
                     <span class="slot-qty">${slot && slot.quantity ? slot.quantity : ''}</span>
                 </div>`;

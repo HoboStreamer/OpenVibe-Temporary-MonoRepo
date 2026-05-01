@@ -8,7 +8,7 @@ import { reconcileLocalState } from './net/reconciliation.js';
 import { interpolateEntity } from './engine/interpolation.js';
 import { HudPanel } from './ui/hud.js';
 import { ChatPanel } from './ui/chat-panel.js';
-import { InventoryPanel } from './ui/inventory-panel.js';
+import { InventoryPanel } from './gamemodes/2dworld/ui/inventory-panel.js';
 import { CraftingPanel } from './ui/crafting-panel.js';
 import { SkillsPanel } from './ui/skills-panel.js';
 import { BuildMenu } from './ui/build-menu.js';
@@ -17,9 +17,9 @@ import { DeathPanel } from './ui/death-panel.js';
 import { ModBrowser } from './ui/mod-browser.js';
 import { LootPanel } from './ui/loot-panel.js';
 import { ShopPanel } from './ui/shop-panel.js';
-import { ConsolePanel } from './ui/console-panel.js';
+import { ConsolePanel } from './gamemodes/2dworld/ui/console-panel.js';
 import { SettingsPanel } from './ui/settings-panel.js';
-import { MenuPanel } from './ui/menu-panel.js';
+import { MenuPanel } from './gamemodes/2dworld/ui/menu-panel.js';
 import { createSourceVibeGlobal } from './sourcevibe-global.js';
 
 const UTILITY_PANELS = ['inventory', 'crafting', 'skills', 'build', 'map', 'mods', 'console', 'settings'];
@@ -167,6 +167,8 @@ function sourcevibeInventoryLayout() {
         rows: Number(layout.rows) || 5,
         cols: Number(layout.cols) || 8,
         hotbarSlots: Number(layout.hotbar || layout.hotbarSlots) || 9,
+        owner: layout.owner || null,
+        showBankOnInteractionOnly: layout.showBankOnInteractionOnly === true || layout.bank_interaction_only === true,
     };
 }
 
@@ -827,76 +829,88 @@ function bindUi() {
 
 function refreshPanels(snapshot) {
     if (!snapshot || !inventory || !crafting || !buildMenu || !mapPanel || !skills || !mods || !lootPanel || !shopPanel) return;
+    const activeInteraction = snapshot.interaction && snapshot.interaction.active;
+    const inventoryLayout = sourcevibeInventoryLayout();
+    const showBank = !!(activeInteraction && activeInteraction.type === 'bank')
+        || (!inventoryLayout.showBankOnInteractionOnly && Array.isArray(snapshot.self && snapshot.self.bank) && snapshot.self.bank.length > 0);
     dom.joinInfo.textContent = `Connected to ${snapshot.world.name} · zone ${snapshot.world.zone_id}`;
     dom.joinInfo.classList.remove('empty');
     dom.welcome.classList.add('connected');
     dom.welcome.classList.add('playing');
     chat.render(snapshot.chat || []);
-    inventory.render(snapshot.self, {
-        layout: sourcevibeInventoryLayout(),
-        onDeposit: async (itemId, quantity = 1) => {
-            await apiJson(`${API_BASE}/bank/${state.identity.userId}/deposit`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
-            addConsoleLog(`Deposited ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} into the bank.`);
-            markHudActivity(9000);
-        },
-        onWithdraw: async (itemId, quantity = 1) => {
-            await apiJson(`${API_BASE}/bank/${state.identity.userId}/withdraw`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
-            addConsoleLog(`Withdrew ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} from the bank.`);
-            markHudActivity(9000);
-        },
-        onHotbarAssign: async (slot, itemId) => {
-            if (!client) return;
-            const result = await client.updateHotbar(slot, itemId, { select: false });
-            if (result && result.ok === false) {
-                dom.joinInfo.textContent = result.reason || 'Hotbar update failed';
-                dom.joinInfo.classList.remove('empty');
-                addConsoleLog(result.reason || `Could not assign ${itemId} to slot ${slot}.`, 'warn');
-                return;
-            }
-            addConsoleLog(`Assigned ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} to hotbar slot ${slot}.`);
-            markHudActivity(9000);
-        },
-        onHotbarClear: async (slot) => {
-            if (!client) return;
-            const result = await client.clearHotbar(slot);
-            if (result && result.ok === false) {
-                dom.joinInfo.textContent = result.reason || 'Clear failed';
-                dom.joinInfo.classList.remove('empty');
-                addConsoleLog(result.reason || `Could not clear ${slot}.`, 'warn');
-                return;
-            }
-            addConsoleLog(`Cleared hotbar slot ${slot}.`);
-            markHudActivity(9000);
-        },
-        onDropItem: async (itemId, quantity) => {
-            if (!client) return;
-            const result = await client.dropInventory(itemId, quantity);
-            if (result && result.ok === false) {
-                dom.joinInfo.textContent = result.reason || 'Drop failed';
-                dom.joinInfo.classList.remove('empty');
-                addConsoleLog(result.reason || `Could not drop ${itemId}.`, 'warn');
-                return;
-            }
-            addConsoleLog(`Dropped ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId}.`);
-            markHudActivity(9000);
-        },
-        onSelectHotbar: (slot) => {
-            input.quickSlot = slot;
-            if (state.localSelf) state.localSelf.quick_slot = slot;
-            if (state.renderSelf) state.renderSelf.quick_slot = slot;
-            markHudActivity(9000);
-        },
-    });
-    skills.render(snapshot.self);
-    crafting.render(snapshot.self, async (recipeId) => client && client.craft(recipeId));
-    buildMenu.render((item) => {
-        state.buildSelection = item;
-    });
-    mapPanel.render(snapshot.world.zone_id, async (zoneId) => client && client.travel(zoneId));
+    if (state.panels.inventory) {
+        inventory.render(snapshot.self, {
+            layout: inventoryLayout,
+            showBank,
+            onDeposit: async (itemId, quantity = 1) => {
+                await apiJson(`${API_BASE}/bank/${state.identity.userId}/deposit`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
+                addConsoleLog(`Deposited ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} into the bank.`);
+                markHudActivity(9000);
+            },
+            onWithdraw: async (itemId, quantity = 1) => {
+                await apiJson(`${API_BASE}/bank/${state.identity.userId}/withdraw`, { method: 'POST', body: JSON.stringify({ item_id: itemId, quantity }) }, state.identity);
+                addConsoleLog(`Withdrew ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} from the bank.`);
+                markHudActivity(9000);
+            },
+            onHotbarAssign: async (slot, itemId) => {
+                if (!client) return;
+                const result = await client.updateHotbar(slot, itemId, { select: false });
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Hotbar update failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not assign ${itemId} to slot ${slot}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Assigned ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId} to hotbar slot ${slot}.`);
+                markHudActivity(9000);
+            },
+            onHotbarClear: async (slot) => {
+                if (!client) return;
+                const result = await client.clearHotbar(slot);
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Clear failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not clear ${slot}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Cleared hotbar slot ${slot}.`);
+                markHudActivity(9000);
+            },
+            onDropItem: async (itemId, quantity) => {
+                if (!client) return;
+                const result = await client.dropInventory(itemId, quantity);
+                if (result && result.ok === false) {
+                    dom.joinInfo.textContent = result.reason || 'Drop failed';
+                    dom.joinInfo.classList.remove('empty');
+                    addConsoleLog(result.reason || `Could not drop ${itemId}.`, 'warn');
+                    return;
+                }
+                addConsoleLog(`Dropped ${quantity} × ${state.catalog.itemMap[itemId] && state.catalog.itemMap[itemId].name || itemId}.`);
+                markHudActivity(9000);
+            },
+            onSelectHotbar: (slot) => {
+                input.quickSlot = slot;
+                if (state.localSelf) state.localSelf.quick_slot = slot;
+                if (state.renderSelf) state.renderSelf.quick_slot = slot;
+                markHudActivity(9000);
+            },
+        });
+    } else {
+        inventory.hide();
+    }
+    if (state.panels.skills) skills.render(snapshot.self); else if (skills && typeof skills.hide === 'function') skills.hide();
+    if (state.panels.crafting) crafting.render(snapshot.self, async (recipeId) => client && client.craft(recipeId)); else if (crafting && typeof crafting.hide === 'function') crafting.hide();
+    if (state.panels.build) {
+        buildMenu.render((item) => {
+            state.buildSelection = item;
+        });
+    } else if (buildMenu && typeof buildMenu.hide === 'function') {
+        buildMenu.hide();
+    }
+    if (state.panels.map) mapPanel.render(snapshot.world.zone_id, async (zoneId) => client && client.travel(zoneId)); else if (mapPanel && typeof mapPanel.hide === 'function') mapPanel.hide();
     death.render(snapshot.self);
     lootPanel.render(snapshot.entities.loot || []);
 
-    const activeInteraction = snapshot.interaction && snapshot.interaction.active;
     if (activeInteraction && activeInteraction.type === 'shop') {
         closeUtilityPanels(null);
         setPanelOpen('menu', false);

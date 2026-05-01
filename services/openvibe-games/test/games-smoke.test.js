@@ -26,6 +26,9 @@ assert.ok(STARTER_WORLD.zones.some((zone) => zone.zone_id === 'ember_basin'));
 assert.ok(Array.isArray(STARTER_WORLD.terrain_patches) && STARTER_WORLD.terrain_patches.length >= 10);
 assert.ok(STARTER_WORLD.resources.length > 40);
 assert.ok(STARTER_WORLD.travel.some((link) => link.from === 'pine_watch' && link.to === 'outpost'));
+assert.strictEqual(STARTER_WORLD.style_id, '2dworld_classic');
+assert.ok(STARTER_WORLD.presentation && STARTER_WORLD.presentation.sprite_layers && STARTER_WORLD.presentation.sprite_layers.background.length >= 1);
+assert.ok(Array.isArray(STARTER_WORLD.editor_palette) && STARTER_WORLD.editor_palette.length >= 8);
 
 const player = model.upsertPlayer({
     user_id: '42',
@@ -392,6 +395,10 @@ assert.ok(moddedCatalog.items.some((item) => item.item_id === 'ember_blade'));
 assert.ok(moddedCatalog.recipes.some((recipe) => recipe.id === 'recipe.ember_blade'));
 assert.ok(moddedCatalog.zones.some((zone) => zone.zone_id === 'ember_camp'));
 assert.ok(moddedCatalog.world_definition.npcs.some((npc) => npc.template_id === 'npc.firekeep.merchant'));
+assert.ok(moddedCatalog.world_definition.presentation && moddedCatalog.world_definition.presentation.player_render);
+assert.ok(moddedCatalog.world_definition.presentation.sprite_layers.detail.some((entry) => entry.src && entry.src.includes('/assets/2dworld-legacy/')));
+assert.ok(moddedCatalog.definitions.items.stone_hatchet.render.icon.includes('/assets/2dworld-legacy/hatchet.png'));
+assert.ok(moddedCatalog.definitions.resources.tree.render.sprite.src.includes('/assets/2dworld-legacy/tree-oak.png'));
 assert.strictEqual(moddedCatalog.definitions.items.ember_blade.render.weapon_type, 'blade');
 assert.strictEqual(moddedCatalog.engine.scripting.active_script_mod_count, 0);
 assert.ok(moddedCatalog.mods.some((mod) => mod.id === registeredMod.id && mod.has_scripts === true));

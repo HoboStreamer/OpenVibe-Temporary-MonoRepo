@@ -1134,7 +1134,429 @@ body.hud-resting #hud-root .interaction-prompt.visible {
     font-size: 0.78rem;
 }
 
+.hud-slot__image {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.legacy-main-menu {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: minmax(360px, 430px) minmax(280px, 420px);
+    justify-content: space-between;
+}
+
+.legacy-main-menu__backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(90deg, rgba(6, 10, 14, 0.92) 0%, rgba(12, 15, 18, 0.74) 38%, rgba(16, 20, 26, 0.4) 100%),
+        radial-gradient(circle at 80% 20%, rgba(153, 181, 215, 0.12) 0%, rgba(16, 20, 28, 0) 48%),
+        radial-gradient(circle at 78% 78%, rgba(80, 114, 160, 0.18) 0%, rgba(16, 20, 28, 0) 36%);
+    backdrop-filter: blur(6px);
+}
+
+.legacy-main-menu__sidebar,
+.legacy-main-menu__detail {
+    position: relative;
+    z-index: 1;
+    padding: 2rem 2.2rem;
+    pointer-events: auto;
+}
+
+.legacy-main-menu__sidebar {
+    display: grid;
+    align-content: start;
+    gap: 0.9rem;
+    border-right: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(64, 73, 84, 0.26), rgba(11, 14, 18, 0.6));
+}
+
+.legacy-main-menu__detail {
+    display: grid;
+    align-content: start;
+    gap: 0.85rem;
+    justify-self: end;
+    width: min(100%, 400px);
+}
+
+.legacy-main-menu__brand,
+.legacy-main-menu__panel-label,
+.legacy-inventory-panel__heading {
+    color: #b7c3d3;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.legacy-main-menu__sidebar h2 {
+    margin: 0;
+    font-size: clamp(2.1rem, 4vw, 3rem);
+    letter-spacing: 0.01em;
+}
+
+.legacy-main-menu__sidebar p,
+.legacy-main-menu__panel small,
+.legacy-main-menu__footer {
+    color: #b8c3cf;
+}
+
+.legacy-main-menu__server {
+    display: inline-flex;
+    width: fit-content;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid rgba(255,255,255,0.11);
+    background: rgba(255,255,255,0.06);
+    color: #dde5ef;
+}
+
+.legacy-main-menu__nav {
+    display: grid;
+    gap: 0.42rem;
+    margin-top: 0.4rem;
+}
+
+.legacy-main-menu__button {
+    min-height: 58px;
+    text-align: left;
+    padding: 0.72rem 0.9rem !important;
+    border-radius: 2px !important;
+    background: linear-gradient(180deg, rgba(167, 180, 198, 0.18), rgba(60, 69, 80, 0.18)) !important;
+    border: 1px solid rgba(243, 247, 255, 0.14) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.22);
+}
+
+.legacy-main-menu__button:hover {
+    background: linear-gradient(180deg, rgba(194, 205, 220, 0.24), rgba(82, 94, 110, 0.24)) !important;
+}
+
+.legacy-main-menu__button span {
+    display: block;
+    font-weight: 700;
+}
+
+.legacy-main-menu__button small {
+    display: block;
+    margin-top: 0.18rem;
+    color: #bac6d4;
+}
+
+.legacy-main-menu__panel {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(64, 73, 84, 0.36), rgba(11, 14, 18, 0.58));
+}
+
+.legacy-main-menu__close {
+    width: auto !important;
+    justify-self: start;
+    padding-inline: 1.1rem !important;
+}
+
+.legacy-console-panel {
+    border-radius: 2px;
+    border-color: rgba(255,255,255,0.14);
+    background: linear-gradient(180deg, rgba(58, 66, 76, 0.97) 0%, rgba(23, 27, 33, 0.97) 8%, rgba(9, 12, 16, 0.98) 100%);
+    box-shadow: 0 34px 96px rgba(0,0,0,0.56);
+}
+
+.legacy-console-panel__titlebar,
+.legacy-console-panel__actions,
+.legacy-console-panel__command {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.legacy-console-panel__titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    justify-content: space-between;
+    padding: 0.6rem 0.8rem;
+    margin: -0.95rem -0.95rem 0;
+    background: linear-gradient(180deg, rgba(169, 181, 198, 0.18), rgba(72, 81, 92, 0.88));
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    cursor: grab;
+}
+
+.legacy-console-panel__titlebar small,
+.legacy-console-panel__status,
+.legacy-console-line__time {
+    color: #9facbf;
+    font-size: 0.75rem;
+}
+
+.legacy-console-panel__actions input {
+    width: 180px;
+    padding: 0.35rem 0.45rem;
+    border-radius: 2px;
+}
+
+.legacy-console-panel__status {
+    padding: 0.45rem 0.15rem 0.5rem;
+    letter-spacing: 0.03em;
+}
+
+.legacy-console-panel__log {
+    display: grid;
+    gap: 0.15rem;
+    min-height: 300px;
+    max-height: calc(100% - 126px);
+    overflow: auto;
+    padding: 0.1rem 0 0.3rem;
+    font-family: "Courier New", monospace;
+}
+
+.legacy-console-line {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    padding: 0.18rem 0.2rem;
+    border-left: 2px solid transparent;
+}
+
+.legacy-console-line--warn {
+    border-left-color: rgba(240, 200, 90, 0.82);
+}
+
+.legacy-console-line--error {
+    border-left-color: rgba(255, 110, 110, 0.88);
+}
+
+.legacy-console-line__message {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.legacy-console-panel__command {
+    margin-top: 0.55rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.34);
+}
+
+.legacy-console-panel__command input {
+    flex: 1;
+    min-width: 0;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+    padding: 0.2rem 0;
+}
+
+.legacy-console-panel__prompt {
+    color: #f4e3a8;
+    font-weight: 700;
+    font-family: "Courier New", monospace;
+}
+
+.legacy-inventory-panel {
+    border-radius: 2px;
+    background: linear-gradient(180deg, rgba(56, 65, 76, 0.97) 0%, rgba(18, 21, 26, 0.98) 12%, rgba(10, 12, 15, 0.98) 100%);
+}
+
+.legacy-inventory-panel__titlebar {
+    cursor: default;
+}
+
+.legacy-inventory-panel__meta {
+    color: #f2dda2;
+    font-weight: 700;
+}
+
+.legacy-inventory-panel__section {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 0.8rem;
+}
+
+.legacy-hotbar-grid,
+.legacy-backpack-grid {
+    display: grid;
+    gap: 0.32rem;
+}
+
+.legacy-hotbar-grid {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.legacy-backpack-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.legacy-slot {
+    position: relative;
+    min-height: 88px;
+    display: grid;
+    align-content: end;
+    gap: 0.16rem;
+    padding: 0.4rem 0.42rem 0.45rem;
+    border-radius: 0;
+    border: 1px solid rgba(220, 228, 241, 0.14);
+    background: linear-gradient(180deg, rgba(39, 45, 53, 0.96), rgba(12, 15, 18, 0.96));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.2);
+    text-align: left;
+}
+
+.legacy-slot--empty {
+    border-style: dashed;
+    background: rgba(255,255,255,0.025);
+}
+
+.legacy-slot.active {
+    border-color: rgba(234, 214, 123, 0.85);
+    box-shadow: inset 0 0 0 1px rgba(234, 214, 123, 0.26), 0 0 0 1px rgba(234, 214, 123, 0.08);
+}
+
+.legacy-slot.drag-over {
+    border-color: rgba(110, 240, 255, 0.85);
+    box-shadow: inset 0 0 0 1px rgba(110, 240, 255, 0.24);
+}
+
+.legacy-slot__index {
+    position: absolute;
+    top: 0.18rem;
+    right: 0.3rem;
+    font-size: 0.7rem;
+    color: #92a0b5;
+}
+
+.legacy-slot__visual {
+    display: grid;
+    place-items: center;
+    min-height: 40px;
+}
+
+.legacy-slot__image,
+.legacy-slot__emoji {
+    display: block;
+}
+
+.legacy-slot__image {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.legacy-slot__emoji {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.legacy-slot__name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legacy-slot__qty {
+    font-size: 0.72rem;
+    color: #92a0b5;
+}
+
+.ov-hud-bars {
+    left: 14px;
+    top: 14px;
+    width: 224px;
+    gap: 0.3rem;
+}
+
+.ov-hud-bars > div,
+.ov-hud-row > div,
+.interaction-prompt,
+.quickbar .slot,
+.feed-item,
+.hud-help {
+    border-radius: 2px;
+}
+
+.ov-hud-bars > div,
+.ov-hud-row > div {
+    background: rgba(0,0,0,0.28);
+    padding: 0.35rem 0.5rem;
+}
+
+.ov-hud-row {
+    left: 14px;
+    top: 152px;
+    gap: 0.35rem;
+}
+
+.ov-hud-row > div {
+    font-size: 0.78rem;
+    color: #b9c5d1;
+}
+
+.interaction-prompt {
+    top: 14px;
+    min-width: min(420px, calc(100vw - 28px));
+    padding: 0.5rem 0.9rem;
+}
+
+.quickbar {
+    bottom: 14px;
+    gap: 0.3rem;
+}
+
+.quickbar .slot {
+    width: 82px;
+    height: 70px;
+    padding: 0.28rem 0.4rem;
+    background: linear-gradient(180deg, rgba(37, 43, 51, 0.95), rgba(11, 13, 16, 0.96));
+}
+
+.quickbar .slot .slot-icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    font-size: 1.05rem;
+}
+
+.quickbar .slot .slot-name {
+    font-size: 0.68rem;
+}
+
+.event-feed {
+    width: min(300px, calc(100% - 28px));
+}
+
+.feed-item {
+    background: rgba(0,0,0,0.28);
+    padding: 0.32rem 0.45rem;
+    font-size: 0.74rem;
+}
+
 @media (max-width: 900px) {
+    .legacy-main-menu {
+        grid-template-columns: 1fr;
+    }
+
+    .legacy-main-menu__detail {
+        justify-self: stretch;
+        width: auto;
+    }
+
+    .legacy-console-panel__actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .legacy-hotbar-grid,
+    .legacy-backpack-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
     .settings-layout,
     .sourcevibe-menu__header,
     .sourcevibe-menu__body {

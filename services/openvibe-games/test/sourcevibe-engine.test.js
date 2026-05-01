@@ -54,6 +54,9 @@ async function main() {
         assert.strictEqual(bootstrap.engine.name, 'SourceVibe Engine');
         assert.ok(Array.isArray(bootstrap.engine.api) && bootstrap.engine.api.includes('hook'));
         assert.strictEqual(bootstrap.gamemode.id, '2dworld');
+        assert.strictEqual(bootstrap.gamemodeUi.theme, '2dworld-classic');
+        assert.strictEqual(bootstrap.gamemodeUi.inventory.owner, 'gamemode');
+        assert.strictEqual(bootstrap.gamemodeUi.inventory.showBankOnInteractionOnly, true);
         assert.ok(Array.isArray(bootstrap.gamemodes) && bootstrap.gamemodes.some((entry) => entry.id === 'base'));
         assert.ok(Array.isArray(bootstrap.maps) && bootstrap.maps.some((entry) => entry.id === '2dworld_outpost'));
 

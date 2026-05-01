@@ -5,6 +5,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const fs = require('fs');
 const path = require('path');
 const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
@@ -75,6 +76,14 @@ function buildApp() {
 
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use('/vendor/pixi', express.static(path.resolve(__dirname, '..', '..', '..', 'node_modules', 'pixi.js', 'dist')));
+    const legacy2dWorldAssetRoot = [
+        process.env.OPENVIBE_GAMES_2DWORLD_LEGACY_ASSETS,
+        path.join(__dirname, '..', 'public', 'assets', '2dworld-legacy'),
+        '/opt/legacy/2dworld/public/img',
+    ].find((candidate) => candidate && fs.existsSync(candidate));
+    if (legacy2dWorldAssetRoot) {
+        app.use('/assets/2dworld-legacy', express.static(legacy2dWorldAssetRoot));
+    }
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     const httpServer = createServer(app);
