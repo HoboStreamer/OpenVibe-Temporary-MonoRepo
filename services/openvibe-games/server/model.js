@@ -735,11 +735,16 @@ function listDailyQuests(userId) {
 function incrementDailyQuestProgress(userId, questId, delta) {
     if (!userId || !questId || !delta) return null;
     ensureDailyQuests(String(userId));
+    const increment = Math.max(0, toInt(delta, 0));
     getDb().prepare(`
         UPDATE game_daily_quests
-        SET progress = MIN(goal, progress + ?), updated_at = CURRENT_TIMESTAMP
+        SET progress = CASE
+                WHEN progress + ? >= goal THEN goal
+                ELSE progress + ?
+            END,
+            updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ? AND quest_date = ? AND quest_id = ?
-    `).run(Math.max(0, toInt(delta, 0)), String(userId), todayKey(), String(questId));
+    `).run(increment, increment, String(userId), todayKey(), String(questId));
     return getDb().prepare('SELECT * FROM game_daily_quests WHERE user_id = ? AND quest_date = ? AND quest_id = ?').get(String(userId), todayKey(), String(questId));
 }
 

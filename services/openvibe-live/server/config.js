@@ -2,7 +2,7 @@
 
 require('dotenv').config();
 const path = require('path');
-const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+const { resolveAuthIssuer, resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
 
 const port = parseInt(process.env.PORT, 10) || 4600;
 
@@ -21,6 +21,13 @@ module.exports = {
     network: { url: resolvePublicOrigin({ surface: 'network' }) },
     stream:  { url: resolvePublicOrigin({ surface: 'restream' }) },
     media:   { url: resolvePublicOrigin({ surface: 'media' }) },
+    auth: {
+        issuer: resolveAuthIssuer(),
+        url: resolvePublicOrigin({ surface: 'auth' }),
+        publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
+        jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
+        cookieNames: ['openvibe_token', 'hobo_token', 'token'],
+    },
 
     // Phase 16: downstream product surfaces consulted by the integrations
     // model. URLs are nullable; absent URLs result in integrations being

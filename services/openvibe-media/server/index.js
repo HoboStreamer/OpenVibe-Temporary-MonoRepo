@@ -14,7 +14,7 @@ const { buildStorage } = require('./storage');
 const { buildEventBus } = require('./events');
 const { buildRouter, buildFilesRouter } = require('./routes');
 const { ProcessingWorker, configureExternalQueue, describeProcessingMode, hasExternalQueue } = require('./processing');
-const { serviceActorMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
@@ -22,16 +22,18 @@ function buildApp() {
 
     const storage = buildStorage(config.storage);
     const eventBus = buildEventBus(config);
+    const authClient = buildAuthClient(config);
 
     const app = express();
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
-    app.use(cors());
+    app.use(cors({ origin: true, credentials: true }));
     app.use(cookieParser());
 
     const runtime = createServiceRuntime({
         serviceName: config.serviceId,
         getHealth: () => ({
+            auth_issuer: config.auth && config.auth.issuer || null,
             persistence: db.describePersistence(),
             storage: storage.describePlan ? storage.describePlan() : { write_provider: storage.name() },
             processing: {
@@ -48,6 +50,12 @@ function buildApp() {
                     ok: !!config.events.url,
                     critical: true,
                     details: { url: config.events.url || null },
+                },
+                {
+                    name: 'auth_issuer_configured',
+                    ok: !!(config.auth && config.auth.issuer),
+                    critical: true,
+                    details: { issuer: config.auth && config.auth.issuer || null },
                 },
                 {
                     name: 'canonical_storage_provider',
@@ -88,6 +96,7 @@ function buildApp() {
     // Static admin shell (read-only landing page).
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use(express.static(path.join(__dirname, '..', 'public')));
+    app.use(optionalOpenVibeAuth(authClient));
 
     // Mount API. service-actor middleware MUST run before policy decisions.
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({

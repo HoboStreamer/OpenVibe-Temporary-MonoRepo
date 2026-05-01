@@ -15,7 +15,7 @@ const model = require('./model');
 const ssr = require('./ssr');
 const integrations = require('./integrations');
 const { applyStreamEvent } = require('./ingestion');
-const { serviceActorMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const communityDb = require('../../openvibe-community/server/db');
 const communityModel = require('../../openvibe-community/server/model');
 const chatDb = require('../../openvibe-chat/server/db');
@@ -83,6 +83,7 @@ function publicFilePath(fileName) {
 
 function buildApp() {
     db.init(config.db.path);
+    const authClient = buildAuthClient(config);
     const thumbnailDir = path.join(__dirname, '..', 'data', 'thumbnails');
     const optionalData = {
         community: false,
@@ -220,12 +221,13 @@ function buildApp() {
     const app = express();
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
-    app.use(cors());
+    app.use(cors({ origin: true, credentials: true }));
     app.use(cookieParser());
 
     const runtime = createServiceRuntime({
         serviceName: config.serviceId || 'openvibe-live',
         getHealth: () => ({
+            auth_issuer: config.auth && config.auth.issuer || null,
             persistence: db.describePersistence(),
             optional_dependencies: optionalData,
         }),
@@ -252,10 +254,17 @@ function buildApp() {
                     critical: true,
                     details: { public_base_url: config.publicBaseUrl || null },
                 },
+                {
+                    name: 'auth_issuer_configured',
+                    ok: !!(config.auth && config.auth.issuer),
+                    critical: true,
+                    details: { issuer: config.auth && config.auth.issuer || null },
+                },
             ],
         }),
     });
     runtime.attach(app);
+    app.use(optionalOpenVibeAuth(authClient));
 
     app.get('/api/thumbnails/:fileName', (req, res) => {
         const fileName = path.basename(String(req.params.fileName || 'thumbnail.svg'));

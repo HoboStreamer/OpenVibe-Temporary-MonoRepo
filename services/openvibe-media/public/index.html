@@ -165,8 +165,12 @@
     const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
     const state = { items: [] };
 
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    if (OpenVibe.renderChrome) {
+        await OpenVibe.renderChrome('media');
+    } else {
+        document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+        document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    }
 
     function withIcon(name, label) {
         return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
@@ -258,6 +262,9 @@
     }
 
     async function fetchJson(path, options) {
+        if (OpenVibe.fetchJson) {
+            return OpenVibe.fetchJson(path, options);
+        }
         const response = await fetch(path, options);
         const text = await response.text();
         let body = null;
@@ -273,6 +280,41 @@
             throw error;
         }
         return body;
+    }
+
+    async function syncUploadState() {
+        const session = OpenVibe.loadSession
+            ? await OpenVibe.loadSession()
+            : { authenticated: false, anonymous: false, user: null };
+        const modeTag = document.getElementById('upload-mode-tag');
+        const status = document.getElementById('up-status');
+        const submit = document.getElementById('submit-upload-btn');
+        const uploadLink = document.getElementById('upload-link');
+
+        if (session && session.authenticated && session.user) {
+            modeTag.innerHTML = withIcon('success', `signed in as @${session.user.username || session.user.id}`);
+            submit.disabled = false;
+            uploadLink.setAttribute('href', '#upload-panel');
+            if (!status.dataset.lockedMessage) {
+                status.textContent = 'Choose a file and submit to start the upload flow.';
+            }
+            return;
+        }
+
+        submit.disabled = true;
+        uploadLink.setAttribute('href', OpenVibe.signInUrl ? OpenVibe.signInUrl(`${window.location.origin}${window.location.pathname}#upload-panel`) : '#upload-panel');
+        if (session && session.anonymous) {
+            modeTag.innerHTML = withIcon('warn', `${(session.user && session.user.display_name) || 'Anonymous'} · read only`);
+            if (!status.dataset.lockedMessage) {
+                status.textContent = 'Anonymous identities can browse media but cannot upload new objects. Create a full account to upload.';
+            }
+            return;
+        }
+
+        modeTag.innerHTML = withIcon('info', 'sign-in required');
+        if (!status.dataset.lockedMessage) {
+            status.textContent = 'Sign in to upload media objects.';
+        }
     }
 
     async function loadProbe(path) {
@@ -329,7 +371,11 @@
     document.getElementById('quota-refresh-btn').addEventListener('click', refreshQuota);
     document.getElementById('clear-upload-btn').addEventListener('click', () => {
         document.getElementById('upload-form').reset();
-        setBanner('up-status', '', 'Form cleared. Choose a file and submit to start the upload flow.');
+        const status = document.getElementById('up-status');
+        delete status.dataset.lockedMessage;
+        syncUploadState().catch(() => {
+            setBanner('up-status', '', 'Form cleared. Choose a file and submit to start the upload flow.');
+        });
     });
 
     document.getElementById('upload-form').addEventListener('submit', async (event) => {
@@ -366,15 +412,23 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: '{}',
             });
+            delete document.getElementById('up-status').dataset.lockedMessage;
             setBanner('up-status', 'ok', `Uploaded ${file.name} as ${init.id}`);
             await refresh();
         } catch (error) {
+            document.getElementById('up-status').dataset.lockedMessage = 'true';
             setBanner('up-status', 'warn', `Upload failed: ${error.message} (sign in required)`);
         }
     });
 
     decorateStaticCopy();
     await refresh();
+    await syncUploadState();
+    document.addEventListener('openvibe-auth-changed', () => {
+        const status = document.getElementById('up-status');
+        delete status.dataset.lockedMessage;
+        syncUploadState().catch(() => {});
+    });
 })();
 </script>
 </body>

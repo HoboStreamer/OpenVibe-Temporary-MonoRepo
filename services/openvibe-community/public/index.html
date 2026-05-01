@@ -156,8 +156,12 @@
     const tabs = ['threads', 'pastes', 'spaces'];
     const state = { threads: [], pastes: [], spaces: [] };
 
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    if (OpenVibe.renderChrome) {
+        await OpenVibe.renderChrome('community');
+    } else {
+        document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+        document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    }
 
     function withIcon(name, label) {
         return `<span class="icon-inline">${OVIcons.icon(name)}<span>${label}</span></span>`;
@@ -203,6 +207,9 @@
     }
 
     async function fetchJson(path, options) {
+        if (OpenVibe.fetchJson) {
+            return OpenVibe.fetchJson(path, options);
+        }
         const response = await fetch(path, options);
         const text = await response.text();
         let body = null;
@@ -218,6 +225,41 @@
             throw error;
         }
         return body;
+    }
+
+    async function syncPasteComposer() {
+        const session = OpenVibe.loadSession
+            ? await OpenVibe.loadSession()
+            : { authenticated: false, anonymous: false, user: null };
+        const modeTag = document.getElementById('paste-mode-tag');
+        const status = document.getElementById('paste-status');
+        const submit = document.getElementById('paste-submit-btn');
+        const quickLink = document.getElementById('new-paste-link');
+
+        if (session && session.authenticated && session.user) {
+            modeTag.innerHTML = withIcon('success', `signed in as @${session.user.username || session.user.id}`);
+            submit.disabled = false;
+            quickLink.setAttribute('href', '#new-paste');
+            if (!status.dataset.lockedMessage) {
+                status.textContent = 'Ready to create a paste.';
+            }
+            return;
+        }
+
+        submit.disabled = true;
+        quickLink.setAttribute('href', OpenVibe.signInUrl ? OpenVibe.signInUrl(`${window.location.origin}${window.location.pathname}#new-paste`) : '#new-paste');
+        if (session && session.anonymous) {
+            modeTag.innerHTML = withIcon('warn', `${(session.user && session.user.display_name) || 'Anonymous'} · read only`);
+            if (!status.dataset.lockedMessage) {
+                status.textContent = 'Anonymous identities can browse but cannot create pastes. Create a full account to post.';
+            }
+            return;
+        }
+
+        modeTag.innerHTML = withIcon('info', 'sign-in required');
+        if (!status.dataset.lockedMessage) {
+            status.textContent = 'Sign in to create a new paste.';
+        }
     }
 
     async function loadItems(path) {
@@ -390,7 +432,11 @@
     document.getElementById('community-threads-btn').addEventListener('click', () => loadProbe('/api/community/threads'));
     document.getElementById('paste-reset-btn').addEventListener('click', () => {
         document.getElementById('paste-form').reset();
-        document.getElementById('paste-status').textContent = 'Sign in to create a new paste.';
+        const status = document.getElementById('paste-status');
+        delete status.dataset.lockedMessage;
+        syncPasteComposer().catch(() => {
+            status.textContent = 'Sign in to create a new paste.';
+        });
     });
 
     document.getElementById('paste-form').addEventListener('submit', async (event) => {
@@ -406,10 +452,12 @@
                     body: formData.get('body'),
                 }),
             });
+            delete status.dataset.lockedMessage;
             status.textContent = 'Paste created.';
             setActiveTab('pastes');
             await refreshCommunity();
         } catch (error) {
+            status.dataset.lockedMessage = 'true';
             status.textContent = `failed: ${error.message} (sign in required)`;
         }
     });
@@ -417,6 +465,12 @@
     decorateStaticCopy();
     setActiveTab('threads');
     await refreshCommunity();
+    await syncPasteComposer();
+    document.addEventListener('openvibe-auth-changed', () => {
+        const status = document.getElementById('paste-status');
+        delete status.dataset.lockedMessage;
+        syncPasteComposer().catch(() => {});
+    });
 })();
 </script>
 </body>

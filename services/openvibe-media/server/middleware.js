@@ -1,5 +1,7 @@
 'use strict';
 
+const { OpenVibeAuthClient, optionalOpenVibeAuth } = require('@openvibe/sdk');
+
 // Local middleware shim — mirrors openvibe-network/middleware/service-actor.js.
 // Keeps openvibe-media self-contained (does not import private files from
 // other services). When we extract this repo into its own GitHub repo the
@@ -20,4 +22,27 @@ function serviceActorMiddleware(internalKey) {
     };
 }
 
-module.exports = { serviceActorMiddleware };
+function buildAuthClient(config) {
+    const authClient = new OpenVibeAuthClient();
+    if (config && config.auth && config.auth.issuer) {
+        authClient.addIssuer({
+            issuer: config.auth.issuer,
+            publicKeyPath: config.auth.publicKeyPath,
+            label: 'openvibe',
+        });
+    }
+    if (process.env.HOBO_TOOLS_URL && process.env.HOBO_TOOLS_PUBLIC_KEY) {
+        authClient.addIssuer({
+            issuer: process.env.HOBO_TOOLS_URL,
+            publicKeyPath: process.env.HOBO_TOOLS_PUBLIC_KEY,
+            label: 'hobo-tools',
+        });
+    }
+    return authClient;
+}
+
+module.exports = {
+    buildAuthClient,
+    optionalOpenVibeAuth,
+    serviceActorMiddleware,
+};

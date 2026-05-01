@@ -150,8 +150,12 @@
         quests: [],
     };
 
-    document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('games');
-    document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    if (OpenVibe.renderChrome) {
+        await OpenVibe.renderChrome('games');
+    } else {
+        document.getElementById('nav-mount').innerHTML = OpenVibe.navbar('games');
+        document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    }
     state.services = OpenVibe.mergedServices(await OpenVibe.loadServices());
     OpenVibe.attachLauncher(() => state.services);
     document.getElementById('games-assets-link').href = OpenVibe.resolveSurfaceUrl('media');
@@ -174,10 +178,14 @@
     }
 
     async function fetchJson(url, opts) {
-        const res = await fetch(url, Object.assign({
+        const merged = Object.assign({}, opts || {}, {
             headers: Object.assign({ 'Accept': 'application/json' }, actorHeaders(), opts && opts.headers ? opts.headers : {}),
             credentials: 'include',
-        }, opts || {}));
+        });
+        if (OpenVibe.fetchJson) {
+            return OpenVibe.fetchJson(url, merged);
+        }
+        const res = await fetch(url, merged);
         const text = await res.text();
         let body = null;
         try { body = text ? JSON.parse(text) : null; } catch { body = { error: text || 'request failed' }; }
@@ -439,6 +447,21 @@
             reloadAll();
         }
     });
+
+    if (OpenVibe.loadSession) {
+        try {
+            const session = await OpenVibe.loadSession();
+            if (session && session.authenticated && session.user && userInput.value.trim() === 'demo-player') {
+                userInput.value = String(session.user.id || session.user.username || 'demo-player');
+                setBanner(`Signed in as @${session.user.username || session.user.id}. Using your account by default for private player routes.`, 'ok');
+            } else if (session && session.anonymous && userInput.value.trim() === 'demo-player') {
+                userInput.value = '';
+                setBanner('Anonymous mode active. Leave the user id blank to place canvas pixels anonymously, or sign in to load your player profile.', 'warn');
+            }
+        } catch {
+            // ignore auth bootstrap failures here; the page still works in guest mode
+        }
+    }
 
     await reloadAll();
     setInterval(loadCanvas, 15000);

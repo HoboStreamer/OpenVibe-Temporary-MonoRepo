@@ -556,9 +556,26 @@
         </footer>`;
     }
 
-    if (helper.navbar) document.getElementById('nav-mount').innerHTML = helper.navbar();
+    if (helper.renderChrome) {
+        await helper.renderChrome('live');
+    } else if (helper.navbar) {
+        document.getElementById('nav-mount').innerHTML = helper.navbar('live');
+    }
     document.getElementById('footer-mount').innerHTML = renderFooterHtml();
     document.getElementById('community-surface-link').href = surfaceHref('community');
+
+    if (helper.loadSession) {
+        try {
+            const session = await helper.loadSession();
+            const primaryAction = document.querySelector('.hero-actions .btn');
+            if (primaryAction && (!session || !session.authenticated)) {
+                primaryAction.textContent = session && session.anonymous ? 'Create account to go live' : 'Sign in to go live';
+                primaryAction.href = helper.signInUrl ? helper.signInUrl(new URL('/go-live', window.location.origin).toString()) : '/go-live';
+            }
+        } catch {
+            // keep the static CTA if auth bootstrapping is unavailable
+        }
+    }
 
     const routes = [
         { href: '/channels', label: 'Creator directory', title: 'Browse every staged creator', body: 'Search channels, inspect activity, and jump straight into live or recent broadcasts.' },

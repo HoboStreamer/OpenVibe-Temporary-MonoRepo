@@ -6,9 +6,15 @@ const os = require('os');
 const path = require('path');
 
 process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-sourcevibe-test-')), 'games.db');
+process.env.NODE_ENV = 'development';
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
 process.env.OPENVIBE_GAMES_CANVAS_TILE_COOLDOWN_SECONDS = '0';
-process.env.OPENVIBE_GAMES_PLACEMENTS_PER_MINUTE = '60';
+process.env.OPENVIBE_GAMES_CANVAS_PLACEMENTS_PER_MINUTE = '60';
+process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_OPENVIBE_GAMES_PERSISTENCE_MODE = 'sqlite';
+process.env.OPENVIBE_DATABASE_URL = '';
+process.env.OPENVIBE_STAGING_DATABASE_URL = '';
+process.env.OPENVIBE_OPENVIBE_GAMES_DATABASE_URL = '';
 
 const { buildApp } = require('../server');
 

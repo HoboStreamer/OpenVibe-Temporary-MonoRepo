@@ -12,22 +12,24 @@ const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
-const { serviceActorMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
     const eventBus = buildEventBus(config);
+    const authClient = buildAuthClient(config);
 
     const app = express();
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
-    app.use(cors());
+    app.use(cors({ origin: true, credentials: true }));
     app.use(cookieParser());
 
     const runtime = createServiceRuntime({
         serviceName: config.serviceId || 'openvibe-community',
         getHealth: () => ({
             persistence: db.describePersistence(),
+            auth_issuer: config.auth && config.auth.issuer || null,
             discord_webhook: !!(config.discord && config.discord.webhookSecret),
         }),
         getReadiness: () => ({
@@ -38,6 +40,12 @@ function buildApp() {
                     ok: !!(config.events && config.events.url),
                     critical: true,
                     details: { url: config.events && config.events.url || null },
+                },
+                {
+                    name: 'auth_issuer_configured',
+                    ok: !!(config.auth && config.auth.issuer),
+                    critical: true,
+                    details: { issuer: config.auth && config.auth.issuer || null },
                 },
                 {
                     name: 'discord_relay_secret',
@@ -53,6 +61,7 @@ function buildApp() {
 
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use(express.static(path.join(__dirname, '..', 'public')));
+    app.use(optionalOpenVibeAuth(authClient));
 
     const apiRouter = buildRouter({ eventBus, config });
 

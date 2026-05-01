@@ -1,10 +1,17 @@
-// OpenVibe shared frontend helpers — lightweight cross-service chrome for
-// service apps outside the full network control plane.
+// OpenVibe shared frontend helpers — bridge/exchange auth plus common chrome
+// for service surfaces outside the full network control plane.
+
+// NOTE: this file intentionally mirrors the shared live/community/games helper.
 
 (function (global) {
     'use strict';
 
     const API_BASE = (global.OV_API_BASE || '/api/v1').replace(/\/$/, '');
+    const BRIDGE_TOKEN_KEY = 'openvibe.bridge.token';
+    const LOCAL_ANON_TOKENS_KEY = 'openvibe.anon_tokens';
+    const LOCAL_ACTIVE_ANON_KEY = 'openvibe.anon_active';
+
+    let sessionPromise = null;
 
     const SURFACES = {
         network:   { origin: 'https://openvibe.network', localHost: 'openvibe.network.localhost', port: 4100 },
@@ -70,37 +77,6 @@
         return `${resolveSurfaceUrl('network')}/api/v1/services`;
     }
 
-    async function requestJson(url, opts, label) {
-        const res = await fetch(url, Object.assign({
-            credentials: 'include',
-            headers: { 'Accept': 'application/json' },
-        }, opts || {}));
-        const text = await res.text();
-        let body = null;
-        try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-        if (!res.ok) {
-            const err = new Error(`${label || url} failed: ${res.status}`);
-            err.status = res.status;
-            err.body = body;
-            throw err;
-        }
-        return body;
-    }
-
-    async function api(pathname, opts) {
-        return requestJson(`${API_BASE}${pathname}`, opts, `api ${pathname}`);
-    }
-
-    async function loadServices() {
-        try {
-            const data = await requestJson(resolveRegistryUrl(), null, 'registry api');
-            return Array.isArray(data && data.items) ? data.items : [];
-        } catch (e) {
-            console.warn('[openvibe] failed to load services:', e.message);
-            return [];
-        }
-    }
-
     const FALLBACK_SERVICES = [
         { service_id: 'openvibe-network', display_name: 'OpenVibe Network', description: 'The platform hub and identity surface.', public_url: resolveSurfaceUrl('network'), category: 'platform' },
         { service_id: 'openvibe-tools', display_name: 'OpenVibe Tools', description: 'Searchable directory of every OpenVibe service.', public_url: resolveSurfaceUrl('tools'), category: 'platform' },
@@ -117,9 +93,286 @@
         { service_id: 'openvibe-themes', display_name: 'Themes', description: 'Network-wide theme catalog.', public_url: resolveSurfaceUrl('themes'), category: 'account' },
     ];
 
+    function bridgeReturnUrl(returnTo) {
+        const target = new URL(returnTo || global.location.href, global.location.href);
+        target.hash = '';
+        return target.toString();
+    }
+
+    function buildBridgeUrl(returnTo) {
+        return `${resolveSurfaceUrl('network')}/api/v1/session/bridge?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo))}`;
+    }
+
+    function signInUrl(returnTo) {
+        return buildBridgeUrl(returnTo || global.location.href);
+    }
+
+    function switchAccountUrl(returnTo) {
+        const authorizeUrl = new URL('/oauth/authorize', resolveSurfaceUrl('auth'));
+        authorizeUrl.searchParams.set('prompt', 'login');
+        authorizeUrl.searchParams.set('return_to', buildBridgeUrl(returnTo || global.location.href));
+        return authorizeUrl.toString();
+    }
+
+    function signOutUrl(returnTo) {
+        return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo))}`;
+    }
+
+    function loadBridgeToken() {
+        try {
+            return global.sessionStorage.getItem(BRIDGE_TOKEN_KEY) || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function saveBridgeToken(token) {
+        try {
+            if (token) global.sessionStorage.setItem(BRIDGE_TOKEN_KEY, token);
+            else global.sessionStorage.removeItem(BRIDGE_TOKEN_KEY);
+        } catch {
+            // ignore storage failures
+        }
+    }
+
+    function clearBridgeToken() {
+        saveBridgeToken('');
+    }
+
+    function consumeBridgeToken() {
+        const hash = String(global.location && global.location.hash || '').replace(/^#/, '');
+        if (!hash) return '';
+        const params = new URLSearchParams(hash);
+        const token = params.get('openvibe_token');
+        if (!token) return '';
+        saveBridgeToken(token);
+        params.delete('openvibe_token');
+        const nextHash = params.toString();
+        const nextUrl = `${global.location.pathname}${global.location.search}${nextHash ? `#${nextHash}` : ''}`;
+        global.history.replaceState({}, global.document.title, nextUrl);
+        return token;
+    }
+
     function safeParse(value, fallback) {
         if (typeof value !== 'string') return value || fallback;
         try { return JSON.parse(value); } catch { return fallback; }
+    }
+
+    function readAnonTokens() {
+        try {
+            return safeParse(global.localStorage.getItem(LOCAL_ANON_TOKENS_KEY), {}) || {};
+        } catch {
+            return {};
+        }
+    }
+
+    function writeAnonTokens(tokens) {
+        try {
+            global.localStorage.setItem(LOCAL_ANON_TOKENS_KEY, JSON.stringify(tokens || {}));
+        } catch {
+            // ignore storage failures
+        }
+    }
+
+    function setActiveAnonId(value) {
+        try {
+            if (value) global.localStorage.setItem(LOCAL_ACTIVE_ANON_KEY, value);
+            else global.localStorage.removeItem(LOCAL_ACTIVE_ANON_KEY);
+        } catch {
+            // ignore storage failures
+        }
+    }
+
+    function rememberAnonymousIdentity(user) {
+        if (!user || !user.id || !user.session_token) return;
+        const tokens = readAnonTokens();
+        tokens[user.id] = {
+            id: user.id,
+            anon_number: user.anon_number || null,
+            display_name: user.display_name || user.username || 'Anonymous',
+            session_token: user.session_token,
+            updated_at: new Date().toISOString(),
+        };
+        writeAnonTokens(tokens);
+        setActiveAnonId(user.id);
+    }
+
+    function isAnonymousUser(user) {
+        return !!(user && (
+            user.anonymous === true
+            || user.actor_type === 'anon'
+            || String(user.id || user.sub || '').startsWith('anon:')
+        ));
+    }
+
+    function dispatchAuthChanged(session) {
+        if (!global.document || typeof global.CustomEvent !== 'function') return;
+        global.document.dispatchEvent(new global.CustomEvent('openvibe-auth-changed', {
+            detail: session || null,
+        }));
+    }
+
+    async function parseJsonResponse(response) {
+        const text = await response.text();
+        let body = null;
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = text;
+        }
+        if (!response.ok) {
+            const error = new Error(body && body.error ? body.error : `Request failed (${response.status})`);
+            error.status = response.status;
+            error.body = body;
+            throw error;
+        }
+        return body;
+    }
+
+    async function requestJson(url, opts, label) {
+        const response = await fetch(url, Object.assign({
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+        }, opts || {}));
+        try {
+            return await parseJsonResponse(response);
+        } catch (error) {
+            if (label) error.message = `${label}: ${error.message}`;
+            throw error;
+        }
+    }
+
+    async function networkRequestJson(pathname, opts) {
+        const options = Object.assign({}, opts || {});
+        const omitStoredToken = !!options.omitStoredToken;
+        delete options.omitStoredToken;
+        const headers = Object.assign({ Accept: 'application/json' }, options.headers || {});
+        const storedToken = omitStoredToken ? '' : loadBridgeToken();
+        if (storedToken && !headers.Authorization && !headers.authorization) {
+            headers.Authorization = `Bearer ${storedToken}`;
+        }
+        options.headers = headers;
+        if (!Object.prototype.hasOwnProperty.call(options, 'credentials')) {
+            options.credentials = 'include';
+        }
+        const response = await fetch(`${resolveSurfaceUrl('network')}${pathname}`, options);
+        return parseJsonResponse(response);
+    }
+
+    function normalizeSession(exchange) {
+        const user = exchange && exchange.user ? exchange.user : null;
+        const anonymous = isAnonymousUser(user);
+        return {
+            authenticated: !!user && !anonymous,
+            anonymous,
+            user,
+            access_token: exchange && exchange.access_token ? exchange.access_token : loadBridgeToken(),
+        };
+    }
+
+    async function exchangeNetworkSession() {
+        consumeBridgeToken();
+        try {
+            const exchange = await networkRequestJson('/api/v1/session/exchange', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+            if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
+            const session = normalizeSession(exchange || {});
+            if (session.anonymous && session.user) rememberAnonymousIdentity(session.user);
+            dispatchAuthChanged(session);
+            return session;
+        } catch (error) {
+            if (error.status === 401 && loadBridgeToken()) {
+                clearBridgeToken();
+                try {
+                    const exchange = await networkRequestJson('/api/v1/session/exchange', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}',
+                        omitStoredToken: true,
+                    });
+                    if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
+                    const session = normalizeSession(exchange || {});
+                    if (session.anonymous && session.user) rememberAnonymousIdentity(session.user);
+                    dispatchAuthChanged(session);
+                    return session;
+                } catch {
+                    // fall through to guest response
+                }
+            }
+            const guest = { authenticated: false, anonymous: false, user: null, access_token: '' };
+            dispatchAuthChanged(guest);
+            return guest;
+        }
+    }
+
+    async function loadSession(force) {
+        consumeBridgeToken();
+        if (!force && sessionPromise) return sessionPromise;
+        sessionPromise = exchangeNetworkSession();
+        return sessionPromise;
+    }
+
+    async function startAnonymousSession(options) {
+        await networkRequestJson('/api/v1/session/anonymous', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(options || {}),
+        });
+        sessionPromise = null;
+        return loadSession(true);
+    }
+
+    async function loadAnonymousIdentities(options) {
+        const params = new URLSearchParams();
+        if (options && options.fingerprint) params.set('fingerprint', options.fingerprint);
+        const suffix = params.toString() ? `?${params.toString()}` : '';
+        const result = await networkRequestJson(`/api/v1/session/anonymous/identities${suffix}`, { omitStoredToken: false }).catch(() => ({ items: [] }));
+        (result.items || []).forEach(rememberAnonymousIdentity);
+        return result;
+    }
+
+    async function switchAnonymousIdentity(identity, options) {
+        const payload = Object.assign({}, options || {});
+        if (typeof identity === 'string') {
+            const stored = readAnonTokens()[identity];
+            if (stored && stored.session_token) payload.session_token = stored.session_token;
+            else payload.anon_user_id = identity;
+        } else if (identity && typeof identity === 'object') {
+            if (identity.session_token) payload.session_token = identity.session_token;
+            else if (identity.id) payload.anon_user_id = identity.id;
+            if (identity.anon_number && !payload.anon_number) payload.anon_number = identity.anon_number;
+        }
+        return startAnonymousSession(payload);
+    }
+
+    async function createAnonymousIdentity(options) {
+        return startAnonymousSession(Object.assign({ force_new: true }, options || {}));
+    }
+
+    async function fetchWithAuth(url, opts) {
+        const options = Object.assign({}, opts || {});
+        const headers = Object.assign({}, options.headers || {});
+        if (!headers.Authorization && !headers.authorization) {
+            const session = await loadSession();
+            if (session && session.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+        }
+        options.headers = headers;
+        if (!Object.prototype.hasOwnProperty.call(options, 'credentials')) {
+            options.credentials = /^[a-z]+:/i.test(String(url || '')) ? 'include' : 'same-origin';
+        }
+        return fetch(url, options);
+    }
+
+    async function fetchJson(url, opts) {
+        const response = await fetchWithAuth(url, opts);
+        return parseJsonResponse(response);
+    }
+
+    async function api(pathname, opts) {
+        return fetchJson(`${API_BASE}${pathname}`, opts);
     }
 
     function resolveServiceUrl(item) {
@@ -201,6 +454,7 @@
                 <nav class="ov-nav-links">
                     ${links.map((link) => `<a href="${escapeHtml(link.href)}"${link.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
                 </nav>
+                <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
             </div></header>`;
     }
 
@@ -212,6 +466,71 @@
             <a href="${escapeHtml(resolveSurfaceUrl('auth'))}/.well-known/openid-configuration">OIDC</a> ·
             <a href="/health">Health</a>
         </footer>`;
+    }
+
+    async function hydrateNavSession() {
+        const target = global.document.getElementById('ov-nav-session');
+        if (!target) return;
+        const session = await loadSession();
+        if (session && session.authenticated && session.user) {
+            target.innerHTML = `
+                <span class="ov-chip ok">@${escapeHtml(session.user.username || session.user.id || 'you')}</span>
+                <span class="ov-chip soft">${escapeHtml(session.user.role || 'user')}</span>
+                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
+                <a class="ov-btn" href="${escapeHtml(switchAccountUrl(global.location.href))}">Switch account</a>
+                <a class="ov-btn ov-btn-ghost" href="${escapeHtml(signOutUrl(global.location.href))}">Sign out</a>`;
+            return;
+        }
+        if (session && session.anonymous && session.user) {
+            target.innerHTML = `
+                <span class="ov-chip warn">${escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span>
+                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
+                <button class="ov-btn" type="button" data-openvibe-new-anon="true">New anon</button>
+                <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Create account</a>
+                <a class="ov-btn ov-btn-ghost" href="${escapeHtml(signOutUrl(global.location.href))}">Leave anonymous</a>`;
+            const newAnonButton = target.querySelector('[data-openvibe-new-anon]');
+            if (newAnonButton) {
+                newAnonButton.addEventListener('click', async function () {
+                    newAnonButton.disabled = true;
+                    newAnonButton.textContent = 'Creating anon…';
+                    try {
+                        await createAnonymousIdentity();
+                        global.location.reload();
+                    } catch (error) {
+                        console.warn('[openvibe] failed to create anonymous identity:', error.message);
+                        newAnonButton.disabled = false;
+                        newAnonButton.textContent = 'New anon';
+                    }
+                });
+            }
+            return;
+        }
+        target.innerHTML = `
+            <button class="ov-btn" type="button" data-openvibe-anon-session="true">Use anonymous identity</button>
+            <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Sign in</a>`;
+        const anonButton = target.querySelector('[data-openvibe-anon-session]');
+        if (anonButton) {
+            anonButton.addEventListener('click', async function () {
+                anonButton.disabled = true;
+                anonButton.textContent = 'Starting anonymous session…';
+                try {
+                    await startAnonymousSession();
+                    global.location.reload();
+                } catch (error) {
+                    console.warn('[openvibe] failed to start anonymous session:', error.message);
+                    anonButton.disabled = false;
+                    anonButton.textContent = 'Use anonymous identity';
+                }
+            });
+        }
+    }
+
+    async function renderChrome(activeKey) {
+        const navMount = global.document.getElementById('nav-mount');
+        const footerMount = global.document.getElementById('footer-mount');
+        if (navMount) navMount.innerHTML = navbar(activeKey);
+        if (footerMount) footerMount.innerHTML = footer();
+        await hydrateNavSession();
     }
 
     function attachLauncher(getItems) {
@@ -249,17 +568,28 @@
         FALLBACK_SERVICES,
         api,
         attachLauncher,
+        createAnonymousIdentity,
         escapeHtml,
+        fetchJson,
+        fetchWithAuth,
         footer,
         icon,
         iconLabel,
+        loadAnonymousIdentities,
         loadServices,
+        loadSession,
         mergedServices,
         navbar,
+        renderChrome,
         renderServiceCards,
         resolveRegistryUrl,
         resolveServiceUrl,
         resolveSurfaceUrl,
         serviceIconName,
+        signInUrl,
+        signOutUrl,
+        startAnonymousSession,
+        switchAccountUrl,
+        switchAnonymousIdentity,
     };
 }(window));
