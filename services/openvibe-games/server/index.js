@@ -16,12 +16,13 @@ const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { createRealtimeRuntime } = require('./realtime');
 const { createSourceVibeEngine } = require('./sourcevibe');
-const { serviceActorMiddleware, userContextMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware, userContextMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
 
     const eventBus = buildEventBus(config);
+    const authClient = buildAuthClient(config);
     let realtime = null;
     let sourcevibe = null;
 
@@ -86,8 +87,10 @@ function buildApp() {
     }
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
+    app.use(optionalOpenVibeAuth(authClient));
+
     const httpServer = createServer(app);
-    realtime = createRealtimeRuntime({ httpServer, eventBus, config });
+    realtime = createRealtimeRuntime({ httpServer, eventBus, config, authClient });
     sourcevibe = createSourceVibeEngine({ realtime, eventBus, config });
     if (typeof realtime.attachSourceVibe === 'function') realtime.attachSourceVibe(sourcevibe);
     realtime.start();

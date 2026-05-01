@@ -1,26 +1,36 @@
+import {
+    currentIdentity,
+    gamesApiJson,
+    getAuthState,
+    initializeOpenVibeAuth,
+    refreshOpenVibeAuth,
+    resolveSurfaceUrl,
+    startSignIn,
+    startSignOut,
+} from '/sourcevibe-shared/auth-client.js';
+
 export const API_BASE = '/api/games';
 export const TWO_D_WORLD_API = `${API_BASE}/2d-world`;
 export const REALTIME_PATH = '/games/realtime';
-export const STORAGE_KEY = 'openvibe.games.2dworld.identity';
 
 let socketClientPromise = null;
 
 export function loadIdentity() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch {}
-    const suffix = Math.random().toString(36).slice(2, 8);
-    return {
-        userId: `demo-${suffix}`,
-        displayName: `Demo ${suffix}`,
-        role: 'user',
-    };
+    return currentIdentity();
 }
 
-export function saveIdentity(identity) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+export function saveIdentity() {
+    return currentIdentity();
 }
+
+export {
+    getAuthState,
+    initializeOpenVibeAuth as initializeAuth,
+    refreshOpenVibeAuth as refreshAuth,
+    resolveSurfaceUrl,
+    startSignIn,
+    startSignOut,
+};
 
 export function ensureSocketIoClient(path = REALTIME_PATH) {
     if (typeof window !== 'undefined' && typeof window.io === 'function') {
@@ -49,22 +59,6 @@ export function ensureSocketIoClient(path = REALTIME_PATH) {
     return socketClientPromise;
 }
 
-export async function apiJson(path, options = {}, identity = loadIdentity()) {
-    const headers = Object.assign({
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-OpenVibe-User-Id': identity.userId,
-        'X-OpenVibe-Display-Name': identity.displayName,
-        'X-OpenVibe-User-Role': identity.role || 'user',
-    }, options.headers || {});
-    const response = await fetch(path, Object.assign({}, options, { headers }));
-    const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
-    if (!response.ok) {
-        const error = new Error(body && body.error ? body.error : `request failed (${response.status})`);
-        error.status = response.status;
-        error.body = body;
-        throw error;
-    }
-    return body;
+export async function apiJson(path, options = {}) {
+    return gamesApiJson(path, options);
 }

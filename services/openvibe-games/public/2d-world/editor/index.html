@@ -12,10 +12,8 @@
             <section class="hero-card">
                 <h1>2D World Editor</h1>
                 <p>Prototype tiles, trees, and rocks for publishable OpenVibe shards.</p>
-                <div class="field-row">
-                    <input id="user-id" placeholder="User ID" />
-                    <input id="display-name" placeholder="Display name" />
-                </div>
+                <div id="editor-session-summary" class="session-summary">Checking OpenVibe session…</div>
+                <div id="editor-session-meta" class="session-meta">Draft publishing now follows your OpenVibe session instead of a local browser identity.</div>
                 <div class="field-row">
                     <input id="world-name" placeholder="World name" />
                     <input id="world-slug" placeholder="world-slug" />
@@ -35,6 +33,9 @@
                 <div class="button-row">
                     <button id="save-world-btn" class="primary">Save draft</button>
                     <button id="publish-world-btn" class="secondary">Publish</button>
+                    <button id="editor-sign-in-btn" class="secondary">Sign in</button>
+                    <button id="editor-sign-out-btn" class="secondary hidden">Sign out</button>
+                    <button id="editor-account-btn" class="secondary">Account</button>
                 </div>
                 <div id="editor-status" class="empty">Click the grid to build your shard.</div>
             </section>

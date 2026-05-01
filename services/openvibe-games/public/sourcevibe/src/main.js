@@ -1,47 +1,18 @@
+import {
+    currentIdentity,
+    gamesApiJson,
+    getAuthState,
+    initializeOpenVibeAuth,
+    refreshOpenVibeAuth,
+    resolveSurfaceUrl,
+    startSignIn,
+    startSignOut,
+} from '/sourcevibe-shared/auth-client.js';
+
 const SOURCEVIBE_API = '/api/games/sourcevibe';
-const GAMES_API = '/api/games';
-const STORAGE_KEY = 'openvibe.sourcevibe.identity.v1';
 
-function loadIdentity() {
-    try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch {}
-    const suffix = Math.random().toString(36).slice(2, 8);
-    return {
-        userId: `sourcevibe-${suffix}`,
-        displayName: `Citizen ${suffix}`,
-        role: 'user',
-    };
-}
-
-function saveIdentity(identity) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
-}
-
-function buildHeaders(identity) {
-    return {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-OpenVibe-User-Id': identity.userId,
-        'X-OpenVibe-Display-Name': identity.displayName,
-        'X-OpenVibe-User-Role': identity.role || 'user',
-    };
-}
-
-async function apiJson(path, options = {}, identity = state.identity) {
-    const response = await fetch(path, Object.assign({}, options, {
-        headers: Object.assign({}, buildHeaders(identity), options.headers || {}),
-    }));
-    const text = await response.text();
-    const body = text ? JSON.parse(text) : null;
-    if (!response.ok) {
-        const error = new Error(body && body.error ? body.error : `Request failed (${response.status})`);
-        error.status = response.status;
-        error.body = body;
-        throw error;
-    }
-    return body;
+async function apiJson(path, options = {}) {
+    return gamesApiJson(path, options);
 }
 
 function createHookLibrary() {
@@ -93,10 +64,9 @@ function sortServers(servers = []) {
 }
 
 const state = {
-    identity: loadIdentity(),
+    auth: getAuthState(),
+    identity: currentIdentity(),
     bootstrap: null,
-    inventory: [],
-    bank: [],
     player: null,
     activePanel: 'launcher',
     consoleHistory: [],
@@ -104,9 +74,7 @@ const state = {
 };
 
 const dom = {
-    identityForm: document.getElementById('identity-form'),
-    identityUserId: document.getElementById('identity-user-id'),
-    identityDisplayName: document.getElementById('identity-display-name'),
+    sessionCard: document.getElementById('session-card'),
     nav: document.getElementById('sidebar-nav'),
     panels: {
         launcher: document.getElementById('panel-launcher'),
@@ -114,11 +82,10 @@ const dom = {
         gamemodes: document.getElementById('panel-gamemodes'),
         console: document.getElementById('panel-console'),
         options: document.getElementById('panel-options'),
-        inventory: document.getElementById('panel-inventory'),
     },
     statusBanner: document.getElementById('status-banner'),
     quickLaunch: document.getElementById('quick-launch'),
-    hotbar: document.getElementById('hotbar-grid'),
+    accountDock: document.getElementById('account-dock'),
     engineStats: document.getElementById('engine-stats'),
 };
 
@@ -128,12 +95,12 @@ function setStatus(message, tone = 'neutral') {
 }
 
 function setPanel(name) {
-    state.activePanel = name;
+    state.activePanel = dom.panels[name] ? name : 'launcher';
     for (const [panelName, panel] of Object.entries(dom.panels)) {
-        panel.classList.toggle('hidden', panelName !== name);
+        panel.classList.toggle('hidden', panelName !== state.activePanel);
     }
     for (const button of dom.nav.querySelectorAll('[data-panel]')) {
-        button.classList.toggle('active', button.dataset.panel === name);
+        button.classList.toggle('active', button.dataset.panel === state.activePanel);
     }
 }
 
@@ -149,26 +116,35 @@ function commandMutatesState(command) {
     return /^(bind|unbind|gamemode_run|gm_reload|addons_reload|cl_|sv_|rate\b|net_graph\b|connect\b)/.test(String(command || '').trim());
 }
 
+function sessionUser() {
+    return state.auth && state.auth.session && state.auth.session.user || null;
+}
+
+function isAuthenticated() {
+    return !!(state.auth && state.auth.session && state.auth.session.authenticated);
+}
+
+async function refreshAuth({ reloadBootstrap = true } = {}) {
+    state.auth = await refreshOpenVibeAuth();
+    state.identity = currentIdentity();
+    if (reloadBootstrap) await loadBootstrap();
+    return state.auth;
+}
+
+function requireSignIn(message) {
+    if (isAuthenticated()) return true;
+    const nextMessage = message || 'Sign in with OpenVibe to continue.';
+    setStatus(nextMessage, 'warn');
+    pushConsole('system', nextMessage, 'warn');
+    return false;
+}
+
 async function loadBootstrap() {
     state.bootstrap = await apiJson(queryBootstrapUrl());
     state.player = state.bootstrap.player || null;
+    state.auth = getAuthState();
+    state.identity = currentIdentity();
     hydrateSV();
-}
-
-async function loadPlayerData() {
-    if (!state.identity.userId) return;
-    try {
-        const [playerRes, inventoryRes, bankRes] = await Promise.all([
-            apiJson(`${GAMES_API}/player/${encodeURIComponent(state.identity.userId)}`),
-            apiJson(`${GAMES_API}/inventory/${encodeURIComponent(state.identity.userId)}`),
-            apiJson(`${GAMES_API}/bank/${encodeURIComponent(state.identity.userId)}`),
-        ]);
-        state.player = playerRes.player;
-        state.inventory = inventoryRes.items || [];
-        state.bank = bankRes.items || [];
-    } catch (error) {
-        pushConsole('system', error.message, 'error');
-    }
 }
 
 function pushConsole(origin, output, level = 'info') {
@@ -182,6 +158,13 @@ function pushConsole(origin, output, level = 'info') {
 }
 
 async function runConsole(command) {
+    if (commandMutatesState(command) && !isAuthenticated()) {
+        const message = 'Sign in with OpenVibe before running launcher commands that change engine state.';
+        setStatus(message, 'warn');
+        pushConsole('system', message, 'warn');
+        startSignIn();
+        return { ok: false, error: message };
+    }
     pushConsole('cmd', command, 'info');
     const result = await apiJson(`${SOURCEVIBE_API}/console/run`, {
         method: 'POST',
@@ -190,13 +173,16 @@ async function runConsole(command) {
     pushConsole('out', result.output || JSON.stringify(result, null, 2), result.ok === false ? 'error' : 'info');
     if (commandMutatesState(command)) {
         await loadBootstrap();
-        await loadPlayerData();
         renderAll();
     }
     return result;
 }
 
 async function connectServer(id) {
+    if (!requireSignIn('Sign in with OpenVibe to launch a SourceVibe shard.')) {
+        startSignIn();
+        return { ok: false, error: 'authentication required' };
+    }
     const result = await apiJson(`${SOURCEVIBE_API}/connect`, {
         method: 'POST',
         body: JSON.stringify({ id }),
@@ -206,6 +192,10 @@ async function connectServer(id) {
 }
 
 async function createServer(formData) {
+    if (!requireSignIn('Sign in with OpenVibe to create a launcher-managed test shard.')) {
+        startSignIn();
+        return { ok: false, error: 'authentication required' };
+    }
     const payload = Object.fromEntries(formData.entries());
     payload.maxPlayers = Number(payload.maxPlayers) || 32;
     const result = await apiJson(`${SOURCEVIBE_API}/servers`, {
@@ -215,6 +205,7 @@ async function createServer(formData) {
     setStatus(`Created server ${result.server.name}.`, 'success');
     await loadBootstrap();
     renderAll();
+    return result;
 }
 
 function hydrateSV() {
@@ -271,12 +262,14 @@ function hydrateSV() {
 }
 
 function renderEngineStats() {
+    const user = sessionUser();
     const stats = [
         ['Engine', state.bootstrap.engine.name],
         ['Version', state.bootstrap.engine.version],
         ['Gamemode', state.bootstrap.gamemode && state.bootstrap.gamemode.title || 'Unknown'],
         ['Servers', String((state.bootstrap.servers || []).length)],
         ['Addons', String((state.bootstrap.addons || []).length)],
+        ['Session', isAuthenticated() ? (user && (user.username || user.id) || 'signed in') : 'guest'],
         ['Interp', `${state.bootstrap.prediction.interpolation.toFixed(3)}s`],
     ];
     dom.engineStats.innerHTML = stats.map(([label, value]) => `
@@ -285,6 +278,72 @@ function renderEngineStats() {
             <strong>${value}</strong>
         </div>
     `).join('');
+}
+
+function renderSessionCard() {
+    const user = sessionUser();
+    const player = state.bootstrap && state.bootstrap.player || state.player || null;
+    if (!dom.sessionCard) return;
+    dom.sessionCard.innerHTML = isAuthenticated()
+        ? `
+            <div class="identity-card__summary">
+                <span class="eyebrow">OpenVibe session</span>
+                <strong>${user && (user.display_name || user.username || user.id) || 'Signed in'}</strong>
+                <span class="identity-card__meta">${user && (user.username || user.id) || 'user'} · role ${user && user.role || 'user'}</span>
+                <span class="identity-card__hint">SourceVibe now launches with your real OpenVibe session instead of a browser-made local identity.</span>
+            </div>
+            <div class="identity-card__actions">
+                <button class="cta-button" data-action="refresh-auth">Refresh session</button>
+                <button class="table-button" data-action="open-account">Account</button>
+                <button class="table-button" data-action="sign-out">Sign out</button>
+            </div>
+            ${player ? `<div class="identity-card__meta">Coins ${Number(player.coins || 0)} · total level ${Number(player.total_level || 1)}</div>` : ''}
+        `
+        : `
+            <div class="identity-card__summary">
+                <span class="eyebrow">OpenVibe session</span>
+                <strong>Not signed in</strong>
+                <span class="identity-card__hint">The old editable User ID form is gone. Sign in with OpenVibe to launch shards, create local test servers, and sync your SourceVibe profile correctly.</span>
+            </div>
+            <div class="identity-card__actions">
+                <button class="cta-button" data-action="sign-in">Sign in with OpenVibe</button>
+                <button class="table-button" data-action="open-account">Account hub</button>
+            </div>
+        `;
+}
+
+function renderAccountDock() {
+    const user = sessionUser();
+    const player = state.bootstrap && state.bootstrap.player || state.player || null;
+    if (!dom.accountDock) return;
+    dom.accountDock.innerHTML = isAuthenticated()
+        ? `
+            <div class="account-dock">
+                <div class="account-dock__header">
+                    <strong>${user && (user.display_name || user.username || user.id) || 'Signed in'}</strong>
+                    <span class="account-dock__meta">${user && user.username || user && user.id || 'user'} · ${user && user.role || 'user'}</span>
+                </div>
+                <div class="account-dock__chips">
+                    <span class="chip">coins ${Number(player && player.coins || 0)}</span>
+                    <span class="chip">level ${Number(player && player.total_level || 1)}</span>
+                </div>
+                <div class="card-actions">
+                    <button class="table-button" data-action="open-account">Account</button>
+                    <button class="table-button" data-action="refresh-auth">Refresh</button>
+                </div>
+            </div>
+        `
+        : `
+            <div class="account-dock">
+                <div class="account-dock__header">
+                    <strong>Session-aware launcher</strong>
+                    <span class="account-dock__meta">Inventory and hotbar stay inside 2D World now. The engine shell just owns launch, directory, console, and options.</span>
+                </div>
+                <div class="card-actions">
+                    <button class="cta-button" data-action="sign-in">Sign in</button>
+                </div>
+            </div>
+        `;
 }
 
 function renderQuickLaunch() {
@@ -298,26 +357,11 @@ function renderQuickLaunch() {
             <strong>${activeServer.name}</strong>
             <span class="muted">${activeServer.gamemode} · ${activeServer.map} · ${activeServer.players}/${activeServer.maxPlayers}</span>
             <div class="card-actions">
-                <button class="cta-button" data-action="launch-server" data-server-id="${activeServer.id}">Launch</button>
+                <button class="cta-button" data-action="launch-server" data-server-id="${activeServer.id}">${isAuthenticated() ? 'Launch' : 'Sign in to launch'}</button>
                 <button class="table-button" data-panel-target="servers">Browse all</button>
             </div>
         </div>
     `;
-}
-
-function renderHotbar() {
-    const layout = state.bootstrap.inventory && state.bootstrap.inventory.layout || { hotbar: 9 };
-    const hotbar = Array.isArray(state.bootstrap.inventory && state.bootstrap.inventory.hotbar) ? state.bootstrap.inventory.hotbar : [];
-    dom.hotbar.innerHTML = Array.from({ length: Number(layout.hotbar) || 9 }, (_, index) => {
-        const item = hotbar[index];
-        return `
-            <div class="hotbar-slot">
-                <strong>${index + 1}</strong>
-                <span>${item && item.name || item && item.item_id || 'Empty'}</span>
-                <small>${item && item.quantity ? `x${item.quantity}` : 'unbound'}</small>
-            </div>
-        `;
-    }).join('');
 }
 
 function renderLauncherPanel() {
@@ -336,7 +380,7 @@ function renderLauncherPanel() {
                 ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `<span class="chip">${entry.title}</span>`).join('')}
             </div>
             <div class="hero-actions">
-                ${activeServer ? `<button class="cta-button" data-action="launch-server" data-server-id="${activeServer.id}">Play ${activeServer.name}</button>` : ''}
+                ${activeServer ? `<button class="cta-button" data-action="launch-server" data-server-id="${activeServer.id}">${isAuthenticated() ? `Play ${activeServer.name}` : 'Sign in to play'}</button>` : ''}
                 ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.play ? `<a class="cta-button" href="${featuredGamemode.routes.play}">Open play route</a>` : gm && gm.routes && gm.routes.play ? `<a class="cta-button" href="${gm.routes.play}">Open play route</a>` : ''}
                 ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.status ? `<a class="table-button" href="${featuredGamemode.routes.status}">Status</a>` : gm && gm.routes && gm.routes.status ? `<a class="table-button" href="${gm.routes.status}">Status</a>` : ''}
                 ${featuredGamemode && featuredGamemode.routes && featuredGamemode.routes.editor ? `<a class="table-button" href="${featuredGamemode.routes.editor}">Editor</a>` : gm && gm.routes && gm.routes.editor ? `<a class="table-button" href="${gm.routes.editor}">Editor</a>` : ''}
@@ -364,44 +408,19 @@ function renderLauncherPanel() {
 
         <div class="grid-two">
             <article class="server-card">
-                <h3>Create a server</h3>
-                <form id="create-server-form" class="server-form">
-                    <label>
-                        <span class="muted">Server name</span>
-                        <input name="name" placeholder="My SourceVibe shard" required />
-                    </label>
-                    <label>
-                        <span class="muted">Gamemode</span>
-                        <select name="gamemode">
-                            ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `<option value="${entry.id}" ${(featuredGamemode && featuredGamemode.id === entry.id) || (gm && gm.id === entry.id) ? 'selected' : ''}>${entry.title}</option>`).join('')}
-                        </select>
-                    </label>
-                    <label>
-                        <span class="muted">Map</span>
-                        <select name="map">
-                            ${(state.bootstrap.maps || []).map((entry) => `<option value="${entry.id}">${entry.title || entry.name || entry.id}</option>`).join('')}
-                        </select>
-                    </label>
-                    <label>
-                        <span class="muted">Max players</span>
-                        <input name="maxPlayers" type="number" min="1" max="128" value="32" />
-                    </label>
-                    <label class="full">
-                        <span class="muted">Description</span>
-                        <input name="description" placeholder="Small sandbox with tasteful chaos." />
-                    </label>
-                    <div class="full inline-actions">
-                        <button type="submit">Create server</button>
-                    </div>
-                </form>
-            </article>
-
-            <article class="server-card">
                 <h3>Engine API namespaces</h3>
                 <div class="chip-row">
                     ${(state.bootstrap.engine.api || []).map((entry) => `<span class="chip">SV.${entry}</span>`).join('')}
                 </div>
-                <p class="muted">Open devtools and poke <code>window.SV</code>. The engine shell now exposes hooks, console, cvars, binds, gamemodes, addons, and launch helpers.</p>
+                <p class="muted">Open devtools and poke <code>window.SV</code>. The engine shell now exposes hooks, console, cvars, binds, gamemodes, addons, and launch helpers—while inventory and hotbar stay owned by the active gamemode.</p>
+            </article>
+            <article class="server-card">
+                <h3>Session-aware launch flow</h3>
+                <p class="muted">SourceVibe now reads your OpenVibe session instead of a local identity form. Use the server browser for launcher-managed test shards and use the gamemode routes for the real in-world UI.</p>
+                <div class="chip-row">
+                    <span class="chip">session ${isAuthenticated() ? 'authenticated' : 'guest'}</span>
+                    <span class="chip">account ${sessionUser() && (sessionUser().username || sessionUser().id) || 'not linked'}</span>
+                </div>
             </article>
         </div>
     `;
@@ -442,6 +461,55 @@ function renderServersPanel() {
                 </thead>
                 <tbody>${rows || '<tr><td colspan="6">No servers yet.</td></tr>'}</tbody>
             </table>
+        </div>
+        <div class="grid-two" style="margin-top: 1rem;">
+            <article class="server-card">
+                <h3>Local test shard</h3>
+                ${isAuthenticated() ? `
+                    <form id="create-server-form" class="server-form">
+                        <label>
+                            <span class="muted">Server name</span>
+                            <input name="name" placeholder="My SourceVibe shard" required />
+                        </label>
+                        <label>
+                            <span class="muted">Gamemode</span>
+                            <select name="gamemode">
+                                ${sortGamemodes(state.bootstrap.gamemodes || []).map((entry) => `<option value="${entry.id}">${entry.title}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label>
+                            <span class="muted">Map</span>
+                            <select name="map">
+                                ${(state.bootstrap.maps || []).map((entry) => `<option value="${entry.id}">${entry.title || entry.name || entry.id}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label>
+                            <span class="muted">Max players</span>
+                            <input name="maxPlayers" type="number" min="1" max="128" value="32" />
+                        </label>
+                        <label class="full">
+                            <span class="muted">Description</span>
+                            <input name="description" placeholder="Small sandbox with tasteful chaos." />
+                        </label>
+                        <div class="full inline-actions">
+                            <button type="submit">Create test shard</button>
+                        </div>
+                    </form>
+                ` : `
+                    <p class="muted">Creating launcher-managed test shards now follows your OpenVibe session. Sign in first so the server is attached to a real account instead of a browser-made ID.</p>
+                    <div class="inline-actions">
+                        <button class="cta-button" data-action="sign-in">Sign in with OpenVibe</button>
+                    </div>
+                `}
+            </article>
+            <article class="server-card">
+                <h3>Official route</h3>
+                <p class="muted">The flagship 2D World shard still lives behind the gamemode play route. Use launcher-managed shards here for deliberate testing, not as a replacement for in-world UI.</p>
+                <div class="inline-actions">
+                    <a class="table-button" href="/2d-world">Open 2D World</a>
+                    <a class="table-button" href="/2d-world/status">Runtime status</a>
+                </div>
+            </article>
         </div>
     `;
 }
@@ -512,77 +580,32 @@ function renderOptionsPanel() {
 }
 
 function renderInventoryPanel() {
-    const layout = state.bootstrap.inventory && state.bootstrap.inventory.layout || { rows: 4, cols: 6, hotbar: 9 };
-    const slots = Number(layout.rows) * Number(layout.cols);
-    const items = state.inventory.slice(0, slots);
-    const cells = Array.from({ length: slots }, (_, index) => {
-        const item = items[index];
-        return `
-            <div class="slot">
-                <strong>${item ? item.item_id : `Slot ${index + 1}`}</strong>
-                <span>${item ? item.metadata && item.metadata.name || item.item_id : 'Empty'}</span>
-                <small>${item ? `x${item.quantity}` : 'available'}</small>
-            </div>
-        `;
-    }).join('');
-    const bank = state.bank.slice(0, 8).map((item) => `
-        <div class="bank-slot">
-            <strong>${item.item_id}</strong>
-            <span>${item.metadata && item.metadata.name || item.item_id}</span>
-            <small>x${item.quantity}</small>
-        </div>
-    `).join('') || '<div class="muted">Bank is empty.</div>';
+    if (!dom.panels.inventory) return;
     dom.panels.inventory.innerHTML = `
-        <div class="inventory-layout">
-            <section class="inventory-column">
-                <h3>Grid inventory</h3>
-                <p class="muted">${layout.rows}×${layout.cols} backpack with a ${layout.hotbar}-slot hotbar dock.</p>
-                <div class="slot-grid">${cells}</div>
-            </section>
-            <section class="inventory-column">
-                <div class="coin-slot">
-                    <strong>Coins</strong>
-                    <span>${state.player && state.player.coins || 0}</span>
-                    <small>Dedicated currency stack</small>
-                </div>
-                <h3 style="margin-top:1rem;">Bank snapshot</h3>
-                <div class="bank-grid">${bank}</div>
-            </section>
+        <div class="hero-card">
+            <h2>Inventory moved into the gamemode</h2>
+            <p class="muted">SourceVibe no longer renders a shell-owned backpack or hotbar. Open the active gamemode route to use the real in-world inventory UI.</p>
+            <div class="hero-actions">
+                <a class="cta-button" href="/2d-world">Open 2D World</a>
+            </div>
         </div>
     `;
 }
 
 function renderAll() {
+    renderSessionCard();
+    renderAccountDock();
     renderEngineStats();
     renderQuickLaunch();
-    renderHotbar();
     renderLauncherPanel();
     renderServersPanel();
     renderGamemodesPanel();
     renderConsolePanel();
     renderOptionsPanel();
-    renderInventoryPanel();
     setPanel(state.activePanel);
 }
 
 function bindEvents() {
-    dom.identityUserId.value = state.identity.userId;
-    dom.identityDisplayName.value = state.identity.displayName;
-
-    dom.identityForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        state.identity = {
-            userId: dom.identityUserId.value.trim() || state.identity.userId,
-            displayName: dom.identityDisplayName.value.trim() || state.identity.displayName,
-            role: 'user',
-        };
-        saveIdentity(state.identity);
-        setStatus(`Identity updated to ${state.identity.displayName}.`, 'success');
-        await loadBootstrap();
-        await loadPlayerData();
-        renderAll();
-    });
-
     dom.nav.addEventListener('click', (event) => {
         const button = event.target.closest('[data-panel]');
         if (!button) return;
@@ -599,6 +622,33 @@ function bindEvents() {
                 pushConsole('system', error.message, 'error');
                 renderAll();
             }
+            return;
+        }
+        const signInButton = event.target.closest('[data-action="sign-in"]');
+        if (signInButton) {
+            startSignIn();
+            return;
+        }
+        const signOutButton = event.target.closest('[data-action="sign-out"]');
+        if (signOutButton) {
+            startSignOut();
+            return;
+        }
+        const refreshAuthButton = event.target.closest('[data-action="refresh-auth"]');
+        if (refreshAuthButton) {
+            try {
+                await refreshAuth();
+                renderAll();
+                setStatus(isAuthenticated() ? 'OpenVibe session refreshed.' : 'No active OpenVibe session found.', isAuthenticated() ? 'success' : 'warn');
+            } catch (error) {
+                setStatus(error.message, 'error');
+                pushConsole('system', error.message, 'error');
+            }
+            return;
+        }
+        const openAccountButton = event.target.closest('[data-action="open-account"]');
+        if (openAccountButton) {
+            window.location.assign(resolveSurfaceUrl('my'));
             return;
         }
         const activateGamemodeButton = event.target.closest('[data-action="activate-gamemode"]');
@@ -675,9 +725,13 @@ function bindEvents() {
 
 async function init() {
     setStatus('Booting SourceVibe engine shell…');
+    await initializeOpenVibeAuth();
+    state.auth = getAuthState();
+    state.identity = currentIdentity();
     await loadBootstrap();
-    await loadPlayerData();
-    pushConsole('system', 'SourceVibe Engine ready. `window.SV` is available for scripts.', 'info');
+    pushConsole('system', isAuthenticated()
+        ? 'SourceVibe Engine ready. `window.SV` is available and your OpenVibe session is attached.'
+        : 'SourceVibe Engine ready. Sign in with OpenVibe to launch shards and create session-backed test servers.', 'info');
     bindEvents();
     renderAll();
     setStatus('SourceVibe engine shell online.', 'success');

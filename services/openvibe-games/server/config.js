@@ -49,8 +49,14 @@ module.exports = {
         url: resolvePublicOrigin({ surface: 'community' }),
     },
 
+    my: {
+        url: resolvePublicOrigin({ surface: 'my' }),
+    },
+
     auth: {
         issuer: resolveAuthIssuer(),
+        url: resolvePublicOrigin({ surface: 'auth' }),
+        publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
         cookieNames: ['openvibe_token', 'hobo_token', 'token'],
     },

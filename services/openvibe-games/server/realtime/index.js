@@ -15,6 +15,7 @@ const { NPC_TEMPLATES } = require('./catalog/npc-templates');
 const { SKILL_KEYS } = require('./catalog/skills');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
 const modRegistry = require('../mods/registry');
+const { buildAuthClient } = require('../middleware');
 const { buildRuntimeCatalog } = require('./engine/content-registry');
 const { buildPublicScriptingSummary } = require('./engine/mod-script-runtime');
 
@@ -24,6 +25,30 @@ function clone(value) {
 
 function isObject(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseCookieHeader(value) {
+    return String(value || '')
+        .split(';')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .reduce((acc, entry) => {
+            const pivot = entry.indexOf('=');
+            if (pivot === -1) return acc;
+            const key = entry.slice(0, pivot).trim();
+            const nextValue = entry.slice(pivot + 1).trim();
+            if (key) acc[key] = decodeURIComponent(nextValue);
+            return acc;
+        }, {});
+}
+
+function socketToken(socket) {
+    const auth = socket.handshake && socket.handshake.auth || {};
+    const headers = socket.handshake && socket.handshake.headers || {};
+    const query = socket.handshake && socket.handshake.query || {};
+    const cookies = parseCookieHeader(headers.cookie);
+    const raw = auth.token || headers.authorization || query.token || cookies.openvibe_token || cookies.hobo_token || cookies.token || '';
+    return String(raw || '').trim().replace(/^Bearer\s+/i, '');
 }
 
 function resolveWorldDefinition(world, fallback = STARTER_WORLD) {
@@ -51,9 +76,25 @@ function resolveWorldDefinition(world, fallback = STARTER_WORLD) {
     });
 }
 
-function actorFromSocket(socket) {
+function actorFromSocket(socket, authClient) {
     const auth = socket.handshake && socket.handshake.auth || {};
     const headers = socket.handshake && socket.handshake.headers || {};
+    const token = socketToken(socket);
+    if (authClient && token) {
+        const user = authClient.verifyToken(token);
+        if (user) {
+            const actorType = user.actor_type === 'anon' || user.anonymous === true ? 'anonymous' : 'user';
+            const actorId = user.sub || user.id || null;
+            if (actorId) {
+                return {
+                    type: actorType,
+                    id: String(actorId),
+                    display_name: user.display_name || user.username || `Player ${actorId}`,
+                    role: user.role || (actorType === 'anonymous' ? 'anonymous' : 'user'),
+                };
+            }
+        }
+    }
     const userId = auth.userId || auth.user_id || headers['x-openvibe-user-id'] || null;
     if (userId) {
         return {
@@ -136,13 +177,14 @@ function buildCatalog(world, worldDefinition = STARTER_WORLD) {
     return nextCatalog;
 }
 
-function createRealtimeRuntime({ httpServer, eventBus, config }) {
+function createRealtimeRuntime({ httpServer, eventBus, config, authClient }) {
     const io = new Server(httpServer, {
         path: '/games/realtime',
         cors: { origin: true, credentials: true },
         transports: ['websocket', 'polling'],
         allowUpgrades: true,
     });
+    const socketAuthClient = authClient || buildAuthClient(config);
 
     const publish = (eventType, payload) => {
         if (eventBus && typeof eventBus.publishGameEvent === 'function') {
@@ -237,7 +279,7 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
     }
 
     io.on('connection', (socket) => {
-        socket.data.actor = actorFromSocket(socket);
+        socket.data.actor = actorFromSocket(socket, socketAuthClient);
         socket.emit('status', {
             ok: true,
             actor: socket.data.actor,
@@ -256,10 +298,24 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
                 }
                 socket.data.roomKey = roomKey(world.id, roomType);
                 socket.join(socket.data.roomKey);
+                const actor = socket.data.actor || {};
+                const authenticatedActor = actor && actor.id && actor.type !== 'guest';
+                const resolvedUserId = String(
+                    (authenticatedActor && actor.id)
+                    || (payload && payload.userId)
+                    || actor.id
+                    || `guest:${socket.id.slice(0, 8)}`
+                );
+                const resolvedDisplayName = String(
+                    (authenticatedActor && actor.display_name)
+                    || (payload && payload.displayName)
+                    || actor.display_name
+                    || `Player ${resolvedUserId}`
+                );
                 const snapshot = room.join({
                     socketId: socket.id,
-                    userId: payload && payload.userId || socket.data.actor.id,
-                    displayName: payload && payload.displayName || socket.data.actor.display_name,
+                    userId: resolvedUserId,
+                    displayName: resolvedDisplayName,
                     zoneId: payload && payload.zone_id || 'outpost',
                 });
                 socket.emit('world:joined', snapshot);

@@ -14,12 +14,13 @@
             <section id="welcome-root" class="hero-card overlay-card welcome-card">
                 <h1>2D World</h1>
                 <p>The flagship <strong>SourceVibe Engine</strong> gamemode for survival, crafting, travel, mods, and fullscreen play.</p>
-                <div class="field-row">
-                    <input id="user-id" placeholder="User ID" />
-                    <input id="display-name" placeholder="Display name" />
-                </div>
+                <div id="welcome-session-summary" class="session-summary">Checking OpenVibe session…</div>
+                <div id="welcome-session-meta" class="session-meta">2D World now launches from your OpenVibe account/session instead of a local editable identity form.</div>
                 <div class="button-row">
                     <button id="connect-btn" class="primary">Enter world</button>
+                    <button id="sign-in-btn" class="secondary">Sign in</button>
+                    <button id="sign-out-btn" class="secondary hidden">Sign out</button>
+                    <button id="account-btn" class="secondary">Account</button>
                     <a href="/sourcevibe" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Launcher</a>
                     <a href="./editor/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Editor</a>
                     <a href="./status/" class="secondary" style="display:grid;place-items:center;text-decoration:none;padding:0.72rem 0.85rem;border-radius:12px;border:1px solid rgba(255,255,255,0.12);color:inherit;">Status</a>

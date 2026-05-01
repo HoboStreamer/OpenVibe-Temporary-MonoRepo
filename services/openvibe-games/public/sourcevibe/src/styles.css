@@ -92,11 +92,10 @@ h1 {
 
 .identity-card {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
     gap: 0.85rem;
     padding: 1rem;
     border-radius: 16px;
-    align-items: end;
+    align-items: start;
 }
 
 .identity-card label {
@@ -104,6 +103,60 @@ h1 {
     gap: 0.4rem;
     color: var(--muted);
     font-size: 0.88rem;
+}
+
+.identity-card__summary {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.identity-card__summary strong {
+    font-size: 1.1rem;
+}
+
+.identity-card__meta,
+.identity-card__hint {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.identity-card__actions,
+.account-dock {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.identity-card__actions .table-button,
+.identity-card__actions .cta-button,
+.account-dock .table-button,
+.account-dock .cta-button {
+    width: auto;
+}
+
+.account-dock {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.account-dock__header {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.account-dock__meta {
+    color: var(--muted);
+    font-size: 0.84rem;
+}
+
+.account-dock__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.account-dock__chips .chip {
+    font-size: 0.78rem;
 }
 
 .identity-card input,

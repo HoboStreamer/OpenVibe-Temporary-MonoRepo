@@ -12,19 +12,9 @@
             <div>
                 <p class="eyebrow">OpenVibe Games Platform</p>
                 <h1>SourceVibe Engine</h1>
-                <p class="subtitle">A real engine shell for gamemodes, addons, console commands, options, server browsing, and inventory hotbar flow.</p>
+                <p class="subtitle">A real engine shell for gamemodes, console commands, options, session-aware server browsing, and clean boundaries between the engine and the 2D World gamemode.</p>
             </div>
-            <form id="identity-form" class="identity-card">
-                <label>
-                    <span>User ID</span>
-                    <input id="identity-user-id" name="userId" autocomplete="off" />
-                </label>
-                <label>
-                    <span>Display name</span>
-                    <input id="identity-display-name" name="displayName" autocomplete="off" />
-                </label>
-                <button type="submit">Apply identity</button>
-            </form>
+            <aside id="session-card" class="identity-card"></aside>
         </header>
 
         <main class="workspace">
@@ -34,7 +24,6 @@
                 <button data-panel="gamemodes" class="nav-button">Gamemodes</button>
                 <button data-panel="console" class="nav-button">Console</button>
                 <button data-panel="options" class="nav-button">Options</button>
-                <button data-panel="inventory" class="nav-button">Inventory</button>
             </nav>
 
             <section class="viewport">
@@ -44,7 +33,6 @@
                 <section id="panel-gamemodes" class="panel-frame hidden"></section>
                 <section id="panel-console" class="panel-frame hidden"></section>
                 <section id="panel-options" class="panel-frame hidden"></section>
-                <section id="panel-inventory" class="panel-frame hidden"></section>
             </section>
 
             <aside class="dock">
@@ -53,8 +41,8 @@
                     <div id="quick-launch"></div>
                 </section>
                 <section class="dock-card">
-                    <h2>Hotbar</h2>
-                    <div id="hotbar-grid" class="hotbar-grid"></div>
+                    <h2>Session</h2>
+                    <div id="account-dock"></div>
                 </section>
                 <section class="dock-card">
                     <h2>Engine stats</h2>

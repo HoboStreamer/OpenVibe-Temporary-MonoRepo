@@ -1,7 +1,8 @@
 export class RealtimeClient {
-    constructor({ path, identity }) {
+    constructor({ path, identity, token = '' }) {
         this.path = path;
-        this.identity = identity;
+        this.identity = identity || null;
+        this.token = String(token || '');
         this.socket = null;
         this.handlers = new Map();
     }
@@ -15,6 +16,25 @@ export class RealtimeClient {
         for (const handler of this.handlers.get(eventName) || []) handler(payload);
     }
 
+    setAuth({ identity, token } = {}) {
+        if (identity) this.identity = identity;
+        if (token !== undefined) this.token = String(token || '');
+        if (this.socket) this.socket.auth = this._socketAuthPayload();
+        return this;
+    }
+
+    _socketAuthPayload() {
+        if (this.token) return { token: this.token };
+        if (this.identity && this.identity.userId) {
+            return {
+                userId: this.identity.userId,
+                displayName: this.identity.displayName,
+                role: this.identity.role || 'user',
+            };
+        }
+        return {};
+    }
+
     connect() {
         if (this.socket) return this.socket;
         if (typeof window.io !== 'function') {
@@ -23,11 +43,7 @@ export class RealtimeClient {
         this.socket = window.io({
             path: this.path,
             transports: ['websocket', 'polling'],
-            auth: {
-                userId: this.identity.userId,
-                displayName: this.identity.displayName,
-                role: this.identity.role || 'user',
-            },
+            auth: this._socketAuthPayload(),
         });
         for (const eventName of ['connect', 'disconnect', 'snapshot', 'chat:message', 'world:joined', 'status', 'editor:snapshot', 'editor:saved']) {
             this.socket.on(eventName, (payload) => this._emitLocal(eventName, payload));
