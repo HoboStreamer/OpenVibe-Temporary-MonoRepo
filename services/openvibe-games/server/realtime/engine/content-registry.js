@@ -76,14 +76,27 @@ const BASE_RESOURCE_TYPES = Object.freeze([
 ]);
 
 const BASE_STRUCTURE_TYPES = Object.freeze([
-    { id: 'wall', name: 'Wall', size: 48, render: { shape: 'wall', color: 0x786452, accent: 0x0f0f0f } },
-    { id: 'door', name: 'Door', size: 48, render: { shape: 'door', color: 0xb5651d, accent: 0xf0c85a } },
+    { id: 'wall', name: 'Wall', size: 48, blocks_movement: true, render: { shape: 'wall', color: 0x786452, accent: 0x0f0f0f } },
+    { id: 'wall_half', name: 'Half Wall', size: 40, blocks_movement: true, render: { shape: 'wall_half', color: 0x786452, accent: 0x0f0f0f } },
+    { id: 'door', name: 'Door', size: 48, blocks_movement: true, interaction: { type: 'door', radius: 72, prompt: 'toggle door', title: 'Door' }, render: { shape: 'door', color: 0xb5651d, accent: 0xf0c85a } },
+    { id: 'forcefield', name: 'Forcefield Gate', size: 56, blocks_movement: true, interaction: { type: 'door', radius: 80, prompt: 'toggle gate', title: 'Forcefield Gate' }, render: { shape: 'forcefield', color: 0x59d8ff, accent: 0xdff8ff } },
     { id: 'bed', name: 'Bed', size: 52, render: { shape: 'bed', color: 0x6f4e7c, accent: 0xe7d6ff } },
-    { id: 'chest', name: 'Chest', size: 46, render: { shape: 'chest', color: 0x8b5a2b, accent: 0xe5c07b } },
+    { id: 'chest', name: 'Chest', size: 46, blocks_movement: true, interaction: { type: 'container', radius: 72, prompt: 'open chest', title: 'Chest' }, render: { shape: 'chest', color: 0x8b5a2b, accent: 0xe5c07b } },
+    { id: 'text_sign', name: 'Text Sign', size: 36, blocks_movement: false, interaction: { type: 'sign', radius: 96, prompt: 'read sign', title: 'Sign' }, render: { shape: 'sign', color: 0x8b5a2b, accent: 0xf6e0a8 } },
+    { id: 'tool_cupboard', name: 'Tool Cupboard', size: 54, blocks_movement: true, interaction: { type: 'container', radius: 80, prompt: 'open cupboard', title: 'Tool Cupboard' }, build_privilege: { radius: 600 }, render: { shape: 'tool_cupboard', color: 0x67523e, accent: 0xe8ddb0 } },
     { id: 'workbench', name: 'Workbench', size: 52, render: { shape: 'workbench', color: 0x6d4c41, accent: 0xcaa472 } },
     { id: 'furnace', name: 'Furnace', size: 54, render: { shape: 'furnace', color: 0x5d6d7e, accent: 0xf0c85a } },
     { id: 'farm_plot', name: 'Farm Plot', size: 56, render: { shape: 'farm_plot', color: 0x6b4f2d, accent: 0x8bc34a } },
     { id: 'campfire', name: 'Campfire', size: 42, render: { shape: 'campfire', color: 0x7a4a1f, accent: 0xffd166 } },
+    { id: 'barbed_wire', name: 'Barbed Wire', size: 80, blocks_movement: true, render: { shape: 'barbed_wire', color: 0x95a5a6, accent: 0xe8edf8 } },
+]);
+
+const BASE_RUNTIME_ENTITY_TYPES = Object.freeze([
+    { kind: 'pickup', name: 'Legacy Pickup', blocks_movement: false, interaction: { type: 'pickup', radius: 58, prompt: 'pick up', title: 'Pickup' }, render: { shape: 'pickup' } },
+    { kind: 'vehicle_car1', name: 'Car', blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect car', title: 'Car' }, render: { shape: 'vehicle', color: 0x6c717c, accent: 0xcfd8e3 } },
+    { kind: 'vehicle_car_police', name: 'Patrol Car', blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect cruiser', title: 'Patrol Car' }, render: { shape: 'vehicle', color: 0x203a64, accent: 0xf1f5ff, lightColor: 0xff5b5b } },
+    { kind: 'weed_plant', name: 'Weed Plant', blocks_movement: false, interaction: { type: 'inspect', radius: 72, prompt: 'inspect plant', title: 'Weed Plant' }, render: { shape: 'weed_plant', color: 0x5aa95a, accent: 0xc8ff90 } },
+    { kind: 'meth_lab', name: 'Meth Lab', blocks_movement: true, interaction: { type: 'inspect', radius: 84, prompt: 'inspect lab', title: 'Meth Lab' }, render: { shape: 'lab', color: 0x56606d, accent: 0x8fd3ff } },
 ]);
 
 function clone(value) {
@@ -295,12 +308,17 @@ function defaultNpcRender(template) {
 function defaultStructureRender(id) {
     const kind = String(id || '');
     if (kind.includes('door')) return { shape: 'door', color: 0xb5651d, accent: 0xf0c85a };
+    if (kind.includes('forcefield')) return { shape: 'forcefield', color: 0x59d8ff, accent: 0xdff8ff };
     if (kind.includes('bed')) return { shape: 'bed', color: 0x6f4e7c, accent: 0xe7d6ff };
     if (kind.includes('furnace')) return { shape: 'furnace', color: 0x5d6d7e, accent: 0xf0c85a };
     if (kind.includes('campfire')) return { shape: 'campfire', color: 0x7a4a1f, accent: 0xffd166 };
     if (kind.includes('farm')) return { shape: 'farm_plot', color: 0x6b4f2d, accent: 0x8bc34a };
+    if (kind.includes('cupboard')) return { shape: 'tool_cupboard', color: 0x67523e, accent: 0xe8ddb0 };
+    if (kind.includes('sign')) return { shape: 'sign', color: 0x8b5a2b, accent: 0xf6e0a8 };
+    if (kind.includes('barbed')) return { shape: 'barbed_wire', color: 0x95a5a6, accent: 0xe8edf8 };
     if (kind.includes('chest')) return { shape: 'chest', color: 0x8b5a2b, accent: 0xe5c07b };
     if (kind.includes('workbench')) return { shape: 'workbench', color: 0x6d4c41, accent: 0xcaa472 };
+    if (kind.includes('half')) return { shape: 'wall_half', color: 0x786452, accent: 0x0f0f0f };
     if (kind.includes('wall')) return { shape: 'wall', color: 0x786452, accent: 0x0f0f0f };
     return { shape: 'block', color: 0x786452, accent: 0x0f0f0f };
 }
@@ -315,7 +333,28 @@ function buildStructureDefinitions(structures) {
             id,
             name: structure.name || humanizeId(id),
             size: Number(structure.size) || 48,
+            interaction: structure.interaction ? clone(structure.interaction) : null,
+            build_privilege: structure.build_privilege ? clone(structure.build_privilege) : null,
+            blocks_movement: structure.blocks_movement !== false,
             render: Object.assign({}, defaultStructureRender(id), classicTheme && classicTheme[id] || {}, render),
+        };
+    }
+    return definitions;
+}
+
+function buildRuntimeEntityDefinitions(entityTypes, structureDefinitions) {
+    const definitions = {};
+    for (const entityType of entityTypes || []) {
+        const kind = String(entityType.kind || entityType.id || 'entity');
+        const structureFallback = structureDefinitions[kind] || null;
+        const render = isObject(entityType.render) ? clone(entityType.render) : {};
+        definitions[kind] = {
+            kind,
+            name: entityType.name || structureFallback && structureFallback.name || humanizeId(kind),
+            interaction: entityType.interaction ? clone(entityType.interaction) : structureFallback && structureFallback.interaction ? clone(structureFallback.interaction) : null,
+            build_privilege: entityType.build_privilege ? clone(entityType.build_privilege) : structureFallback && structureFallback.build_privilege ? clone(structureFallback.build_privilege) : null,
+            blocks_movement: entityType.blocks_movement != null ? entityType.blocks_movement !== false : structureFallback ? structureFallback.blocks_movement !== false : true,
+            render: Object.assign({}, structureFallback && structureFallback.render || {}, render),
         };
     }
     return definitions;
@@ -391,6 +430,7 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
     let npcTemplates = clone(NPC_TEMPLATES);
     let resourceTypes = clone(BASE_RESOURCE_TYPES);
     let structureTypes = clone(BASE_STRUCTURE_TYPES);
+    let runtimeEntityTypes = clone(BASE_RUNTIME_ENTITY_TYPES);
     let zones = clone(sourceWorldDefinition.zones || []);
     let travel = clone(sourceWorldDefinition.travel || []);
     let worldResources = clone(sourceWorldDefinition.resources || []);
@@ -419,6 +459,10 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
         npcTemplates = mergeRecords(npcTemplates, npcSplit.templates, 'id');
         resourceTypes = mergeRecords(resourceTypes, resourceSplit.definitions, 'kind');
         structureTypes = mergeRecords(structureTypes, asArray(content.structures), 'id');
+        runtimeEntityTypes = mergeRecords(runtimeEntityTypes, [
+            ...asArray(content.runtime_entities),
+            ...asArray(content.entities),
+        ], 'kind');
         zones = mergeRecords(zones, asArray(content.zones), 'zone_id');
         travel = mergeTravel(travel, asArray(content.travel));
         worldResources = mergeSpawns(worldResources, [
@@ -446,6 +490,7 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
     }
 
     const structureDefinitions = buildStructureDefinitions(structureTypes, useClassicTheme ? CLASSIC_STRUCTURE_RENDER : null);
+    const runtimeEntityDefinitions = buildRuntimeEntityDefinitions(runtimeEntityTypes, structureDefinitions);
     const itemDefinitions = buildItemDefinitions(items, structureDefinitions, useClassicTheme ? CLASSIC_ITEM_RENDER : null);
     const npcDefinitions = buildNpcDefinitions(npcTemplates, useClassicTheme ? CLASSIC_NPC_RENDER : null);
     const resourceDefinitions = buildResourceDefinitions(resourceTypes, useClassicTheme ? CLASSIC_RESOURCE_RENDER : null);
@@ -479,11 +524,13 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
             npcs: npcDefinitions,
             resources: resourceDefinitions,
             structures: structureDefinitions,
+            runtime_entities: runtimeEntityDefinitions,
             render_profiles: {
                 items: Object.fromEntries(Object.entries(itemDefinitions).map(([key, entry]) => [key, clone(entry.render || {})])),
                 npcs: Object.fromEntries(Object.entries(npcDefinitions).map(([key, entry]) => [key, clone(entry.render || {})])),
                 resources: Object.fromEntries(Object.entries(resourceDefinitions).map(([key, entry]) => [key, clone(entry.render || {})])),
                 structures: Object.fromEntries(Object.entries(structureDefinitions).map(([key, entry]) => [key, clone(entry.render || {})])),
+                runtime_entities: Object.fromEntries(Object.entries(runtimeEntityDefinitions).map(([key, entry]) => [key, clone(entry.render || {})])),
             },
         },
         engine: {
@@ -497,6 +544,7 @@ function buildRuntimeCatalog({ world, worldDefinition, mods = [] }) {
 module.exports = {
     BASE_RESOURCE_TYPES,
     BASE_STRUCTURE_TYPES,
+    BASE_RUNTIME_ENTITY_TYPES,
     HOOK_SURFACES,
     buildRuntimeCatalog,
 };

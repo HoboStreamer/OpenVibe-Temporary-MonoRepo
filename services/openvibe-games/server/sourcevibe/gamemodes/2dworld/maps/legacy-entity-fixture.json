@@ -1,0 +1,211 @@
+[
+  {
+    "class": "wall1",
+    "Owner": "legacy_demo_base",
+    "pos": [5520, 4160],
+    "bbox": [0, 0, 120, 40],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Container": []
+  },
+  {
+    "class": "wall1",
+    "Owner": "legacy_demo_base",
+    "pos": [5640, 4160],
+    "bbox": [0, 0, 120, 40],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Container": []
+  },
+  {
+    "class": "wall1-half",
+    "Owner": "legacy_demo_base",
+    "pos": [5580, 4108],
+    "bbox": [0, 0, 88, 28],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Container": []
+  },
+  {
+    "class": "forcefield",
+    "Owner": "legacy_demo_base",
+    "pos": [5580, 4220],
+    "bbox": [0, 0, 120, 40],
+    "rotate": 1.5707963267948966,
+    "parts": [],
+    "interpDir": 0,
+    "Opened": 0,
+    "AutoClose": 0,
+    "Container": []
+  },
+  {
+    "class": "tool_cupboard",
+    "Owner": "legacy_demo_base",
+    "pos": [5700, 4300],
+    "bbox": [27, 29, 16, 50],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "BuildRadius": 600,
+    "BuildOrigin": [-32, -140],
+    "Container": [
+      { "item": "logs", "am": 40 },
+      { "item": "ore_tin", "am": 10 }
+    ]
+  },
+  {
+    "class": "chest",
+    "Owner": "legacy_demo_base",
+    "pos": [5510, 4304],
+    "bbox": [23, 23, 21, 45],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Container": [
+      { "item": "logs", "am": 18 },
+      { "item": "ore_iron", "am": 6 },
+      { "item": "berries", "am": 14 },
+      { "item": "hammer", "am": 1 }
+    ]
+  },
+  {
+    "class": "text_sign",
+    "Owner": "legacy_demo_base",
+    "pos": [5444, 4088],
+    "bbox": [0, 0, 0, 0],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "SignText": "legacy yard ahead · mind the cupboard radius",
+    "Container": []
+  },
+  {
+    "class": "bed",
+    "Owner": "legacy_demo_base",
+    "pos": [5468, 4344],
+    "bbox": [0, 0, 70, 42],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Container": []
+  },
+  {
+    "class": "vehicle_car1",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5820, 4360],
+    "bbox": [3, 3, 184, 77],
+    "rotate": 0.14,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 1
+  },
+  {
+    "class": "vehicle_car_police",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5930, 4400],
+    "bbox": [3, 3, 184, 77],
+    "rotate": -0.08,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 1
+  },
+  {
+    "class": "logs",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5472, 4120],
+    "bbox": [1, 1, 42, 39],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 9
+  },
+  {
+    "class": "hammer",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5498, 4124],
+    "bbox": [3, 10, 22, 44],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 1
+  },
+  {
+    "class": "pickaxe",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5522, 4126],
+    "bbox": [3, 10, 22, 44],
+    "rotate": 0.04,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 1
+  },
+  {
+    "class": "hatchet",
+    "PlacedBy": "legacy_demo_base",
+    "pos": [5550, 4128],
+    "bbox": [0, 0, 20, 48],
+    "rotate": -0.08,
+    "parts": [],
+    "interpDir": 0,
+    "itemAm": 1
+  },
+  {
+    "class": "tree_oak",
+    "Owner": "legacy_demo_base",
+    "pos": [6010, 3920],
+    "bbox": [0, 0, 92, 130],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0
+  },
+  {
+    "class": "ore_tin",
+    "Owner": "legacy_demo_base",
+    "pos": [6100, 4010],
+    "bbox": [0, 0, 56, 42],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0
+  },
+  {
+    "class": "bush",
+    "Owner": "legacy_demo_base",
+    "pos": [5988, 4160],
+    "bbox": [0, 0, 52, 34],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0
+  },
+  {
+    "class": "weed_plant",
+    "Owner": "legacy_demo_base",
+    "pos": [5736, 4384],
+    "bbox": [0, 0, 28, 54],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0,
+    "Grown": true,
+    "IsGrowing": false
+  },
+  {
+    "class": "barbed_wire",
+    "Owner": "legacy_demo_base",
+    "pos": [5662, 4206],
+    "bbox": [0, 0, 120, 20],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0
+  },
+  {
+    "class": "meth_lab_pro",
+    "Owner": "legacy_demo_base",
+    "pos": [5860, 4260],
+    "bbox": [0, 0, 80, 72],
+    "rotate": 0,
+    "parts": [],
+    "interpDir": 0
+  }
+]

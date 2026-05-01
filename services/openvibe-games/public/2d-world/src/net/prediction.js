@@ -34,15 +34,7 @@ function heldItemFromHotbar(state) {
 
 function defaultHeldItem(state) {
     const hotbarHeld = heldItemFromHotbar(state);
-    if (hotbarHeld) return hotbarHeld;
-    const equipment = state && state.equipment || {};
-    switch (Number(state && state.quick_slot) || 1) {
-    case 2: return equipment.axe || state.equip_axe || equipment.weapon || state.equip_weapon || 'hands';
-    case 3: return equipment.pickaxe || state.equip_pickaxe || equipment.weapon || state.equip_weapon || 'hands';
-    case 4: return equipment.rod || state.equip_rod || equipment.weapon || state.equip_weapon || 'hands';
-    case 5: return 'hammer';
-    default: return state && state.held_item || equipment.weapon || state.equip_weapon || equipment.axe || state.equip_axe || equipment.pickaxe || state.equip_pickaxe || 'hands';
-    }
+    return hotbarHeld || 'hands';
 }
 
 function movementVector(keys) {
@@ -91,7 +83,7 @@ export function applyPredictedInput(state, input, dtMs, bounds = { x: 0, y: 0, w
 
     if (input.action === 'attack') {
         state.attack_anim_until = now + 240;
-        state.held_item = heldItemFromHotbar(state) || state.equipment && state.equipment.weapon || state.equip_weapon || defaultHeldItem(state);
+        state.held_item = heldItemFromHotbar(state) || defaultHeldItem(state);
         state.hold_until = now + 420;
     } else if (input.action === 'build') {
         state.held_item = 'hammer';

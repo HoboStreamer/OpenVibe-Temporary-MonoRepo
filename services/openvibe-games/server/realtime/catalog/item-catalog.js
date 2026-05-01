@@ -46,9 +46,12 @@ const ITEMS = Object.freeze([
 
     // buildables
     { item_id: 'build_wall', name: 'Wall Kit', category: 'build', max_stack: 99 },
+    { item_id: 'build_half_wall', name: 'Half Wall Kit', category: 'build', max_stack: 99, metadata: { structure_kind: 'wall_half', icon: '🧱' } },
     { item_id: 'build_door', name: 'Door Kit', category: 'build', max_stack: 99 },
     { item_id: 'build_bed', name: 'Bed Kit', category: 'build', max_stack: 4 },
     { item_id: 'build_chest', name: 'Chest Kit', category: 'build', max_stack: 99 },
+    { item_id: 'build_tool_cupboard', name: 'Tool Cupboard Kit', category: 'build', max_stack: 32, metadata: { icon: '🗄' } },
+    { item_id: 'build_sign', name: 'Sign Kit', category: 'build', max_stack: 64, metadata: { structure_kind: 'text_sign', icon: '🪧' } },
     { item_id: 'build_workbench', name: 'Workbench Kit', category: 'build', max_stack: 8 },
     { item_id: 'build_furnace', name: 'Furnace Kit', category: 'build', max_stack: 8 },
     { item_id: 'build_farm_plot', name: 'Farm Plot', category: 'build', max_stack: 16 },

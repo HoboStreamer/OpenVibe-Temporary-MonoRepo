@@ -86,6 +86,12 @@ function resolveStructureDefinition(catalog, structure) {
     return catalog && catalog.structures && structure && structure.kind && catalog.structures[structure.kind] || null;
 }
 
+function resolveRuntimeEntityDefinition(catalog, entity) {
+    return catalog && catalog.runtime_entities && entity && entity.kind && catalog.runtime_entities[entity.kind]
+        || catalog && catalog.structures && entity && entity.kind && catalog.structures[entity.kind]
+        || null;
+}
+
 function paletteFor(actor, self = false, catalog = null) {
     const fallback = self
         ? { tunic: 0x2c4d7a, trim: 0x7de3ff, skin: 0xf3d8b6, leg: 0x1d2334, accent: 0x9cf5ff }
@@ -604,22 +610,44 @@ function drawStructure(structure, catalog = null) {
     const g = new PIXI.Container();
     const art = new PIXI.Graphics();
     const size = structure.size || 48;
+    const state = structure.data || {};
+    const opened = !!state.opened;
     const color = parseColor(render.color, structure.kind && String(structure.kind).includes('door') ? 0xb5651d : 0x786452);
     const accent = parseColor(render.accent, 0x0f0f0f);
     switch (String(render.shape || structure.kind || 'block')) {
     case 'wall':
         art.roundRect(-size / 2, -size * 0.26, size, size * 0.52, 6).fill({ color, alpha: 0.94 }).stroke({ color: accent, width: 2, alpha: 0.28 });
         break;
+    case 'wall_half':
+        art.roundRect(-size / 2, -size * 0.18, size, size * 0.34, 6).fill({ color, alpha: 0.94 }).stroke({ color: accent, width: 2, alpha: 0.28 });
+        break;
     case 'door':
-        art.roundRect(-size / 2, -size / 2, size, size, 8).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+        art.roundRect(-size / 2, -size / 2, size, size, 8).fill({ color, alpha: opened ? 0.24 : 0.95 }).stroke({ color: accent, width: 2, alpha: opened ? 0.5 : 0.3 });
         art.circle(size / 4, 0, 2.4).fill(parseColor(render.accent, 0xf0c85a));
         break;
+    case 'forcefield': {
+        const fieldAlpha = opened ? 0.12 : 0.48;
+        art.roundRect(-size / 2, -size / 2, size, size, 10).stroke({ color, width: 2, alpha: 0.82 });
+        for (let x = -size * 0.35; x <= size * 0.35; x += size * 0.18) {
+            art.moveTo(x, -size * 0.42).lineTo(x, size * 0.42).stroke({ color, width: 2, alpha: fieldAlpha });
+        }
+        art.roundRect(-size / 2, -size / 2, size, size, 10).fill({ color: parseColor(render.accent, 0xdff8ff), alpha: fieldAlpha * 0.25 });
+        break;
+    }
     case 'bed':
         art.roundRect(-size / 2, -size * 0.24, size, size * 0.5, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.25 });
         break;
     case 'chest':
         art.roundRect(-size / 2, -size * 0.28, size, size * 0.56, 6).fill({ color, alpha: 0.96 }).stroke({ color: accent, width: 2, alpha: 0.3 });
         art.circle(0, 0, 2.2).fill(0xf7e3a0);
+        break;
+    case 'sign':
+        art.roundRect(-size * 0.08, -size * 0.08, size * 0.16, size * 0.62, 4).fill({ color: 0x6b4f38, alpha: 0.96 });
+        art.roundRect(-size * 0.36, -size * 0.5, size * 0.72, size * 0.34, 6).fill({ color, alpha: 0.96 }).stroke({ color: accent, width: 2, alpha: 0.25 });
+        break;
+    case 'tool_cupboard':
+        art.roundRect(-size * 0.34, -size * 0.48, size * 0.68, size * 0.82, 6).fill({ color, alpha: 0.96 }).stroke({ color: accent, width: 2, alpha: 0.28 });
+        art.roundRect(-size * 0.24, -size * 0.12, size * 0.48, size * 0.14, 4).fill({ color: parseColor(render.accent, 0xe8ddb0), alpha: 0.7 });
         break;
     case 'workbench':
         art.roundRect(-size / 2, -size * 0.14, size, size * 0.18, 4).fill({ color, alpha: 0.96 });
@@ -636,6 +664,13 @@ function drawStructure(structure, catalog = null) {
         art.moveTo(-size * 0.22, -size * 0.16).lineTo(size * 0.22, size * 0.16).stroke({ color, width: 6, alpha: 0.88, cap: 'round' });
         art.poly([[0, -size * 0.28], [size * 0.14, 0], [0, size * 0.16], [-size * 0.14, 0]]).fill({ color: parseColor(render.accent, 0xffd166), alpha: 0.92 });
         break;
+    case 'barbed_wire':
+        art.moveTo(-size * 0.46, 0).lineTo(size * 0.46, 0).stroke({ color, width: 3, alpha: 0.8 });
+        for (let x = -size * 0.38; x <= size * 0.38; x += size * 0.2) {
+            art.moveTo(x - 4, -6).lineTo(x + 4, 6).stroke({ color: accent, width: 1.5, alpha: 0.9 });
+            art.moveTo(x - 4, 6).lineTo(x + 4, -6).stroke({ color: accent, width: 1.5, alpha: 0.9 });
+        }
+        break;
     default:
         art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
         break;
@@ -643,6 +678,64 @@ function drawStructure(structure, catalog = null) {
     g.addChild(art);
     g.position.set(structure.x, structure.y);
     return g;
+}
+
+function drawRuntimeEntity(entity, catalog = null) {
+    const definition = resolveRuntimeEntityDefinition(catalog, entity) || {};
+    const render = definition.render || {};
+    const state = entity.metadata || {};
+    if (render.sprite) return drawSpriteEntity(entity, render);
+    if (String(render.shape || entity.kind || '') === 'pickup' || entity.kind === 'pickup') {
+        return drawLoot({
+            x: entity.x,
+            y: entity.y,
+            item_id: state.item_id || 'coins',
+            quantity: Math.max(1, Number(state.quantity || 1)),
+        }, catalog);
+    }
+    if (String(render.shape || entity.kind || '') === 'vehicle') {
+        const container = new PIXI.Container();
+        const art = new PIXI.Graphics();
+        const size = Number(state.size || definition.size || 68);
+        art.roundRect(-size * 0.46, -size * 0.18, size * 0.92, size * 0.36, 10).fill({ color: parseColor(render.color, 0x6c717c), alpha: 0.96 }).stroke({ color: parseColor(render.accent, 0xcfd8e3), width: 2, alpha: 0.28 });
+        art.roundRect(-size * 0.18, -size * 0.34, size * 0.42, size * 0.22, 8).fill({ color: parseColor(render.accent, 0xcfd8e3), alpha: 0.8 });
+        art.circle(-size * 0.26, size * 0.22, size * 0.11).fill(0x1b1b1b);
+        art.circle(size * 0.26, size * 0.22, size * 0.11).fill(0x1b1b1b);
+        if (render.lightColor) art.roundRect(-size * 0.1, -size * 0.42, size * 0.2, size * 0.07, 4).fill({ color: parseColor(render.lightColor, 0xff5b5b), alpha: 0.9 });
+        container.addChild(art);
+        container.position.set(entity.x, entity.y);
+        return container;
+    }
+    if (String(render.shape || entity.kind || '') === 'weed_plant') {
+        const container = new PIXI.Container();
+        const art = new PIXI.Graphics();
+        const color = parseColor(render.color, 0x5aa95a);
+        const accent = parseColor(render.accent, 0xc8ff90);
+        art.moveTo(0, 8).lineTo(-10, -18).stroke({ color, width: 4, alpha: 0.9, cap: 'round' });
+        art.moveTo(0, 8).lineTo(10, -16).stroke({ color, width: 4, alpha: 0.9, cap: 'round' });
+        art.moveTo(0, 10).lineTo(0, -22).stroke({ color, width: 4, alpha: 0.95, cap: 'round' });
+        art.poly([[-2, -16], [-14, -26], [-8, -10]]).fill({ color: accent, alpha: 0.9 });
+        art.poly([[2, -16], [14, -24], [8, -8]]).fill({ color: accent, alpha: 0.9 });
+        art.poly([[0, -24], [-9, -38], [5, -30]]).fill({ color: accent, alpha: 0.82 });
+        container.addChild(art);
+        container.position.set(entity.x, entity.y);
+        return container;
+    }
+    if (String(render.shape || entity.kind || '') === 'lab') {
+        const container = new PIXI.Container();
+        const art = new PIXI.Graphics();
+        const size = Number(state.size || definition.size || 64);
+        art.roundRect(-size * 0.34, -size * 0.42, size * 0.68, size * 0.84, 8).fill({ color: parseColor(render.color, 0x56606d), alpha: 0.96 }).stroke({ color: parseColor(render.accent, 0x8fd3ff), width: 2, alpha: 0.3 });
+        art.circle(-size * 0.14, -size * 0.1, size * 0.1).fill({ color: parseColor(render.accent, 0x8fd3ff), alpha: 0.75 });
+        art.circle(size * 0.14, -size * 0.1, size * 0.1).fill({ color: parseColor(render.accent, 0x8fd3ff), alpha: 0.75 });
+        art.roundRect(-size * 0.2, size * 0.1, size * 0.4, size * 0.14, 4).fill({ color: 0x1d232c, alpha: 0.9 });
+        container.addChild(art);
+        container.position.set(entity.x, entity.y);
+        return container;
+    }
+    return drawStructure({ kind: entity.kind, x: entity.x, y: entity.y, size: Number(state.size || definition.size || 48), data: state }, {
+        structures: catalog && catalog.structures || {},
+    });
 }
 
 function drawLoot(drop, catalog = null) {
@@ -738,6 +831,7 @@ export class TwoDWorldRenderer {
             npcs: definitions.npcs || {},
             resources: definitions.resources || {},
             structures: definitions.structures || {},
+            runtime_entities: definitions.runtime_entities || {},
         };
         this.worldDefinition = catalog && (catalog.worldDefinition || catalog.world_definition) || this.worldDefinition;
         this.background.removeChildren();
@@ -846,6 +940,10 @@ export class TwoDWorldRenderer {
         for (const structure of snapshot.entities.structures || []) {
             const display = drawStructure(structure, this.catalog);
             if (display) worldObjects.push({ y: structure.y || 0, display });
+        }
+        for (const entity of snapshot.entities.runtime_entities || []) {
+            const display = drawRuntimeEntity(entity, this.catalog);
+            if (display) worldObjects.push({ y: entity.y || 0, display });
         }
         for (const loot of snapshot.entities.loot || []) {
             const display = drawLoot(loot, this.catalog);

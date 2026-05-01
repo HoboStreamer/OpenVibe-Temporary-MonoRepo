@@ -1,6 +1,8 @@
 'use strict';
 
 const { buildClassicWorldPresentation } = require('../../sourcevibe/gamemodes/2dworld/legacy-style');
+const legacyEntityFixture = require('../../sourcevibe/gamemodes/2dworld/maps/legacy-entity-fixture.json');
+const { importLegacyEntities } = require('../engine/legacy-entity-importer');
 
 // Starter world for the 2D World vertical slice. The original fixed layout is
 // preserved around the classic outpost/wilderness cluster, but the runtime now
@@ -217,6 +219,12 @@ function buildStarterWorld(seed = 20260430) {
         },
     ];
 
+    const importedLegacy = importLegacyEntities(legacyEntityFixture, {
+        zones,
+        worldId: '2d-world',
+        idPrefix: 'starter-legacy',
+    });
+
     const resources = [
         // Original practice nodes.
         { zone_id: 'outpost', kind: 'tree', x: 4180, y: 4080, hp: 3, max_hp: 3, loot_table_id: 'loot.tree.oak' },
@@ -230,6 +238,7 @@ function buildStarterWorld(seed = 20260430) {
         // Original farm island starters.
         { zone_id: 'farm_island', kind: 'bush', x: 3040, y: 5240, hp: 2, max_hp: 2, loot_table_id: 'loot.bush.herbs' },
         { zone_id: 'farm_island', kind: 'tree', x: 2960, y: 5180, hp: 3, max_hp: 3, loot_table_id: 'loot.tree.oak' },
+        ...importedLegacy.resources,
     ];
 
     createResourceCluster(resources, {
@@ -535,6 +544,7 @@ function buildStarterWorld(seed = 20260430) {
         landmarks,
         zones,
         resources,
+        runtime_entities: importedLegacy.runtime_entities,
         npcs,
         travel: [
             { from: 'outpost', to: 'wilderness', kind: 'walk' },
