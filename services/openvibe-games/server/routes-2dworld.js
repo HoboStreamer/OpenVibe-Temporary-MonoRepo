@@ -76,7 +76,10 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
 
     r.get('/catalog', (_req, res) => {
         const worlds = worldStore.listWorlds({ limit: 100 });
-        res.json(Object.assign({ worlds }, realtime.catalog));
+        const requestedWorld = _req.query && (_req.query.world_id || _req.query.world_slug);
+        const world = requestedWorld ? (worldStore.getWorld(requestedWorld) || realtime.rootWorld) : realtime.rootWorld;
+        const catalog = typeof realtime.getCatalog === 'function' ? realtime.getCatalog(world.id) : realtime.catalog;
+        res.json(Object.assign({ worlds }, catalog));
     });
 
     r.get('/player/:userId', (req, res) => {
@@ -184,7 +187,9 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
     r.post('/mods/:modId/enable', json, (req, res) => {
         try {
             requireAuthenticated(req);
-            const enabled = modRegistry.setEnabled(req.params.modId, req.body && req.body.world_id || realtime.rootWorld.id, true);
+            const worldId = req.body && req.body.world_id || realtime.rootWorld.id;
+            const enabled = modRegistry.setEnabled(req.params.modId, worldId, true);
+            if (typeof realtime.refreshWorldCatalog === 'function') realtime.refreshWorldCatalog(worldId);
             publish(req, GAME_EVENT_TYPES.MOD_ENABLED, { mod_id: enabled.mod_id, world_id: enabled.world_id });
             res.json({ mod_world: enabled });
         } catch (err) {
@@ -195,7 +200,9 @@ function build2dWorldRouter({ eventBus, realtime, config }) {
     r.post('/mods/:modId/disable', json, (req, res) => {
         try {
             requireAuthenticated(req);
-            const disabled = modRegistry.setEnabled(req.params.modId, req.body && req.body.world_id || realtime.rootWorld.id, false);
+            const worldId = req.body && req.body.world_id || realtime.rootWorld.id;
+            const disabled = modRegistry.setEnabled(req.params.modId, worldId, false);
+            if (typeof realtime.refreshWorldCatalog === 'function') realtime.refreshWorldCatalog(worldId);
             publish(req, GAME_EVENT_TYPES.MOD_DISABLED, { mod_id: disabled.mod_id, world_id: disabled.world_id });
             res.json({ mod_world: disabled });
         } catch (err) {

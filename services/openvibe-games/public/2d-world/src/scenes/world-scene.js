@@ -14,6 +14,10 @@ export class WorldScene {
         this.renderer.render(snapshot);
     }
 
+    setCatalog(catalog) {
+        this.renderer.setCatalog(catalog);
+    }
+
     setBuildPreview(preview) {
         this.renderer.setBuildPreview(preview);
     }

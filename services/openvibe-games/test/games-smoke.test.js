@@ -15,7 +15,9 @@ const db = require('../server/db');
 db.init(config.db.path);
 
 const model = require('../server/model');
+const modRegistry = require('../server/mods/registry');
 const policy = require('../server/policy');
+const { buildCatalog } = require('../server/realtime');
 const { STARTER_WORLD } = require('../server/realtime/data/starter-world');
 const { WorldRoom } = require('../server/realtime/rooms/world-room');
 
@@ -172,5 +174,160 @@ const closedSnapshot = room.buildSnapshotForPlayer(roomPlayer, interactNow + 120
 assert.strictEqual(closedSnapshot.interaction.active, null);
 assert.ok(closedSnapshot.interaction.prompt);
 assert.ok(closedSnapshot.interaction.prompt.label.startsWith('E · '));
+
+const moddedPlayerRow = model.upsertPlayer({
+    user_id: 'modder',
+    display_name: 'Firekeep Fan',
+    coins: 160,
+    zone: 'outpost',
+    x: 4128,
+    y: 3996,
+});
+assert.strictEqual(moddedPlayerRow.coins, 160);
+
+const registeredMod = modRegistry.registerMod({
+    owner_id: '42',
+    manifest: {
+        id: 'openvibe.firekeep-expansion',
+        name: 'Firekeep Expansion',
+        version: '1.0.0',
+        engine_version: '17.x',
+        permissions: {
+            media_namespaces: ['games.assets.firekeep'],
+        },
+        content: {
+            items: [
+                {
+                    item_id: 'ember_blade',
+                    name: 'Ember Blade',
+                    category: 'weapon',
+                    stackable: 0,
+                    metadata: { damage: 13, range: 40 },
+                    render: { weapon_type: 'blade', color: '#ff8844', accent: '#4a1f10', length: 38 },
+                },
+            ],
+            recipes: [
+                {
+                    id: 'recipe.ember_blade',
+                    result: { item_id: 'ember_blade', quantity: 1 },
+                    inputs: [{ item_id: 'iron_ore', quantity: 2 }, { item_id: 'coal', quantity: 1 }],
+                    station: 'build_furnace',
+                    skill: 'smithing',
+                    level: 12,
+                    xp: 90,
+                },
+            ],
+            npc_templates: [
+                {
+                    id: 'npc.firekeep.merchant',
+                    name: 'Firekeep Merchant',
+                    kind: 'npc',
+                    hp: 30,
+                    damage: 0,
+                    speed: 34,
+                    aggro_radius: 0,
+                    held_item_id: 'ember_blade',
+                    render: {
+                        body: 'humanoid',
+                        palette: {
+                            tunic: '#6b2f1f',
+                            trim: '#ffb366',
+                            skin: '#f0d2b8',
+                            leg: '#2c1612',
+                            accent: '#ffd9a0',
+                        },
+                    },
+                    interaction: {
+                        type: 'shop',
+                        shop_id: 'shop.firekeep.merchant',
+                        title: 'Firekeep Relics',
+                        prompt: 'Browse ember relics',
+                        description: 'Experimental gear from the hottest corner of the outpost.',
+                        inventory: [
+                            { item_id: 'ember_blade', price: 64, quantity: 1, note: 'A very warm sword.' },
+                        ],
+                    },
+                },
+            ],
+            zones: [
+                {
+                    zone_id: 'ember_camp',
+                    kind: 'safe',
+                    pvp: false,
+                    spawn: { x: 6200, y: 2200 },
+                    radius: 180,
+                    description: 'Tiny volcanic camp added by a pure-data mod.',
+                },
+            ],
+            travel: [
+                { from: 'outpost', to: 'ember_camp', kind: 'portal' },
+            ],
+            world_npcs: [
+                { zone_id: 'outpost', template_id: 'npc.firekeep.merchant', x: 4128, y: 3996 },
+            ],
+        },
+    },
+});
+
+modRegistry.setEnabled(registeredMod.id, room.world.id, true);
+
+const moddedCatalog = buildCatalog(room.world, STARTER_WORLD);
+assert.ok(moddedCatalog.engine.hook_surfaces.includes('interaction:prompt'));
+assert.ok(moddedCatalog.items.some((item) => item.item_id === 'ember_blade'));
+assert.ok(moddedCatalog.recipes.some((recipe) => recipe.id === 'recipe.ember_blade'));
+assert.ok(moddedCatalog.zones.some((zone) => zone.zone_id === 'ember_camp'));
+assert.ok(moddedCatalog.world_definition.npcs.some((npc) => npc.template_id === 'npc.firekeep.merchant'));
+assert.strictEqual(moddedCatalog.definitions.items.ember_blade.render.weapon_type, 'blade');
+
+const moddedRoom = new WorldRoom({
+    world: room.world,
+    worldDefinition: moddedCatalog.world_definition,
+    catalog: moddedCatalog,
+    publish: () => {},
+    emitToSocket: () => {},
+    tickRate: 20,
+});
+
+moddedRoom.join({
+    socketId: 'socket-modder',
+    userId: 'modder',
+    displayName: 'Firekeep Fan',
+    zoneId: 'outpost',
+});
+
+const moddedPlayer = moddedRoom.players.get('socket-modder');
+moddedPlayer.x = 4128;
+moddedPlayer.y = 3996;
+moddedPlayer.zone_id = 'outpost';
+
+const modPromptSnapshot = moddedRoom.buildSnapshotForPlayer(moddedPlayer, Date.now());
+assert.ok(modPromptSnapshot.interaction.prompt);
+assert.ok(modPromptSnapshot.interaction.prompt.label.includes('Browse ember relics'));
+
+const modInteractNow = Date.now();
+const modInteractResult = moddedRoom.receiveInput('socket-modder', {
+    seq: 1,
+    dt: 0.05,
+    sent_at: modInteractNow,
+    keys: {},
+    aim: { x: 4128, y: 3996 },
+    action: 'interact',
+});
+assert.strictEqual(modInteractResult.ok, true);
+moddedRoom.tick(0.05, modInteractNow + 50);
+
+const modShopSnapshot = moddedRoom.buildSnapshotForPlayer(moddedPlayer, modInteractNow + 60);
+assert.ok(modShopSnapshot.interaction.active);
+assert.ok(modShopSnapshot.interaction.active.items.some((entry) => entry.item_id === 'ember_blade'));
+
+const modPurchaseResult = moddedRoom.handleShopPurchase(moddedPlayer, {
+    npc_id: modShopSnapshot.interaction.active.npc_id,
+    item_id: 'ember_blade',
+    quantity: 1,
+});
+assert.strictEqual(modPurchaseResult.ok, true);
+assert.strictEqual(moddedPlayer.equip_weapon, 'ember_blade');
+assert.strictEqual(moddedPlayer.held_item_id, 'ember_blade');
+assert.ok(model.listInventory('modder').some((entry) => entry.item_id === 'ember_blade' && entry.quantity >= 1));
 
 console.log('openvibe-games smoke OK');

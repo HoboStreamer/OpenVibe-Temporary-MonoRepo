@@ -14,6 +14,8 @@ const { LOOT_TABLES } = require('./data/loot-tables');
 const { NPC_TEMPLATES } = require('./data/npc-templates');
 const { SKILL_KEYS } = require('./data/skills');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
+const modRegistry = require('../mods/registry');
+const { buildRuntimeCatalog } = require('./engine/content-registry');
 
 function actorFromSocket(socket) {
     const auth = socket.handshake && socket.handshake.auth || {};
@@ -65,17 +67,13 @@ function seedStarterContent({ publish } = {}) {
     return world;
 }
 
-function buildCatalog(world) {
-    return {
+function buildCatalog(world, worldDefinition = STARTER_WORLD) {
+    const catalog = buildRuntimeCatalog({
         world,
-        world_definition: STARTER_WORLD,
-        items: ITEMS,
-        recipes: RECIPES,
-        npcs: NPC_TEMPLATES,
-        skills: SKILL_KEYS,
-        loot_tables: LOOT_TABLES,
-        zones: STARTER_WORLD.zones,
-        travel: STARTER_WORLD.travel,
+        worldDefinition,
+        mods: modRegistry.listEnabledMods(world.id, { includeAssets: true }),
+    });
+    return Object.assign({}, catalog, {
         seams: {
             media_namespace: 'games.assets',
             chat_surface: 'openvibe.chat',
@@ -83,7 +81,7 @@ function buildCatalog(world) {
             ai_surface: 'ai.openvibe.network',
             community_surface: 'openvibe.community',
         },
-    };
+    });
 }
 
 function createRealtimeRuntime({ httpServer, eventBus, config }) {
@@ -101,7 +99,6 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
     };
 
     const rootWorld = seedStarterContent({ publish });
-    const worldCatalog = buildCatalog(rootWorld);
     const worldRooms = new Map();
     const dungeonRooms = new Map();
     const editorRoom = new EditorRoom({ emitToSocket, publish });
@@ -115,28 +112,57 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
         return `${roomType || 'world'}:${worldId}`;
     }
 
+    function getCatalog(worldId = rootWorld.id) {
+        const world = worldStore.getWorld(worldId) || rootWorld;
+        return buildCatalog(world);
+    }
+
+    function refreshWorldCatalog(worldId = rootWorld.id) {
+        const world = worldStore.getWorld(worldId) || rootWorld;
+        const catalog = buildCatalog(world);
+        for (const room of worldRooms.values()) {
+            if (room && room.world && room.world.id === world.id && typeof room.setCatalog === 'function') {
+                room.setCatalog(catalog);
+            }
+        }
+        for (const room of dungeonRooms.values()) {
+            if (room && room.world && room.world.id === world.id && typeof room.setCatalog === 'function') {
+                room.setCatalog(catalog);
+            }
+        }
+        return catalog;
+    }
+
     function getRoom({ worldId, roomType }) {
+        const world = worldStore.getWorld(worldId) || rootWorld;
+        const catalog = buildCatalog(world);
         const key = roomKey(worldId, roomType);
         if (roomType === 'dungeon') {
             if (!dungeonRooms.has(key)) {
                 dungeonRooms.set(key, new DungeonRoom({
-                    world: worldStore.getWorld(worldId) || rootWorld,
-                    worldDefinition: STARTER_WORLD,
+                    world,
+                    worldDefinition: catalog.world_definition,
+                    catalog,
                     publish,
                     emitToSocket,
                     tickRate: Number(process.env.OPENVIBE_GAMES_TICK_RATE) || 20,
                 }));
+            } else if (typeof dungeonRooms.get(key).setCatalog === 'function') {
+                dungeonRooms.get(key).setCatalog(catalog);
             }
             return dungeonRooms.get(key);
         }
         if (!worldRooms.has(key)) {
             worldRooms.set(key, new WorldRoom({
-                world: worldStore.getWorld(worldId) || rootWorld,
-                worldDefinition: STARTER_WORLD,
+                world,
+                worldDefinition: catalog.world_definition,
+                catalog,
                 publish,
                 emitToSocket,
                 tickRate: Number(process.env.OPENVIBE_GAMES_TICK_RATE) || 20,
             }));
+        } else if (typeof worldRooms.get(key).setCatalog === 'function') {
+            worldRooms.get(key).setCatalog(catalog);
         }
         return worldRooms.get(key);
     }
@@ -264,6 +290,7 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
     });
 
     function summary() {
+        const catalog = getCatalog(rootWorld.id);
         return {
             ok: true,
             socket_clients: io.engine.clientsCount,
@@ -272,10 +299,11 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
             editor: editorRoom.summary(),
             catalog: {
                 world_count: worldStore.listWorlds({ limit: 100 }).length,
-                item_count: ITEMS.length,
-                recipe_count: RECIPES.length,
-                npc_template_count: NPC_TEMPLATES.length,
-                loot_table_count: LOOT_TABLES.length,
+                item_count: catalog.items.length,
+                recipe_count: catalog.recipes.length,
+                npc_template_count: catalog.npcs.length,
+                loot_table_count: catalog.loot_tables.length,
+                enabled_mod_count: catalog.mods.length,
             },
             websocket_path: '/games/realtime',
         };
@@ -286,7 +314,11 @@ function createRealtimeRuntime({ httpServer, eventBus, config }) {
         editorRoom,
         ticker,
         rootWorld,
-        catalog: worldCatalog,
+        get catalog() {
+            return getCatalog(rootWorld.id);
+        },
+        getCatalog,
+        refreshWorldCatalog,
         seedStarterContent: () => seedStarterContent({ publish }),
         getRoom,
         start() {

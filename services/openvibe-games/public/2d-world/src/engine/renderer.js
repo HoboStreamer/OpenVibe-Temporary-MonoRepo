@@ -8,6 +8,26 @@ function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
 
+function isObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseColor(value, fallback) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+        const trimmed = value.trim().toLowerCase();
+        if (trimmed.startsWith('#')) {
+            const parsed = Number.parseInt(trimmed.slice(1), 16);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        if (trimmed.startsWith('0x')) {
+            const parsed = Number.parseInt(trimmed.slice(2), 16);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+    }
+    return fallback;
+}
+
 function drawLabel(text, x, y, color = 0xffffff, size = 11) {
     const label = new PIXI.Text({ text, style: { fill: color, fontSize: size, fontFamily: 'monospace', stroke: { color: 0x000000, width: 3 } } });
     label.anchor.set(0.5, 1);
@@ -38,31 +58,68 @@ function actorAimAngle(actor, facing) {
     return Math.atan2(dy || 0, dx || facing || 1);
 }
 
-function paletteFor(actor, self = false) {
-    if (self) return { tunic: 0x2c4d7a, trim: 0x7de3ff, skin: 0xf3d8b6, leg: 0x1d2334, accent: 0x9cf5ff };
-    if (actor.kind === 'boss') return { tunic: 0x5e2a2a, trim: 0xffb980, skin: 0xe8c3a0, leg: 0x2e1616, accent: 0xffd8b0 };
-    if (actor.kind === 'mob') return { tunic: actor.template_id && actor.template_id.includes('boar') ? 0x5f4738 : 0x5d2e2e, trim: 0xff9191, skin: 0xd0b090, leg: 0x342018, accent: 0xffc7b8 };
-    return { tunic: 0x365544, trim: 0xa7f2c2, skin: 0xf0d8bc, leg: 0x24352d, accent: 0xd8fff0 };
+function resolveItemDefinition(catalog, itemId) {
+    return catalog && catalog.items && catalog.items[itemId] || null;
+}
+
+function resolveNpcDefinition(catalog, actor) {
+    return catalog && catalog.npcs && actor && actor.template_id && catalog.npcs[actor.template_id] || null;
+}
+
+function resolveResourceDefinition(catalog, resource) {
+    return catalog && catalog.resources && resource && resource.kind && catalog.resources[resource.kind] || null;
+}
+
+function resolveStructureDefinition(catalog, structure) {
+    return catalog && catalog.structures && structure && structure.kind && catalog.structures[structure.kind] || null;
+}
+
+function paletteFor(actor, self = false, catalog = null) {
+    const fallback = self
+        ? { tunic: 0x2c4d7a, trim: 0x7de3ff, skin: 0xf3d8b6, leg: 0x1d2334, accent: 0x9cf5ff }
+        : actor.kind === 'boss'
+            ? { tunic: 0x5e2a2a, trim: 0xffb980, skin: 0xe8c3a0, leg: 0x2e1616, accent: 0xffd8b0 }
+            : actor.kind === 'mob'
+                ? { tunic: actor.template_id && actor.template_id.includes('boar') ? 0x5f4738 : 0x5d2e2e, trim: 0xff9191, skin: 0xd0b090, leg: 0x342018, accent: 0xffc7b8 }
+                : { tunic: 0x365544, trim: 0xa7f2c2, skin: 0xf0d8bc, leg: 0x24352d, accent: 0xd8fff0 };
+    const render = resolveNpcDefinition(catalog, actor) && resolveNpcDefinition(catalog, actor).render || null;
+    const palette = render && isObject(render.palette) ? render.palette : {};
+    return {
+        tunic: parseColor(palette.tunic, fallback.tunic),
+        trim: parseColor(palette.trim, fallback.trim),
+        skin: parseColor(palette.skin, fallback.skin),
+        leg: parseColor(palette.leg, fallback.leg),
+        accent: parseColor(palette.accent, fallback.accent),
+    };
 }
 
 function hitTint(base, actor) {
     return actor.hit_flash_until && Date.now() < actor.hit_flash_until ? 0xffb0b0 : base;
 }
 
-function weaponProfile(itemId = '') {
-    if (itemId.includes('sword')) return { type: 'blade', length: 34, color: 0xe8edf8, accent: 0x6b4c2d };
-    if (itemId.includes('spear')) return { type: 'spear', length: 42, color: 0xc7d2de, accent: 0x7f5539 };
-    if (itemId.includes('bow')) return { type: 'bow', length: 34, color: 0xb07a3c, accent: 0xdcc18f };
-    if (itemId.includes('hatchet') || itemId.includes('axe')) return { type: 'axe', length: 28, color: 0x8c613c, accent: 0xb8c4cf };
-    if (itemId.includes('pickaxe')) return { type: 'pickaxe', length: 30, color: 0x8c613c, accent: 0xb8c4cf };
-    if (itemId.includes('fishing_rod')) return { type: 'rod', length: 40, color: 0xb78e58, accent: 0x7de3ff };
-    if (itemId.includes('hoe')) return { type: 'hoe', length: 30, color: 0x8e6b41, accent: 0xadb8c2 };
-    if (itemId === 'hammer') return { type: 'hammer', length: 24, color: 0x8b633e, accent: 0x9ba8b3 };
-    return { type: 'club', length: 26, color: 0x8c613c, accent: 0xb08d57 };
+function weaponProfile(itemId = '', itemDefinition = null) {
+    const fallback = (() => {
+        if (itemId.includes('sword')) return { type: 'blade', length: 34, color: 0xe8edf8, accent: 0x6b4c2d };
+        if (itemId.includes('spear')) return { type: 'spear', length: 42, color: 0xc7d2de, accent: 0x7f5539 };
+        if (itemId.includes('bow')) return { type: 'bow', length: 34, color: 0xb07a3c, accent: 0xdcc18f };
+        if (itemId.includes('hatchet') || itemId.includes('axe')) return { type: 'axe', length: 28, color: 0x8c613c, accent: 0xb8c4cf };
+        if (itemId.includes('pickaxe')) return { type: 'pickaxe', length: 30, color: 0x8c613c, accent: 0xb8c4cf };
+        if (itemId.includes('fishing_rod')) return { type: 'rod', length: 40, color: 0xb78e58, accent: 0x7de3ff };
+        if (itemId.includes('hoe')) return { type: 'hoe', length: 30, color: 0x8e6b41, accent: 0xadb8c2 };
+        if (itemId === 'hammer') return { type: 'hammer', length: 24, color: 0x8b633e, accent: 0x9ba8b3 };
+        return { type: 'club', length: 26, color: 0x8c613c, accent: 0xb08d57 };
+    })();
+    const render = itemDefinition && isObject(itemDefinition.render) ? itemDefinition.render : {};
+    return {
+        type: render.weapon_type || fallback.type,
+        length: Number(render.length) || fallback.length,
+        color: parseColor(render.color, fallback.color),
+        accent: parseColor(render.accent, fallback.accent),
+    };
 }
 
-function drawWeapon(itemId, angle, x, y) {
-    const profile = weaponProfile(itemId || '');
+function drawWeapon(itemId, angle, x, y, itemDefinition = null) {
+    const profile = weaponProfile(itemId || '', itemDefinition);
     const weapon = new PIXI.Container();
     weapon.position.set(x, y);
     weapon.rotation = angle;
@@ -120,9 +177,10 @@ function addLimb(container, startX, startY, angle, length, width, color) {
     return { endX, endY };
 }
 
-function drawHumanoid(actor, { self = false } = {}) {
+function drawHumanoid(actor, { self = false, catalog = null } = {}) {
     const facing = actorFacing(actor);
-    const colors = paletteFor(actor, self);
+    const colors = paletteFor(actor, self, catalog);
+    const itemDefinition = resolveItemDefinition(catalog, actor.held_item || actor.equip_weapon || '');
     const movingSpeed = clamp(actorSpeed(actor) / 220, 0, 1.35);
     const phase = Number(actor.step_phase || 0) + ((performance.now() / 160) * movingSpeed * 0.9);
     const stride = Math.sin(phase) * 6 * movingSpeed;
@@ -133,7 +191,8 @@ function drawHumanoid(actor, { self = false } = {}) {
     const attackWindow = Math.max(0, Number(actor.attack_anim_until || 0) - Date.now());
     const attackProgress = attackWindow > 0 ? 1 - (attackWindow / 280) : 0;
     const attackSwing = attackProgress > 0 ? Math.sin(attackProgress * Math.PI) : 0;
-    const frontArmAngle = aimAngle + (attackWindow ? (weaponProfile(actor.held_item || actor.equip_weapon || '').type === 'bow' ? Math.sin(attackProgress * Math.PI) * 0.08 : facing * -0.95 * attackSwing) : 0);
+    const frontWeapon = weaponProfile(actor.held_item || actor.equip_weapon || '', itemDefinition);
+    const frontArmAngle = aimAngle + (attackWindow ? (frontWeapon.type === 'bow' ? Math.sin(attackProgress * Math.PI) * 0.08 : facing * -0.95 * attackSwing) : 0);
     const backArmAngle = aimAngle - (facing * 0.45);
     const container = new PIXI.Container();
     container.position.set(actor.x, actor.y);
@@ -164,52 +223,60 @@ function drawHumanoid(actor, { self = false } = {}) {
 
     addLimb(body, -8, -4, backArmAngle, 16, 4.5, hitTint(colors.skin, actor));
     const frontHand = addLimb(body, 8, -4, frontArmAngle, 18, 4.8, hitTint(colors.skin, actor));
-    body.addChild(drawWeapon(actor.held_item || actor.equip_weapon || '', frontArmAngle, frontHand.endX, frontHand.endY));
+    body.addChild(drawWeapon(actor.held_item || actor.equip_weapon || '', frontArmAngle, frontHand.endX, frontHand.endY, itemDefinition));
 
     container.addChild(drawBar(0, -38, 30, actor.max_hp ? actor.hp / actor.max_hp : 0, self ? 0x7de3ff : 0x53d769));
     container.addChild(drawLabel(actor.display_name || actor.name || actor.id, 0, -40, self ? 0xbaf6ff : 0xffffff));
     return container;
 }
 
-function drawBoar(actor) {
+function drawBoar(actor, catalog = null) {
     const container = new PIXI.Container();
     container.position.set(actor.x, actor.y);
     const facing = actorFacing(actor);
     const movingSpeed = clamp(actorSpeed(actor) / 180, 0, 1.2);
     const phase = Number(actor.step_phase || 0) + ((performance.now() / 140) * movingSpeed);
     const stride = Math.sin(phase) * 4 * movingSpeed;
+    const render = resolveNpcDefinition(catalog, actor) && resolveNpcDefinition(catalog, actor).render || {};
+    const palette = isObject(render.palette) ? render.palette : {};
     const body = new PIXI.Graphics();
-    body.ellipse(0, 0, 18, 12).fill(hitTint(0x5f4738, actor));
-    body.circle(14 * facing, -2, 8).fill(hitTint(0x755744, actor));
-    body.circle((18 * facing), 0, 2).fill(0xf7f0df);
-    body.circle((18 * facing), 3, 2).fill(0xf7f0df);
+    body.ellipse(0, 0, 18, 12).fill(hitTint(parseColor(palette.tunic, 0x5f4738), actor));
+    body.circle(14 * facing, -2, 8).fill(hitTint(parseColor(palette.trim, 0x755744), actor));
+    body.circle((18 * facing), 0, 2).fill(parseColor(palette.skin, 0xf7f0df));
+    body.circle((18 * facing), 3, 2).fill(parseColor(palette.skin, 0xf7f0df));
     body.circle((15 * facing), -4, 1.2).fill(0x0b0b0b);
-    body.moveTo(8 * facing, -2).lineTo(20 * facing, -8).stroke({ color: 0xf4efe7, width: 1.3 });
-    body.moveTo(8 * facing, 2).lineTo(20 * facing, 8).stroke({ color: 0xf4efe7, width: 1.3 });
-    body.moveTo(-8, 10).lineTo(-8 + stride, 18).stroke({ color: 0x2e2118, width: 3, cap: 'round' });
-    body.moveTo(0, 10).lineTo(0 - stride, 18).stroke({ color: 0x2e2118, width: 3, cap: 'round' });
-    body.moveTo(8, 10).lineTo(8 + stride, 18).stroke({ color: 0x2e2118, width: 3, cap: 'round' });
-    body.moveTo(15, 8).lineTo(15 - stride, 18).stroke({ color: 0x2e2118, width: 3, cap: 'round' });
+    body.moveTo(8 * facing, -2).lineTo(20 * facing, -8).stroke({ color: parseColor(palette.accent, 0xf4efe7), width: 1.3 });
+    body.moveTo(8 * facing, 2).lineTo(20 * facing, 8).stroke({ color: parseColor(palette.accent, 0xf4efe7), width: 1.3 });
+    body.moveTo(-8, 10).lineTo(-8 + stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
+    body.moveTo(0, 10).lineTo(0 - stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
+    body.moveTo(8, 10).lineTo(8 + stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
+    body.moveTo(15, 8).lineTo(15 - stride, 18).stroke({ color: parseColor(palette.leg, 0x2e2118), width: 3, cap: 'round' });
     container.addChild(body);
     container.addChild(drawBar(0, -24, 28, actor.max_hp ? actor.hp / actor.max_hp : 0, 0xf08c6d));
     container.addChild(drawLabel(actor.name || actor.id, 0, -26));
     return container;
 }
 
-function drawResource(resource) {
+function drawResource(resource, catalog = null) {
     const g = new PIXI.Container();
     const art = new PIXI.Graphics();
+    const definition = resolveResourceDefinition(catalog, resource) || {};
+    const render = definition.render || {};
     if (resource.kind === 'tree') {
-        art.circle(0, -12, 18).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0x8cff8c : 0x4caf50);
-        art.circle(-10, -4, 12).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0x8cff8c : 0x3f9850);
-        art.circle(10, -2, 12).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0x8cff8c : 0x56b85b);
-        art.roundRect(-5, 6, 10, 22, 4).fill(0x8d6e63);
+        const hit = resource.hit_flash_until && Date.now() < resource.hit_flash_until;
+        const foliage = Array.isArray(render.foliage) ? render.foliage : [0x4caf50, 0x3f9850, 0x56b85b];
+        art.circle(0, -12, 18).fill(hit ? parseColor(render.hit, 0x8cff8c) : parseColor(foliage[0], 0x4caf50));
+        art.circle(-10, -4, 12).fill(hit ? parseColor(render.hit, 0x8cff8c) : parseColor(foliage[1], 0x3f9850));
+        art.circle(10, -2, 12).fill(hit ? parseColor(render.hit, 0x8cff8c) : parseColor(foliage[2], 0x56b85b));
+        art.roundRect(-5, 6, 10, 22, 4).fill(parseColor(render.trunk, 0x8d6e63));
     } else if (resource.kind === 'rock') {
-        art.poly([[-18, 10], [-8, -12], [10, -14], [20, 6], [0, 20]]).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0xd2dee7 : 0x95a5a6);
+        art.poly([[-18, 10], [-8, -12], [10, -14], [20, 6], [0, 20]]).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? parseColor(render.hit, 0xd2dee7) : parseColor(render.rock, 0x95a5a6));
     } else {
-        art.circle(0, 0, 12).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0xb3ff9c : 0x7ed957);
-        art.circle(-8, 3, 9).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0xb3ff9c : 0x6dc44e);
-        art.circle(8, 3, 9).fill(resource.hit_flash_until && Date.now() < resource.hit_flash_until ? 0xb3ff9c : 0x6dc44e);
+        const hit = resource.hit_flash_until && Date.now() < resource.hit_flash_until;
+        const shrub = Array.isArray(render.shrub) ? render.shrub : [0x7ed957, 0x6dc44e];
+        art.circle(0, 0, 12).fill(hit ? parseColor(render.hit, 0xb3ff9c) : parseColor(shrub[0], 0x7ed957));
+        art.circle(-8, 3, 9).fill(hit ? parseColor(render.hit, 0xb3ff9c) : parseColor(shrub[1], 0x6dc44e));
+        art.circle(8, 3, 9).fill(hit ? parseColor(render.hit, 0xb3ff9c) : parseColor(shrub[1], 0x6dc44e));
     }
     g.addChild(art);
     g.addChild(drawBar(0, -30, 26, resource.max_hp ? resource.hp / resource.max_hp : 0, 0xf0c85a));
@@ -217,13 +284,16 @@ function drawResource(resource) {
     return g;
 }
 
-function drawStructure(structure) {
+function drawStructure(structure, catalog = null) {
     const g = new PIXI.Container();
     const art = new PIXI.Graphics();
     const size = structure.size || 48;
-    const color = structure.kind && String(structure.kind).includes('door') ? 0xb5651d : 0x786452;
-    art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.95 }).stroke({ color: 0x0f0f0f, width: 2, alpha: 0.3 });
-    if (String(structure.kind).includes('door')) art.circle(size / 4, 0, 2).fill(0xf0c85a);
+    const definition = resolveStructureDefinition(catalog, structure) || {};
+    const render = definition.render || {};
+    const color = parseColor(render.color, structure.kind && String(structure.kind).includes('door') ? 0xb5651d : 0x786452);
+    const accent = parseColor(render.accent, 0x0f0f0f);
+    art.roundRect(-size / 2, -size / 2, size, size, 6).fill({ color, alpha: 0.95 }).stroke({ color: accent, width: 2, alpha: 0.3 });
+    if (String(structure.kind).includes('door')) art.circle(size / 4, 0, 2).fill(parseColor(render.accent, 0xf0c85a));
     g.addChild(art);
     g.position.set(structure.x, structure.y);
     return g;
@@ -271,6 +341,7 @@ export class PixiWorldRenderer {
         this.preview = null;
         this.backgroundBuilt = false;
         this.cameraWorld = null;
+        this.catalog = { items: {}, npcs: {}, resources: {}, structures: {} };
     }
 
     async init() {
@@ -279,6 +350,16 @@ export class PixiWorldRenderer {
         this.mount.replaceChildren(this.app.canvas);
         this.app.stage.addChild(this.camera);
         this.camera.addChild(this.background, this.worldLayer, this.overlayLayer);
+    }
+
+    setCatalog(catalog) {
+        const definitions = catalog && catalog.definitions || {};
+        this.catalog = {
+            items: definitions.items || {},
+            npcs: definitions.npcs || {},
+            resources: definitions.resources || {},
+            structures: definitions.structures || {},
+        };
     }
 
     ensureBackground() {
@@ -324,14 +405,16 @@ export class PixiWorldRenderer {
         this.worldLayer.removeChildren();
         this.overlayLayer.removeChildren();
 
-        for (const resource of snapshot.entities.resources || []) this.worldLayer.addChild(drawResource(resource));
-        for (const structure of snapshot.entities.structures || []) this.worldLayer.addChild(drawStructure(structure));
+        for (const resource of snapshot.entities.resources || []) this.worldLayer.addChild(drawResource(resource, this.catalog));
+        for (const structure of snapshot.entities.structures || []) this.worldLayer.addChild(drawStructure(structure, this.catalog));
         for (const loot of snapshot.entities.loot || []) this.worldLayer.addChild(drawLoot(loot));
         for (const npc of snapshot.entities.npcs || []) {
-            this.worldLayer.addChild(npc.template_id && npc.template_id.includes('boar') ? drawBoar(npc) : drawHumanoid(npc));
+            const npcDefinition = resolveNpcDefinition(this.catalog, npc);
+            const body = npcDefinition && npcDefinition.render && npcDefinition.render.body || (npc.template_id && npc.template_id.includes('boar') ? 'boar' : 'humanoid');
+            this.worldLayer.addChild(body === 'boar' ? drawBoar(npc, this.catalog) : drawHumanoid(npc, { catalog: this.catalog }));
         }
-        for (const player of snapshot.entities.players || []) this.worldLayer.addChild(drawHumanoid(player));
-        this.worldLayer.addChild(drawHumanoid(Object.assign({}, self, { kind: 'self' }), { self: true }));
+        for (const player of snapshot.entities.players || []) this.worldLayer.addChild(drawHumanoid(player, { catalog: this.catalog }));
+        this.worldLayer.addChild(drawHumanoid(Object.assign({}, self, { kind: 'self' }), { self: true, catalog: this.catalog }));
         for (const projectile of snapshot.entities.projectiles || []) this.worldLayer.addChild(drawProjectile(projectile));
 
         if (snapshot.interaction && snapshot.interaction.prompt) {

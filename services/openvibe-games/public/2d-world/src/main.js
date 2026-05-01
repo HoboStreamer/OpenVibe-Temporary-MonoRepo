@@ -32,7 +32,7 @@ const state = {
     localSelf: null,
     latestSnapshot: null,
     buildSelection: null,
-    catalog: { items: [], itemMap: {}, skills: [] },
+    catalog: { items: [], itemMap: {}, skills: [], definitions: {}, mods: [] },
     panels: { chat: false, inventory: false, crafting: false, skills: false, build: false, map: false, mods: false, loot: false, shop: false },
     hudActiveUntil: performance.now() + 8000,
     snapshotBuffer: new SnapshotBuffer(45),
@@ -133,7 +133,10 @@ async function loadCatalog() {
         items: catalog.items || [],
         itemMap: buildItemMap(catalog.items || []),
         skills: catalog.skills || [],
+        definitions: catalog.definitions || {},
+        mods: catalog.mods || [],
     };
+    scene.setCatalog(state.catalog);
     inventory = new InventoryPanel(dom.inventory, state.catalog.items);
     skills = new SkillsPanel(dom.skills, state.catalog.skills);
     crafting = new CraftingPanel(dom.crafting, catalog.recipes || [], state.catalog.items);

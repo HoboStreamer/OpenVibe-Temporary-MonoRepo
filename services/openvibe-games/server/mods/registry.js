@@ -44,6 +44,27 @@ function listMods(options = {}) {
     return rows.map(toObject);
 }
 
+function listEnabledMods(worldId, options = {}) {
+    const limit = Math.min(200, Math.max(1, Number(options.limit) || 50));
+    const rows = getDb().prepare(`
+        SELECT gm.*, gmw.world_id, gmw.enabled, gmw.updated_at AS world_updated_at
+        FROM game_mod_worlds gmw
+        JOIN game_mods gm ON gm.id = gmw.mod_id
+        WHERE gmw.world_id = ? AND gmw.enabled = 1
+        ORDER BY gmw.updated_at DESC, gm.updated_at DESC
+        LIMIT ?
+    `).all(String(worldId), limit);
+    return rows.map((row) => {
+        const mod = toObject(row);
+        return Object.assign({}, mod, {
+            world_id: String(row.world_id),
+            enabled: !!row.enabled,
+            world_updated_at: row.world_updated_at,
+            assets: options.includeAssets ? listAssets(mod.id) : [],
+        });
+    });
+}
+
 function getMod(id) {
     const row = getDb().prepare(`SELECT * FROM game_mods WHERE id = ? OR slug = ? LIMIT 1`).get(id, id);
     return toObject(row);
@@ -128,4 +149,4 @@ function uploadAsset({ modId, namespace, media_id, asset_path, metadata }) {
     return listAssets(mod.id)[0];
 }
 
-module.exports = { listMods, getMod, registerMod, setEnabled, listAssets, uploadAsset };
+module.exports = { listMods, listEnabledMods, getMod, registerMod, setEnabled, listAssets, uploadAsset };

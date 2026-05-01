@@ -14,11 +14,9 @@ const { canPlaceStructure } = require('../systems/build-system');
 const { canTravel, spawnForZone } = require('../systems/travel-system');
 const { worldSnapshotPayload } = require('../systems/persistence-system');
 const { validateInput } = require('../systems/anti-cheat-system');
-const { RECIPES_BY_ID } = require('../data/recipes');
-const { ITEMS_BY_ID } = require('../data/item-catalog');
 const { SKILL_KEYS, SKILL_TO_XP_FIELD } = require('../data/skills');
-const { NPC_TEMPLATES_BY_ID } = require('../data/npc-templates');
-const { LOOT_TABLES_BY_ID } = require('../data/loot-tables');
+const { buildRuntimeCatalog } = require('../engine/content-registry');
+const { createHookBus } = require('../engine/hook-bus');
 const { levelForXp, xpRequiredForNext } = require('../engine/skills');
 const { rollLoot } = require('../engine/loot');
 const inventoryUtils = require('../engine/inventory');
@@ -81,7 +79,130 @@ class WorldRoom {
         this.lastPersistAt = 0;
         this.lastSnapshotAt = 0;
         this.sequence = 0;
+        this.hooks = createHookBus();
+        this.catalog = null;
+        this.itemMap = {};
+        this.itemDefinitions = {};
+        this.recipeMap = {};
+        this.npcTemplateMap = {};
+        this.npcDefinitions = {};
+        this.lootTableMap = {};
+        this.resourceDefinitions = {};
+        this.structureDefinitions = {};
+        this.setCatalog(opts.catalog || buildRuntimeCatalog({
+            world: this.world,
+            worldDefinition: this.worldDefinition,
+            mods: [],
+        }));
         this._seed();
+    }
+
+    setCatalog(catalog) {
+        const nextCatalog = catalog || buildRuntimeCatalog({
+            world: this.world,
+            worldDefinition: this.worldDefinition,
+            mods: [],
+        });
+        this.catalog = nextCatalog;
+        if (nextCatalog && nextCatalog.world_definition) this.worldDefinition = nextCatalog.world_definition;
+        this.chunkSize = Number((this.worldDefinition && this.worldDefinition.chunk_size) || this.chunkSize || 256);
+        this.itemMap = nextCatalog.item_map || {};
+        this.itemDefinitions = nextCatalog.definitions && nextCatalog.definitions.items || {};
+        this.recipeMap = nextCatalog.recipe_map || {};
+        this.npcTemplateMap = nextCatalog.npc_map || {};
+        this.npcDefinitions = nextCatalog.definitions && nextCatalog.definitions.npcs || {};
+        this.lootTableMap = nextCatalog.loot_table_map || {};
+        this.resourceDefinitions = nextCatalog.definitions && nextCatalog.definitions.resources || {};
+        this.structureDefinitions = nextCatalog.definitions && nextCatalog.definitions.structures || {};
+        if (this.resources && this.npcs && (this.resources.size > 0 || this.npcs.size > 0)) this._syncCatalogSpawns();
+        return this.catalog;
+    }
+
+    _resourceSeedKey(resource) {
+        if (resource && resource.id) return String(resource.id);
+        return `${String(resource && resource.zone_id || 'outpost')}|${String(resource && resource.kind || 'resource')}|${Number(resource && resource.x) || 0}|${Number(resource && resource.y) || 0}`;
+    }
+
+    _npcSeedKey(seed) {
+        if (seed && seed.id) return String(seed.id);
+        return `${String(seed && seed.zone_id || 'outpost')}|${String(seed && seed.template_id || 'npc')}|${Number(seed && seed.x) || 0}|${Number(seed && seed.y) || 0}`;
+    }
+
+    _createResourceEntry(resource) {
+        return Object.assign({}, resource, {
+            id: resource.id || uid('resource'),
+            _catalog_key: this._resourceSeedKey(resource),
+            zone_id: resource.zone_id || 'outpost',
+            kind: resource.kind,
+            x: Number(resource.x) || 0,
+            y: Number(resource.y) || 0,
+            hp: Number(resource.hp || resource.max_hp || 1),
+            max_hp: Number(resource.max_hp || resource.hp || 1),
+            respawn_ms: Number(resource.respawn_ms || 15000),
+            respawn_at: resource.respawn_at ? Number(resource.respawn_at) : null,
+            loot_table_id: resource.loot_table_id || null,
+        });
+    }
+
+    _createNpcEntry(seed) {
+        const template = this.npcTemplateMap[seed.template_id];
+        if (!template) return null;
+        return Object.assign({}, template, seed, {
+            id: seed.id || uid('npc'),
+            _catalog_key: this._npcSeedKey(seed),
+            template_id: seed.template_id,
+            zone_id: seed.zone_id || 'outpost',
+            x: Number(seed.x) || 0,
+            y: Number(seed.y) || 0,
+            home_x: Number(seed.x) || 0,
+            home_y: Number(seed.y) || 0,
+            hp: Number(seed.hp || template.hp || 10),
+            max_hp: Number(seed.max_hp || template.hp || 10),
+            respawn_ms: Number(seed.respawn_ms || (template.kind === 'boss' ? 45000 : 15000)),
+            cooldowns: { attack: 0 },
+            interaction: template.interaction ? clone(template.interaction) : null,
+            held_item_id: seed.held_item_id || template.held_item_id || '',
+            facing: Number(seed.facing) || 1,
+            aim_x: Number(seed.x) || 0,
+            aim_y: Number(seed.y) || 0,
+            vx: 0,
+            vy: 0,
+            moving: false,
+            sprinting: false,
+            step_phase: 0,
+            attack_anim_until: 0,
+            hit_flash_until: 0,
+        });
+    }
+
+    _syncCatalogSpawns() {
+        const resourceSeeds = (this.worldDefinition && this.worldDefinition.resources) || [];
+        for (const seed of resourceSeeds) {
+            const key = this._resourceSeedKey(seed);
+            const existing = Array.from(this.resources.values()).find((entry) => entry._catalog_key === key);
+            if (!existing) {
+                const resource = this._createResourceEntry(seed);
+                this.resources.set(resource.id, resource);
+            }
+        }
+        const npcSeeds = (this.worldDefinition && this.worldDefinition.npcs) || [];
+        for (const seed of npcSeeds) {
+            const key = this._npcSeedKey(seed);
+            const existing = Array.from(this.npcs.values()).find((entry) => entry._catalog_key === key);
+            if (!existing) {
+                const npc = this._createNpcEntry(seed);
+                if (npc) this.npcs.set(npc.id, npc);
+                continue;
+            }
+            const template = this.npcTemplateMap[seed.template_id];
+            if (!template) continue;
+            existing.template_id = seed.template_id;
+            existing.kind = seed.kind || template.kind || existing.kind;
+            existing.name = seed.name || template.name || existing.name;
+            existing.interaction = template.interaction ? clone(template.interaction) : existing.interaction;
+            existing.held_item_id = seed.held_item_id || template.held_item_id || existing.held_item_id;
+            existing.respawn_ms = Number(seed.respawn_ms || existing.respawn_ms || (template.kind === 'boss' ? 45000 : 15000));
+        }
     }
 
     bounds() {
@@ -100,52 +221,19 @@ class WorldRoom {
 
     _seed() {
         const storedResources = worldStore.listResourceNodes(this.world.id);
-        const resources = storedResources.length ? storedResources : ((this.worldDefinition && this.worldDefinition.resources) || []);
-        for (const resource of resources) {
-            const entry = Object.assign({}, resource, {
-                id: resource.id || uid('resource'),
-                zone_id: resource.zone_id || 'outpost',
-                kind: resource.kind,
-                x: Number(resource.x) || 0,
-                y: Number(resource.y) || 0,
-                hp: Number(resource.hp || resource.max_hp || 1),
-                max_hp: Number(resource.max_hp || resource.hp || 1),
-                respawn_ms: Number(resource.respawn_ms || 15000),
-                respawn_at: resource.respawn_at ? Number(resource.respawn_at) : null,
-                loot_table_id: resource.loot_table_id || null,
-            });
+        const resourceSeeds = new Map();
+        for (const resource of [...storedResources, ...((this.worldDefinition && this.worldDefinition.resources) || [])]) {
+            const entry = this._createResourceEntry(resource);
+            resourceSeeds.set(entry._catalog_key, entry);
+        }
+        for (const entry of resourceSeeds.values()) {
             this.resources.set(entry.id, entry);
         }
 
         const worldNpcs = (this.worldDefinition && this.worldDefinition.npcs) || [];
         for (const seed of worldNpcs) {
-            const template = NPC_TEMPLATES_BY_ID[seed.template_id];
-            if (!template) continue;
-            const npc = Object.assign({}, template, seed, {
-                id: seed.id || uid('npc'),
-                template_id: seed.template_id,
-                zone_id: seed.zone_id || 'outpost',
-                x: Number(seed.x) || 0,
-                y: Number(seed.y) || 0,
-                home_x: Number(seed.x) || 0,
-                home_y: Number(seed.y) || 0,
-                hp: Number(seed.hp || template.hp || 10),
-                max_hp: Number(seed.max_hp || template.hp || 10),
-                respawn_ms: Number(seed.respawn_ms || (template.kind === 'boss' ? 45000 : 15000)),
-                cooldowns: { attack: 0 },
-                interaction: template.interaction ? clone(template.interaction) : null,
-                held_item_id: seed.held_item_id || template.held_item_id || '',
-                facing: Number(seed.facing) || 1,
-                aim_x: Number(seed.x) || 0,
-                aim_y: Number(seed.y) || 0,
-                vx: 0,
-                vy: 0,
-                moving: false,
-                sprinting: false,
-                step_phase: 0,
-                attack_anim_until: 0,
-                hit_flash_until: 0,
-            });
+            const npc = this._createNpcEntry(seed);
+            if (!npc) continue;
             this.npcs.set(npc.id, npc);
         }
 
@@ -257,6 +345,8 @@ class WorldRoom {
             prompt: npc.interaction.prompt || `Browse ${npc.name}`,
             description: npc.interaction.description || '',
             items: (npc.interaction.inventory || []).map((entry) => ({
+                item_name: this.itemDefinitions[String(entry.item_id)] && this.itemDefinitions[String(entry.item_id)].name || String(entry.item_id),
+                category: this.itemDefinitions[String(entry.item_id)] && this.itemDefinitions[String(entry.item_id)].category || null,
                 item_id: String(entry.item_id),
                 price: Math.max(0, Number(entry.price) || 0),
                 quantity: Math.max(1, Number(entry.quantity) || 1),
@@ -290,6 +380,9 @@ class WorldRoom {
     }
 
     _interactionPrompt(player) {
+        const hookPrompt = this.hooks.firstDefined('interaction:prompt', { room: this, player });
+        if (hookPrompt) return hookPrompt;
+
         const activeNpc = this._activeInteractionNpc(player);
         if (activeNpc) {
             const activeShop = this._shopInteractionPayload(activeNpc);
@@ -306,7 +399,7 @@ class WorldRoom {
         for (const drop of this.loot.values()) {
             if (drop.zone_id !== player.zone_id) continue;
             if (distanceSq(player, drop) <= (LOOT_PICKUP_RADIUS * LOOT_PICKUP_RADIUS)) {
-                const item = ITEMS_BY_ID[drop.item_id];
+                const item = this.itemDefinitions[drop.item_id] || this.itemMap[drop.item_id];
                 return {
                     type: 'loot',
                     target_id: drop.id,
@@ -342,20 +435,22 @@ class WorldRoom {
             }
         }
         if (!closest) return null;
-        const verb = closest.kind === 'tree' ? 'chop' : closest.kind === 'rock' ? 'mine' : 'harvest';
-        const name = closest.kind === 'tree' ? 'tree' : closest.kind === 'rock' ? 'ore vein' : 'bush';
+        const definition = this.resourceDefinitions[closest.kind] || {};
+        const interaction = definition.interaction || {};
+        const verb = interaction.verb || (closest.kind === 'tree' ? 'chop' : closest.kind === 'rock' ? 'mine' : 'harvest');
+        const name = interaction.label || definition.name || (closest.kind === 'tree' ? 'tree' : closest.kind === 'rock' ? 'ore vein' : 'bush');
         return {
             type: 'resource',
             target_id: closest.id,
             x: closest.x,
             y: closest.y - 42,
             label: `E · ${verb} ${name}`,
-            description: `Gather with your ${closest.kind === 'rock' ? 'pickaxe' : closest.kind === 'tree' ? 'hatchet' : 'hands'}`,
+            description: interaction.tool_hint || `Gather with your ${closest.kind === 'rock' ? 'pickaxe' : closest.kind === 'tree' ? 'hatchet' : 'hands'}`,
         };
     }
 
     _autoEquipPurchasedItem(player, itemId) {
-        const item = ITEMS_BY_ID[itemId];
+        const item = this.itemDefinitions[itemId] || this.itemMap[itemId];
         if (!item) return;
         const patch = { user_id: player.user_id };
         let changed = false;
@@ -502,7 +597,7 @@ class WorldRoom {
     _killNpc(npc, killer, now) {
         npc.hp = 0;
         npc.respawn_at = now + npc.respawn_ms;
-        const lootTable = npc.loot_table_id ? LOOT_TABLES_BY_ID[npc.loot_table_id] : null;
+        const lootTable = npc.loot_table_id ? this.lootTableMap[npc.loot_table_id] : null;
         const drops = lootTable ? rollLoot(lootTable.entries, { seed: now % 0x7fffffff, rolls: npc.kind === 'boss' ? 3 : 1 }) : [];
         this._dropLoot(npc.x, npc.y, npc.zone_id, drops, { kind: npc.kind, id: npc.id });
         this._publish(npc.kind === 'boss' ? GAME_EVENT_TYPES.BOSS_DEFEATED : GAME_EVENT_TYPES.NPC_DIED, {
@@ -673,11 +768,11 @@ class WorldRoom {
 
     _gatherPower(player, resource) {
         if (resource.kind === 'tree') {
-            const axe = ITEMS_BY_ID[player.equip_axe] || ITEMS_BY_ID.stone_hatchet || null;
+            const axe = this.itemDefinitions[player.equip_axe] || this.itemDefinitions.stone_hatchet || this.itemMap[player.equip_axe] || this.itemMap.stone_hatchet || null;
             return axe && axe.metadata && axe.metadata.tier ? axe.metadata.tier : 1;
         }
         if (resource.kind === 'rock') {
-            const pick = ITEMS_BY_ID[player.equip_pickaxe] || ITEMS_BY_ID.stone_pickaxe || null;
+            const pick = this.itemDefinitions[player.equip_pickaxe] || this.itemDefinitions.stone_pickaxe || this.itemMap[player.equip_pickaxe] || this.itemMap.stone_pickaxe || null;
             return pick && pick.metadata && pick.metadata.tier ? pick.metadata.tier : 1;
         }
         return 1;
@@ -712,10 +807,13 @@ class WorldRoom {
         }
         if (!closest) return { ok: false, reason: 'nothing to interact with' };
         player.activeInteraction = null;
+        const resourceDefinition = this.resourceDefinitions[closest.kind] || {};
+        const resourceInteraction = resourceDefinition.interaction || {};
         const power = this._gatherPower(player, closest);
         closest.hit_flash_until = now + 140;
-        if (closest.kind === 'tree') this._setHeldItem(player, player.equip_axe || 'stone_hatchet', now, 460);
-        else if (closest.kind === 'rock') this._setHeldItem(player, player.equip_pickaxe || 'stone_pickaxe', now, 460);
+        if (closest.kind === 'tree') this._setHeldItem(player, player.equip_axe || resourceInteraction.held_item_id || 'stone_hatchet', now, 460);
+        else if (closest.kind === 'rock') this._setHeldItem(player, player.equip_pickaxe || resourceInteraction.held_item_id || 'stone_pickaxe', now, 460);
+        else if (resourceInteraction.held_item_id) this._setHeldItem(player, resourceInteraction.held_item_id, now, 460);
         applyGatherDamage(closest, power);
         this._publish(GAME_EVENT_TYPES.RESOURCE_GATHERED, {
             user_id: player.user_id,
@@ -725,7 +823,7 @@ class WorldRoom {
             zone_id: player.zone_id,
         });
         if (closest.hp <= 0) {
-            const lootTable = closest.loot_table_id ? LOOT_TABLES_BY_ID[closest.loot_table_id] : null;
+            const lootTable = closest.loot_table_id ? this.lootTableMap[closest.loot_table_id] : null;
             const drops = lootTable ? rollLoot(lootTable.entries, { seed: now % 0x7fffffff, rolls: 1 }) : [];
             for (const drop of drops) {
                 model.addInventoryItem({ user_id: player.user_id, item_id: drop.item_id, quantity: drop.quantity, metadata: {} });
@@ -746,7 +844,7 @@ class WorldRoom {
     }
 
     _handleCraft(player, input) {
-        const recipe = RECIPES_BY_ID[input.recipe_id];
+        const recipe = this.recipeMap[input.recipe_id];
         if (!recipe) return { ok: false, reason: 'recipe not found' };
         const skillLevel = Number(player.levels[recipe.skill] || 1);
         if (skillLevel < Number(recipe.level || 1)) return { ok: false, reason: 'skill too low' };
@@ -774,6 +872,13 @@ class WorldRoom {
         const inventory = model.listInventory(player.user_id);
         const entry = inventory.find((item) => item.item_id === itemId && item.quantity > 0);
         if (!entry) return { ok: false, reason: 'missing build item' };
+        const itemDefinition = this.itemDefinitions[itemId] || this.itemMap[itemId] || null;
+        const buildDefinition = itemDefinition && itemDefinition.builds || {
+            structure_kind: itemId.replace(/^build_/, ''),
+            size: 48,
+        };
+        const structureDefinition = this.structureDefinitions[buildDefinition.structure_kind] || null;
+        const structureSize = Number(buildDefinition.size || structureDefinition && structureDefinition.size) || 48;
         const placement = {
             x: Number(input.x) || player.x + 48,
             y: Number(input.y) || player.y,
@@ -782,18 +887,19 @@ class WorldRoom {
         const decision = canPlaceStructure({
             x: placement.x,
             y: placement.y,
+            size: structureSize,
             zone_id: placement.zone_id,
             bounds: this.bounds(),
             structures: Array.from(this.structures.values()),
         });
         if (!decision.ok) return decision;
         const structure = model.createStructure({
-            type: itemId.replace(/^build_/, ''),
+            type: buildDefinition.structure_kind,
             world_id: this.world.id,
             x: placement.x,
             y: placement.y,
             owner_id: player.user_id,
-            data: { zone_id: placement.zone_id, size: 48, source_item_id: itemId },
+            data: { zone_id: placement.zone_id, size: structureSize, source_item_id: itemId },
         });
         const hydrated = {
             id: structure.id,
@@ -803,8 +909,8 @@ class WorldRoom {
             x: Number(structure.x),
             y: Number(structure.y),
             zone_id: placement.zone_id,
-            size: 48,
-            data: structure.data || { zone_id: placement.zone_id },
+            size: structureSize,
+            data: structure.data || { zone_id: placement.zone_id, size: structureSize },
         };
         this.structures.set(hydrated.id, hydrated);
         model.addInventoryItem({ user_id: player.user_id, item_id: itemId, quantity: -1, metadata: {} });
@@ -951,6 +1057,7 @@ class WorldRoom {
         this._publish(GAME_EVENT_TYPES.SESSION_STARTED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
         this._publish(GAME_EVENT_TYPES.PLAYER_JOINED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
         this._publish(GAME_EVENT_TYPES.PLAYER_SPAWNED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        this.hooks.call('player:join', { room: this, player, socketId });
         return this.buildSnapshotForPlayer(player, Date.now());
     }
 
@@ -977,6 +1084,7 @@ class WorldRoom {
         this.playersBySocket.delete(socketId);
         this._publish(GAME_EVENT_TYPES.PLAYER_LEFT, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
         this._publish(GAME_EVENT_TYPES.SESSION_ENDED, { user_id: player.user_id, world_id: this.world.id, zone_id: player.zone_id });
+        this.hooks.call('player:leave', { room: this, player, socketId });
     }
 
     receiveInput(socketId, input) {
@@ -1037,26 +1145,37 @@ class WorldRoom {
     }
 
     _processAction(player, action, now) {
+        let result;
         switch (action.action) {
         case 'attack':
-            return this._handleAttack(player, action, now);
+            result = this._handleAttack(player, action, now);
+            break;
         case 'interact':
         case 'pickup':
-            return this._handleInteract(player, now);
+            result = this._handleInteract(player, now);
+            break;
         case 'craft':
-            return this._handleCraft(player, action, now);
+            result = this._handleCraft(player, action, now);
+            break;
         case 'build':
-            return this._handleBuild(player, action, now);
+            result = this._handleBuild(player, action, now);
+            break;
         case 'travel':
-            return this._handleTravel(player, action, now);
+            result = this._handleTravel(player, action, now);
+            break;
         case 'close_interaction':
-            return this.closeInteraction(player);
+            result = this.closeInteraction(player);
+            break;
         case 'respawn':
             if (player.dead && now >= player.dead_until) this._respawnPlayer(player);
-            return { ok: true };
+            result = { ok: true };
+            break;
         default:
-            return { ok: false, reason: 'unknown action' };
+            result = { ok: false, reason: 'unknown action' };
+            break;
         }
+        this.hooks.call('action:processed', { room: this, player, action, now, result });
+        return result;
     }
 
     _updateProjectiles(dt, now) {
@@ -1273,7 +1392,7 @@ class WorldRoom {
         const projectiles = Array.from(this.projectiles.values())
             .filter((entry) => entry.zone_id === player.zone_id)
             .map((entry) => ({ id: entry.id, x: entry.x, y: entry.y, vx: entry.vx, vy: entry.vy, owner_id: entry.owner_id, zone_id: entry.zone_id }));
-        return {
+        const snapshot = {
             world: {
                 id: this.world.id,
                 slug: this.world.slug,
@@ -1344,6 +1463,8 @@ class WorldRoom {
                 entities_visible: sameZonePlayers.length + npcs.length + resources.length + structures.length + loot.length,
             },
         };
+        this.hooks.call('snapshot:decorate', snapshot, { room: this, player, now });
+        return snapshot;
     }
 
     broadcastSnapshots(now) {
