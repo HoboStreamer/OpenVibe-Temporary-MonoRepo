@@ -1,5 +1,6 @@
 'use strict';
 
+const Database = require('better-sqlite3');
 const path = require('path');
 
 const {
@@ -13,6 +14,7 @@ const {
     safeJsonParse,
     writeJson,
 } = require('./common');
+const { resolveLegacyArtifactSummary } = require('./legacy-source-roots');
 
 function createStatsTracker() {
     const datasets = {};
@@ -231,6 +233,7 @@ function createImportContext(sourceDir, outDir, logger) {
     return {
         logger,
         root,
+        legacyArtifacts: resolveLegacyArtifactSummary({ sourceDir }),
         sourceRoots: {
             hobostreamer: path.join(sourceDir, 'hobostreamer'),
             hobotools: path.join(sourceDir, 'hobotools'),
@@ -263,6 +266,10 @@ function createImportContext(sourceDir, outDir, logger) {
             channelsByLegacyId: new Map(),
             managedStreamsByLegacyId: new Map(),
             streamsByLegacyId: new Map(),
+        },
+        anonContinuity: {
+            ipLinksByKey: new Map(),
+            fingerprintLinksByKey: new Map(),
         },
     };
 }
@@ -571,13 +578,310 @@ function ensureHoboQuestAnonUser(context, legacyUserId, hints) {
 
 function flushHoboQuestAnonUsers(context) {
     const anonWriter = context.writers.get('identity/anon-users');
-    for (const record of context.userContext.hoboQuestAnonRecordsById.values()) {
+    for (const record of context.userContext.anonRecordsById.values()) {
         if (record._written) continue;
         anonWriter.write(record);
         record._written = true;
         context.stats.bump('identity/anon-users', 'source_records');
         context.stats.bump('identity/anon-users', 'written_records');
     }
+}
+
+function normalizeIpAddress(value) {
+    const candidate = String(value == null ? '' : value).trim().toLowerCase();
+    if (!candidate || candidate === 'unknown') return null;
+    return candidate.replace(/^::ffff:/, '') || null;
+}
+
+function ensureContinuityMetadata(record) {
+    if (!record.metadata || typeof record.metadata !== 'object') {
+        record.metadata = {};
+    }
+    if (!Array.isArray(record.metadata.sources)) {
+        record.metadata.sources = record.source ? [record.source] : [];
+    }
+    if (!Array.isArray(record.metadata.reasons)) {
+        record.metadata.reasons = [];
+    }
+    if (!Array.isArray(record.metadata.legacy_refs)) {
+        record.metadata.legacy_refs = record.legacy_ref ? [record.legacy_ref] : [];
+    }
+    return record.metadata;
+}
+
+function appendContinuityMetadata(record, source, reason, legacyRef) {
+    const metadata = ensureContinuityMetadata(record);
+    if (source && !metadata.sources.includes(source)) {
+        metadata.sources.push(source);
+    }
+    if (reason && !metadata.reasons.includes(reason)) {
+        metadata.reasons.push(reason);
+    }
+    if (legacyRef) {
+        const key = `${legacyRef.source}:${legacyRef.table}:${legacyRef.legacy_id}`;
+        const existing = new Set(metadata.legacy_refs.map((ref) => `${ref.source}:${ref.table}:${ref.legacy_id}`));
+        if (!existing.has(key)) {
+            metadata.legacy_refs.push(legacyRef);
+        }
+        if (!record.legacy_ref) {
+            record.legacy_ref = legacyRef;
+        }
+    }
+}
+
+function ensureLegacyAnonUserByNumber(context, anonNumber, options) {
+    const normalizedNumber = normalizeAnonNumber(anonNumber);
+    if (!normalizedNumber) return null;
+    const existingCanonicalId = context.userContext.anonUsersByNumber.get(String(normalizedNumber));
+    if (existingCanonicalId) return existingCanonicalId;
+
+    const sourceName = options && options.source ? String(options.source) : 'hobostreamer';
+    const legacyId = options && options.legacyId != null
+        ? String(options.legacyId)
+        : `anon-number-${normalizedNumber}`;
+    const tableName = options && options.table ? String(options.table) : 'anon_ip_mappings';
+    const legacyRef = makeLegacyRef(sourceName, tableName, legacyId);
+    const canonicalId = buildEntityId('anon-user', sourceName, legacyId);
+    const record = {
+        id: canonicalId,
+        source: sourceName,
+        anon_number: normalizedNumber,
+        session_token: null,
+        display_name: anonDisplayNameForNumber(normalizedNumber),
+        preferences: {
+            migrated_from: sourceName,
+            placeholder: true,
+            preserved_via: tableName,
+        },
+        total_messages: 0,
+        total_commands: 0,
+        first_seen: null,
+        last_seen: null,
+        legacy_ref: legacyRef,
+        legacy_refs: [legacyRef],
+    };
+    context.userContext.anonRecordsById.set(canonicalId, record);
+    context.userContext.anonUsersByNumber.set(String(normalizedNumber), canonicalId);
+    context.userContext.anonIds.add(canonicalId);
+    return canonicalId;
+}
+
+function resolveCanonicalAnonUserId(context, sourceName, legacyAnonId, anonNumber, options) {
+    const normalizedNumber = normalizeAnonNumber(anonNumber);
+    if (sourceName === 'hobotools' && legacyAnonId != null) {
+        const directCanonicalId = buildEntityId('anon-user', 'hobotools', legacyAnonId);
+        if (context.userContext.anonRecordsById.has(directCanonicalId)) {
+            return directCanonicalId;
+        }
+    }
+    if (!normalizedNumber) return null;
+    return context.userContext.anonUsersByNumber.get(String(normalizedNumber))
+        || ensureLegacyAnonUserByNumber(context, normalizedNumber, options || {});
+}
+
+function rememberAnonIpLink(context, params) {
+    const anonUserId = params && params.anonUserId ? String(params.anonUserId) : null;
+    const ipAddress = normalizeIpAddress(params && params.ipAddress);
+    if (!anonUserId || !ipAddress) return;
+
+    const key = `${anonUserId}:${ipAddress}`;
+    let record = context.anonContinuity.ipLinksByKey.get(key);
+    if (!record) {
+        record = {
+            id: buildEntityId('anon-ip', 'canonical', key),
+            anon_user_id: anonUserId,
+            ip_address: ipAddress,
+            source: params && params.source ? String(params.source) : null,
+            first_seen: params && params.firstSeen || null,
+            last_seen: params && (params.lastSeen || params.firstSeen) || null,
+            metadata: {},
+            legacy_ref: params && params.legacyRef || null,
+        };
+        context.anonContinuity.ipLinksByKey.set(key, record);
+    } else {
+        record.first_seen = earliestTimestamp(record.first_seen, params && params.firstSeen || null);
+        record.last_seen = latestTimestamp(record.last_seen, params && params.lastSeen || null);
+        record.source = record.source || params && params.source || null;
+    }
+    appendContinuityMetadata(record, params && params.source || null, params && params.reason || null, params && params.legacyRef || null);
+}
+
+function rememberAnonFingerprint(context, params) {
+    const anonUserId = params && params.anonUserId ? String(params.anonUserId) : null;
+    const fingerprint = String(params && params.fingerprint || '').trim();
+    if (!anonUserId || !fingerprint) return;
+
+    const key = `${anonUserId}:${fingerprint}`;
+    let record = context.anonContinuity.fingerprintLinksByKey.get(key);
+    if (!record) {
+        record = {
+            id: buildEntityId('anon-fingerprint', 'canonical', key),
+            anon_user_id: anonUserId,
+            fingerprint,
+            source: params && params.source ? String(params.source) : null,
+            first_seen: params && params.firstSeen || null,
+            last_seen: params && (params.lastSeen || params.firstSeen) || null,
+            metadata: {},
+            legacy_ref: params && params.legacyRef || null,
+        };
+        context.anonContinuity.fingerprintLinksByKey.set(key, record);
+    } else {
+        record.first_seen = earliestTimestamp(record.first_seen, params && params.firstSeen || null);
+        record.last_seen = latestTimestamp(record.last_seen, params && params.lastSeen || null);
+        record.source = record.source || params && params.source || null;
+    }
+    appendContinuityMetadata(record, params && params.source || null, params && params.reason || null, params && params.legacyRef || null);
+}
+
+function hasSqliteTable(sqlite, tableName) {
+    return !!sqlite.prepare(`
+        SELECT name
+          FROM sqlite_master
+         WHERE type = 'table' AND name = ?
+         LIMIT 1
+    `).get(String(tableName));
+}
+
+function sqliteTableColumns(sqlite, tableName) {
+    return new Set(sqlite.prepare(`PRAGMA table_info(${tableName})`).all().map((column) => column.name));
+}
+
+function loadHoboToolsAnonContinuity(context) {
+    const detail = context.legacyArtifacts && context.legacyArtifacts.details && context.legacyArtifacts.details.hobotools;
+    if (!detail || !detail.dbExists || !detail.dbPath) {
+        queueImportWarning(context, 'Legacy hobo-tools anon continuity database was not found, so only exported anon identity rows will be preserved.');
+        return;
+    }
+
+    const sqlite = new Database(detail.dbPath, { readonly: true, fileMustExist: true });
+    try {
+        if (!hasSqliteTable(sqlite, 'anon_users')) {
+            queueImportWarning(context, `Legacy hobo-tools database at ${detail.dbPath} does not expose anon_users; skipping anon continuity enrichment.`);
+            return;
+        }
+
+        const anonUserColumns = sqliteTableColumns(sqlite, 'anon_users');
+        const anonUsers = sqlite.prepare(`
+            SELECT
+                id,
+                anon_number,
+                ${anonUserColumns.has('fingerprint') ? 'fingerprint' : 'NULL AS fingerprint'},
+                ${anonUserColumns.has('ip') ? 'ip' : 'NULL AS ip'},
+                ${anonUserColumns.has('first_seen') ? 'first_seen' : 'NULL AS first_seen'},
+                ${anonUserColumns.has('last_seen') ? 'last_seen' : 'NULL AS last_seen'}
+              FROM anon_users
+        `).all();
+
+        for (const row of anonUsers) {
+            const anonUserId = resolveCanonicalAnonUserId(context, 'hobotools', row.id, row.anon_number, {
+                source: 'hobotools',
+                table: 'anon_users',
+                legacyId: row.id,
+            });
+            if (!anonUserId) {
+                queueImportWarning(context, `Skipped hobo-tools anon continuity row ${row.id} because anon_number ${row.anon_number} could not be mapped to a canonical anon identity.`);
+                continue;
+            }
+            rememberAnonFingerprint(context, {
+                anonUserId,
+                fingerprint: row.fingerprint,
+                source: 'hobotools',
+                reason: 'fingerprint',
+                firstSeen: row.first_seen || null,
+                lastSeen: row.last_seen || null,
+                legacyRef: makeLegacyRef('hobotools', 'anon_users', row.id),
+            });
+            rememberAnonIpLink(context, {
+                anonUserId,
+                ipAddress: row.ip,
+                source: 'hobotools',
+                reason: 'creating_ip',
+                firstSeen: row.first_seen || null,
+                lastSeen: row.last_seen || null,
+                legacyRef: makeLegacyRef('hobotools', 'anon_users', row.id),
+            });
+        }
+
+        if (!hasSqliteTable(sqlite, 'anon_ip_log')) return;
+        const ipLogRows = sqlite.prepare(`
+            SELECT
+                l.anon_id,
+                l.ip,
+                l.first_seen,
+                l.last_seen,
+                a.anon_number
+              FROM anon_ip_log l
+              LEFT JOIN anon_users a ON a.id = l.anon_id
+        `).all();
+        for (const row of ipLogRows) {
+            const anonUserId = resolveCanonicalAnonUserId(context, 'hobotools', row.anon_id, row.anon_number, {
+                source: 'hobotools',
+                table: 'anon_ip_log',
+                legacyId: row.anon_id,
+            });
+            if (!anonUserId) {
+                queueImportWarning(context, `Skipped hobo-tools anon IP log row ${row.anon_id}:${row.ip} because it could not be mapped to a canonical anon identity.`);
+                continue;
+            }
+            rememberAnonIpLink(context, {
+                anonUserId,
+                ipAddress: row.ip,
+                source: 'hobotools',
+                reason: 'ip_log',
+                firstSeen: row.first_seen || null,
+                lastSeen: row.last_seen || null,
+                legacyRef: makeLegacyRef('hobotools', 'anon_ip_log', `${row.anon_id}:${row.ip}`),
+            });
+        }
+    } finally {
+        sqlite.close();
+    }
+}
+
+function loadHoboStreamerAnonContinuity(context) {
+    const detail = context.legacyArtifacts && context.legacyArtifacts.details && context.legacyArtifacts.details.hobostreamer;
+    if (!detail || !detail.dbExists || !detail.dbPath) {
+        queueImportWarning(context, 'Legacy HoboStreamer anon IP mapping database was not found, so only hobo-tools anon continuity data will be imported.');
+        return;
+    }
+
+    const sqlite = new Database(detail.dbPath, { readonly: true, fileMustExist: true });
+    try {
+        if (!hasSqliteTable(sqlite, 'anon_ip_mappings')) {
+            queueImportWarning(context, `Legacy HoboStreamer database at ${detail.dbPath} does not expose anon_ip_mappings; skipping HoboStreamer anon continuity enrichment.`);
+            return;
+        }
+        const rows = sqlite.prepare(`
+            SELECT ip, anon_num
+              FROM anon_ip_mappings
+             ORDER BY anon_num ASC, ip ASC
+        `).all();
+        for (const row of rows) {
+            const anonUserId = resolveCanonicalAnonUserId(context, 'hobostreamer', `anon-number-${row.anon_num}`, row.anon_num, {
+                source: 'hobostreamer',
+                table: 'anon_ip_mappings',
+                legacyId: row.anon_num,
+            });
+            if (!anonUserId) {
+                queueImportWarning(context, `Skipped HoboStreamer anon IP mapping ${row.ip} -> ${row.anon_num} because it could not be mapped to a canonical anon identity.`);
+                continue;
+            }
+            rememberAnonIpLink(context, {
+                anonUserId,
+                ipAddress: row.ip,
+                source: 'hobostreamer',
+                reason: 'ip_mapping',
+                legacyRef: makeLegacyRef('hobostreamer', 'anon_ip_mappings', `${row.ip}:${row.anon_num}`),
+            });
+        }
+    } finally {
+        sqlite.close();
+    }
+}
+
+function enrichAnonContinuity(context) {
+    loadHoboToolsAnonContinuity(context);
+    loadHoboStreamerAnonContinuity(context);
 }
 
 async function writeGamesDatasets(context) {
@@ -1517,6 +1821,8 @@ async function writeGamesDatasets(context) {
 async function writeIdentityDatasets(context) {
     const usersWriter = context.writers.get('identity/users');
     const anonWriter = context.writers.get('identity/anon-users');
+    const anonIpWriter = context.writers.get('identity/anon-ip-links');
+    const anonFingerprintWriter = context.writers.get('identity/anon-fingerprints');
     const linkedWriter = context.writers.get('identity/linked-accounts');
     const conflictWriter = context.writers.get('identity/username-conflicts');
 
@@ -1542,6 +1848,26 @@ async function writeIdentityDatasets(context) {
         record._written = true;
         context.stats.bump('identity/anon-users', 'source_records');
         context.stats.bump('identity/anon-users', 'written_records');
+    }
+
+    for (const record of [...context.anonContinuity.ipLinksByKey.values()].sort((left, right) => {
+        const leftKey = `${left.anon_user_id}:${left.ip_address}`;
+        const rightKey = `${right.anon_user_id}:${right.ip_address}`;
+        return leftKey.localeCompare(rightKey);
+    })) {
+        anonIpWriter.write(record);
+        context.stats.bump('identity/anon-ip-links', 'source_records');
+        context.stats.bump('identity/anon-ip-links', 'written_records');
+    }
+
+    for (const record of [...context.anonContinuity.fingerprintLinksByKey.values()].sort((left, right) => {
+        const leftKey = `${left.anon_user_id}:${left.fingerprint}`;
+        const rightKey = `${right.anon_user_id}:${right.fingerprint}`;
+        return leftKey.localeCompare(rightKey);
+    })) {
+        anonFingerprintWriter.write(record);
+        context.stats.bump('identity/anon-fingerprints', 'source_records');
+        context.stats.bump('identity/anon-fingerprints', 'written_records');
     }
 
     const seenVerificationKeys = new Set();
@@ -2219,6 +2545,7 @@ async function importCanonicalBundle(options) {
     ];
 
     await buildUserContext(context);
+    enrichAnonContinuity(context);
     await writeIdentityDatasets(context);
     await writeThemeAndControlPlaneDatasets(context);
     await writeSocialDatasets(context);

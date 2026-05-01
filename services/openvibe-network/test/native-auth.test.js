@@ -21,6 +21,7 @@ process.env.OPENVIBE_ADMIN_URL = 'http://admin.openvibe.network';
 process.env.HOBO_TOOLS_URL = '';
 process.env.HOBO_TOOLS_PUBLIC_KEY = '';
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
+process.env.INTERNAL_API_KEY = 'change-me-in-production';
 process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_OPENVIBE_NETWORK_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_DATABASE_URL = '';
@@ -77,7 +78,10 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             hostHeader: 'openvibe.network',
             method: 'POST',
             requestPath: '/api/v1/session/anonymous',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+                'content-type': 'application/json',
+                'x-forwarded-for': '203.0.113.10',
+            },
             body: JSON.stringify({}),
         });
         assert.strictEqual(anonSessionStart.status, 201);
@@ -109,11 +113,107 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             headers: {
                 cookie: anonCookie,
                 'content-type': 'application/json',
+                'x-forwarded-for': '203.0.113.10',
             },
             body: JSON.stringify({}),
         });
         assert.strictEqual(anonRepeat.status, 200);
         assert.strictEqual(JSON.parse(anonRepeat.body).user.anon_number, 1);
+
+        const anonIpRestore = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: {
+                'content-type': 'application/json',
+                'x-forwarded-for': '203.0.113.10',
+            },
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(anonIpRestore.status, 200);
+        assert.strictEqual(JSON.parse(anonIpRestore.body).user.anon_number, 1);
+
+        const anonSecond = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: {
+                'content-type': 'application/json',
+                'x-forwarded-for': '203.0.113.10',
+            },
+            body: JSON.stringify({ force_new: true, fingerprint: 'fingerprint-shared' }),
+        });
+        assert.strictEqual(anonSecond.status, 201);
+        const anonSecondSetCookies = Array.isArray(anonSecond.headers['set-cookie']) ? anonSecond.headers['set-cookie'] : [anonSecond.headers['set-cookie']];
+        const anonTwoCookie = anonSecondSetCookies[0].split(';')[0];
+        const anonSecondBody = JSON.parse(anonSecond.body);
+        assert.strictEqual(anonSecondBody.user.anon_number, 2);
+        assert.ok(anonSecondBody.user.session_token, 'expected anon continuity session token to be exposed');
+
+        const anonFingerprintRestore = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: {
+                'content-type': 'application/json',
+                'x-forwarded-for': '198.51.100.77',
+            },
+            body: JSON.stringify({ fingerprint: 'fingerprint-shared' }),
+        });
+        assert.strictEqual(anonFingerprintRestore.status, 200);
+        assert.strictEqual(JSON.parse(anonFingerprintRestore.body).user.anon_number, 2);
+
+        const anonIdentities = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/session/anonymous/identities?fingerprint=' + encodeURIComponent('fingerprint-shared'),
+            headers: {
+                cookie: anonTwoCookie,
+                'x-forwarded-for': '203.0.113.10',
+            },
+        });
+        assert.strictEqual(anonIdentities.status, 200);
+        const anonIdentityItems = JSON.parse(anonIdentities.body).items;
+        assert.deepStrictEqual(anonIdentityItems.map((item) => item.anon_number), [1, 2]);
+        assert.ok(anonIdentityItems.find((item) => item.anon_number === 2 && item.current), 'expected current anon identity to be flagged');
+
+        const anonSwitch = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/anonymous',
+            headers: {
+                cookie: anonTwoCookie,
+                'content-type': 'application/json',
+                'x-forwarded-for': '203.0.113.10',
+            },
+            body: JSON.stringify({ anon_number: 1, fingerprint: 'fingerprint-shared' }),
+        });
+        assert.strictEqual(anonSwitch.status, 200);
+        assert.strictEqual(JSON.parse(anonSwitch.body).user.anon_number, 1);
+        const switchedAnonCookies = Array.isArray(anonSwitch.headers['set-cookie']) ? anonSwitch.headers['set-cookie'] : [anonSwitch.headers['set-cookie']];
+        const switchedAnonCookie = switchedAnonCookies[0].split(';')[0];
+
+        const internalResolveAnon = await request({
+            port,
+            hostHeader: 'api.openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/internal/resolve-anon',
+            headers: {
+                'content-type': 'application/json',
+                'x-internal-key': 'change-me-in-production',
+                'x-openvibe-service': 'openvibe-chat',
+            },
+            body: JSON.stringify({ anon_number: 2, ip: '203.0.113.10' }),
+        });
+        assert.strictEqual(internalResolveAnon.status, 200);
+        const resolvedAnon = JSON.parse(internalResolveAnon.body);
+        assert.strictEqual(resolvedAnon.ok, true);
+        assert.strictEqual(resolvedAnon.created, false);
+        assert.strictEqual(resolvedAnon.user.anon_number, 2);
 
         const anonMe = await request({
             port,
@@ -128,10 +228,50 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
             port,
             hostHeader: 'auth.openvibe.network',
             requestPath: '/oauth/authorize?return_to=' + encodeURIComponent('http://my.openvibe.network/account'),
-            headers: { cookie: anonCookie },
+            headers: { cookie: switchedAnonCookie },
         });
         assert.strictEqual(anonAuthorize.status, 200);
         assert.ok(anonAuthorize.body.includes('Create an account or sign in'));
+
+        const anonBridgeRes = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            requestPath: '/api/v1/session/bridge?return_to=' + encodeURIComponent('http://openvibe.chat.localhost:4800/'),
+            headers: { cookie: switchedAnonCookie },
+        });
+        assert.strictEqual(anonBridgeRes.status, 302);
+        const anonBridgeUrl = new URL(anonBridgeRes.headers.location);
+        const anonBridgeHash = new URLSearchParams(anonBridgeUrl.hash.slice(1));
+        assert.ok(anonBridgeHash.get('openvibe_token'), 'anon session bridge should return a bearer token in the URL fragment');
+
+        const anonExchangeRes = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            method: 'POST',
+            requestPath: '/api/v1/session/exchange',
+            headers: {
+                cookie: switchedAnonCookie,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        });
+        assert.strictEqual(anonExchangeRes.status, 200);
+        const anonExchanged = JSON.parse(anonExchangeRes.body);
+        assert.ok(anonExchanged.access_token, 'anon exchange should return an access token');
+        assert.strictEqual(anonExchanged.scope, 'anonymous');
+        assert.strictEqual(anonExchanged.user.anon_number, 1);
+
+        const anonBearerSession = await request({
+            port,
+            hostHeader: 'my.openvibe.network',
+            requestPath: '/api/v1/session',
+            headers: { authorization: `Bearer ${anonExchanged.access_token}` },
+        });
+        assert.strictEqual(anonBearerSession.status, 200);
+        const anonBearerSessionBody = JSON.parse(anonBearerSession.body);
+        assert.strictEqual(anonBearerSessionBody.authenticated, false);
+        assert.strictEqual(anonBearerSessionBody.anonymous, true);
+        assert.strictEqual(anonBearerSessionBody.user.anon_number, 1);
 
         const reservedAnonUsername = await request({
             port,

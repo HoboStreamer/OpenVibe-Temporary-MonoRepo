@@ -15,6 +15,8 @@
 //   auth_authorization_codes — OAuth authorization code staging
 //   auth_refresh_tokens  — native refresh token rotation store
 //   auth_sessions        — browser/device session inventory
+//   auth_anon_ip_links   — durable anon ↔ IP continuity imported from legacy runtimes
+//   auth_anon_fingerprints — durable anon ↔ fingerprint continuity imported from legacy runtimes
 //   control_notifications — durable in-app notification history
 //   control_oauth_clients — sanitized OAuth client manifests used by native auth
 //   social_follows       — network and live follow edges with runtime toggles
@@ -65,6 +67,36 @@ const AUTH_SCHEMA_SQL = `
             updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_auth_anon_users_number ON auth_anon_users(anon_number);
+
+        CREATE TABLE IF NOT EXISTS auth_anon_ip_links (
+            id            TEXT PRIMARY KEY,
+            anon_user_id  TEXT NOT NULL,
+            ip_address    TEXT NOT NULL,
+            source        TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            first_seen    DATETIME,
+            last_seen     DATETIME,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anon_user_id, ip_address)
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_ip_links_ip ON auth_anon_ip_links(ip_address, last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_ip_links_anon ON auth_anon_ip_links(anon_user_id, last_seen DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_anon_fingerprints (
+            id            TEXT PRIMARY KEY,
+            anon_user_id  TEXT NOT NULL,
+            fingerprint   TEXT NOT NULL,
+            source        TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            first_seen    DATETIME,
+            last_seen     DATETIME,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anon_user_id, fingerprint)
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_fingerprints_lookup ON auth_anon_fingerprints(fingerprint, last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_fingerprints_anon ON auth_anon_fingerprints(anon_user_id, last_seen DESC);
 
         CREATE TABLE IF NOT EXISTS auth_authorization_codes (
             code_hash              TEXT PRIMARY KEY,
@@ -310,6 +342,36 @@ const SCHEMA_SQL = `
             updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_auth_anon_users_number ON auth_anon_users(anon_number);
+
+        CREATE TABLE IF NOT EXISTS auth_anon_ip_links (
+            id            TEXT PRIMARY KEY,
+            anon_user_id  TEXT NOT NULL,
+            ip_address    TEXT NOT NULL,
+            source        TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            first_seen    DATETIME,
+            last_seen     DATETIME,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anon_user_id, ip_address)
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_ip_links_ip ON auth_anon_ip_links(ip_address, last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_ip_links_anon ON auth_anon_ip_links(anon_user_id, last_seen DESC);
+
+        CREATE TABLE IF NOT EXISTS auth_anon_fingerprints (
+            id            TEXT PRIMARY KEY,
+            anon_user_id  TEXT NOT NULL,
+            fingerprint   TEXT NOT NULL,
+            source        TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            first_seen    DATETIME,
+            last_seen     DATETIME,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anon_user_id, fingerprint)
+        );
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_fingerprints_lookup ON auth_anon_fingerprints(fingerprint, last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_auth_anon_fingerprints_anon ON auth_anon_fingerprints(anon_user_id, last_seen DESC);
 
         CREATE TABLE IF NOT EXISTS auth_authorization_codes (
             code_hash              TEXT PRIMARY KEY,

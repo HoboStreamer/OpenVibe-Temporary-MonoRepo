@@ -5,6 +5,15 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const Database = require('better-sqlite3');
+
+process.env.OPENVIBE_LEGACY_SOURCE_ROOT = '';
+process.env.OPENVIBE_HOBOSTREAMER_ROOT = '';
+process.env.OPENVIBE_HOBOSTREAMER_DB_PATH = '';
+process.env.OPENVIBE_HOBOTOOLS_ROOT = '';
+process.env.OPENVIBE_HOBOTOOLS_DB_PATH = '';
+process.env.OPENVIBE_HOBOQUEST_ROOT = '';
+process.env.OPENVIBE_HOBOQUEST_DB_PATH = '';
 
 const { ensureDir, writeJson } = require('../lib/common');
 const { importCanonicalBundle } = require('../lib/importer');
@@ -27,10 +36,13 @@ async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-migrate-test-'));
     const sourceDir = path.join(root, 'source');
     const outDir = path.join(root, 'out');
+    const productionSourceDir = path.join(sourceDir, 'production-source');
 
     ensureDir(path.join(sourceDir, 'hobotools', 'tables'));
     ensureDir(path.join(sourceDir, 'hobostreamer', 'tables'));
     ensureDir(path.join(sourceDir, 'hoboquest', 'tables'));
+    ensureDir(path.join(productionSourceDir, 'hobotools', 'data'));
+    ensureDir(path.join(productionSourceDir, 'hobostreamer', 'data'));
 
     writeNdjson(path.join(sourceDir, 'hobotools', 'tables', 'users.ndjson'), [
         {
@@ -205,10 +217,53 @@ async function main() {
         ],
     });
 
+    const hoboToolsDb = new Database(path.join(productionSourceDir, 'hobotools', 'data', 'hobo-tools.db'));
+    const hoboStreamerDb = new Database(path.join(productionSourceDir, 'hobostreamer', 'data', 'hobostreamer.db'));
+    try {
+        hoboToolsDb.exec(`
+            CREATE TABLE anon_users (
+                id INTEGER PRIMARY KEY,
+                anon_number INTEGER NOT NULL,
+                fingerprint TEXT,
+                ip TEXT,
+                first_seen TEXT,
+                last_seen TEXT
+            );
+            CREATE TABLE anon_ip_log (
+                anon_id INTEGER NOT NULL,
+                ip TEXT NOT NULL,
+                first_seen TEXT,
+                last_seen TEXT
+            );
+        `);
+        hoboToolsDb.prepare(`
+            INSERT INTO anon_users (id, anon_number, fingerprint, ip, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(5, 5, 'legacy-fingerprint-5', '203.0.113.10', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z');
+        hoboToolsDb.prepare(`
+            INSERT INTO anon_ip_log (anon_id, ip, first_seen, last_seen)
+            VALUES (?, ?, ?, ?)
+        `).run(5, '198.51.100.5', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z');
+
+        hoboStreamerDb.exec(`
+            CREATE TABLE anon_ip_mappings (
+                ip TEXT NOT NULL,
+                anon_num INTEGER NOT NULL
+            );
+        `);
+        hoboStreamerDb.prepare('INSERT INTO anon_ip_mappings (ip, anon_num) VALUES (?, ?)').run('203.0.113.10', 5);
+        hoboStreamerDb.prepare('INSERT INTO anon_ip_mappings (ip, anon_num) VALUES (?, ?)').run('192.0.2.44', 99);
+    } finally {
+        hoboToolsDb.close();
+        hoboStreamerDb.close();
+    }
+
     const report = await importCanonicalBundle({ sourceDir, outDir, logger: { info() {}, warn() {}, error() {} } });
     assert.strictEqual(report.user_merge.canonical_users, 1, 'expected HoboStreamer user to merge into hobo-tools canonical user');
     assert.strictEqual(report.datasets['identity/users'].written_records, 1, 'expected one canonical user');
-    assert.strictEqual(report.datasets['identity/anon-users'].written_records, 2, 'expected anon bundle to include hobo.tools and HoboQuest anonymous identities');
+    assert.strictEqual(report.datasets['identity/anon-users'].written_records, 3, 'expected anon bundle to include exported identities plus placeholder continuity-only anon numbers');
+    assert.strictEqual(report.datasets['identity/anon-ip-links'].written_records, 3, 'expected anon IP continuity rows from legacy hobo-tools and HoboStreamer databases');
+    assert.strictEqual(report.datasets['identity/anon-fingerprints'].written_records, 1, 'expected anon fingerprint continuity rows from the legacy hobo-tools database');
     assert.strictEqual(report.datasets['loyalty/coin-transactions'].written_records, 1, 'expected one loyalty transaction');
     assert.strictEqual(report.datasets['games/players'].written_records, 3, 'expected canonical game players to preserve the native user plus both anonymous HoboQuest users');
     assert.strictEqual(report.datasets['games/canvas-tiles'].written_records, 3, 'expected canonical canvas tiles to preserve the native user plus both anonymous HoboQuest placements');
@@ -218,13 +273,15 @@ async function main() {
     assert.ok(fs.existsSync(path.join(report.bundle_dir, 'audit', 'import-report.json')));
 
     const importedAnonUsers = readNdjson(path.join(report.bundle_dir, 'identity', 'anon-users.ndjson'));
+    const importedAnonIpLinks = readNdjson(path.join(report.bundle_dir, 'identity', 'anon-ip-links.ndjson'));
+    const importedAnonFingerprints = readNdjson(path.join(report.bundle_dir, 'identity', 'anon-fingerprints.ndjson'));
     const importedCosmetics = readNdjson(path.join(report.bundle_dir, 'games', 'cosmetics.ndjson'));
     const importedPlayers = readNdjson(path.join(report.bundle_dir, 'games', 'players.ndjson'));
     const importedInventory = readNdjson(path.join(report.bundle_dir, 'games', 'inventory.ndjson'));
     const importedOverrides = readNdjson(path.join(report.bundle_dir, 'games', 'canvas-user-overrides.ndjson'));
     const importedAnonUser = importedAnonUsers.find((row) => row.source === 'hoboquest');
     assert.ok(importedAnonUser, 'expected a HoboQuest anonymous identity record');
-    assert.strictEqual(importedAnonUsers.length, 2, 'expected colliding HoboQuest anon identities to reuse the existing hobo.tools anon record');
+    assert.strictEqual(importedAnonUsers.length, 3, 'expected colliding HoboQuest anon identities to reuse the existing hobo.tools anon record while continuity-only placeholder anon numbers are preserved');
     assert.strictEqual(importedAnonUser.anon_number, 4242);
     assert.strictEqual(importedAnonUser.display_name, 'Anonymous #4242');
     assert.strictEqual(importedAnonUser.preferences.legacy_game_user_id, '-101001001');
@@ -232,6 +289,10 @@ async function main() {
     assert.ok(importedInventory.some((row) => row.user_id === importedAnonUser.id && row.item_id === 'stone'), 'expected anonymous HoboQuest inventory to survive canonical import');
     assert.ok(importedPlayers.some((row) => row.user_id === 'anon-user:hobotools:5' && row.zone === 'ruins'), 'expected HoboQuest anon identities that expose an existing anon number to collapse onto the matching hobo.tools anon user');
     assert.ok(importedInventory.some((row) => row.user_id === 'anon-user:hobotools:5' && row.item_id === 'berry'), 'expected merged HoboQuest anon inventory to follow the reused canonical anon identity');
+    assert.ok(importedAnonUsers.some((row) => row.anon_number === 99 && row.source === 'hobostreamer'), 'expected HoboStreamer-only anon numbers to become placeholder canonical anon identities');
+    assert.ok(importedAnonIpLinks.some((row) => row.anon_user_id === 'anon-user:hobotools:5' && row.ip_address === '203.0.113.10'), 'expected exported anon IP continuity rows for existing hobo.tools identities');
+    assert.ok(importedAnonIpLinks.some((row) => row.anon_user_id === 'anon-user:hobostreamer:99' && row.ip_address === '192.0.2.44'), 'expected exported anon IP continuity rows for placeholder HoboStreamer identities');
+    assert.ok(importedAnonFingerprints.some((row) => row.anon_user_id === 'anon-user:hobotools:5' && row.fingerprint === 'legacy-fingerprint-5'), 'expected exported anon fingerprint continuity rows');
     assert.strictEqual(importedCosmetics.length, 1, 'expected one cosmetic row in canonical bundle');
     assert.strictEqual(importedCosmetics[0].equipped, true);
     assert.strictEqual(importedOverrides.length, 1, 'expected one canvas override row in canonical bundle');

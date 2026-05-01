@@ -74,6 +74,8 @@ function datasetTargetServices(dataset) {
         case 'identity/users':
         case 'identity/linked-accounts':
         case 'identity/anon-users':
+        case 'identity/anon-ip-links':
+        case 'identity/anon-fingerprints':
         case 'identity/verification-keys':
         case 'identity/user-effects':
         case 'identity/username-conflicts':
@@ -507,6 +509,108 @@ function upsertNetworkAnonUser(context, row) {
         nextLastSeen,
         nextCreatedAt,
         nextUpdatedAt
+    );
+    return true;
+}
+
+function normalizeIpAddress(value) {
+    const candidate = String(value == null ? '' : value).trim().toLowerCase();
+    if (!candidate || candidate === 'unknown') return null;
+    return candidate.replace(/^::ffff:/, '') || null;
+}
+
+function upsertNetworkAnonIpLink(context, row) {
+    const anonUserId = row && row.anon_user_id ? String(row.anon_user_id) : null;
+    const ipAddress = normalizeIpAddress(row && row.ip_address);
+    if (!anonUserId || !ipAddress) return false;
+    const existingById = row.id
+        ? context.dbs.network.prepare('SELECT * FROM auth_anon_ip_links WHERE id = ? LIMIT 1').get(String(row.id))
+        : null;
+    const existingByKey = context.dbs.network.prepare(`
+        SELECT *
+          FROM auth_anon_ip_links
+         WHERE anon_user_id = ? AND ip_address = ?
+         LIMIT 1
+    `).get(anonUserId, ipAddress);
+    const existing = existingById || existingByKey || null;
+    const targetId = existing && existing.id ? String(existing.id) : String(row.id || buildEntityId('anon-ip', 'canonical', `${anonUserId}:${ipAddress}`));
+    const nextMetadata = Object.assign({}, parseJsonValue(existing && existing.metadata_json, {}), row.metadata || {});
+    if (row.legacy_ref) {
+        nextMetadata.legacy_ref = row.legacy_ref;
+    }
+
+    context.dbs.network.prepare(`
+        INSERT INTO auth_anon_ip_links (
+            id, anon_user_id, ip_address, source, metadata_json,
+            first_seen, last_seen, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(id) DO UPDATE SET
+            anon_user_id = excluded.anon_user_id,
+            ip_address = excluded.ip_address,
+            source = COALESCE(excluded.source, auth_anon_ip_links.source),
+            metadata_json = excluded.metadata_json,
+            first_seen = COALESCE(auth_anon_ip_links.first_seen, excluded.first_seen),
+            last_seen = COALESCE(excluded.last_seen, auth_anon_ip_links.last_seen),
+            created_at = COALESCE(auth_anon_ip_links.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        targetId,
+        anonUserId,
+        ipAddress,
+        row.source || existing && existing.source || null,
+        toJson(nextMetadata, {}),
+        existing && existing.first_seen || row.first_seen || null,
+        row.last_seen || existing && existing.last_seen || row.first_seen || null,
+        existing && existing.created_at || row.first_seen || row.created_at || null,
+        row.last_seen || row.updated_at || existing && existing.updated_at || null
+    );
+    return true;
+}
+
+function upsertNetworkAnonFingerprint(context, row) {
+    const anonUserId = row && row.anon_user_id ? String(row.anon_user_id) : null;
+    const fingerprint = String(row && row.fingerprint || '').trim();
+    if (!anonUserId || !fingerprint) return false;
+    const existingById = row.id
+        ? context.dbs.network.prepare('SELECT * FROM auth_anon_fingerprints WHERE id = ? LIMIT 1').get(String(row.id))
+        : null;
+    const existingByKey = context.dbs.network.prepare(`
+        SELECT *
+          FROM auth_anon_fingerprints
+         WHERE anon_user_id = ? AND fingerprint = ?
+         LIMIT 1
+    `).get(anonUserId, fingerprint);
+    const existing = existingById || existingByKey || null;
+    const targetId = existing && existing.id ? String(existing.id) : String(row.id || buildEntityId('anon-fingerprint', 'canonical', `${anonUserId}:${fingerprint}`));
+    const nextMetadata = Object.assign({}, parseJsonValue(existing && existing.metadata_json, {}), row.metadata || {});
+    if (row.legacy_ref) {
+        nextMetadata.legacy_ref = row.legacy_ref;
+    }
+
+    context.dbs.network.prepare(`
+        INSERT INTO auth_anon_fingerprints (
+            id, anon_user_id, fingerprint, source, metadata_json,
+            first_seen, last_seen, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+        ON CONFLICT(id) DO UPDATE SET
+            anon_user_id = excluded.anon_user_id,
+            fingerprint = excluded.fingerprint,
+            source = COALESCE(excluded.source, auth_anon_fingerprints.source),
+            metadata_json = excluded.metadata_json,
+            first_seen = COALESCE(auth_anon_fingerprints.first_seen, excluded.first_seen),
+            last_seen = COALESCE(excluded.last_seen, auth_anon_fingerprints.last_seen),
+            created_at = COALESCE(auth_anon_fingerprints.created_at, excluded.created_at),
+            updated_at = COALESCE(excluded.updated_at, CURRENT_TIMESTAMP)
+    `).run(
+        targetId,
+        anonUserId,
+        fingerprint,
+        row.source || existing && existing.source || null,
+        toJson(nextMetadata, {}),
+        existing && existing.first_seen || row.first_seen || null,
+        row.last_seen || existing && existing.last_seen || row.first_seen || null,
+        existing && existing.created_at || row.first_seen || row.created_at || null,
+        row.last_seen || row.updated_at || existing && existing.updated_at || null
     );
     return true;
 }
@@ -2255,6 +2359,24 @@ function loadDatasetRow(context, dataset, row) {
                 context.addManualAction('Canonical anonymous identities are projected into openvibe-network auth_anon_users so numbered anon sessions can survive the cutover, while the full payload remains mirrored in staging_import_records for audit and future parity work.');
             }
             return;
+        case 'identity/anon-ip-links':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkAnonIpLink(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'auth_anon_ip_links', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Legacy anon IP continuity is projected into openvibe-network auth_anon_ip_links so imported IP-based anonymous identities keep their original numbering after cutover.');
+            }
+            return;
+        case 'identity/anon-fingerprints':
+            if (shouldWriteService(context, 'network')) {
+                loadIntoNetworkHolding(context, dataset, row);
+                if (upsertNetworkAnonFingerprint(context, row)) {
+                    bumpLoadReport(context.report, dataset, 'network', 'auth_anon_fingerprints', 'direct', context.dbPaths.network);
+                }
+                context.addManualAction('Legacy anon fingerprint continuity is projected into openvibe-network auth_anon_fingerprints so migrated anonymous identities can be restored without requiring a surviving session cookie.');
+            }
+            return;
         case 'control-plane/url-registry':
             if (shouldWriteService(context, 'network')) {
                 loadIntoNetworkHolding(context, dataset, row);
@@ -2412,6 +2534,8 @@ function datasetLoadOrder(importReport) {
         'identity/users',
         'identity/linked-accounts',
         'identity/anon-users',
+        'identity/anon-ip-links',
+        'identity/anon-fingerprints',
         'identity/verification-keys',
         'identity/user-effects',
         'identity/username-conflicts',

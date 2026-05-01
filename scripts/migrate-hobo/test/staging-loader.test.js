@@ -155,6 +155,40 @@ async function main() {
             legacy_ref: { source: 'hoboquest', legacy_id: '-4242' },
         },
     ]);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-ip-links.ndjson'), [
+        {
+            id: 'anon-ip:canonical:7',
+            anon_user_id: 'anon-user:hobotools:7',
+            ip_address: '203.0.113.10',
+            source: 'hobotools',
+            first_seen: '2026-01-01T00:00:00Z',
+            last_seen: '2026-01-02T00:00:00Z',
+            metadata: { imported: true },
+            legacy_ref: { source: 'hobotools', legacy_id: '7:203.0.113.10' },
+        },
+        {
+            id: 'anon-ip:canonical:4242',
+            anon_user_id: 'anon-user:hoboquest:-4242',
+            ip_address: '192.0.2.42',
+            source: 'hobostreamer',
+            first_seen: '2026-01-05T00:00:00Z',
+            last_seen: '2026-01-06T00:00:00Z',
+            metadata: { imported: true },
+            legacy_ref: { source: 'hobostreamer', legacy_id: '192.0.2.42:4242' },
+        },
+    ]);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-fingerprints.ndjson'), [
+        {
+            id: 'anon-fingerprint:canonical:7',
+            anon_user_id: 'anon-user:hobotools:7',
+            fingerprint: 'legacy-fingerprint-7',
+            source: 'hobotools',
+            first_seen: '2026-01-01T00:00:00Z',
+            last_seen: '2026-01-02T00:00:00Z',
+            metadata: { imported: true },
+            legacy_ref: { source: 'hobotools', legacy_id: '7:fingerprint' },
+        },
+    ]);
     writeNdjson(path.join(bundleDir, 'identity', 'linked-accounts.ndjson'), [
         { id: 'linked-account:hobotools:10', user_id: 'user:hobotools:1', service: 'hobostreamer', service_user_id: '42' },
     ]);
@@ -414,6 +448,8 @@ async function main() {
         datasets: {
             'identity/users': {},
             'identity/anon-users': {},
+            'identity/anon-ip-links': {},
+            'identity/anon-fingerprints': {},
             'identity/linked-accounts': {},
             'control-plane/oauth-clients': {},
             'control-plane/notifications': {},
@@ -515,6 +551,8 @@ async function main() {
     try {
         assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/users'").get().count, 1);
         assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/anon-users'").get().count, 3);
+        assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/anon-ip-links'").get().count, 2);
+        assert.strictEqual(networkDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'identity/anon-fingerprints'").get().count, 1);
         const authUser = networkDb.prepare("SELECT username, email, password_hash, password_algorithm, metadata_json FROM auth_users WHERE id = 'user:hobotools:1'").get();
         assert.ok(authUser, 'expected canonical identity to project into auth_users');
         assert.strictEqual(authUser.username, 'alice');
@@ -540,6 +578,22 @@ async function main() {
                 display_name: 'Anonymous #4242',
                 total_messages: 4,
                 total_commands: 1,
+            }
+        );
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT anon_user_id, ip_address, source FROM auth_anon_ip_links WHERE anon_user_id = 'anon-user:hobotools:7'").get(),
+            {
+                anon_user_id: 'anon-user:hobotools:7',
+                ip_address: '203.0.113.10',
+                source: 'hobotools',
+            }
+        );
+        assert.deepStrictEqual(
+            networkDb.prepare("SELECT anon_user_id, fingerprint, source FROM auth_anon_fingerprints WHERE anon_user_id = 'anon-user:hobotools:7'").get(),
+            {
+                anon_user_id: 'anon-user:hobotools:7',
+                fingerprint: 'legacy-fingerprint-7',
+                source: 'hobotools',
             }
         );
         const authMetadata = JSON.parse(authUser.metadata_json);

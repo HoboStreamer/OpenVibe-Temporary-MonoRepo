@@ -7,6 +7,8 @@
     const API_BASE = (global.OV_API_BASE || '/api/v1').replace(/\/$/, '');
     const LOCAL_LAUNCHER_KEY = 'openvibe.launcher';
     const LOCAL_THEME_KEY = 'openvibe.theme';
+    const LOCAL_ANON_TOKENS_KEY = 'openvibe.anon_tokens';
+    const LOCAL_ACTIVE_ANON_KEY = 'openvibe.anon_active';
     const relativeTime = typeof Intl !== 'undefined' && Intl.RelativeTimeFormat
         ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
         : null;
@@ -205,6 +207,60 @@
     let urlRegistryCache = null;
     let accountProfilePromise = null;
 
+    function readAnonTokens() {
+        try {
+            return safeParse(localStorage.getItem(LOCAL_ANON_TOKENS_KEY), {}) || {};
+        } catch {
+            return {};
+        }
+    }
+
+    function writeAnonTokens(tokens) {
+        try {
+            localStorage.setItem(LOCAL_ANON_TOKENS_KEY, JSON.stringify(tokens || {}));
+        } catch {
+            // ignore storage write failures
+        }
+    }
+
+    function activeAnonId() {
+        try {
+            return localStorage.getItem(LOCAL_ACTIVE_ANON_KEY) || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function setActiveAnonId(value) {
+        try {
+            if (value) localStorage.setItem(LOCAL_ACTIVE_ANON_KEY, value);
+            else localStorage.removeItem(LOCAL_ACTIVE_ANON_KEY);
+        } catch {
+            // ignore storage write failures
+        }
+    }
+
+    function rememberAnonymousIdentity(user) {
+        if (!user || !user.id || !user.session_token) return;
+        const tokens = readAnonTokens();
+        tokens[user.id] = {
+            id: user.id,
+            anon_number: user.anon_number || null,
+            display_name: user.display_name || user.username || 'Anonymous',
+            session_token: user.session_token,
+            updated_at: new Date().toISOString(),
+        };
+        writeAnonTokens(tokens);
+        setActiveAnonId(user.id);
+    }
+
+    function dispatchAuthChanged(session) {
+        if (!global.document || typeof global.CustomEvent !== 'function') return;
+        global.document.dispatchEvent(new global.CustomEvent('openvibe-auth-changed', {
+            detail: session || null,
+        }));
+    }
+
     function resolveSurfaceFallback(surface) {
         const local = inferLocalOrigin(surface);
         return local || SURFACE_FALLBACKS[surface] || '#';
@@ -304,7 +360,12 @@
 
     async function loadSession(force) {
         if (!force && sessionPromise) return sessionPromise;
-        sessionPromise = api('/session').catch(() => ({ authenticated: false, anonymous: false, user: null }));
+        sessionPromise = api('/session').then((result) => {
+            if (result && result.anonymous && result.user) {
+                rememberAnonymousIdentity(result.user);
+            }
+            return result;
+        }).catch(() => ({ authenticated: false, anonymous: false, user: null }));
         return sessionPromise;
     }
 
@@ -316,7 +377,46 @@
             body: JSON.stringify(payload),
         });
         sessionPromise = Promise.resolve(result);
+        if (result && result.anonymous && result.user) {
+            rememberAnonymousIdentity(result.user);
+        }
+        accountProfilePromise = null;
+        dispatchAuthChanged(result);
         return result;
+    }
+
+    async function loadAnonymousIdentities(options) {
+        const payload = Object.assign({}, options || {});
+        const params = new URLSearchParams();
+        if (payload.fingerprint) params.set('fingerprint', payload.fingerprint);
+        const suffix = params.toString() ? `?${params.toString()}` : '';
+        const result = await api(`/session/anonymous/identities${suffix}`).catch(() => ({ items: [] }));
+        (result.items || []).forEach((item) => {
+            if (item && item.session_token) rememberAnonymousIdentity(item);
+        });
+        return result;
+    }
+
+    async function switchAnonymousIdentity(identity, options) {
+        const payload = Object.assign({}, options || {});
+        if (typeof identity === 'string') {
+            const stored = readAnonTokens()[identity];
+            if (stored && stored.session_token) {
+                payload.session_token = stored.session_token;
+            } else {
+                payload.anon_user_id = identity;
+            }
+        } else if (identity && typeof identity === 'object') {
+            if (identity.session_token) payload.session_token = identity.session_token;
+            else if (identity.id) payload.anon_user_id = identity.id;
+            if (identity.anon_number && !payload.anon_number) payload.anon_number = identity.anon_number;
+        }
+        return startAnonymousSession(payload);
+    }
+
+    async function createAnonymousIdentity(options) {
+        const payload = Object.assign({ force_new: true }, options || {});
+        return startAnonymousSession(payload);
     }
 
     async function loadServices() {
@@ -683,8 +783,25 @@
         if (session && session.anonymous && session.user) {
             target.innerHTML = `
                 <span class="ov-chip warn">${escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span>
+                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
+                <button class="ov-btn" type="button" data-openvibe-new-anon="true">New anon</button>
                 <a class="ov-btn" href="${signInUrl(global.location.href)}">Create account</a>
                 <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Leave anonymous</a>`;
+            const newAnonButton = target.querySelector('[data-openvibe-new-anon]');
+            if (newAnonButton) {
+                newAnonButton.addEventListener('click', async function () {
+                    newAnonButton.disabled = true;
+                    newAnonButton.textContent = 'Creating anon…';
+                    try {
+                        await createAnonymousIdentity();
+                        global.location.reload();
+                    } catch (error) {
+                        console.warn('[openvibe] failed to create anonymous identity:', error.message);
+                        newAnonButton.disabled = false;
+                        newAnonButton.textContent = 'New anon';
+                    }
+                });
+            }
             return;
         }
         if (!session || !session.authenticated || !session.user) {
@@ -776,6 +893,7 @@
         applySavedTheme,
         applyTheme,
         attachLauncher,
+        createAnonymousIdentity,
         escapeHtml,
         footer,
         formatDateTime,
@@ -787,6 +905,7 @@
         loadAccountLinked,
         loadAccountProfile,
         loadAccountSessions,
+        loadAnonymousIdentities,
         loadLauncherState,
         loadServices,
         loadSession,
@@ -807,6 +926,7 @@
         signOutUrl,
         slugifyLabel,
         startAnonymousSession,
+        switchAnonymousIdentity,
         syncThemePreference,
         themeById,
         toggleFavorite,

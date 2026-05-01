@@ -41,6 +41,12 @@ function randomOpaque(prefix) {
     return `${prefix}_${crypto.randomBytes(24).toString('base64url')}`;
 }
 
+function isTruthy(value) {
+    if (value == null || value === '') return false;
+    const normalized = String(value).trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
 function hashOpaque(value) {
     return crypto.createHash('sha256').update(String(value || '')).digest('hex');
 }
@@ -774,15 +780,292 @@ function buildNativeAuth({ config, identity }) {
         `).run(String(anonId));
     }
 
-    function ensureAnonUser({ sessionToken, req }) {
+    function normalizeIpAddress(value) {
+        const candidate = String(value == null ? '' : value).trim().toLowerCase();
+        if (!candidate || candidate === 'unknown') return null;
+        return candidate.replace(/^::ffff:/, '') || null;
+    }
+
+    function normalizeFingerprint(value) {
+        const candidate = String(value == null ? '' : value).trim();
+        return candidate || null;
+    }
+
+    function getRequestIp(req, overrideIp) {
+        const forwarded = overrideIp
+            || req && req.get && (req.get('cf-connecting-ip') || req.get('x-forwarded-for'))
+            || req && req.ip
+            || req && req.socket && req.socket.remoteAddress
+            || req && req.connection && req.connection.remoteAddress
+            || null;
+        const primary = String(forwarded || '').split(',')[0].trim();
+        return normalizeIpAddress(primary);
+    }
+
+    function getAnonUserByAnonNumber(anonNumber) {
+        const normalized = normalizeAnonNumber(anonNumber);
+        if (!normalized) return null;
+        const row = db.get().prepare('SELECT * FROM auth_anon_users WHERE anon_number = ? LIMIT 1').get(normalized);
+        return hydrateAnonUser(row);
+    }
+
+    function getAnonUserByFingerprint(fingerprint) {
+        const normalizedFingerprint = normalizeFingerprint(fingerprint);
+        if (!normalizedFingerprint) return null;
+        const row = db.get().prepare(`
+            SELECT u.*
+              FROM auth_anon_fingerprints f
+              JOIN auth_anon_users u ON u.id = f.anon_user_id
+             WHERE f.fingerprint = ?
+             ORDER BY u.anon_number ASC,
+                      datetime(f.last_seen) DESC,
+                      datetime(u.last_seen) DESC
+             LIMIT 1
+        `).get(normalizedFingerprint);
+        return hydrateAnonUser(row);
+    }
+
+    function getAnonUserByIpAddress(ipAddress) {
+        const normalizedIp = normalizeIpAddress(ipAddress);
+        if (!normalizedIp) return null;
+        const row = db.get().prepare(`
+            SELECT u.*
+              FROM auth_anon_ip_links l
+              JOIN auth_anon_users u ON u.id = l.anon_user_id
+             WHERE l.ip_address = ?
+             ORDER BY u.anon_number ASC,
+                      datetime(l.last_seen) DESC,
+                      datetime(u.last_seen) DESC
+             LIMIT 1
+        `).get(normalizedIp);
+        return hydrateAnonUser(row);
+    }
+
+    function anonUserMatchesContinuity(anonUserId, ipAddress, fingerprint) {
+        if (!anonUserId) return false;
+        const normalizedFingerprint = normalizeFingerprint(fingerprint);
+        if (normalizedFingerprint) {
+            const byFingerprint = db.get().prepare(`
+                SELECT 1
+                  FROM auth_anon_fingerprints
+                 WHERE anon_user_id = ? AND fingerprint = ?
+                 LIMIT 1
+            `).get(String(anonUserId), normalizedFingerprint);
+            if (byFingerprint) return true;
+        }
+        const normalizedIp = normalizeIpAddress(ipAddress);
+        if (!normalizedIp) return false;
+        const byIp = db.get().prepare(`
+            SELECT 1
+              FROM auth_anon_ip_links
+             WHERE anon_user_id = ? AND ip_address = ?
+             LIMIT 1
+        `).get(String(anonUserId), normalizedIp);
+        return !!byIp;
+    }
+
+    function ensureAnonSessionToken(anonId, preferredToken) {
+        const nextToken = String(preferredToken || '').trim() || crypto.randomUUID();
+        db.get().prepare(`
+            UPDATE auth_anon_users
+               SET session_token = ?,
+                   last_seen = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+        `).run(nextToken, String(anonId));
+        return getAnonUserById(anonId);
+    }
+
+    function mergeAnonContinuityMetadata(existingJson, patch) {
+        const current = parseJson(existingJson, {});
+        const next = Object.assign({}, current, patch || {});
+        if (patch && patch.legacy_ref) {
+            next.legacy_ref = patch.legacy_ref;
+        }
+        return next;
+    }
+
+    function upsertAnonIpLink(anonUserId, ipAddress, options) {
+        const normalizedIp = normalizeIpAddress(ipAddress);
+        if (!anonUserId || !normalizedIp) return;
+        const row = db.get().prepare(`
+            SELECT *
+              FROM auth_anon_ip_links
+             WHERE anon_user_id = ? AND ip_address = ?
+             LIMIT 1
+        `).get(String(anonUserId), normalizedIp);
+        const nextId = row && row.id ? row.id : `anon-ip:${hashOpaque(`${anonUserId}:${normalizedIp}`)}`;
+        const metadataJson = JSON.stringify(mergeAnonContinuityMetadata(row && row.metadata_json, options && options.metadata));
+        db.get().prepare(`
+            INSERT INTO auth_anon_ip_links (
+                id, anon_user_id, ip_address, source, metadata_json,
+                first_seen, last_seen, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+                anon_user_id = excluded.anon_user_id,
+                ip_address = excluded.ip_address,
+                source = COALESCE(excluded.source, auth_anon_ip_links.source),
+                metadata_json = excluded.metadata_json,
+                first_seen = COALESCE(auth_anon_ip_links.first_seen, excluded.first_seen),
+                last_seen = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+        `).run(
+            nextId,
+            String(anonUserId),
+            normalizedIp,
+            options && options.source || 'openvibe-runtime',
+            metadataJson,
+            row && row.first_seen || options && options.firstSeen || nowIso()
+        );
+    }
+
+    function upsertAnonFingerprint(anonUserId, fingerprint, options) {
+        const normalizedFingerprint = normalizeFingerprint(fingerprint);
+        if (!anonUserId || !normalizedFingerprint) return;
+        const row = db.get().prepare(`
+            SELECT *
+              FROM auth_anon_fingerprints
+             WHERE anon_user_id = ? AND fingerprint = ?
+             LIMIT 1
+        `).get(String(anonUserId), normalizedFingerprint);
+        const nextId = row && row.id ? row.id : `anon-fingerprint:${hashOpaque(`${anonUserId}:${normalizedFingerprint}`)}`;
+        const metadataJson = JSON.stringify(mergeAnonContinuityMetadata(row && row.metadata_json, options && options.metadata));
+        db.get().prepare(`
+            INSERT INTO auth_anon_fingerprints (
+                id, anon_user_id, fingerprint, source, metadata_json,
+                first_seen, last_seen, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+                anon_user_id = excluded.anon_user_id,
+                fingerprint = excluded.fingerprint,
+                source = COALESCE(excluded.source, auth_anon_fingerprints.source),
+                metadata_json = excluded.metadata_json,
+                first_seen = COALESCE(auth_anon_fingerprints.first_seen, excluded.first_seen),
+                last_seen = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+        `).run(
+            nextId,
+            String(anonUserId),
+            normalizedFingerprint,
+            options && options.source || 'openvibe-runtime',
+            metadataJson,
+            row && row.first_seen || options && options.firstSeen || nowIso()
+        );
+    }
+
+    function rememberAnonContinuity(anonUser, params) {
+        if (!anonUser || !anonUser.id) return anonUser;
+        const metadata = {
+            anon_number: anonUser.anon_number || null,
+            actor_type: 'anon',
+            user_agent: params && params.userAgent || null,
+        };
+        upsertAnonIpLink(anonUser.id, params && params.ipAddress, {
+            source: params && params.source || 'openvibe-runtime',
+            firstSeen: anonUser.first_seen || anonUser.created_at || nowIso(),
+            metadata,
+        });
+        upsertAnonFingerprint(anonUser.id, params && params.fingerprint, {
+            source: params && params.source || 'openvibe-runtime',
+            firstSeen: anonUser.first_seen || anonUser.created_at || nowIso(),
+            metadata,
+        });
+        return getAnonUserById(anonUser.id) || anonUser;
+    }
+
+    function listAnonIdentitiesForRequest(req, options) {
+        const ipAddress = getRequestIp(req, options && options.ipAddress);
+        const fingerprint = normalizeFingerprint(options && options.fingerprint);
+        const items = new Map();
+
+        if (ipAddress) {
+            const rows = db.get().prepare(`
+                SELECT u.*
+                  FROM auth_anon_ip_links l
+                  JOIN auth_anon_users u ON u.id = l.anon_user_id
+                 WHERE l.ip_address = ?
+                 ORDER BY u.anon_number ASC,
+                          datetime(l.last_seen) DESC,
+                          datetime(u.last_seen) DESC
+            `).all(ipAddress);
+            for (const row of rows) {
+                const user = hydrateAnonUser(row);
+                if (user) items.set(user.id, user);
+            }
+        }
+
+        if (fingerprint) {
+            const rows = db.get().prepare(`
+                SELECT u.*
+                  FROM auth_anon_fingerprints f
+                  JOIN auth_anon_users u ON u.id = f.anon_user_id
+                 WHERE f.fingerprint = ?
+                 ORDER BY u.anon_number ASC,
+                          datetime(f.last_seen) DESC,
+                          datetime(u.last_seen) DESC
+            `).all(fingerprint);
+            for (const row of rows) {
+                const user = hydrateAnonUser(row);
+                if (user) items.set(user.id, user);
+            }
+        }
+
+        const currentAnon = isAnonActor(req && req.user) ? resolveSessionUser(req) : null;
+        if (currentAnon && currentAnon.id) {
+            items.set(currentAnon.id, currentAnon);
+        }
+
+        return [...items.values()].sort((left, right) => {
+            const leftNumber = normalizeAnonNumber(left && left.anon_number) || Number.MAX_SAFE_INTEGER;
+            const rightNumber = normalizeAnonNumber(right && right.anon_number) || Number.MAX_SAFE_INTEGER;
+            if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+            return String(left && left.id || '').localeCompare(String(right && right.id || ''));
+        });
+    }
+
+    function ensureAnonUser({ sessionToken, req, forceNew, fingerprint, anonUserId, anonNumber, ipAddress, source }) {
         const requestedToken = String(sessionToken || '').trim() || null;
-        const existing = requestedToken ? getAnonUserBySessionToken(requestedToken) : null;
+        const requestedIp = getRequestIp(req, ipAddress);
+        const requestedFingerprint = normalizeFingerprint(fingerprint);
+        let existing = requestedToken ? getAnonUserBySessionToken(requestedToken) : null;
+
+        if (!existing && !forceNew && anonUserId) {
+            const candidate = getAnonUserById(anonUserId);
+            if (candidate && anonUserMatchesContinuity(candidate.id, requestedIp, requestedFingerprint)) {
+                existing = candidate;
+            }
+        }
+
+        if (!existing && !forceNew && anonNumber) {
+            const candidate = getAnonUserByAnonNumber(anonNumber);
+            if (candidate && anonUserMatchesContinuity(candidate.id, requestedIp, requestedFingerprint)) {
+                existing = candidate;
+            }
+        }
+
+        if (!existing && !forceNew && requestedFingerprint) {
+            existing = getAnonUserByFingerprint(requestedFingerprint);
+        }
+
+        if (!existing && !forceNew && requestedIp) {
+            existing = getAnonUserByIpAddress(requestedIp);
+        }
+
         if (existing) {
             touchAnonLastSeen(existing.id);
-            return getAnonUserById(existing.id) || existing;
+            const userWithToken = existing.session_token ? (getAnonUserById(existing.id) || existing) : ensureAnonSessionToken(existing.id, requestedToken);
+            return {
+                created: false,
+                user: rememberAnonContinuity(userWithToken, {
+                    ipAddress: requestedIp,
+                    fingerprint: requestedFingerprint,
+                    source: source || 'openvibe-runtime',
+                    userAgent: req && req.get ? req.get('user-agent') || null : null,
+                }),
+            };
         }
-        const anonNumber = nextAnonNumber();
-        const id = `anon-user:openvibe:${anonNumber}`;
+        const nextAnon = nextAnonNumber();
+        const id = `anon-user:openvibe:${nextAnon}`;
         const nextSessionToken = requestedToken || crypto.randomUUID();
         db.get().prepare(`
             INSERT INTO auth_anon_users (
@@ -790,16 +1073,24 @@ function buildNativeAuth({ config, identity }) {
                 total_messages, total_commands, primary_source, legacy_source, legacy_id,
                 first_seen, last_seen, created_at, updated_at
             ) VALUES (?, ?, ?, ?, '{}', 0, 0, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `).run(id, anonNumber, nextSessionToken, anonDisplayNameForNumber(anonNumber), 'openvibe', 'openvibe', String(anonNumber));
+        `).run(id, nextAnon, nextSessionToken, anonDisplayNameForNumber(nextAnon), 'openvibe', 'openvibe', String(nextAnon));
         audit.record({
             actorType: 'anonymous',
             actorId: id,
             action: 'auth.anon.provision',
             resource: `auth_anon_user:${id}`,
             outcome: 'allow',
-            detail: { anon_number: anonNumber, ip: req && req.ip || null },
+            detail: { anon_number: nextAnon, ip: requestedIp || null, source: source || 'openvibe-runtime' },
         });
-        return getAnonUserById(id);
+        return {
+            created: true,
+            user: rememberAnonContinuity(getAnonUserById(id), {
+                ipAddress: requestedIp,
+                fingerprint: requestedFingerprint,
+                source: source || 'openvibe-runtime',
+                userAgent: req && req.get ? req.get('user-agent') || null : null,
+            }),
+        };
     }
 
     function touchSession(sessionId, req) {
@@ -988,6 +1279,48 @@ function buildNativeAuth({ config, identity }) {
             authenticated: !!user && !anonymous,
             anonymous,
             user: user || null,
+        };
+    }
+
+    function ensureActorSession(user, req) {
+        if (req && req.user && req.user.sid) {
+            touchSession(req.user.sid, req);
+            return { id: req.user.sid };
+        }
+        if (isAnonActor(user)) {
+            return createSession(user.id, req, {
+                metadata: {
+                    actor_type: 'anon',
+                    anon_number: user.anon_number,
+                    session_token: user.session_token || null,
+                },
+            });
+        }
+        return createSession(user.id, req);
+    }
+
+    function buildExchangeResponse(user, req) {
+        const session = ensureActorSession(user, req);
+        if (isAnonActor(user)) {
+            return {
+                access_token: issueAnonAccessToken(user, session.id, 'anonymous', {
+                    actor_type: 'anon',
+                    anonymous: true,
+                    anon_number: user.anon_number,
+                    session_token: user.session_token || null,
+                }),
+                token_type: 'Bearer',
+                expires_in: ANON_ACCESS_TOKEN_TTL_SECONDS,
+                scope: 'anonymous',
+                user,
+            };
+        }
+        return {
+            access_token: issueAccessToken(user, session.id, 'openid profile email theme'),
+            token_type: 'Bearer',
+            expires_in: ACCESS_TOKEN_TTL_SECONDS,
+            scope: 'openid profile email theme',
+            user,
         };
     }
 
@@ -1186,20 +1519,65 @@ function buildNativeAuth({ config, identity }) {
 
     function buildAccountRouter() {
         const router = express.Router();
-        router.post('/session/anonymous', (req, res) => {
+        router.post('/session/anonymous', express.json(), (req, res) => {
+            const body = req.body || {};
+            const requestedFingerprint = body.fingerprint || req.query && req.query.fingerprint || null;
+            const requestedAnonUserId = body.anon_user_id || req.query && req.query.anon_user_id || null;
+            const requestedAnonNumber = body.anon_number || req.query && req.query.anon_number || null;
+            const forceNew = isTruthy(body.force_new || req.query && req.query.force_new);
+            const shouldReuseCurrentAnonToken = !forceNew && !requestedAnonUserId && !requestedAnonNumber;
             const legacySessionToken = String(
-                (req.body && (req.body.legacy_session_token || req.body.session_token))
+                (body && (body.legacy_session_token || body.session_token))
                 || (req.query && (req.query.legacy_session_token || req.query.session_token))
-                || (isAnonActor(req.user) ? (req.user.session_token || '') : '')
+                || (shouldReuseCurrentAnonToken && isAnonActor(req.user) ? (req.user.session_token || '') : '')
             ).trim() || null;
-            const anonUser = ensureAnonUser({ sessionToken: legacySessionToken, req });
+            const ensured = ensureAnonUser({
+                sessionToken: legacySessionToken,
+                req,
+                forceNew,
+                fingerprint: requestedFingerprint,
+                anonUserId: requestedAnonUserId,
+                anonNumber: requestedAnonNumber,
+                source: 'browser',
+            });
+            const anonUser = ensured.user;
             const bundle = buildAnonBrowserBundle(anonUser, req);
             setSessionCookie(res, bundle.access_token, bundle.expires_in);
-            const returnTo = String((req.body && req.body.return_to) || (req.query && req.query.return_to) || '').trim();
+            const returnTo = String((body && body.return_to) || (req.query && req.query.return_to) || '').trim();
             if (returnTo && isAllowedRedirectUri(returnTo)) {
                 return res.redirect(302, returnTo);
             }
-            res.status(legacySessionToken ? 200 : 201).json(buildSessionResponse({ user: anonUser }));
+            res.status(ensured.created ? 201 : 200).json(buildSessionResponse({ user: anonUser }));
+        });
+
+        router.get('/session/anonymous/identities', (req, res) => {
+            const fingerprint = req.query && req.query.fingerprint ? String(req.query.fingerprint) : null;
+            const items = listAnonIdentitiesForRequest(req, { fingerprint }).map((user) => Object.assign({}, user, {
+                current: !!(isAnonActor(req.user) && String((req.user.sub || req.user.id || '')) === String(user.id)),
+            }));
+            res.json({ items });
+        });
+
+        router.post('/internal/resolve-anon', express.json(), (req, res) => {
+            if (!req.serviceActor) {
+                return res.status(403).json({ error: 'internal service actor required' });
+            }
+            const body = req.body || {};
+            const ensured = ensureAnonUser({
+                sessionToken: body.session_token || null,
+                req,
+                forceNew: isTruthy(body.force_new),
+                fingerprint: body.fingerprint || null,
+                anonUserId: body.anon_user_id || null,
+                anonNumber: body.anon_number || null,
+                ipAddress: body.ip || body.ip_address || null,
+                source: req.serviceActor,
+            });
+            res.json({
+                ok: true,
+                created: !!ensured.created,
+                user: ensured.user,
+            });
         });
 
         router.get('/session/bridge', (req, res) => {
@@ -1209,7 +1587,7 @@ function buildNativeAuth({ config, identity }) {
             }
 
             const sessionUser = resolveSessionUser(req);
-            if (!sessionUser || isAnonActor(sessionUser)) {
+            if (!sessionUser) {
                 const bridgeUrl = new URL('/api/v1/session/bridge', config.surfaces.network || config.surfaces.auth);
                 bridgeUrl.searchParams.set('return_to', returnTo);
                 const authorizeUrl = new URL('/oauth/authorize', config.surfaces.auth);
@@ -1217,25 +1595,21 @@ function buildNativeAuth({ config, identity }) {
                 return res.redirect(302, authorizeUrl.toString());
             }
 
-            const sessionId = (req.user && req.user.sid) || createSession(sessionUser.id, req).id;
-            if (req.user && req.user.sid) touchSession(req.user.sid, req);
-            const scope = 'openid profile email theme';
-            const accessToken = issueAccessToken(sessionUser, sessionId, scope);
-            return res.redirect(302, appendTokenToReturnUri(returnTo, accessToken));
+            const exchange = buildExchangeResponse(sessionUser, req);
+            return res.redirect(302, appendTokenToReturnUri(returnTo, exchange.access_token));
         });
 
         router.post('/session/exchange', (req, res) => {
-            const user = requireNativeUser(req, res);
-            if (!user) return;
-            const sessionId = (req.user && req.user.sid) || createSession(user.id, req).id;
-            const scope = 'openid profile email theme';
-            res.json({
-                access_token: issueAccessToken(user, sessionId, scope),
-                token_type: 'Bearer',
-                expires_in: ACCESS_TOKEN_TTL_SECONDS,
-                scope,
-                user,
-            });
+            const sessionUser = resolveSessionUser(req);
+            if (!sessionUser) {
+                return res.status(401).json({ error: 'authentication required' });
+            }
+            if (!isAnonActor(sessionUser)) {
+                const user = requireNativeUser(req, res);
+                if (!user) return;
+                return res.json(buildExchangeResponse(user, req));
+            }
+            return res.json(buildExchangeResponse(sessionUser, req));
         });
 
         router.get('/users/lookup', (req, res) => {

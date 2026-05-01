@@ -72,6 +72,8 @@ async function validateBundle(options) {
     }
 
     const userRefChecks = [
+        { file: path.join(bundleDir, 'identity', 'anon-ip-links.ndjson'), fields: ['anon_user_id'] },
+        { file: path.join(bundleDir, 'identity', 'anon-fingerprints.ndjson'), fields: ['anon_user_id'] },
         { file: path.join(bundleDir, 'themes', 'preferences.ndjson'), fields: ['user_id'] },
         { file: path.join(bundleDir, 'control-plane', 'notifications.ndjson'), fields: ['user_id', 'sender_user_id'] },
         { file: path.join(bundleDir, 'social', 'follows.ndjson'), fields: ['follower_user_id', 'followed_user_id'] },

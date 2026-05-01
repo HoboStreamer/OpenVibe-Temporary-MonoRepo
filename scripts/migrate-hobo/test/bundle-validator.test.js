@@ -20,7 +20,15 @@ async function main() {
     writeNdjson(path.join(bundleDir, 'identity', 'users.ndjson'), [
         { id: 'user:hobotools:1', username: 'alice' },
     ]);
-    writeNdjson(path.join(bundleDir, 'identity', 'anon-users.ndjson'), []);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-users.ndjson'), [
+        { id: 'anon-user:hobotools:7', anon_number: 7, display_name: 'Anonymous #7' },
+    ]);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-ip-links.ndjson'), [
+        { id: 'anon-ip:1', anon_user_id: 'anon-user:hobotools:missing', ip_address: '203.0.113.10' },
+    ]);
+    writeNdjson(path.join(bundleDir, 'identity', 'anon-fingerprints.ndjson'), [
+        { id: 'anon-fingerprint:1', anon_user_id: 'anon-user:hobotools:7', fingerprint: 'fp-7' },
+    ]);
     writeNdjson(path.join(bundleDir, 'themes', 'preferences.ndjson'), [
         { id: 'theme-pref:1', user_id: 'user:hobotools:missing', theme_id: 'theme:hobotools:campfire' },
     ]);
@@ -49,6 +57,7 @@ async function main() {
     assert.strictEqual(summary.ok, false, 'expected validation to fail on missing user refs');
     assert.strictEqual(summary.gate, 'red');
     assert.ok(summary.missing_refs.length >= 1, 'expected a missing user ref to be reported');
+    assert.ok(summary.missing_refs.some((entry) => entry.file.endsWith(path.join('identity', 'anon-ip-links.ndjson'))), 'expected anon IP link validation failures to be reported');
 
     console.log('bundle validator test passed');
 }
