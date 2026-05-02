@@ -1,4 +1,4 @@
-import { API_BASE, TWO_D_WORLD_API, REALTIME_PATH, apiJson, ensureSocketIoClient, getAuthState, initializeAuth, loadIdentity, resolveSurfaceUrl, startSignIn, startSignOut } from './app/config.js';
+import { API_BASE, TWO_D_WORLD_API, REALTIME_PATH, apiJson, ensureSocketIoClient, getAuthState, initializeAuth, loadIdentity } from './app/config.js';
 import { InputController } from './app/input.js';
 import { WorldScene } from './scenes/world-scene.js';
 import { RealtimeClient } from './net/realtime-client.js';
@@ -105,13 +105,9 @@ const state = {
 
 const dom = {
     gameShell: document.getElementById('game-shell'),
-    welcome: document.getElementById('welcome-root'),
+    joinStatus: document.getElementById('join-status'),
     sessionSummary: document.getElementById('welcome-session-summary'),
     sessionMeta: document.getElementById('welcome-session-meta'),
-    connectButton: document.getElementById('connect-btn'),
-    signInButton: document.getElementById('sign-in-btn'),
-    signOutButton: document.getElementById('sign-out-btn'),
-    accountButton: document.getElementById('account-btn'),
     joinInfo: document.getElementById('join-info'),
     gameCanvas: document.getElementById('game-canvas'),
     hud: document.getElementById('hud-root'),
@@ -342,10 +338,6 @@ async function loadSourceVibeBootstrap() {
     installSourceVibeGlobal();
     document.title = `${state.sourcevibeBootstrap && state.sourcevibeBootstrap.engine && state.sourcevibeBootstrap.engine.name || 'SourceVibe Engine'} · ${state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemode && state.sourcevibeBootstrap.gamemode.title || '2D World'}`;
     if (dom.hotkeys) dom.hotkeys.textContent = buildHotkeyLegend();
-    const welcomeTitle = dom.welcome && dom.welcome.querySelector('h1');
-    const welcomeBody = dom.welcome && dom.welcome.querySelector('p');
-    if (welcomeTitle) welcomeTitle.textContent = state.sourcevibeBootstrap && state.sourcevibeBootstrap.gamemode && state.sourcevibeBootstrap.gamemode.title || '2D World';
-    if (welcomeBody) welcomeBody.innerHTML = `The flagship <strong>${state.sourcevibeBootstrap && state.sourcevibeBootstrap.engine && state.sourcevibeBootstrap.engine.name || 'SourceVibe Engine'}</strong> gamemode for survival, crafting, travel, mods, and fullscreen play.`;
     return state.sourcevibeBootstrap;
 }
 
@@ -514,10 +506,9 @@ async function disconnectClient() {
     state.latestSnapshot = null;
     state.buildSelection = null;
     closeAllPanels();
-    dom.joinInfo.textContent = 'Disconnected. Choose a server from the launcher or reconnect here.';
+    dom.joinInfo.textContent = 'Disconnected. Return to the SourceVibe directory to reconnect or pick another shard.';
     dom.joinInfo.classList.remove('empty');
-    dom.welcome.classList.remove('playing');
-    dom.welcome.classList.add('connected');
+    document.body.classList.remove('play-connected');
     addConsoleLog('Disconnected from the active server.', 'warn');
 }
 
@@ -530,7 +521,7 @@ async function handleMenuAction(actionId) {
         await disconnectClient();
         break;
     case 'directory':
-        window.location.assign('/sourcevibe');
+        window.location.assign(`/sourcevibe?gamemode=${encodeURIComponent(state.query.gamemodeId)}&view=directory`);
         break;
     case 'options':
         toggleMenuPanel(false);
@@ -760,20 +751,14 @@ function renderIdentity() {
     const user = state.auth && state.auth.session && state.auth.session.user || null;
     if (dom.sessionSummary) {
         dom.sessionSummary.textContent = isAuthenticated()
-            ? `${user && (user.display_name || user.username || user.id) || 'Signed in'} · ${user && user.role || 'user'}`
-            : 'Sign in with OpenVibe to enter the world';
+            ? `${user && (user.display_name || user.username || user.id) || 'Signed in'} · joining ${state.query.serverId}`
+            : 'Redirecting to SourceVibe sign-in…';
     }
     if (dom.sessionMeta) {
         dom.sessionMeta.textContent = isAuthenticated()
-            ? `Player profile ${user && (user.username || user.id) || 'linked'} is now bound to this client session. Inventory, hotbar, console, and progression all resolve from the authenticated actor.`
-            : 'The old local User ID and Display Name fields are gone. This route now joins the authoritative shard using your OpenVibe session instead.';
+            ? 'Authoritative play now boots straight from the unified SourceVibe shell. Escape opens the shared menu; backtick opens the shared console; F1 opens shared options.'
+            : 'This fullscreen route no longer runs its own launcher splash. Authentication and routing now happen in /sourcevibe/.';
     }
-    if (dom.connectButton) {
-        dom.connectButton.disabled = !isAuthenticated();
-        dom.connectButton.textContent = client ? 'Connected' : (isAuthenticated() ? 'Enter world' : 'Sign in to enter');
-    }
-    if (dom.signInButton) dom.signInButton.classList.toggle('hidden', isAuthenticated());
-    if (dom.signOutButton) dom.signOutButton.classList.toggle('hidden', !isAuthenticated());
 }
 
 async function loadCatalog() {
@@ -929,8 +914,7 @@ function refreshPanels(snapshot) {
         || (!inventoryLayout.showBankOnInteractionOnly && Array.isArray(snapshot.self && snapshot.self.bank) && snapshot.self.bank.length > 0);
     dom.joinInfo.textContent = `Connected to ${snapshot.world.name} · zone ${snapshot.world.zone_id}`;
     dom.joinInfo.classList.remove('empty');
-    dom.welcome.classList.add('connected');
-    dom.welcome.classList.add('playing');
+    document.body.classList.add('play-connected');
     chat.render(snapshot.chat || []);
     if (state.panels.inventory) {
         inventory.render(snapshot.self, {
@@ -1154,16 +1138,15 @@ function onSnapshot(snapshot) {
 async function connect() {
     if (client) return;
     if (!isAuthenticated()) {
-        dom.joinInfo.textContent = 'Sign in with OpenVibe before entering the authoritative shard.';
+        dom.joinInfo.textContent = 'Redirecting to the SourceVibe shell so OpenVibe auth can complete before launch.';
         dom.joinInfo.classList.remove('empty');
-        startSignIn();
+        window.location.replace(`/sourcevibe?gamemode=${encodeURIComponent(state.query.gamemodeId)}&view=home`);
         return;
     }
     await loadSourceVibeBootstrap();
     dom.joinInfo.textContent = `Connecting to ${state.query.serverId}…`;
     dom.joinInfo.classList.remove('empty');
-    dom.welcome.classList.add('connected');
-    dom.welcome.classList.remove('playing');
+    document.body.classList.remove('play-connected');
     addConsoleLog(`Connecting as ${state.identity.displayName || state.identity.userId} (${state.identity.userId})…`);
     await ensureSocketIoClient(REALTIME_PATH);
     client = new RealtimeClient({ path: REALTIME_PATH, identity: state.identity, token: state.auth.token });
@@ -1180,12 +1163,13 @@ async function connect() {
     });
     client.on('disconnect', () => {
         state.connectionText = 'disconnected';
-        dom.joinInfo.textContent = 'Disconnected. Press Enter world to reconnect.';
-        dom.welcome.classList.remove('playing');
+        dom.joinInfo.textContent = 'Disconnected. Return to SourceVibe to reconnect or choose another shard.';
+        document.body.classList.remove('play-connected');
         addConsoleLog('Realtime link dropped. Waiting to reconnect…', 'warn');
     });
     client.on('world:joined', (snapshot) => {
         dom.joinInfo.textContent = `Joined ${snapshot.world.name}`;
+        document.body.classList.add('play-connected');
         addConsoleLog(`Joined ${snapshot.world.name} in zone ${snapshot.world.zone_id}.`);
         toggleMenuPanel(false);
         onSnapshot(snapshot);
@@ -1260,18 +1244,9 @@ await loadCatalog();
 bindUi();
 applyClientSettings();
 refreshOverlayPanels();
-
-dom.signInButton?.addEventListener('click', () => startSignIn());
-dom.signOutButton?.addEventListener('click', () => startSignOut());
-dom.accountButton?.addEventListener('click', () => {
-    window.location.assign(resolveSurfaceUrl('my'));
-});
-
-dom.connectButton.addEventListener('click', () => {
-    connect().catch((error) => {
-        dom.joinInfo.textContent = error.message;
-        dom.joinInfo.classList.remove('empty');
-        addConsoleLog(error.message || 'Connection failed.', 'error');
-    });
+await connect().catch((error) => {
+    dom.joinInfo.textContent = error.message;
+    dom.joinInfo.classList.remove('empty');
+    addConsoleLog(error.message || 'Connection failed.', 'error');
 });
 requestAnimationFrame(animate);

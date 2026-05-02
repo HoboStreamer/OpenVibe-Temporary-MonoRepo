@@ -2,7 +2,7 @@
 
 module.exports = {
     ui: {
-        theme: '2dworld-classic',
+        theme: 'sourcevibe-foundation',
         inventory: {
             rows: 5,
             cols: 8,
@@ -18,11 +18,11 @@ module.exports = {
         },
         menu: {
             owner: 'gamemode',
-            style: 'source-classic',
+            style: 'source-engine',
         },
         console: {
             owner: 'gamemode',
-            style: 'source-classic',
+            style: 'source-engine',
         },
     },
     hooks: {

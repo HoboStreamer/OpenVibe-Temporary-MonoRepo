@@ -1,5 +1,7 @@
 import { clamp, setNodeContent } from './dom.js';
 
+const WINDOW_LAYOUT_KEY = 'openvibe.games.sourcevibe.window-layout.v1';
+
 function px(value, fallback) {
     if (value == null || value === '') return fallback;
     return typeof value === 'number' ? `${value}px` : String(value);
@@ -10,9 +12,13 @@ export class SourceWindowManager {
         this.container = container;
         this.windows = new Map();
         this.zIndex = 2200;
+        this.storageKey = WINDOW_LAYOUT_KEY;
         this.layer = container.querySelector('.svui-window-layer') || document.createElement('div');
         this.layer.className = 'svui-window-layer';
         if (!this.layer.parentNode) container.appendChild(this.layer);
+        window.addEventListener('resize', () => {
+            this.windows.forEach((record) => record.restoreWithinViewport());
+        });
     }
 
     createWindow(id, options = {}) {
@@ -36,6 +42,25 @@ export class SourceWindowManager {
 
     closeAll() {
         this.windows.forEach((record) => record.close());
+    }
+
+    readFrame(id) {
+        try {
+            const layout = JSON.parse(window.localStorage.getItem(this.storageKey) || '{}');
+            return layout && layout[id] || null;
+        } catch {
+            return null;
+        }
+    }
+
+    writeFrame(id, frame) {
+        try {
+            const layout = JSON.parse(window.localStorage.getItem(this.storageKey) || '{}');
+            layout[id] = frame;
+            window.localStorage.setItem(this.storageKey, JSON.stringify(layout));
+        } catch {
+            // Ignore storage failures; windows can still behave ephemerally.
+        }
     }
 }
 
@@ -75,6 +100,12 @@ class ManagedWindow {
 
         this.closeButton.addEventListener('click', () => this.close());
         this.element.addEventListener('pointerdown', () => this.focus());
+        if (typeof ResizeObserver === 'function') {
+            this.resizeObserver = new ResizeObserver(() => {
+                if (!this.element.hidden) this.persist();
+            });
+            this.resizeObserver.observe(this.element);
+        }
         this._bindDrag();
         this.setFrame(options);
     }
@@ -95,6 +126,7 @@ class ManagedWindow {
         const onUp = (event) => {
             if (event.pointerId !== pointerId) return;
             pointerId = null;
+            this.persist();
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
         };
@@ -121,6 +153,48 @@ class ManagedWindow {
         this.positioned = true;
     }
 
+    currentFrame() {
+        const rect = this.element.getBoundingClientRect();
+        return {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+        };
+    }
+
+    restoreWithinViewport() {
+        if (this.element.hidden) return;
+        const rect = this.element.getBoundingClientRect();
+        const width = Math.min(rect.width, window.innerWidth - 24);
+        const height = Math.min(rect.height, window.innerHeight - 24);
+        const left = clamp(rect.left, 12, Math.max(12, window.innerWidth - width - 12));
+        const top = clamp(rect.top, 12, Math.max(12, window.innerHeight - height - 12));
+        this.element.style.width = `${width}px`;
+        this.element.style.height = `${height}px`;
+        this.element.style.left = `${left}px`;
+        this.element.style.top = `${top}px`;
+        this.positioned = true;
+        this.persist();
+    }
+
+    restorePersistedFrame() {
+        const saved = this.manager.readFrame(this.id);
+        if (!saved) return false;
+        if (saved.width) this.element.style.width = `${saved.width}px`;
+        if (saved.height) this.element.style.height = `${saved.height}px`;
+        this.element.style.left = `${saved.left || 24}px`;
+        this.element.style.top = `${saved.top || 72}px`;
+        this.positioned = true;
+        this.restoreWithinViewport();
+        return true;
+    }
+
+    persist() {
+        if (!this.positioned) return;
+        this.manager.writeFrame(this.id, this.currentFrame());
+    }
+
     setFrame(frame = {}) {
         const title = frame.title || this.options.title || 'Window';
         const subtitle = frame.subtitle || this.options.subtitle || '';
@@ -132,7 +206,8 @@ class ManagedWindow {
         if (frame.className || this.options.className) {
             this.element.className = ['svui-window', this.options.className, frame.className].filter(Boolean).join(' ');
         }
-        if (!this.positioned && !this.element.hidden) this.center();
+        if (!this.positioned && !this.element.hidden && !this.restorePersistedFrame()) this.center();
+        else if (!this.element.hidden) this.restoreWithinViewport();
     }
 
     body() {
@@ -155,12 +230,15 @@ class ManagedWindow {
     open() {
         this.element.hidden = false;
         this.focus();
-        if (!this.positioned) this.center();
+        if (!this.positioned && !this.restorePersistedFrame()) this.center();
+        this.restoreWithinViewport();
+        this.persist();
         return this;
     }
 
     close() {
         if (this.element.hidden) return this;
+        this.persist();
         this.element.hidden = true;
         if (typeof this.options.onClose === 'function') this.options.onClose();
         return this;

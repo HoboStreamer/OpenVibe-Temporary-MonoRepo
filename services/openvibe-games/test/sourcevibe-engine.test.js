@@ -62,13 +62,39 @@ async function main() {
         assert.ok(launcherHtml.includes('SourceVibe Engine'));
         assert.ok(launcherHtml.includes('Directory'));
         assert.ok(launcherHtml.includes('Console'));
+        assert.ok(launcherHtml.includes('Editor'));
+
+        const worldShellRedirect = await fetch(`${baseUrl}/2d-world/`, {
+            headers: headers(),
+            redirect: 'manual',
+        });
+        assert.strictEqual(worldShellRedirect.status, 302);
+        assert.ok(String(worldShellRedirect.headers.get('location') || '').includes('/sourcevibe?gamemode=2dworld&view=home'));
+
+        const worldPlayHtml = await fetch(`${baseUrl}/2d-world/?gamemode=2dworld&server=2d-world&launch=play`, { headers: headers() }).then((response) => response.text());
+        assert.ok(worldPlayHtml.includes('join-status'));
+        assert.ok(!worldPlayHtml.includes('welcome-root'));
+
+        const editorRedirect = await fetch(`${baseUrl}/2d-world/editor/?gamemode=2dworld`, {
+            headers: headers(),
+            redirect: 'manual',
+        });
+        assert.strictEqual(editorRedirect.status, 302);
+        assert.ok(String(editorRedirect.headers.get('location') || '').includes('/sourcevibe?gamemode=2dworld&view=editor'));
+
+        const statusRedirect = await fetch(`${baseUrl}/2d-world/status/?gamemode=2dworld`, {
+            headers: headers(),
+            redirect: 'manual',
+        });
+        assert.strictEqual(statusRedirect.status, 302);
+        assert.ok(String(statusRedirect.headers.get('location') || '').includes('/sourcevibe?gamemode=2dworld&view=diagnostics'));
 
         const bootstrap = await jsonFetch(`${baseUrl}/api/games/sourcevibe/bootstrap`);
         assert.strictEqual(bootstrap.engine.name, 'SourceVibe Engine');
         assert.ok(Array.isArray(bootstrap.engine.api) && bootstrap.engine.api.includes('hook'));
         assert.ok(Array.isArray(bootstrap.engine.sharedWindows) && bootstrap.engine.sharedWindows.includes('console'));
         assert.strictEqual(bootstrap.gamemode.id, '2dworld');
-        assert.strictEqual(bootstrap.gamemodeUi.theme, '2dworld-classic');
+        assert.strictEqual(bootstrap.gamemodeUi.theme, 'sourcevibe-foundation');
         assert.strictEqual(bootstrap.gamemodeUi.inventory.owner, 'gamemode');
         assert.strictEqual(bootstrap.gamemodeUi.inventory.showBankOnInteractionOnly, true);
         assert.ok(Array.isArray(bootstrap.gamemodes) && bootstrap.gamemodes.some((entry) => entry.id === 'base'));
@@ -84,6 +110,8 @@ async function main() {
         const gamemodeDetail = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld`);
         assert.strictEqual(gamemodeDetail.gamemode.id, '2dworld');
         assert.ok(gamemodeDetail.gamemode.routes.play.includes('/2d-world'));
+        assert.ok(gamemodeDetail.gamemode.routes.status.includes('/sourcevibe'));
+        assert.ok(gamemodeDetail.gamemode.routes.editor.includes('/sourcevibe'));
         assert.strictEqual(gamemodeDetail.permissions.canPlay, true);
 
         const directory = await jsonFetch(`${baseUrl}/api/games/sourcevibe/directory`);
@@ -93,6 +121,8 @@ async function main() {
         assert.strictEqual(directoryEntry.permissions.canPlay, true);
         assert.strictEqual(directoryEntry.permissions.canLocalTest, true);
         assert.ok(directoryEntry.surfaces.play.includes('/2d-world'));
+        assert.ok(directoryEntry.surfaces.status.includes('/sourcevibe'));
+        assert.ok(directoryEntry.surfaces.editor.includes('/sourcevibe'));
 
         const permissions = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld/permissions`);
         assert.strictEqual(permissions.permissions.gamemode, '2dworld');
@@ -106,6 +136,19 @@ async function main() {
         assert.strictEqual(play.ok, true);
         assert.strictEqual(play.launch.auth.userId, 'sv-user-1');
         assert.ok(play.launch.url.includes('/2d-world'));
+        assert.ok(play.launch.url.includes('launch=play'));
+
+        const legacyImportRejected = await fetch(`${baseUrl}/api/games/2d-world/worlds`, {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+                name: 'Legacy Import Block Test',
+                legacy_entities: [{ class: 'car1' }],
+            }),
+        });
+        const legacyImportBody = await legacyImportRejected.json();
+        assert.strictEqual(legacyImportRejected.status, 400);
+        assert.strictEqual(legacyImportBody.reason, 'sourcevibe_only');
 
         const localTest = await jsonFetch(`${baseUrl}/api/games/sourcevibe/gamemodes/2dworld/local-test`, {
             method: 'POST',

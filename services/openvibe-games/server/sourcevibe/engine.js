@@ -60,10 +60,10 @@ function buildServerRoutes(gamemode, serverId, gamemodeId) {
     const routes = Object.assign({}, gamemode && gamemode.manifest && gamemode.manifest.routes || {});
     const extra = { server: serverId, gamemode: gamemodeId };
     return {
-        play: withQuery(routes.play || '/sourcevibe', extra),
-        launcher: withQuery(routes.launcher || '/sourcevibe', extra),
-        status: withQuery(routes.status || '/sourcevibe', Object.assign({ panel: 'status' }, extra)),
-        editor: routes.editor ? withQuery(routes.editor, extra) : null,
+        play: withQuery(routes.play || '/2d-world', Object.assign({ launch: 'play' }, extra)),
+        launcher: withQuery(routes.launcher || '/sourcevibe', Object.assign({ view: 'home' }, extra)),
+        status: withQuery(routes.status || '/sourcevibe', Object.assign({ view: 'diagnostics', panel: 'status' }, extra)),
+        editor: withQuery(routes.editor || '/sourcevibe', Object.assign({ view: 'editor' }, extra)),
     };
 }
 
@@ -512,7 +512,8 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
                 displayName: caps.displayName,
             });
         }
-        const launchUrl = officialServer && officialServer.route || gamemode.routes && gamemode.routes.play || withQuery('/sourcevibe', { gamemode: gamemode.id });
+        const launchUrl = officialServer && officialServer.route
+            || withQuery(gamemode.routes && gamemode.routes.play || '/2d-world', { gamemode: gamemode.id, launch: 'play' });
         return {
             ok: true,
             gamemode,
@@ -649,6 +650,7 @@ function createSourceVibeEngine({ realtime, eventBus, config, sourcevibeRoot } =
             launcher: {
                 route: '/sourcevibe',
                 legacyPlayRoute: '/2d-world',
+                editorRoute: '/sourcevibe?gamemode=2dworld&view=editor',
             },
         };
     };

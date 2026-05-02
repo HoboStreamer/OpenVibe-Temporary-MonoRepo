@@ -371,6 +371,7 @@ function buildClassicPlayer(actor, worldDefinition, { self = false, catalog = nu
 }
 
 function defaultWeaponType(itemId) {
+    if (!itemId || itemId === 'hands' || itemId === 'coins') return 'none';
     if (itemId.includes('sword')) return 'blade';
     if (itemId.includes('spear')) return 'spear';
     if (itemId.includes('bow')) return 'bow';
@@ -386,6 +387,7 @@ function weaponProfile(itemId = '', itemDefinition = null) {
     const render = itemDefinition && isObject(itemDefinition.render) ? itemDefinition.render : {};
     const fallbackType = defaultWeaponType(itemId || '');
     const fallback = {
+        none: { type: 'none', length: 0, color: 0x000000, accent: 0x000000 },
         blade: { type: 'blade', length: 34, color: 0xe8edf8, accent: 0x6b4c2d },
         spear: { type: 'spear', length: 42, color: 0xc7d2de, accent: 0x7f5539 },
         bow: { type: 'bow', length: 34, color: 0xb07a3c, accent: 0xdcc18f },
@@ -407,6 +409,7 @@ function weaponProfile(itemId = '', itemDefinition = null) {
 
 function drawWeapon(itemId, angle, x, y, itemDefinition = null) {
     const profile = weaponProfile(itemId || '', itemDefinition);
+    if (!profile || profile.type === 'none') return null;
     if (profile.sprite) {
         const weapon = buildSprite(Object.assign({}, profile.sprite, {
             x,
