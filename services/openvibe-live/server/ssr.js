@@ -304,25 +304,35 @@ function _shellStyles() {
     return `<style>
         :root {
             color-scheme: dark;
-            --bg: #060916;
-            --bg-elev: rgba(10, 18, 38, 0.82);
-            --bg-elev-strong: rgba(14, 23, 46, 0.92);
+            --ov-accent: #8b5cf6;
+            --ov-accent-2: #22d3ee;
+            --ov-bg: #060916;
+            --ov-bg-elev: rgba(10, 18, 38, 0.82);
+            --ov-bg-elev-2: rgba(14, 23, 46, 0.92);
+            --ov-text: #edf3ff;
+            --ov-text-dim: #9fb0cf;
+            --ov-text-faint: #c7d4ee;
+            --ov-border: rgba(148, 163, 184, 0.16);
+            --ov-shadow: 0 28px 90px rgba(2, 8, 23, 0.52);
+            --bg: var(--ov-bg);
+            --bg-elev: var(--ov-bg-elev);
+            --bg-elev-strong: var(--ov-bg-elev-2);
             --bg-soft: rgba(19, 31, 62, 0.68);
             --surface: rgba(255, 255, 255, 0.05);
             --surface-2: rgba(255, 255, 255, 0.08);
             --surface-3: rgba(255, 255, 255, 0.12);
-            --border: rgba(148, 163, 184, 0.16);
+            --border: var(--ov-border);
             --border-strong: rgba(148, 163, 184, 0.26);
-            --text: #edf3ff;
-            --muted: #9fb0cf;
-            --muted-strong: #c7d4ee;
-            --primary: #8b5cf6;
+            --text: var(--ov-text);
+            --muted: var(--ov-text-dim);
+            --muted-strong: var(--ov-text-faint);
+            --primary: var(--ov-accent);
             --primary-2: #6d28d9;
-            --accent: #22d3ee;
+            --accent: var(--ov-accent-2);
             --success: #34d399;
             --warn: #f59e0b;
             --danger: #fb7185;
-            --shadow: 0 28px 90px rgba(2, 8, 23, 0.52);
+            --shadow: var(--ov-shadow);
             --radius: 28px;
             --radius-lg: 36px;
             --radius-md: 20px;
@@ -407,12 +417,12 @@ function _shellStyles() {
             width: 2.8rem;
             height: 2.8rem;
             border-radius: 18px;
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(34, 211, 238, 0.92));
+            background: linear-gradient(135deg, var(--primary), var(--accent));
             display: grid;
             place-items: center;
             font-weight: 800;
             color: white;
-            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.34);
+            box-shadow: var(--shadow);
         }
         .brand-copy {
             min-width: 0;
@@ -446,8 +456,8 @@ function _shellStyles() {
         }
         .nav-link:hover,
         .nav-link.active {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.08);
+            background: var(--surface-2);
+            border-color: var(--surface-2);
             color: white;
             transform: translateY(-1px);
         }
@@ -457,11 +467,11 @@ function _shellStyles() {
             gap: 0.55rem;
             padding: 0.78rem 1.1rem;
             border-radius: 999px;
-            background: linear-gradient(135deg, var(--primary), #4f46e5 60%, var(--accent));
+            background: linear-gradient(135deg, var(--primary), var(--primary-2) 60%, var(--accent));
             color: white;
             font-weight: 700;
             border: 0;
-            box-shadow: 0 18px 40px rgba(99, 102, 241, 0.34);
+            box-shadow: var(--shadow);
             transition: transform 0.25s ease, box-shadow 0.25s ease;
         }
         .nav-cta:hover { transform: translateY(-2px); box-shadow: 0 24px 56px rgba(99, 102, 241, 0.42); }
@@ -474,7 +484,7 @@ function _shellStyles() {
         .timeline-card,
         .stat-card,
         .footer-card {
-            background: linear-gradient(180deg, rgba(14, 23, 46, 0.88), rgba(9, 15, 31, 0.90));
+            background: linear-gradient(180deg, var(--bg-elev-strong), var(--bg-elev));
             border: 1px solid var(--border);
             box-shadow: var(--shadow);
         }
@@ -632,7 +642,7 @@ function _shellStyles() {
             max-width: 10ch;
         }
         .hero-gradient {
-            background: linear-gradient(135deg, #eef2ff 0%, #c7d2fe 30%, #67e8f9 100%);
+            background: linear-gradient(135deg, var(--text) 0%, color-mix(in srgb, var(--text) 72%, var(--primary) 28%) 30%, color-mix(in srgb, var(--text) 46%, var(--accent) 54%) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -917,9 +927,9 @@ function _shellStyles() {
             color: rgba(230, 238, 255, 0.9);
         }
         .pill.live {
-            background: rgba(251, 113, 133, 0.14);
-            border-color: rgba(251, 113, 133, 0.26);
-            color: #fecdd3;
+            background: color-mix(in srgb, var(--danger) 18%, transparent);
+            border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+            color: color-mix(in srgb, white 78%, var(--danger) 22%);
         }
         .pill.success {
             background: rgba(52, 211, 153, 0.14);
@@ -927,9 +937,9 @@ function _shellStyles() {
             color: #bbf7d0;
         }
         .pill.warn {
-            background: rgba(245, 158, 11, 0.15);
-            border-color: rgba(245, 158, 11, 0.26);
-            color: #fde68a;
+            background: color-mix(in srgb, var(--warn) 16%, transparent);
+            border-color: color-mix(in srgb, var(--warn) 28%, transparent);
+            color: color-mix(in srgb, white 72%, var(--warn) 28%);
         }
         .pill.primary {
             background: rgba(139, 92, 246, 0.16);
@@ -937,9 +947,9 @@ function _shellStyles() {
             color: #ddd6fe;
         }
         .pill.soft {
-            background: rgba(34, 211, 238, 0.12);
-            border-color: rgba(34, 211, 238, 0.22);
-            color: #a5f3fc;
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+            color: color-mix(in srgb, white 70%, var(--accent) 30%);
         }
         .pill.muted {
             color: var(--muted);
@@ -1226,6 +1236,10 @@ function _shellStyles() {
 function _shellScript() {
     return `<script>
         (function () {
+            if (window.OpenVibe && typeof window.OpenVibe.primeTheme === 'function') {
+                Promise.resolve(window.OpenVibe.primeTheme()).catch(() => {});
+            }
+
             const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             const revealTargets = Array.from(document.querySelectorAll('[data-reveal]'));
             const reveal = (el) => el.classList.add('is-visible');
@@ -1499,6 +1513,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                 ${bodyHtml}
             </main>
             ${renderFooter(baseUrl)}
+            <script src="/assets/openvibe.js?v=20260501-3"></script>
             ${_shellScript()}
         </body>
         </html>`;

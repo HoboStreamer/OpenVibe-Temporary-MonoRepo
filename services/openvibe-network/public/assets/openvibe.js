@@ -547,6 +547,7 @@
         const root = global.document && global.document.documentElement;
         if (!root) return theme;
         root.dataset.openvibeTheme = theme.id;
+        root.style.setProperty('color-scheme', theme.id === 'openvibe-light' ? 'light' : 'dark');
         root.style.setProperty('--ov-accent', theme.accent);
         root.style.setProperty('--ov-accent-2', theme.accent2);
         root.style.setProperty('--ov-bg', theme.bg);

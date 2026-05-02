@@ -220,7 +220,7 @@ function repairLegacySchema(database) {
             event_type = COALESCE(event_type, 'legacy.event'),
             version = COALESCE(version, 1),
             source = COALESCE(source, 'legacy'),
-            timestamp = COALESCE(timestamp, created_at, CURRENT_TIMESTAMP),
+            timestamp = COALESCE(timestamp, CAST(created_at AS TEXT), CAST(CURRENT_TIMESTAMP AS TEXT)),
             payload_json = COALESCE(payload_json, '{}')
     `);
     database.exec(`
