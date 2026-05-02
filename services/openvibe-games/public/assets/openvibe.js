@@ -8,10 +8,92 @@
 
     const API_BASE = (global.OV_API_BASE || '/api/v1').replace(/\/$/, '');
     const BRIDGE_TOKEN_KEY = 'openvibe.bridge.token';
+    const LOCAL_THEME_KEY = 'openvibe.theme';
     const LOCAL_ANON_TOKENS_KEY = 'openvibe.anon_tokens';
     const LOCAL_ACTIVE_ANON_KEY = 'openvibe.anon_active';
 
     let sessionPromise = null;
+
+    const BUILTIN_THEMES = [
+        {
+            id: 'openvibe-dark',
+            accent: '#8b5cf6',
+            accent2: '#22d3ee',
+            bg: '#060917',
+            bgElev: 'rgba(15, 23, 45, 0.88)',
+            bgElev2: 'rgba(21, 31, 60, 0.94)',
+            text: '#eef4ff',
+            textDim: '#a7b5d2',
+            textFaint: '#6d7c98',
+            border: 'rgba(148, 163, 184, 0.14)',
+            shadow: '0 28px 90px rgba(2, 8, 23, 0.42)',
+        },
+        {
+            id: 'openvibe-dim',
+            accent: '#2dd4bf',
+            accent2: '#60a5fa',
+            bg: '#0b1323',
+            bgElev: 'rgba(21, 33, 54, 0.88)',
+            bgElev2: 'rgba(28, 42, 66, 0.94)',
+            text: '#edf6ff',
+            textDim: '#b4c7dd',
+            textFaint: '#7f94b0',
+            border: 'rgba(96, 165, 250, 0.16)',
+            shadow: '0 28px 90px rgba(5, 16, 32, 0.42)',
+        },
+        {
+            id: 'openvibe-light',
+            accent: '#5b3df0',
+            accent2: '#0ea5e9',
+            bg: '#eef4ff',
+            bgElev: 'rgba(255, 255, 255, 0.92)',
+            bgElev2: 'rgba(235, 243, 255, 0.96)',
+            text: '#0f172a',
+            textDim: '#475569',
+            textFaint: '#64748b',
+            border: 'rgba(71, 85, 105, 0.18)',
+            shadow: '0 18px 48px rgba(15, 23, 42, 0.12)',
+        },
+        {
+            id: 'sunset',
+            accent: '#f97316',
+            accent2: '#fb7185',
+            bg: '#1a1118',
+            bgElev: 'rgba(56, 26, 36, 0.88)',
+            bgElev2: 'rgba(79, 33, 49, 0.94)',
+            text: '#fff1f2',
+            textDim: '#fecdd3',
+            textFaint: '#fda4af',
+            border: 'rgba(251, 113, 133, 0.18)',
+            shadow: '0 28px 90px rgba(42, 16, 24, 0.45)',
+        },
+        {
+            id: 'forest',
+            accent: '#22c55e',
+            accent2: '#2dd4bf',
+            bg: '#0d1410',
+            bgElev: 'rgba(18, 36, 29, 0.88)',
+            bgElev2: 'rgba(24, 51, 40, 0.94)',
+            text: '#ecfdf5',
+            textDim: '#a7f3d0',
+            textFaint: '#6ee7b7',
+            border: 'rgba(45, 212, 191, 0.16)',
+            shadow: '0 28px 90px rgba(8, 24, 18, 0.45)',
+        },
+        {
+            id: 'cyberpunk',
+            accent: '#ec4899',
+            accent2: '#22d3ee',
+            bg: '#0c0a18',
+            bgElev: 'rgba(30, 18, 48, 0.9)',
+            bgElev2: 'rgba(43, 23, 69, 0.94)',
+            text: '#faf5ff',
+            textDim: '#d8b4fe',
+            textFaint: '#c084fc',
+            border: 'rgba(236, 72, 153, 0.18)',
+            shadow: '0 28px 90px rgba(15, 6, 32, 0.5)',
+        },
+    ];
 
     const SURFACES = {
         network:   { origin: 'https://openvibe.network', localHost: 'openvibe.network.localhost', port: 4100 },
@@ -62,6 +144,46 @@
     function isLocalHostname() {
         const hostname = global.location && global.location.hostname ? global.location.hostname : '';
         return /localhost$/i.test(hostname);
+    }
+
+    function themeById(themeId) {
+        return BUILTIN_THEMES.find((theme) => theme.id === themeId) || BUILTIN_THEMES[0];
+    }
+
+    function applyTheme(themeId, options) {
+        const theme = themeById(themeId);
+        const root = global.document && global.document.documentElement;
+        if (!root) return theme;
+        root.dataset.openvibeTheme = theme.id;
+        root.style.setProperty('color-scheme', theme.id === 'openvibe-light' ? 'light' : 'dark');
+        root.style.setProperty('--ov-accent', theme.accent);
+        root.style.setProperty('--ov-accent-2', theme.accent2);
+        root.style.setProperty('--ov-bg', theme.bg);
+        root.style.setProperty('--ov-bg-elev', theme.bgElev);
+        root.style.setProperty('--ov-bg-elev-2', theme.bgElev2);
+        root.style.setProperty('--ov-text', theme.text);
+        root.style.setProperty('--ov-text-dim', theme.textDim);
+        root.style.setProperty('--ov-text-faint', theme.textFaint);
+        root.style.setProperty('--ov-border', theme.border);
+        root.style.setProperty('--ov-shadow', theme.shadow);
+        if (!options || options.persistLocal !== false) {
+            try {
+                global.localStorage.setItem(LOCAL_THEME_KEY, theme.id);
+            } catch {
+                // ignore storage failures
+            }
+        }
+        return theme;
+    }
+
+    function applySavedTheme() {
+        try {
+            const saved = global.localStorage.getItem(LOCAL_THEME_KEY);
+            if (saved) return applyTheme(saved, { persistLocal: false });
+        } catch {
+            // ignore storage failures
+        }
+        return applyTheme(BUILTIN_THEMES[0].id, { persistLocal: false });
     }
 
     function resolveSurfaceUrl(surface) {
@@ -315,6 +437,31 @@
         return sessionPromise;
     }
 
+    async function loadSyncedThemePreference() {
+        const session = await loadSession();
+        if (!session || !session.authenticated) return null;
+        try {
+            const moduleState = await networkRequestJson('/api/v1/user-modules/me/openvibe.theme');
+            const themeId = moduleState && moduleState.data && moduleState.data.theme_id
+                ? String(moduleState.data.theme_id)
+                : '';
+            if (themeId) {
+                applyTheme(themeId);
+                return themeId;
+            }
+        } catch (error) {
+            if (!error || error.status !== 404) {
+                console.warn('[openvibe] failed to load synced theme:', error.message);
+            }
+        }
+        return null;
+    }
+
+    async function primeTheme() {
+        applySavedTheme();
+        return loadSyncedThemePreference();
+    }
+
     async function startAnonymousSession(options) {
         await networkRequestJson('/api/v1/session/anonymous', {
             method: 'POST',
@@ -373,6 +520,16 @@
 
     async function api(pathname, opts) {
         return fetchJson(`${API_BASE}${pathname}`, opts);
+    }
+
+    async function loadServices() {
+        try {
+            const data = await requestJson(resolveRegistryUrl(), null, 'registry api');
+            return Array.isArray(data && data.items) ? data.items : [];
+        } catch (error) {
+            console.warn('[openvibe] failed to load services:', error.message);
+            return [];
+        }
     }
 
     function resolveServiceUrl(item) {
@@ -530,7 +687,10 @@
         const footerMount = global.document.getElementById('footer-mount');
         if (navMount) navMount.innerHTML = navbar(activeKey);
         if (footerMount) footerMount.innerHTML = footer();
-        await hydrateNavSession();
+        await Promise.all([
+            hydrateNavSession(),
+            loadSyncedThemePreference(),
+        ]);
     }
 
     function attachLauncher(getItems) {
@@ -564,6 +724,8 @@
         return { open, close };
     }
 
+    applySavedTheme();
+
     global.OpenVibe = {
         FALLBACK_SERVICES,
         api,
@@ -580,6 +742,7 @@
         loadSession,
         mergedServices,
         navbar,
+        primeTheme,
         renderChrome,
         renderServiceCards,
         resolveRegistryUrl,

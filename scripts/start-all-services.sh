@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
 LOG_DIR="$ROOT_DIR/logs"
 LOG_FILE="$LOG_DIR/all-services.log"
 mkdir -p "$LOG_DIR"
@@ -13,6 +20,9 @@ SERVICES=(
   openvibe-events
   openvibe-network
   openvibe-media
+  openvibe-realtime
+  openvibe-workers
+  openvibe-content
   openre-stream
   openvibe-live
   openvibe-chat
@@ -26,11 +36,14 @@ SERVICE_PORTS=(
   4400
   4100
   4500
+  5400
+  5300
+  5500
   4700
   4600
   4800
   4900
-  5000
+  5001
   5100
   5200
 )
@@ -63,11 +76,6 @@ get_service_port() {
   local service_dir="$1"
   local port
   port=$(read_port_from_env_file "$service_dir/.env") || true
-  if [ -n "$port" ]; then
-    echo "$port"
-    return 0
-  fi
-  port=$(read_port_from_env_file "$service_dir/.env.example") || true
   if [ -n "$port" ]; then
     echo "$port"
     return 0
@@ -119,7 +127,7 @@ for i in "${!SERVICES[@]}"; do
     continue
   fi
 
-  PORT=$(get_service_port "$SERVICE_DIR")
+  PORT=$(get_service_port "$SERVICE_DIR" || true)
   if [ -z "$PORT" ]; then
     PORT="${SERVICE_PORTS[$i]}"
   fi
@@ -132,6 +140,7 @@ for i in "${!SERVICES[@]}"; do
   ( 
     cd "$SERVICE_DIR"
     printf "\n=== STARTING %s (port %s) ===\n" "$SERVICE" "$PORT" | tee -a "$LOG_FILE"
+    export PORT="$PORT"
     stdbuf -oL -eL npm start 2>&1 | sed "s/^/[$SERVICE] /" | tee -a "$LOG_FILE"
   ) &
 
