@@ -7,46 +7,75 @@
     <link rel="stylesheet" href="../src/styles/game.css" />
 </head>
 <body>
-    <div id="app" style="grid-template-columns: 360px 1fr;">
-        <aside class="sidebar">
-            <section class="hero-card">
+    <div id="app" class="editor-app">
+        <aside class="sidebar editor-sidebar">
+            <section class="hero-card editor-hero">
+                <div class="panel-header">SourceVibe workspace</div>
                 <h1>2D World Editor</h1>
-                <p>Prototype tiles, trees, and rocks for publishable OpenVibe shards.</p>
+                <p>World-space drafting surface for the flagship gamemode package. The launcher shell stays in <code>/sourcevibe/</code>; this route is the focused workspace.</p>
                 <div id="editor-session-summary" class="session-summary">Checking OpenVibe session…</div>
-                <div id="editor-session-meta" class="session-meta">Draft publishing now follows your OpenVibe session instead of a local browser identity.</div>
+                <div id="editor-session-meta" class="session-meta">Draft saves, publish actions, and collaborative rooms follow your OpenVibe account when authenticated.</div>
                 <div class="field-row">
                     <input id="world-name" placeholder="World name" />
                     <input id="world-slug" placeholder="world-slug" />
                 </div>
-                <div class="field-row">
-                    <select id="tool-select">
-                        <option value="tile">Paint Tile</option>
-                        <option value="tree">Place Tree</option>
-                        <option value="rock">Place Rock</option>
-                    </select>
-                    <select id="terrain-select">
-                        <option value="grass">Grass</option>
-                        <option value="sand">Sand</option>
-                        <option value="water">Water</option>
-                    </select>
-                </div>
-                <div class="button-row">
+                <div class="button-row editor-button-row">
                     <button id="save-world-btn" class="primary">Save draft</button>
                     <button id="publish-world-btn" class="secondary">Publish</button>
+                </div>
+                <div class="button-row editor-button-row">
+                    <button id="open-sourcevibe-btn" class="secondary">Open SourceVibe shell</button>
                     <button id="editor-sign-in-btn" class="secondary">Sign in</button>
                     <button id="editor-sign-out-btn" class="secondary hidden">Sign out</button>
                     <button id="editor-account-btn" class="secondary">Account</button>
                 </div>
-                <div id="editor-status" class="empty">Click the grid to build your shard.</div>
+                <div id="editor-status" class="empty">Loading world-space workspace…</div>
             </section>
-            <section class="panel">
-                <div class="panel-header">How it works</div>
-                <p class="empty">Tile clicks are mirrored into the collaborative editor room and can be published to the native Phase 17 world catalog.</p>
+
+            <section class="panel editor-panel">
+                <div class="panel-header">Brush palette</div>
+                <div id="tool-palette" class="editor-chip-grid">
+                    <button type="button" class="editor-chip active" data-tool="grass">Grass</button>
+                    <button type="button" class="editor-chip" data-tool="sand">Sand</button>
+                    <button type="button" class="editor-chip" data-tool="water">Water</button>
+                    <button type="button" class="editor-chip" data-tool="tree">Tree</button>
+                    <button type="button" class="editor-chip" data-tool="rock">Rock</button>
+                    <button type="button" class="editor-chip" data-tool="chest">Chest</button>
+                    <button type="button" class="editor-chip" data-tool="sign">Sign</button>
+                    <button type="button" class="editor-chip" data-tool="bus">Bus</button>
+                    <button type="button" class="editor-chip" data-tool="spawn">Spawn</button>
+                    <button type="button" class="editor-chip" data-tool="erase">Erase</button>
+                </div>
+            </section>
+
+            <section class="panel editor-panel">
+                <div class="panel-header">Workspace stats</div>
+                <div class="editor-stat-grid">
+                    <div>
+                        <span>Zoom</span>
+                        <strong id="editor-zoom">100%</strong>
+                    </div>
+                    <div>
+                        <span>Cell</span>
+                        <strong id="editor-cell">—</strong>
+                    </div>
+                    <div>
+                        <span>Tiles</span>
+                        <strong id="editor-tile-count">0</strong>
+                    </div>
+                    <div>
+                        <span>Props</span>
+                        <strong id="editor-object-count">0</strong>
+                    </div>
+                </div>
+                <p class="panel-copy">Left click paints or places. Right click erases. Middle mouse or Space + drag pans. Mouse wheel zooms.</p>
             </section>
         </aside>
-        <main style="padding: 1rem;">
-            <section class="panel" style="height: calc(100vh - 2rem);">
-                <canvas id="editor-canvas" width="1152" height="768" style="width:100%;height:100%;border-radius:16px;background:#18202d;"></canvas>
+
+        <main class="editor-stage">
+            <section class="panel editor-canvas-shell">
+                <div class="panel-header">World space preview</div>
+                <canvas id="editor-canvas"></canvas>
             </section>
         </main>
     </div>

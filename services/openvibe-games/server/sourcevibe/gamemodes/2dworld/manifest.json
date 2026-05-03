@@ -8,9 +8,9 @@
   "description": "Flagship SourceVibe survival/sandbox gamemode built on the base engine shell.",
   "routes": {
     "play": "/2d-world",
-    "launcher": "/sourcevibe?gamemode=2dworld",
-    "status": "/2d-world/status",
-    "editor": "/2d-world/editor"
+    "launcher": "/sourcevibe?gamemode=2dworld&view=home",
+    "status": "/sourcevibe?gamemode=2dworld&view=diagnostics&panel=status",
+    "editor": "/sourcevibe?gamemode=2dworld&view=editor"
   },
   "maps": [
     "2dworld_outpost"

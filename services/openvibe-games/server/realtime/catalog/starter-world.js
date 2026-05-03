@@ -1,9 +1,5 @@
 'use strict';
 
-const { buildClassicWorldPresentation } = require('../../sourcevibe/gamemodes/2dworld/legacy-style');
-const legacyEntityFixture = require('../../sourcevibe/gamemodes/2dworld/maps/legacy-entity-fixture.json');
-const { importLegacyEntities } = require('../engine/legacy-entity-importer');
-
 // Starter world for the 2D World vertical slice. The original fixed layout is
 // preserved around the classic outpost/wilderness cluster, but the runtime now
 // grows that into a larger deterministic world with extra biomes, generated
@@ -122,6 +118,25 @@ function createNpcCluster(npcs, config) {
     }
 }
 
+function buildStarterWorldPresentation({ bounds = { x: 0, y: 0, w: 16384, h: 16384 } } = {}) {
+    return {
+        style_id: 'sourcevibe_foundation',
+        presentation: {
+            show_grid: true,
+            show_landmarks: true,
+            show_terrain_patches: true,
+            sprite_layers: {
+                background: [
+                    { src: '', fit: 'bounds' },
+                ].filter((entry) => entry.src),
+                detail: [],
+            },
+        },
+        player_render: {},
+        bounds,
+    };
+}
+
 function buildStarterWorld(seed = 20260430) {
     const rng = createRng(seed);
     const terrainRng = createRng(seed ^ 0x9e3779b9);
@@ -219,12 +234,6 @@ function buildStarterWorld(seed = 20260430) {
         },
     ];
 
-    const importedLegacy = importLegacyEntities(legacyEntityFixture, {
-        zones,
-        worldId: '2d-world',
-        idPrefix: 'starter-legacy',
-    });
-
     const resources = [
         // Original practice nodes.
         { zone_id: 'outpost', kind: 'tree', x: 4180, y: 4080, hp: 3, max_hp: 3, loot_table_id: 'loot.tree.oak' },
@@ -238,7 +247,6 @@ function buildStarterWorld(seed = 20260430) {
         // Original farm island starters.
         { zone_id: 'farm_island', kind: 'bush', x: 3040, y: 5240, hp: 2, max_hp: 2, loot_table_id: 'loot.bush.herbs' },
         { zone_id: 'farm_island', kind: 'tree', x: 2960, y: 5180, hp: 3, max_hp: 3, loot_table_id: 'loot.tree.oak' },
-        ...importedLegacy.resources,
     ];
 
     createResourceCluster(resources, {
@@ -444,6 +452,97 @@ function buildStarterWorld(seed = 20260430) {
         minDistance: 180,
     });
 
+    const runtime_entities = [
+        {
+            id: 'outpost-transit-bus',
+            zone_id: 'outpost',
+            kind: 'vehicle_bus',
+            x: 3920,
+            y: 4016,
+            metadata: { size: 148, route: 'Outpost ↔ Dungeon Depths', seats: 14 },
+        },
+        {
+            id: 'outpost-patrol-car',
+            zone_id: 'outpost',
+            kind: 'vehicle_car_police',
+            x: 4288,
+            y: 4012,
+            metadata: { size: 80, call_sign: 'SV-12' },
+        },
+        {
+            id: 'outpost-starter-sign-kit',
+            zone_id: 'outpost',
+            kind: 'pickup',
+            x: 4188,
+            y: 4136,
+            metadata: { item_id: 'build_sign', quantity: 1 },
+        },
+        {
+            id: 'wilderness-cache',
+            zone_id: 'wilderness',
+            kind: 'chest',
+            x: 5510,
+            y: 4304,
+            metadata: {
+                size: 48,
+                container: [
+                    { item_id: 'wood', quantity: 6 },
+                    { item_id: 'stone', quantity: 4 },
+                ],
+            },
+        },
+        {
+            id: 'wilderness-warning-sign',
+            zone_id: 'wilderness',
+            kind: 'text_sign',
+            x: 5444,
+            y: 4088,
+            metadata: {
+                size: 36,
+                sign_text: 'SourceVibe freight lane ahead. Keep clear of the bus turn-around.',
+                owner: 'network-ops',
+            },
+        },
+        {
+            id: 'wilderness-claim-cupboard',
+            zone_id: 'wilderness',
+            kind: 'tool_cupboard',
+            x: 6000,
+            y: 4300,
+            owner_id: 'claim-warden',
+            metadata: {
+                size: 54,
+                owner: 'claim-warden',
+                build_radius: 600,
+                container: [],
+            },
+        },
+        {
+            id: 'farm-crop-experiment',
+            zone_id: 'farm_island',
+            kind: 'weed_plant',
+            x: 3120,
+            y: 5350,
+            metadata: { size: 54, note: 'Research sample' },
+        },
+        {
+            id: 'lake-scrap-cache',
+            zone_id: 'glass_lake',
+            kind: 'pickup',
+            x: 8140,
+            y: 7330,
+            metadata: { item_id: 'scrap', quantity: 6 },
+        },
+        {
+            id: 'ember-lab-rig',
+            zone_id: 'ember_basin',
+            kind: 'meth_lab',
+            x: 12490,
+            y: 4890,
+            metadata: { size: 78, stage: 'cold' },
+        },
+    ];
+
     const terrain_patches = [
         { type: 'rect', x: 0, y: 0, w: 16384, h: 16384, color: '#274634', alpha: 1 },
         { type: 'ellipse', x: 4096, y: 4096, rx: 720, ry: 540, color: '#7b6b57', alpha: 0.92 },
@@ -519,7 +618,7 @@ function buildStarterWorld(seed = 20260430) {
         { type: 'label', label: 'Lowwater Causeway', x: 3440, y: 4830, size: 14, color: '#e6ffe2' },
     );
 
-    const classicPresentation = buildClassicWorldPresentation({
+    const starterPresentation = buildStarterWorldPresentation({
         bounds: { x: 0, y: 0, w: 16384, h: 16384 },
     });
 
@@ -544,7 +643,7 @@ function buildStarterWorld(seed = 20260430) {
         landmarks,
         zones,
         resources,
-        runtime_entities: importedLegacy.runtime_entities,
+        runtime_entities,
         npcs,
         travel: [
             { from: 'outpost', to: 'wilderness', kind: 'walk' },
@@ -566,7 +665,7 @@ function buildStarterWorld(seed = 20260430) {
             { from: 'glass_lake', to: 'ember_basin', kind: 'ferry' },
             { from: 'ember_basin', to: 'glass_lake', kind: 'ferry' },
         ],
-    }, classicPresentation);
+    }, starterPresentation);
 }
 
 const STARTER_WORLD = Object.freeze(buildStarterWorld());

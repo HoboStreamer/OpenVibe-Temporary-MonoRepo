@@ -18,6 +18,33 @@ const { createRealtimeRuntime } = require('./realtime');
 const { createSourceVibeEngine } = require('./sourcevibe');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware, userContextMiddleware } = require('./middleware');
 
+function buildSourceVibeUrl(params = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params || {})) {
+        if (value == null || value === '') continue;
+        query.set(key, String(value));
+    }
+    const serialized = query.toString();
+    return `/sourcevibe${serialized ? `?${serialized}` : ''}`;
+}
+
+function wantsPlaySurface(req) {
+    const query = req && req.query || {};
+    return !!(
+        query.server
+        || query.world
+        || query.serverId
+        || query.worldId
+        || String(query.launch || '').toLowerCase() === 'play'
+        || String(query.direct || '') === '1'
+    );
+}
+
+function wantsEmbeddedSurface(req) {
+    const query = req && req.query || {};
+    return String(query.embedded || query.direct || '') === '1';
+}
+
 function buildApp() {
     db.init(config.db.path);
 
@@ -85,6 +112,37 @@ function buildApp() {
     if (legacy2dWorldAssetRoot) {
         app.use('/assets/2dworld-legacy', express.static(legacy2dWorldAssetRoot));
     }
+    const publicRoot = path.join(__dirname, '..', 'public');
+    app.get(['/2d-world', '/2d-world/'], (req, res) => {
+        if (wantsPlaySurface(req)) {
+            return res.sendFile(path.join(publicRoot, '2d-world', 'index.html'));
+        }
+        return res.redirect(302, buildSourceVibeUrl({
+            gamemode: req.query && req.query.gamemode || '2dworld',
+            view: 'home',
+        }));
+    });
+    app.get(['/2d-world/editor', '/2d-world/editor/'], (req, res) => {
+        if (wantsEmbeddedSurface(req)) {
+            return res.sendFile(path.join(publicRoot, '2d-world', 'editor', 'index.html'));
+        }
+        return res.redirect(302, buildSourceVibeUrl({
+            gamemode: req.query && req.query.gamemode || '2dworld',
+            server: req.query && (req.query.server || req.query.world) || null,
+            view: 'editor',
+        }));
+    });
+    app.get(['/2d-world/status', '/2d-world/status/'], (req, res) => {
+        if (wantsEmbeddedSurface(req)) {
+            return res.sendFile(path.join(publicRoot, '2d-world', 'status', 'index.html'));
+        }
+        return res.redirect(302, buildSourceVibeUrl({
+            gamemode: req.query && req.query.gamemode || '2dworld',
+            server: req.query && (req.query.server || req.query.world) || null,
+            view: 'diagnostics',
+            panel: 'status',
+        }));
+    });
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     app.use(optionalOpenVibeAuth(authClient));

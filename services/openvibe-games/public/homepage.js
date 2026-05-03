@@ -441,8 +441,8 @@ function renderHero() {
             <p class="homepage-copy">This homepage now points you at the engine shell, the gamemode directory, and the real 2D World surfaces—without the old spoofable user fields or operator dashboard detours.</p>
             <div class="homepage-button-row">
                 ${featured ? `<button class="homepage-button" data-action="play-gamemode" data-gamemode-id="${escapeHtml(featured.id)}">${isAuthenticated() ? `Play ${escapeHtml(featured.title)}` : 'Sign in to play'}</button>` : ''}
-                <a class="homepage-button--secondary" href="/sourcevibe">Open SourceVibe directory</a>
-                <a class="homepage-button--ghost" href="/2d-world/status">2D World status</a>
+                <a class="homepage-button--secondary" href="/sourcevibe?gamemode=2dworld&view=directory">Open SourceVibe directory</a>
+                <a class="homepage-button--ghost" href="/sourcevibe?gamemode=2dworld&view=diagnostics&panel=status">2D World status</a>
             </div>
         </div>
         <aside class="homepage-hero__featured">
@@ -522,9 +522,9 @@ function renderNotes() {
         <article class="homepage-card">
             <h3>Where to go next</h3>
             <div class="homepage-button-row">
-                <a class="homepage-button--secondary" href="/sourcevibe">Engine shell</a>
-                <a class="homepage-button--ghost" href="/2d-world">2D World play route</a>
-                <a class="homepage-button--ghost" href="/2d-world/editor">2D World editor</a>
+                <a class="homepage-button--secondary" href="/sourcevibe?gamemode=2dworld&view=home">Engine shell</a>
+                <a class="homepage-button--ghost" href="/sourcevibe?gamemode=2dworld&view=directory">2D World package</a>
+                <a class="homepage-button--ghost" href="/sourcevibe?gamemode=2dworld&view=editor">2D World editor</a>
             </div>
         </article>
     `;

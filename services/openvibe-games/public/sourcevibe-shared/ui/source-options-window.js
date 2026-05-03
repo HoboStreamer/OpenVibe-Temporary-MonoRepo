@@ -30,6 +30,20 @@ function textInput(kind, name, label, value, help) {
     `;
 }
 
+function normalizeBindingToken(value) {
+    const token = normalizeToken(value || '');
+    if (!token) return '';
+    if (token === 'spacebar') return 'space';
+    if (token === ' ') return 'space';
+    return token;
+}
+
+function bindingFromEvent(event) {
+    if (!event) return '';
+    if (event.key === ' ') return 'space';
+    return normalizeBindingToken(event.key);
+}
+
 function renderBindings(binds = []) {
     return binds.length ? binds.map((entry) => textInput('bind', entry.command, entry.command, entry.key || '', entry.description || '')) .join('') : '<div class="svui-empty">No bindings exposed by this surface.</div>';
 }
@@ -45,8 +59,8 @@ export class SourceOptionsWindow {
         this.window = manager.createWindow('source-options', {
             title: 'Options',
             subtitle: 'Shared SourceVibe settings',
-            width: 760,
-            height: 600,
+            width: 680,
+            height: 540,
             onClose: () => this.handlers.onClose && this.handlers.onClose(),
         });
     }
@@ -203,6 +217,17 @@ export class SourceOptionsWindow {
         root.querySelectorAll('[data-bind]').forEach((input) => {
             input.addEventListener('input', () => {
                 if (typeof this.handlers.onBindChange === 'function') this.handlers.onBindChange(input.dataset.bind, input.value);
+            });
+            input.addEventListener('focus', () => {
+                input.select();
+            });
+            input.addEventListener('keydown', (event) => {
+                if (event.key === 'Tab') return;
+                event.preventDefault();
+                const token = bindingFromEvent(event);
+                if (!token) return;
+                input.value = token;
+                if (typeof this.handlers.onBindChange === 'function') this.handlers.onBindChange(input.dataset.bind, token);
             });
         });
         root.querySelectorAll('[data-cvar]').forEach((input) => {

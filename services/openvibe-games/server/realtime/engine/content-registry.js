@@ -92,11 +92,12 @@ const BASE_STRUCTURE_TYPES = Object.freeze([
 ]);
 
 const BASE_RUNTIME_ENTITY_TYPES = Object.freeze([
-    { kind: 'pickup', name: 'Legacy Pickup', blocks_movement: false, interaction: { type: 'pickup', radius: 58, prompt: 'pick up', title: 'Pickup' }, render: { shape: 'pickup' } },
-    { kind: 'vehicle_car1', name: 'Car', blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect car', title: 'Car' }, render: { shape: 'vehicle', color: 0x6c717c, accent: 0xcfd8e3 } },
-    { kind: 'vehicle_car_police', name: 'Patrol Car', blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect cruiser', title: 'Patrol Car' }, render: { shape: 'vehicle', color: 0x203a64, accent: 0xf1f5ff, lightColor: 0xff5b5b } },
-    { kind: 'weed_plant', name: 'Weed Plant', blocks_movement: false, interaction: { type: 'inspect', radius: 72, prompt: 'inspect plant', title: 'Weed Plant' }, render: { shape: 'weed_plant', color: 0x5aa95a, accent: 0xc8ff90 } },
-    { kind: 'meth_lab', name: 'Meth Lab', blocks_movement: true, interaction: { type: 'inspect', radius: 84, prompt: 'inspect lab', title: 'Meth Lab' }, render: { shape: 'lab', color: 0x56606d, accent: 0x8fd3ff } },
+    { kind: 'pickup', name: 'Field Pickup', size: 28, blocks_movement: false, interaction: { type: 'pickup', radius: 58, prompt: 'pick up', title: 'Pickup' }, render: { shape: 'pickup' } },
+    { kind: 'vehicle_car1', name: 'Car', size: 68, blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect car', title: 'Car' }, render: { shape: 'vehicle', color: 0x6c717c, accent: 0xcfd8e3 } },
+    { kind: 'vehicle_car_police', name: 'Patrol Car', size: 76, blocks_movement: true, interaction: { type: 'vehicle', radius: 96, prompt: 'inspect cruiser', title: 'Patrol Car' }, render: { shape: 'vehicle', color: 0x203a64, accent: 0xf1f5ff, lightColor: 0xff5b5b } },
+    { kind: 'vehicle_bus', name: 'Transit Bus', size: 136, blocks_movement: true, interaction: { type: 'vehicle', radius: 112, prompt: 'inspect bus', title: 'Transit Bus' }, render: { shape: 'vehicle', color: 0x786348, accent: 0xf6d39b, lightColor: 0x8fd3ff } },
+    { kind: 'weed_plant', name: 'Weed Plant', size: 52, blocks_movement: false, interaction: { type: 'inspect', radius: 72, prompt: 'inspect plant', title: 'Weed Plant' }, render: { shape: 'weed_plant', color: 0x5aa95a, accent: 0xc8ff90 } },
+    { kind: 'meth_lab', name: 'Lab Rig', size: 72, blocks_movement: true, interaction: { type: 'inspect', radius: 84, prompt: 'inspect lab', title: 'Lab Rig' }, render: { shape: 'lab', color: 0x56606d, accent: 0x8fd3ff } },
 ]);
 
 function clone(value) {
@@ -211,6 +212,7 @@ function equipSlotFor(item) {
 
 function defaultWeaponType(itemId) {
     const id = String(itemId || '');
+    if (!id || id === 'hands' || id === 'coins') return 'none';
     if (id.includes('sword')) return 'blade';
     if (id.includes('spear')) return 'spear';
     if (id.includes('bow')) return 'bow';
@@ -225,6 +227,7 @@ function defaultWeaponType(itemId) {
 function defaultItemRender(item) {
     const type = defaultWeaponType(item && item.item_id);
     const byType = {
+        none: { weapon_type: 'none', length: 0, color: 0x000000, accent: 0x000000 },
         blade: { weapon_type: 'blade', length: 34, color: 0xe8edf8, accent: 0x6b4c2d },
         spear: { weapon_type: 'spear', length: 42, color: 0xc7d2de, accent: 0x7f5539 },
         bow: { weapon_type: 'bow', length: 34, color: 0xb07a3c, accent: 0xdcc18f },
@@ -351,6 +354,7 @@ function buildRuntimeEntityDefinitions(entityTypes, structureDefinitions) {
         definitions[kind] = {
             kind,
             name: entityType.name || structureFallback && structureFallback.name || humanizeId(kind),
+            size: Number(entityType.size || structureFallback && structureFallback.size) || 48,
             interaction: entityType.interaction ? clone(entityType.interaction) : structureFallback && structureFallback.interaction ? clone(structureFallback.interaction) : null,
             build_privilege: entityType.build_privilege ? clone(entityType.build_privilege) : structureFallback && structureFallback.build_privilege ? clone(structureFallback.build_privilege) : null,
             blocks_movement: entityType.blocks_movement != null ? entityType.blocks_movement !== false : structureFallback ? structureFallback.blocks_movement !== false : true,

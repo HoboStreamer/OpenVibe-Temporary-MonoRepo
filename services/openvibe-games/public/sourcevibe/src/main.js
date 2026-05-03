@@ -106,12 +106,40 @@ function sortServers(servers = []) {
     });
 }
 
+function viewFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const requested = normalizeToken(params.get('view') || params.get('panel') || '');
+    if (requested === 'status') return 'diagnostics';
+    if (['home', 'directory', 'editor', 'addons', 'diagnostics'].includes(requested)) return requested;
+    return 'home';
+}
+
+function syncViewUrl(view) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', view || 'home');
+    if ((view || 'home') === 'diagnostics') {
+        if (!url.searchParams.get('panel')) url.searchParams.set('panel', 'status');
+    } else {
+        url.searchParams.delete('panel');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function focusGamemodeView(gamemodeId, view) {
+    const url = new URL(window.location.href);
+    if (gamemodeId) url.searchParams.set('gamemode', gamemodeId);
+    state.activeView = dom.views[view] ? view : 'home';
+    syncViewUrl(state.activeView);
+    window.history.replaceState({}, '', `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''}${url.hash}`);
+    renderAll();
+}
+
 const state = {
     auth: getAuthState(),
     identity: currentIdentity(),
     bootstrap: null,
     directory: [],
-    activeView: 'home',
+    activeView: viewFromQuery(),
     consoleHistory: [],
     consoleCommand: '',
     consoleFilter: '',
@@ -132,6 +160,7 @@ const dom = {
     views: {
         home: document.getElementById('view-home'),
         directory: document.getElementById('view-directory'),
+        editor: document.getElementById('view-editor'),
         addons: document.getElementById('view-addons'),
         diagnostics: document.getElementById('view-diagnostics'),
     },
@@ -216,7 +245,7 @@ function setStatus(message, tone = 'neutral') {
     dom.statusBanner.className = `status-banner${tone === 'neutral' ? '' : ` ${tone}`}`;
 }
 
-function setView(name) {
+function setView(name, { updateUrl = true } = {}) {
     state.activeView = dom.views[name] ? name : 'home';
     for (const [viewName, panel] of Object.entries(dom.views)) {
         panel.classList.toggle('hidden', viewName !== state.activeView);
@@ -224,6 +253,7 @@ function setView(name) {
     for (const button of dom.nav.querySelectorAll('[data-view]')) {
         button.classList.toggle('active', button.dataset.view === state.activeView);
     }
+    if (updateUrl) syncViewUrl(state.activeView);
 }
 
 function queryBootstrapUrl() {
@@ -251,7 +281,12 @@ function sourcevibeConsole() {
 }
 
 function featuredEntry() {
-    return sortDirectory(state.directory || []).find((entry) => entry.id === '2dworld') || sortDirectory(state.directory || [])[0] || null;
+    const requested = normalizeToken(new URLSearchParams(window.location.search).get('gamemode') || '');
+    const items = sortDirectory(state.directory || []);
+    return items.find((entry) => normalizeToken(entry.id) === requested)
+        || items.find((entry) => entry.id === '2dworld')
+        || items[0]
+        || null;
 }
 
 function syncOptionDrafts(force = false) {
@@ -395,7 +430,7 @@ function hydrateSV() {
             get(name) { return cvarMap.get(name) || null; },
             async set(name, value) {
                 const result = await runConsole(`${name} ${value}`);
-                await loadBootstrap();
+                await loadData();
                 renderAll();
                 return result;
             },
@@ -484,7 +519,7 @@ function renderSessionCard() {
             </div>
             <div class="identity-card__actions">
                 <button class="cta-button" data-action="sign-in">Sign in with OpenVibe</button>
-                <a class="table-button" href="/2d-world">Preview 2D World route</a>
+                <a class="table-button" href="/sourcevibe?gamemode=2dworld&view=directory">Browse 2D World package</a>
             </div>
         `;
 }
@@ -539,8 +574,8 @@ function renderHomeView() {
             <div class="hero-actions">
                 ${featured ? `<button class="cta-button" data-action="play-gamemode" data-gamemode-id="${escapeHtml(featured.id)}">${isAuthenticated() ? `Play ${escapeHtml(featured.title)}` : 'Sign in to play'}</button>` : ''}
                 ${featured && featured.permissions && featured.permissions.canLocalTest ? `<button class="table-button" data-action="local-test-gamemode" data-gamemode-id="${escapeHtml(featured.id)}">Local Test</button>` : ''}
-                ${featured && featured.surfaces && featured.surfaces.editor ? `<a class="table-button" href="${featured.surfaces.editor}">Editor</a>` : ''}
-                ${featured && featured.surfaces && featured.surfaces.status ? `<a class="table-button" href="${featured.surfaces.status}">Status</a>` : ''}
+                ${featured && featured.surfaces && featured.surfaces.editor ? `<button class="table-button" data-view-target="editor">Editor</button>` : ''}
+                ${featured && featured.surfaces && featured.surfaces.status ? `<button class="table-button" data-view-target="diagnostics">Status</button>` : ''}
                 <button class="table-button" data-view-target="directory">Open directory</button>
             </div>
         </div>
@@ -630,8 +665,8 @@ function renderDirectoryView() {
                         <div class="card-actions">
                             <button class="cta-button" data-action="play-gamemode" data-gamemode-id="${escapeHtml(entry.id)}">${permissions.canPlay ? 'Play' : 'Sign in to play'}</button>
                             ${permissions.canLocalTest ? `<button class="table-button" data-action="local-test-gamemode" data-gamemode-id="${escapeHtml(entry.id)}">Local Test</button>` : ''}
-                            ${entry.surfaces && entry.surfaces.status ? `<a class="table-button" href="${entry.surfaces.status}">Status</a>` : ''}
-                            ${entry.surfaces && entry.surfaces.editor ? `<a class="table-button" href="${entry.surfaces.editor}">Editor</a>` : ''}
+                            ${entry.surfaces && entry.surfaces.status ? `<button class="table-button" data-action="open-gamemode-view" data-gamemode-id="${escapeHtml(entry.id)}" data-target-view="diagnostics">Status</button>` : ''}
+                            ${entry.surfaces && entry.surfaces.editor ? `<button class="table-button" data-action="open-gamemode-view" data-gamemode-id="${escapeHtml(entry.id)}" data-target-view="editor">Editor</button>` : ''}
                         </div>
                         <div class="route-list">
                             <small>${escapeHtml(permissions.playReason || '')}</small>
@@ -642,6 +677,63 @@ function renderDirectoryView() {
             }).join('')}
         </div>
     ` : '<div class="empty-card"><h3>No gamemodes registered</h3><p class="muted">The engine directory will populate once gamemode manifests are loaded.</p></div>';
+}
+
+function renderEditorView() {
+    const featured = featuredEntry();
+    if (!featured) {
+        dom.views.editor.innerHTML = '<div class="empty-card"><h3>No editor surface available</h3><p class="muted">Load a gamemode package with editor support to populate this workspace.</p></div>';
+        return;
+    }
+    const activeServer = featured.officialServer && (featured.officialServer.id || featured.officialServer.slug)
+        || state.bootstrap && state.bootstrap.activeServer && (state.bootstrap.activeServer.id || state.bootstrap.activeServer.slug)
+        || null;
+    const editorParams = new URLSearchParams({
+        embedded: '1',
+        gamemode: featured.id,
+    });
+    if (activeServer) editorParams.set('server', activeServer);
+    const editorUrl = `/2d-world/editor/?${editorParams.toString()}`;
+    dom.views.editor.innerHTML = `
+        <div class="detail-grid detail-grid--editor">
+            <article class="detail-card">
+                <h3>${escapeHtml(featured.title)} editor</h3>
+                <p class="muted">The control plane stays in <code>/sourcevibe/</code>; the world tool surface docks below so the same launcher, console, and options stay in charge.</p>
+                <div class="chip-row">
+                    <span class="chip">canonical shell</span>
+                    <span class="chip">shared console</span>
+                    <span class="chip">shared options</span>
+                </div>
+                <div class="card-actions">
+                    <button class="cta-button" data-action="play-gamemode" data-gamemode-id="${escapeHtml(featured.id)}">${isAuthenticated() ? 'Launch play surface' : 'Sign in to launch'}</button>
+                    ${featured.permissions && featured.permissions.canLocalTest ? `<button class="table-button" data-action="local-test-gamemode" data-gamemode-id="${escapeHtml(featured.id)}">Local test</button>` : ''}
+                    <a class="table-button" href="/2d-world/editor/?direct=1&gamemode=${escapeHtml(featured.id)}${activeServer ? `&server=${escapeHtml(activeServer)}` : ''}">Open editor directly</a>
+                </div>
+            </article>
+            <article class="detail-card">
+                <h3>Linked surfaces</h3>
+                <div class="kv-grid">
+                    <div>
+                        <strong>Play</strong>
+                        <span class="muted">${escapeHtml(featured.surfaces && featured.surfaces.play || 'n/a')}</span>
+                    </div>
+                    <div>
+                        <strong>Status</strong>
+                        <span class="muted">${escapeHtml(featured.surfaces && featured.surfaces.status || 'n/a')}</span>
+                    </div>
+                    <div>
+                        <strong>Editor shell</strong>
+                        <span class="muted">${escapeHtml(featured.surfaces && featured.surfaces.editor || '/sourcevibe?view=editor')}</span>
+                    </div>
+                </div>
+            </article>
+        </div>
+        <div class="editor-embed">
+            ${isAuthenticated()
+        ? `<iframe class="editor-embed__frame" src="${editorUrl}" title="${escapeHtml(featured.title)} editor"></iframe>`
+        : `<div class="empty-card"><h3>Sign in to edit</h3><p class="muted">The unified SourceVibe shell is already in place. Sign in to load the collaborative editor workspace here.</p></div>`}
+        </div>
+    `;
 }
 
 function renderAddonsView() {
@@ -722,9 +814,10 @@ function renderAll() {
     renderStatusStrip();
     renderHomeView();
     renderDirectoryView();
+    renderEditorView();
     renderAddonsView();
     renderDiagnosticsView();
-    setView(state.activeView);
+    setView(state.activeView, { updateUrl: false });
     updateWindows();
 }
 
@@ -732,7 +825,7 @@ function bindEvents() {
     dom.nav.addEventListener('click', (event) => {
         const button = event.target.closest('[data-view]');
         if (!button) return;
-        setView(button.dataset.view);
+        setView(button.dataset.view, { updateUrl: true });
     });
 
     document.body.addEventListener('click', async (event) => {
@@ -776,6 +869,11 @@ function bindEvents() {
             await launchGamemode(localTestButton.dataset.gamemodeId, 'local-test');
             return;
         }
+        const openGamemodeViewButton = event.target.closest('[data-action="open-gamemode-view"]');
+        if (openGamemodeViewButton) {
+            focusGamemodeView(openGamemodeViewButton.dataset.gamemodeId, openGamemodeViewButton.dataset.targetView || 'home');
+            return;
+        }
         const seedConsole = event.target.closest('[data-action="seed-console"]');
         if (seedConsole) {
             state.consoleCommand = seedConsole.dataset.command || '';
@@ -785,7 +883,7 @@ function bindEvents() {
         }
         const viewButton = event.target.closest('[data-view-target]');
         if (viewButton) {
-            setView(viewButton.dataset.viewTarget || 'home');
+            setView(viewButton.dataset.viewTarget || 'home', { updateUrl: true });
         }
     });
 

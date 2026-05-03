@@ -5,7 +5,6 @@ const crypto = require('crypto');
 const model = require('../../model');
 const worldStore = require('../world-store');
 const { GAME_EVENT_TYPES } = require('@openvibe/contracts');
-const { visibleWithinAoi } = require('../net/interest-management');
 const { pushHistory } = require('../net/lag-compensation');
 const { defaultWeapon, computeDamage, canAttack, markAttack, findRewoundTarget, targetInRange } = require('../systems/combat-system');
 const { updatePlayerMovement } = require('../systems/movement-system');
@@ -20,7 +19,6 @@ const { createHookBus } = require('../engine/hook-bus');
 const { installModHooks } = require('../engine/mod-script-runtime');
 const { levelForXp, xpRequiredForNext } = require('../engine/skills');
 const { rollLoot } = require('../engine/loot');
-const { normalizeLegacyContainer } = require('../engine/legacy-entity-importer');
 const inventoryUtils = require('../engine/inventory');
 
 const LOOT_PICKUP_RADIUS = 48;
@@ -67,6 +65,22 @@ function distanceSq(a, b) {
     return (dx * dx) + (dy * dy);
 }
 
+function normalizeContainerItems(entries) {
+    return (Array.isArray(entries) ? entries : [])
+        .map((entry) => {
+            if (!entry) return null;
+            if (typeof entry === 'string') return { item_id: entry, quantity: 1, metadata: {} };
+            const itemId = String(entry.item_id || entry.itemId || entry.id || '').trim();
+            if (!itemId) return null;
+            const quantity = Math.max(1, Math.floor(Number(entry.quantity || entry.qty || 1) || 1));
+            const metadata = entry.metadata && typeof entry.metadata === 'object'
+                ? JSON.parse(JSON.stringify(entry.metadata))
+                : {};
+            return { item_id: itemId, quantity, metadata };
+        })
+        .filter(Boolean);
+}
+
 class WorldRoom {
     constructor(options) {
         const opts = options || {};
@@ -91,6 +105,7 @@ class WorldRoom {
         this.lastPersistAt = 0;
         this.lastSnapshotAt = 0;
         this.sequence = 0;
+        this.visibilityState = new Map();
         this.hooks = createHookBus();
         this.scriptDiagnostics = [];
         this.catalog = null;
@@ -276,6 +291,25 @@ class WorldRoom {
         while (this.feed.length > 50) this.feed.shift();
     }
 
+    _visibilityCacheKey(player, bucket) {
+        return `${player && player.user_id || 'unknown'}:${bucket}`;
+    }
+
+    _visibleEntities(player, entities, radius, bucket, options = {}) {
+        const cacheKey = this._visibilityCacheKey(player, bucket);
+        const previous = this.visibilityState.get(cacheKey) || new Set();
+        const zoneId = options.zone_id || null;
+        const stickyRadius = Number(radius || 0) + 144;
+        const visible = (entities || []).filter((entity) => {
+            if (!entity) return false;
+            if (zoneId && entity.zone_id && entity.zone_id !== zoneId) return false;
+            const limit = previous.has(entity.id) ? stickyRadius : radius;
+            return distanceSq(player, entity) <= (limit * limit);
+        });
+        this.visibilityState.set(cacheKey, new Set(visible.map((entity) => entity.id)));
+        return visible;
+    }
+
     _publish(type, payload) {
         this.publish(type, payload);
         this._feed(type, payload);
@@ -405,7 +439,7 @@ class WorldRoom {
     _hotbarDefaults(player) {
         const defaults = Array.from({ length: HOTBAR_SIZE }, () => null);
         const preferred = [
-            player && (player.equip_weapon || 'wooden_club'),
+            player && (player.equip_weapon || ''),
             player && (player.equip_axe || 'stone_hatchet'),
             player && (player.equip_pickaxe || 'stone_pickaxe'),
             player && (player.equip_rod || 'fishing_rod'),
@@ -496,15 +530,15 @@ class WorldRoom {
     _legacyHeldItem(player) {
         switch (Number(player.quick_slot) || 1) {
         case 2:
-            return player.equip_axe || player.equip_weapon || '';
+            return player.equip_axe || '';
         case 3:
-            return player.equip_pickaxe || player.equip_weapon || '';
+            return player.equip_pickaxe || '';
         case 4:
-            return player.equip_rod || player.equip_weapon || '';
+            return player.equip_rod || '';
         case 5:
             return 'hammer';
         default:
-            return player.equip_weapon || player.equip_axe || player.equip_pickaxe || '';
+            return player.equip_weapon || '';
         }
     }
 
@@ -695,7 +729,7 @@ class WorldRoom {
 
     _containerItemsForSource(source, target) {
         const state = source === 'structure' ? this._structureState(target) : this._runtimeEntityState(target);
-        return normalizeLegacyContainer(state.container || state.Container || []);
+        return normalizeContainerItems(state.container || state.Container || []);
     }
 
     _persistStructureState(structure, nextState) {
@@ -1870,7 +1904,7 @@ class WorldRoom {
             max_hp: Number(playerRow.max_hp || 100),
             stamina: Number(playerRow.stamina || playerRow.max_stamina || 100),
             max_stamina: Number(playerRow.max_stamina || 100),
-            equip_weapon: playerRow.equip_weapon || 'wooden_club',
+            equip_weapon: playerRow.equip_weapon || '',
             equip_armor: playerRow.equip_armor || '',
             equip_axe: playerRow.equip_axe || 'stone_hatchet',
             equip_pickaxe: playerRow.equip_pickaxe || 'stone_pickaxe',
@@ -1902,7 +1936,7 @@ class WorldRoom {
             attack_anim_until: 0,
             hit_flash_until: 0,
             quick_slot: 1,
-            held_item_id: playerRow.equip_weapon || 'wooden_club',
+            held_item_id: playerRow.equip_weapon || '',
             hold_until: 0,
             activeInteraction: null,
         };
@@ -1936,6 +1970,9 @@ class WorldRoom {
     leave(socketId) {
         const player = this.players.get(socketId);
         if (!player) return;
+        ['players', 'npcs', 'resources', 'structures', 'runtime_entities', 'loot', 'projectiles'].forEach((bucket) => {
+            this.visibilityState.delete(this._visibilityCacheKey(player, bucket));
+        });
         if (player.session_id) worldStore.endSession(player.session_id);
         model.upsertPlayer({
             user_id: player.user_id,
@@ -2362,19 +2399,20 @@ class WorldRoom {
                 active: activeInteraction,
             },
             entities: {
-                players: visibleWithinAoi(player, sameZonePlayers, this.aoiRadius, { zone_id: player.zone_id }),
-                npcs: visibleWithinAoi(player, npcs, this.aoiRadius, { zone_id: player.zone_id }),
-                resources: visibleWithinAoi(player, resources, this.aoiRadius, { zone_id: player.zone_id }),
-                structures: visibleWithinAoi(player, structures, this.aoiRadius + 64, { zone_id: player.zone_id }),
-                runtime_entities: visibleWithinAoi(player, runtimeEntities, this.aoiRadius + 96, { zone_id: player.zone_id }),
-                loot: visibleWithinAoi(player, loot, this.aoiRadius, { zone_id: player.zone_id }),
-                projectiles: visibleWithinAoi(player, projectiles, this.aoiRadius, { zone_id: player.zone_id }),
+                players: this._visibleEntities(player, sameZonePlayers, this.aoiRadius, 'players', { zone_id: player.zone_id }),
+                npcs: this._visibleEntities(player, npcs, this.aoiRadius, 'npcs', { zone_id: player.zone_id }),
+                resources: this._visibleEntities(player, resources, this.aoiRadius, 'resources', { zone_id: player.zone_id }),
+                structures: this._visibleEntities(player, structures, this.aoiRadius + 64, 'structures', { zone_id: player.zone_id }),
+                runtime_entities: this._visibleEntities(player, runtimeEntities, this.aoiRadius + 96, 'runtime_entities', { zone_id: player.zone_id }),
+                loot: this._visibleEntities(player, loot, this.aoiRadius, 'loot', { zone_id: player.zone_id }),
+                projectiles: this._visibleEntities(player, projectiles, this.aoiRadius, 'projectiles', { zone_id: player.zone_id }),
             },
             chat: this._currentWorldChat(player.zone_id),
             feed: this.feed.slice(-10),
             performance: {
                 tick_rate: this.tickRate,
                 aoi_radius: this.aoiRadius,
+                aoi_grace_radius: this.aoiRadius + 144,
                 players_in_room: this.players.size,
                 entities_visible: sameZonePlayers.length + npcs.length + resources.length + structures.length + runtimeEntities.length + loot.length,
             },

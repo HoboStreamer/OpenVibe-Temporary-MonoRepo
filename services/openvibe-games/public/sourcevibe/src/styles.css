@@ -207,6 +207,10 @@ h1 {
     overflow: auto;
 }
 
+.panel-frame--editor {
+    min-height: 680px;
+}
+
 .hidden { display: none !important; }
 
 .hero-card,
@@ -247,6 +251,26 @@ h1 {
 .detail-grid,
 .diagnostics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-grid--editor {
+    margin-bottom: 1rem;
+}
+
+.editor-embed {
+    min-height: 640px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(15, 20, 27, 0.44);
+    overflow: hidden;
+}
+
+.editor-embed__frame {
+    width: 100%;
+    min-height: 680px;
+    border: 0;
+    display: block;
+    background: #0f141b;
 }
 
 .stat-value,
@@ -363,6 +387,11 @@ h1 {
 
     .launcher-identity {
         position: static;
+    }
+
+    .editor-embed,
+    .editor-embed__frame {
+        min-height: 560px;
     }
 }
 

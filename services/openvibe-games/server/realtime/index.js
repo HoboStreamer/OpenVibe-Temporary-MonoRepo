@@ -125,9 +125,9 @@ function seedStarterContent({ publish } = {}) {
             chunk_size: STARTER_WORLD.chunk_size,
             description: 'Flagship OpenVibe Games 2D MMO vertical slice.',
             routes: {
-                play: '/2d-world',
-                editor: '/2d-world/editor',
-                status: '/2d-world/status',
+                play: '/2d-world?server=2d-world&gamemode=2dworld&launch=play',
+                editor: '/sourcevibe?gamemode=2dworld&view=editor',
+                status: '/sourcevibe?gamemode=2dworld&view=diagnostics&panel=status',
             },
         },
     });

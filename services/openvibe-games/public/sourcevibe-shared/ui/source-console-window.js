@@ -16,8 +16,8 @@ export class SourceConsoleWindow {
         this.window = manager.createWindow('source-console', {
             title: 'Developer Console',
             subtitle: 'SourceVibe Engine',
-            width: 760,
-            height: 560,
+            width: 620,
+            height: 420,
             onClose: () => this.handlers.onClose && this.handlers.onClose(),
         });
     }
@@ -63,10 +63,10 @@ export class SourceConsoleWindow {
             body: `
                 <div class="svui-console">
                     <div class="svui-console__toolbar">
-                        <label>
-                            <span>Filter</span>
-                            <input data-role="filter" class="svui-input" value="${escapeHtml(model.filter || '')}" placeholder="find command output" />
-                        </label>
+                        <div class="svui-console__toolbar-group">
+                            <span class="svui-console__eyebrow">scrollback</span>
+                            <input data-role="filter" class="svui-input svui-console__filter" value="${escapeHtml(model.filter || '')}" placeholder="filter log" />
+                        </div>
                         <div class="svui-console__toolbar-actions">
                             <button type="button" class="svui-button" data-action="clear">Clear</button>
                         </div>
@@ -79,10 +79,6 @@ export class SourceConsoleWindow {
                             </div>
                         `).join('') : '<div class="svui-empty">Console ready. Try <strong>help</strong>, <strong>status</strong>, or <strong>gamemode_list</strong>.</div>'}
                     </div>
-                    <form data-role="command-form" class="svui-console__prompt">
-                        <input data-role="command" class="svui-input svui-console__command" value="${escapeHtml(model.command || '')}" placeholder="Enter a SourceVibe command" autocomplete="off" />
-                        <button class="svui-button svui-button--primary" type="submit">Run</button>
-                    </form>
                     <div class="svui-console__suggestions">
                         ${suggestions.map((entry) => `
                             <button type="button" class="svui-chip" data-action="suggestion" data-value="${escapeHtml(entry.name || '')}">
@@ -91,6 +87,11 @@ export class SourceConsoleWindow {
                             </button>
                         `).join('')}
                     </div>
+                    <form data-role="command-form" class="svui-console__prompt">
+                        <span class="svui-console__prompt-glyph">]</span>
+                        <input data-role="command" class="svui-input svui-console__command" value="${escapeHtml(model.command || '')}" placeholder="help" autocomplete="off" />
+                        <button class="svui-button svui-button--primary" type="submit">Enter</button>
+                    </form>
                 </div>
             `,
         });
