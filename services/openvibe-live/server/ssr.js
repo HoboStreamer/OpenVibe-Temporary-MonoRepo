@@ -156,12 +156,21 @@ function labelizeKey(value) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function normalizeCreatorSlug(value) {
+    const raw = String(value || '').trim();
+    return raw && raw.toLowerCase() !== 'unknown' ? raw : '';
+}
+
 function channelPath(slug) {
-    return `/@${encodeURIComponent(String(slug || 'unknown').trim() || 'unknown')}`;
+    const normalized = normalizeCreatorSlug(slug);
+    return normalized ? `/@${encodeURIComponent(normalized)}` : '/channels';
 }
 
 function streamPath(slug, streamId) {
-    return `${channelPath(slug)}/s/${encodeURIComponent(String(streamId || '').trim())}`;
+    const normalized = normalizeCreatorSlug(slug);
+    const stream = String(streamId || '').trim();
+    if (!normalized || !stream) return channelPath(normalized);
+    return `${channelPath(normalized)}/s/${encodeURIComponent(stream)}`;
 }
 
 function canRenderImageUrl(value) {
@@ -272,6 +281,7 @@ function _shellStyles() {
         .input-help,
         .muted-text { color: var(--muted); }
         .nav-links,
+        .nav-account,
         .pill-row,
         .footer-links,
         .footer-legal-links,
@@ -319,6 +329,24 @@ function _shellStyles() {
         .nav-cta {
             background: linear-gradient(135deg, rgba(139, 92, 246, 0.88), rgba(34, 211, 238, 0.72));
             border-color: transparent;
+        }
+        .nav-account {
+            justify-content: flex-end;
+            min-width: 0;
+        }
+        .nav-session-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            min-height: 2.7rem;
+            padding: 0.65rem 0.95rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--muted-strong);
+            font-size: 0.86rem;
+            font-weight: 700;
+            white-space: nowrap;
         }
         main.page-shell { padding: 1.35rem 0 3rem; }
         section + section { margin-top: 1.2rem; }
@@ -506,6 +534,7 @@ function _shellStyles() {
             }
             .topbar-inner { flex-wrap: wrap; justify-content: center; }
             .nav-links { justify-content: center; }
+            .nav-account { justify-content: center; width: 100%; }
         }
     </style>`;
 }
@@ -1381,6 +1410,7 @@ function renderFooter() {
 }
 
 function renderPage({ title, description, canonical, ogType, ogImage, activeNav, bodyHtml, baseUrl }) {
+    const signInHref = `/auth/login?return_to=${encodeURIComponent(canonical || `${baseUrl || ''}/`)}`;
     return `<!doctype html>
         <html lang="en">
         <head>
@@ -1403,7 +1433,11 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                     <nav class="nav-links" aria-label="Primary">
                         ${renderNav(activeNav)}
                     </nav>
-                    <a class="nav-cta" href="/go-live">Launch your stream</a>
+                    <div class="nav-account" data-live-nav-session>
+                        <span class="nav-session-status">Checking session…</span>
+                        <a class="button-secondary" href="${signInHref}">Sign in</a>
+                        <a class="nav-cta" href="/go-live">Launch your stream</a>
+                    </div>
                 </div>
             </header>
             <main class="page-shell">
@@ -1411,7 +1445,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             </main>
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
-            <script src="/assets/live-dashboard.js?v=20260503-2"></script>
+            <script src="/assets/live-dashboard-local.js?v=20260503-1"></script>
             ${_shellScript()}
         </body>
         </html>`;
@@ -1436,10 +1470,10 @@ function renderMediaThumb({ url, title, eyebrow, subtitle, initials, baseUrl }) 
 
 function renderStreamCard(stream, channel, baseUrl, options) {
     const opts = options || {};
-    const slug = stream.channel_slug || (channel && channel.slug) || 'unknown';
-    const channelName = stream.channel_name || (channel && (channel.display_name || channel.slug)) || slug;
+    const slug = normalizeCreatorSlug(stream.channel_slug || (channel && channel.slug));
+    const channelName = stream.channel_name || (channel && (channel.display_name || channel.slug)) || slug || 'Creator';
     const isReplayMedia = stream.kind === 'vod' || stream.kind === 'clip';
-    const href = stream.route_url || streamPath(slug, stream.id);
+    const href = stream.route_url || (slug ? streamPath(slug, stream.id) : '/channels');
     const audiencePill = stream.is_live
         ? renderPill(`${formatCompactNumber(stream.viewer_count || 0)} watching`, 'live')
         : (isReplayMedia
@@ -1464,19 +1498,19 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         ? stream.detail_bits.filter(Boolean)
         : (isReplayMedia
             ? [
-                slug ? `@${slug}` : null,
+                slug ? `@${slug}` : channelName,
                 stream.duration_seconds ? formatDurationSeconds(stream.duration_seconds) : null,
                 stream.kind === 'vod' ? 'Replay library' : 'Highlight clip',
             ].filter(Boolean)
             : [
-                `@${slug}`,
+                slug ? `@${slug}` : channelName,
                 stream.vod_media_id ? 'VOD attached' : 'No VOD yet',
                 stream.has_clips ? `${formatNumber(stream.clip_count)} clip${stream.clip_count === 1 ? '' : 's'}` : 'No clips yet',
             ]);
     const filterText = `${stream.title || ''} ${slug} ${channelName} ${stream.category || ''} ${summary} ${detailBits.join(' ')}`.toLowerCase();
     const kicker = isReplayMedia
         ? `From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(summary)}`
-        : `By <a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a> · ${escapeHtml(summary)}`;
+        : `By ${slug ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(summary)}`;
     const footerMeta = stream.footer_meta || (isReplayMedia
         ? formatDateTime(stream.created_at || stream.updated_at)
         : (stream.started_at ? formatDateTime(stream.started_at) : 'Schedule TBD'));
@@ -1856,8 +1890,8 @@ function renderChannelPage({ channel, currentStream, recentStreams, recentVods, 
 }
 
 function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
-    const slug = channel ? channel.slug : (stream.channel_slug || 'unknown');
-    const channelName = channel ? (channel.display_name || slug) : slug;
+    const slug = normalizeCreatorSlug(channel ? channel.slug : stream.channel_slug);
+    const channelName = channel ? (channel.display_name || channel.slug) : (stream.channel_name || slug || 'Creator');
     const isLive = !!stream.is_live;
     const title = `${stream.title || 'Untitled stream'} — ${channelName} — openvibe.live`;
     const description = isLive
@@ -1880,11 +1914,11 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             <div class="hero-copy" data-reveal>
                 <div class="eyebrow">${escapeHtml(isLive ? 'Live session' : 'Broadcast record')}</div>
                 <h1 class="hero-heading" style="max-width:12ch"><span class="hero-gradient">${escapeHtml(stream.title || 'Untitled stream')}</span></h1>
-                <p>By <a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a> · ${escapeHtml(stream.category || 'uncategorized')} · ${escapeHtml(isLive ? `${formatCompactNumber(stream.viewer_count || 0)} watching right now` : `Peak ${formatCompactNumber(stream.peak_viewers || 0)} viewers`)}</p>
+                <p>By ${slug ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(stream.category || 'uncategorized')} · ${escapeHtml(isLive ? `${formatCompactNumber(stream.viewer_count || 0)} watching right now` : `Peak ${formatCompactNumber(stream.peak_viewers || 0)} viewers`)}</p>
                 <div class="hero-actions">
-                    <a class="button" href="${channelPath(slug)}">Back to channel</a>
-                    <a class="button-secondary" href="/vods?channel=${encodeURIComponent(slug)}">Channel VODs</a>
-                    <a class="button-ghost" href="/clips?channel=${encodeURIComponent(slug)}">Channel clips</a>
+                    <a class="button" href="${slug ? channelPath(slug) : '/channels'}">${slug ? 'Back to channel' : 'Browse creators'}</a>
+                    <a class="button-secondary" href="/vods${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Channel VODs' : 'Browse VODs'}</a>
+                    <a class="button-ghost" href="/clips${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Channel clips' : 'Browse clips'}</a>
                 </div>
             </div>
         </section>
@@ -1930,14 +1964,14 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             content: moreFromChannelHtml ? `<div class="card-grid">${moreFromChannelHtml}</div>` : null,
             emptyTitle: 'No other broadcasts yet',
             emptyBody: 'Once more sessions exist for this creator, they appear here automatically.',
-            emptyHref: channelPath(slug),
-            emptyLabel: 'Open channel page',
+            emptyHref: slug ? channelPath(slug) : '/channels',
+            emptyLabel: slug ? 'Open channel page' : 'Browse creators',
         })}
     `;
     return renderPage({
         title,
         description,
-        canonical: `${baseUrl}${streamPath(slug, stream.id)}`,
+        canonical: slug ? `${baseUrl}${streamPath(slug, stream.id)}` : `${baseUrl}/channels`,
         ogType: isLive ? 'video.other' : 'video.movie',
         ogImage,
         activeNav: 'channels',
@@ -1949,8 +1983,8 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
 function renderMediaDetailPage({ item, channel, baseUrl }) {
     const kind = item && item.kind === 'clip' ? 'clip' : 'vod';
     const kindLabel = kind === 'clip' ? 'Clip' : 'VOD';
-    const slug = item.channel_slug || (channel && channel.slug) || 'unknown';
-    const channelName = item.channel_name || (channel && (channel.display_name || channel.slug)) || slug;
+    const slug = normalizeCreatorSlug(item.channel_slug || (channel && channel.slug));
+    const channelName = item.channel_name || (channel && (channel.display_name || channel.slug)) || slug || 'Creator';
     const title = `${item.title || `Untitled ${kindLabel}` } — ${channelName} — openvibe.live`;
     const description = item.description
         || `${kindLabel} from ${channelName} on openvibe.live, backed by canonical OpenVibe media storage.`;
@@ -2489,7 +2523,12 @@ function renderCollectionPage({ kind, title, description, emptyMessage, items, b
     });
 }
 
-function renderGoLivePage({ baseUrl }) {
+function renderGoLivePage({ baseUrl, session }) {
+    const signedIn = !!(session && session.authenticated && session.user && !session.anonymous);
+    const viewerName = signedIn
+        ? String(session.user.display_name || session.user.username || 'creator').trim()
+        : String(session && session.user && (session.user.display_name || session.user.username) || '').trim();
+    const signInHref = `/auth/login?return_to=${encodeURIComponent(`${baseUrl}/go-live`)}`;
     const tracksHtml = GO_LIVE_TRACKS.map((track) => `
         <article class="glass-card" data-reveal>
             <div class="eyebrow">${escapeHtml(track.label)}</div>
@@ -2498,37 +2537,8 @@ function renderGoLivePage({ baseUrl }) {
             <div class="card-kicker">${escapeHtml(track.meta)}</div>
         </article>
     `).join('');
-    const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-grid">
-                <div class="hero-copy" data-reveal>
-                    <div class="eyebrow">Creator dashboard</div>
-                    <h1 class="hero-heading">Go live with <span class="hero-gradient">OpenVibe</span></h1>
-                    <p>Use one OpenVibe account to claim your creator route, prep your ingest, start a stream, and keep VODs, clips, chat, and community tied to the same channel.</p>
-                    <div class="hero-actions">
-                        <a class="button" href="#stream-manager">Open stream manager</a>
-                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                        <a class="button-ghost" href="/">Back to live discovery</a>
-                    </div>
-                    <div class="utility-links">
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
-                        <a class="utility-link" href="/channels">Browse channels</a>
-                    </div>
-                </div>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">How it fits</div>
-                    <h3 class="card-title">Discovery on openvibe.live. Routing on openre.stream.</h3>
-                    <p class="card-body">Use this page when you want your public creator route and your basic stream controls in one place. Jump to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> when you want the fuller restream cockpit.</p>
-                    <div class="pill-row" style="margin-top:0.85rem;">
-                        ${renderPill('Creator route on openvibe.live', 'soft')}
-                        ${renderPill('Routing on openre.stream', 'warn')}
-                        ${renderPill('One account across both', 'primary')}
-                    </div>
-                </article>
-            </div>
-        </section>
+    const managerSection = signedIn
+        ? `
         <section class="section-panel" id="stream-manager">
             <div class="section-head">
                 <div>
@@ -2543,8 +2553,8 @@ function renderGoLivePage({ baseUrl }) {
             <div class="story-grid">
                 <article class="glass-card" data-reveal data-go-live-session>
                     <div class="eyebrow">Account status</div>
-                    <h3 class="card-title">Checking your OpenVibe account…</h3>
-                    <p class="card-body">Sign in to load your creator route, connected destinations, and recent stream control state.</p>
+                    <h3 class="card-title">Loading ${escapeHtml(viewerName || 'your account')}…</h3>
+                    <p class="card-body">This same-origin manager talks to the real OpenRe control plane through local live routes, so the sign-in state actually belongs to this surface.</p>
                 </article>
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">What this page can do</div>
@@ -2659,7 +2669,85 @@ function renderGoLivePage({ baseUrl }) {
                     <div data-go-live-streams class="list-stack"><p class="manager-note">Checking your recent streams…</p></div>
                 </article>
             </div>
+        </section>`
+        : `
+        <section class="section-panel" id="stream-manager">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Sign in to unlock your stream manager</h2>
+                    <p class="section-subtitle">This page only shows real creator controls to authenticated OpenVibe accounts. Anonymous visitors should not see fake channel or stream creation panels.</p>
+                </div>
+                <div class="inline-actions">
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                    <a class="section-link" href="/channels">Browse channels</a>
+                </div>
+            </div>
+            <div class="story-grid">
+                <article class="glass-card" data-reveal data-go-live-session>
+                    <div class="eyebrow">Account status</div>
+                    <h3 class="card-title">${escapeHtml(viewerName ? `Finish signing in, ${viewerName}` : 'Use your OpenVibe account')}</h3>
+                    <p class="card-body">Claim your creator route, save real RTMP destinations, and generate ingest details from this same-origin live surface once you are signed in.</p>
+                    <div class="form-actions" style="margin-top:1rem;">
+                        <a class="button" href="${signInHref}">${escapeHtml(viewerName ? 'Create full account' : 'Sign in with OpenVibe')}</a>
+                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                        <a class="button-ghost" href="/">Back to live discovery</a>
+                    </div>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">What unlocks after sign-in</div>
+                    <div class="data-points">
+                        <div class="data-point">
+                            <div class="data-point-label">Creator route</div>
+                            <div class="data-point-value">Claim @handle</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">Destinations</div>
+                            <div class="data-point-value">Save RTMP targets</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">Stream records</div>
+                            <div class="data-point-value">Create + control</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">Identity</div>
+                            <div class="data-point-value">One OpenVibe account</div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>`;
+    const pageContent = `
+        <section class="hero-panel compact">
+            <div class="hero-grid">
+                <div class="hero-copy" data-reveal>
+                    <div class="eyebrow">Creator dashboard</div>
+                    <h1 class="hero-heading">Go live with <span class="hero-gradient">OpenVibe</span></h1>
+                    <p>Use one OpenVibe account to claim your creator route, prep your ingest, start a stream, and keep VODs, clips, chat, and community tied to the same channel.</p>
+                    <div class="hero-actions">
+                        <a class="button" href="#stream-manager">Open stream manager</a>
+                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                        <a class="button-ghost" href="/">Back to live discovery</a>
+                    </div>
+                    <div class="utility-links">
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
+                        <a class="utility-link" href="/channels">Browse channels</a>
+                    </div>
+                </div>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">How it fits</div>
+                    <h3 class="card-title">Discovery on openvibe.live. Routing on openre.stream.</h3>
+                    <p class="card-body">Use this page when you want your public creator route and your basic stream controls in one place. Jump to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> when you want the fuller restream cockpit.</p>
+                    <div class="pill-row" style="margin-top:0.85rem;">
+                        ${renderPill('Creator route on openvibe.live', 'soft')}
+                        ${renderPill('Routing on openre.stream', 'warn')}
+                        ${renderPill('One account across both', 'primary')}
+                    </div>
+                </article>
+            </div>
         </section>
+        ${managerSection}
         ${renderSection({
             title: 'Broadcast tracks',
             subtitle: 'Choose the publishing style that matches your setup today.',

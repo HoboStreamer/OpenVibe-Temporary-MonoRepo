@@ -9,9 +9,18 @@ const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
+const { buildAuthRouter } = require('./auth-routes');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
+const { buildSessionResponse } = require('./session');
+
+function deriveBaseUrl(req) {
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = forwardedProto ? String(forwardedProto).split(',')[0].trim() : req.protocol;
+    const host = req.get('host');
+    return host ? `${protocol}://${host}` : config.publicBaseUrl;
+}
 
 function buildApp() {
     db.init(config.db.path);
@@ -59,9 +68,15 @@ function buildApp() {
     runtime.attach(app);
 
     app.use(optionalOpenVibeAuth(authClient));
+    app.use(buildAuthRouter({
+        authClient,
+        config,
+        deriveBaseUrl,
+        serviceName: 'openre.stream',
+    }));
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
-    app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config }));
+    app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config, buildSessionResponse }));
 
     app.use((err, _req, res, _next) => {
         console.error('[openre-stream] unhandled:', err.message);

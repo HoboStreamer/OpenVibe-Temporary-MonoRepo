@@ -5,7 +5,7 @@ const model = require('./model');
 const policy = require('./policy');
 const { STREAM_EVENT_TYPES } = require('@openvibe/contracts/stream-events');
 
-function buildRouter({ eventBus, config }) {
+function buildRouter({ eventBus, config, buildSessionResponse }) {
     const r = express.Router();
     const json = express.json({ limit: '256kb' });
 
@@ -18,10 +18,28 @@ function buildRouter({ eventBus, config }) {
         return { actor_type: a.type, actor_id: a.id };
     }
 
+    r.get('/session', (req, res) => {
+        if (typeof buildSessionResponse === 'function') {
+            return res.json(buildSessionResponse(req, { service: config.serviceId || 'openre-stream' }));
+        }
+        res.json({
+            authenticated: !!req.user,
+            anonymous: false,
+            user: req.user || null,
+            service: config.serviceId || 'openre-stream',
+        });
+    });
+
     // ── channels ─────────────────────────────────────────────
     r.post('/channels', json, (req, res) => {
         const b = req.body || {};
         if (!b.slug || !b.owner_user_id) return res.status(400).json({ error: 'slug, owner_user_id required' });
+        const existing = model.getChannelBySlug(b.slug);
+        if (existing && String(existing.owner_user_id) !== String(b.owner_user_id)) {
+            if (!req.serviceActor && (!req.user || req.user.role !== 'admin')) {
+                return res.status(409).json({ error: 'channel handle already claimed', reason: 'slug_taken' });
+            }
+        }
         try { policy.assert(policy.decideChannelWrite({ req, ownerUserId: b.owner_user_id }), { ...actorMeta(req), action: 'channel.upsert' }); }
         catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
         const ch = model.upsertChannel(b);

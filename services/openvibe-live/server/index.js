@@ -8,6 +8,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
+const { requireOpenVibeAuth } = require('@openvibe/sdk');
 
 const config = require('./config');
 const db = require('./db');
@@ -16,7 +17,10 @@ const ssr = require('./ssr');
 const integrations = require('./integrations');
 const { applyStreamEvent } = require('./ingestion');
 const { createFeedBridge } = require('./feed-bridge');
+const { buildAuthRouter } = require('./auth-routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
+const { createOpenReClient } = require('./openre-client');
+const { buildSessionResponse } = require('./session');
 const communityDb = require('../../openvibe-community/server/db');
 const communityModel = require('../../openvibe-community/server/model');
 const chatDb = require('../../openvibe-chat/server/db');
@@ -88,9 +92,26 @@ function asyncRoute(handler) {
     };
 }
 
+function normalizeCreatorSlugInput(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48);
+}
+
+function sortByRecent(left, right) {
+    const leftStamp = new Date(left && (left.updated_at || left.started_at || left.created_at || left.ended_at) || 0).getTime() || 0;
+    const rightStamp = new Date(right && (right.updated_at || right.started_at || right.created_at || right.ended_at) || 0).getTime() || 0;
+    return rightStamp - leftStamp;
+}
+
 function buildApp() {
     db.init(config.db.path);
     const authClient = buildAuthClient(config);
+    const openreClient = createOpenReClient({ config });
+    const requireUserAuth = requireOpenVibeAuth(authClient);
     const thumbnailDir = path.join(__dirname, '..', 'data', 'thumbnails');
     const optionalData = {
         community: false,
@@ -164,6 +185,82 @@ function buildApp() {
         buildCommunityFallback,
         buildChatFallback,
     });
+
+    function ownerUserIdOf(req) {
+        return String(req && req.user && (req.user.sub || req.user.id) || '').trim();
+    }
+
+    function syncLiveChannel(channel, extra) {
+        if (!channel || !channel.slug) return null;
+        const extraData = extra || {};
+        return model.upsertChannel({
+            slug: channel.slug,
+            display_name: channel.display_name || channel.slug,
+            owner_user_id: channel.owner_user_id || extraData.owner_user_id || null,
+            description: extraData.description || null,
+            metadata: Object.assign({ source: 'openre-stream' }, channel.metadata || {}, extraData.metadata || {}),
+        });
+    }
+
+    function syncLiveStream(stream, channel, extra) {
+        if (!stream || !stream.id) return null;
+        const extraData = extra || {};
+        const syncedChannel = channel ? syncLiveChannel(channel, extraData.channel) : null;
+        return model.upsertStream({
+            id: stream.id,
+            channel_slug: stream.channel_slug || (syncedChannel && syncedChannel.slug) || (channel && channel.slug) || null,
+            channel_id: stream.channel_id || (channel && channel.id) || null,
+            status: stream.status,
+            title: stream.title,
+            category: stream.category,
+            vod_media_id: stream.vod_media_id || null,
+            started_at: stream.started_at || null,
+            ended_at: stream.ended_at || null,
+            metadata: Object.assign({}, stream.metadata || {}, extraData.metadata || {}, {
+                owner_user_id: (channel && channel.owner_user_id) || extraData.owner_user_id || null,
+            }),
+        });
+    }
+
+    function sendOpenReError(res, error, fallbackMessage) {
+        const status = Number(error && error.status) || (error && error.code === 'ENETWORK' ? 502 : 500);
+        const upstreamBody = error && error.body && typeof error.body === 'object' ? error.body : null;
+        if (upstreamBody && upstreamBody.error) {
+            return res.status(status).json(upstreamBody);
+        }
+        return res.status(status).json({ error: fallbackMessage || (error && error.message) || 'openre request failed' });
+    }
+
+    async function buildGoLiveDashboardState(req) {
+        const ownerUserId = ownerUserIdOf(req);
+        const channelsPayload = await openreClient.listChannels({ ownerUserId, token: req.token, limit: 24 });
+        const channels = Array.isArray(channelsPayload && channelsPayload.items) ? channelsPayload.items : [];
+        channels.forEach((channel) => syncLiveChannel(channel, { owner_user_id: ownerUserId }));
+
+        const destinationsPayload = await openreClient.listDestinations({ ownerUserId, token: req.token });
+        const destinations = Array.isArray(destinationsPayload && destinationsPayload.items) ? destinationsPayload.items : [];
+
+        const streamGroups = await Promise.all(channels.map(async (channel) => {
+            const payload = await openreClient.listStreams({ channelId: channel.id, token: req.token, limit: 8 });
+            const items = Array.isArray(payload && payload.items) ? payload.items : [];
+            return items.map((stream) => {
+                const hydrated = Object.assign({}, stream, {
+                    channel_slug: stream.channel_slug || channel.slug,
+                    channel_display_name: channel.display_name || channel.slug,
+                });
+                syncLiveStream(hydrated, channel, { owner_user_id: ownerUserId });
+                return hydrated;
+            });
+        }));
+
+        return {
+            channels,
+            destinations,
+            streams: streamGroups.flat().sort(sortByRecent).slice(0, 12),
+            restream_url: config.stream.url,
+            account_url: config.network.url,
+        };
+    }
 
     async function renderChannelRoute(req, res, slug) {
         const channel = model.getChannelBySlug(slug);
@@ -257,6 +354,12 @@ function buildApp() {
     });
     runtime.attach(app);
     app.use(optionalOpenVibeAuth(authClient));
+    app.use(buildAuthRouter({
+        authClient,
+        config,
+        deriveBaseUrl,
+        serviceName: 'openvibe.live',
+    }));
 
     app.get('/api/thumbnails/:fileName', (req, res) => {
         const fileName = path.basename(String(req.params.fileName || 'thumbnail.svg'));
@@ -328,7 +431,10 @@ function buildApp() {
     }));
 
     app.get('/go-live', (req, res) => {
-        res.type('html').send(ssr.renderGoLivePage({ baseUrl: deriveBaseUrl(req) }));
+        res.type('html').send(ssr.renderGoLivePage({
+            baseUrl: deriveBaseUrl(req),
+            session: buildSessionResponse(req),
+        }));
     });
 
     app.get('/updates', (req, res) => {
@@ -362,6 +468,129 @@ function buildApp() {
     // ── JSON API ─────────────────────────────────────────────
     const json = express.json({ limit: '256kb' });
     const guarded = serviceActorMiddleware(config.internalKey);
+    const localApiRouter = express.Router();
+
+    localApiRouter.get('/session', (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const primaryChannel = ownerUserId ? model.getChannelByOwnerUserId(ownerUserId) : null;
+        res.json(buildSessionResponse(req, {
+            service: config.serviceId,
+            primary_channel: primaryChannel
+                ? {
+                    slug: primaryChannel.slug,
+                    display_name: primaryChannel.display_name || primaryChannel.slug,
+                }
+                : null,
+        }));
+    });
+
+    localApiRouter.get('/go-live/dashboard', requireUserAuth, asyncRoute(async (req, res) => {
+        try {
+            res.json(await buildGoLiveDashboardState(req));
+        } catch (error) {
+            sendOpenReError(res, error, 'stream manager unavailable');
+        }
+    }));
+
+    localApiRouter.post('/go-live/channels', requireUserAuth, json, asyncRoute(async (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const slug = normalizeCreatorSlugInput(req.body && req.body.slug);
+        const displayName = String(req.body && req.body.display_name || req.user && (req.user.display_name || req.user.username) || '').trim();
+        const description = String(req.body && req.body.description || '').trim() || null;
+        if (!slug) return res.status(400).json({ error: 'valid slug required' });
+
+        const existingLiveChannel = model.getChannelBySlug(slug);
+        if (existingLiveChannel && existingLiveChannel.owner_user_id && String(existingLiveChannel.owner_user_id) !== ownerUserId && req.user.role !== 'admin') {
+            return res.status(409).json({ error: 'channel handle already claimed' });
+        }
+
+        try {
+            const created = await openreClient.createChannel({
+                owner_user_id: ownerUserId,
+                slug,
+                display_name: displayName || slug,
+                metadata: { source: 'openre-stream' },
+            }, req.token);
+            const channel = created && created.channel ? created.channel : null;
+            if (!channel) return res.status(502).json({ error: 'openre returned no channel' });
+            const liveChannel = syncLiveChannel(channel, {
+                owner_user_id: ownerUserId,
+                description,
+                metadata: { source: 'openre-stream' },
+            });
+            res.status(201).json({ channel, live_channel: liveChannel });
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to create channel');
+        }
+    }));
+
+    localApiRouter.post('/go-live/destinations', requireUserAuth, json, asyncRoute(async (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const payload = {
+            owner_user_id: ownerUserId,
+            kind: String(req.body && req.body.kind || 'custom').trim(),
+            label: String(req.body && req.body.label || '').trim() || null,
+            target_url: String(req.body && req.body.target_url || '').trim(),
+            target_key: String(req.body && req.body.target_key || '').trim() || null,
+        };
+        if (!payload.target_url) return res.status(400).json({ error: 'target_url required' });
+        try {
+            const created = await openreClient.createDestination(payload, req.token);
+            res.status(201).json(created);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to save destination');
+        }
+    }));
+
+    localApiRouter.post('/go-live/streams', requireUserAuth, json, asyncRoute(async (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const payload = {
+            channel_slug: String(req.body && req.body.channel_slug || '').trim(),
+            title: String(req.body && req.body.title || '').trim() || null,
+            category: String(req.body && req.body.category || '').trim() || null,
+            protocol: String(req.body && req.body.protocol || 'rtmp').trim(),
+        };
+        if (!payload.channel_slug) return res.status(400).json({ error: 'channel_slug required' });
+        try {
+            const created = await openreClient.createStream(payload, req.token);
+            if (created && created.channel) syncLiveChannel(created.channel, { owner_user_id: ownerUserId });
+            if (created && created.stream) syncLiveStream(created.stream, created.channel || null, { owner_user_id: ownerUserId });
+            res.status(201).json(created);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to create stream');
+        }
+    }));
+
+    localApiRouter.post('/go-live/streams/:id/start', requireUserAuth, json, asyncRoute(async (req, res) => {
+        try {
+            const started = await openreClient.startStream(req.params.id, req.token);
+            if (started && started.channel) syncLiveChannel(started.channel, { owner_user_id: ownerUserIdOf(req) });
+            if (started && started.stream) syncLiveStream(started.stream, started.channel || null, { owner_user_id: ownerUserIdOf(req) });
+            if (started && started.stream && started.mirror && started.mirror.live_url) {
+                model.recordMirror({
+                    stream_id: started.stream.id,
+                    channel_slug: (started.channel && started.channel.slug) || started.stream.channel_slug || '',
+                    details: { live_url: started.mirror.live_url },
+                });
+            }
+            res.json(started);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to start stream');
+        }
+    }));
+
+    localApiRouter.post('/go-live/streams/:id/end', requireUserAuth, json, asyncRoute(async (req, res) => {
+        try {
+            const ended = await openreClient.endStream(req.params.id, req.token, req.body || {});
+            if (ended && ended.channel) syncLiveChannel(ended.channel, { owner_user_id: ownerUserIdOf(req) });
+            if (ended && ended.stream) syncLiveStream(ended.stream, ended.channel || null, { owner_user_id: ownerUserIdOf(req) });
+            res.json(ended);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to end stream');
+        }
+    }));
+
+    app.use('/api/v1', localApiRouter);
 
     app.get('/api/v1/home', asyncRoute(async (_req, res) => res.json(await feedBridge.buildHomeViewModel())));
     app.get('/api/v1/channels', (req, res) => res.json({ items: model.listChannels({ limit: req.query.limit || 200 }) }));
