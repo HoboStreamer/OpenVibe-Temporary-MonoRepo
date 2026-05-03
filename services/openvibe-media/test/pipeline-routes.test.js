@@ -70,6 +70,10 @@ function request(server, method, requestPath, body, extraHeaders) {
     const { app } = buildApp();
     const server = await listen(app);
     try {
+        const healthResponse = await request(server, 'GET', '/health');
+        assert.strictEqual(healthResponse.status, 200);
+        assert.strictEqual(healthResponse.headers['cross-origin-resource-policy'], 'cross-origin');
+
         const media = model.create({
             owner_type: 'user',
             owner_id: '42',

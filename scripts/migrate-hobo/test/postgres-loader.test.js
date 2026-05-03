@@ -120,6 +120,10 @@ function createMockClient() {
         assert.ok(client._tables.has('control_notifications'), 'notifications schema present');
         assert.ok(client._tables.has('control_user_preferences'), 'user preferences schema present');
         assert.ok(client._tables.has('community_comments'), 'community comments schema present');
+        assert.ok(
+            client._calls.some((call) => /ALTER TABLE game_battle_stats[\s\S]*ALTER COLUMN total_stolen TYPE REAL/i.test(call.sql)),
+            'battle stats evolution applied'
+        );
 
         const report = await loadBundle({ client, bundleDir: bundle, runId: 'test', dryRun: false, batchSize: 10 });
         assert.strictEqual(report.hobo_bucks_excluded, true);

@@ -2376,9 +2376,40 @@ async function writeChatAndCommunityDatasets(context) {
 async function writeMediaDatasets(context) {
     const mediaWriter = context.writers.get('media/objects');
 
-    await forEachNdjson(tableFile(context.sourceRoots.hobostreamer, 'vods'), async (row) => {
+    function writeThumbnailRecord(row, options) {
+        const opts = options || {};
+        const thumbnailUrl = String(row && row.thumbnail_url || '').trim();
+        if (!thumbnailUrl) return;
+        const match = thumbnailUrl.match(/\/api\/thumbnails\/([^/?#]+)/i);
+        if (!match) return;
         mediaWriter.write({
-            id: buildEntityId('media', 'hobostreamer-vod', row.id),
+            id: buildEntityId('media', `hobostreamer-${opts.kind}-thumbnail`, row.id),
+            source: 'hobostreamer',
+            legacy_table: `${opts.legacyTable}.thumbnail_url`,
+            owner_user_id: canonicalUserIdFor(context, 'hobostreamer', row.user_id),
+            namespace: 'live.thumbnails',
+            media_type: 'thumbnail',
+            visibility: row.is_public ? 'public' : 'private',
+            parent_media_id: opts.parentMediaId || null,
+            file_path: path.join(context.sourceRoots.hobostreamer, 'data', 'thumbnails', match[1]),
+            thumbnail_url: thumbnailUrl,
+            metadata: {
+                source: 'hobostreamer',
+                parent_media_id: opts.parentMediaId || null,
+                original_thumbnail_url: thumbnailUrl,
+                media_kind: opts.kind,
+            },
+            created_at: row.created_at || null,
+            legacy_ref: makeLegacyRef('hobostreamer', `${opts.kind}-thumbnails`, row.id),
+        });
+        context.stats.bump('media/objects', 'source_records');
+        context.stats.bump('media/objects', 'written_records');
+    }
+
+    await forEachNdjson(tableFile(context.sourceRoots.hobostreamer, 'vods'), async (row) => {
+        const mediaId = buildEntityId('media', 'hobostreamer-vod', row.id);
+        mediaWriter.write({
+            id: mediaId,
             source: 'hobostreamer',
             legacy_table: 'vods',
             owner_user_id: canonicalUserIdFor(context, 'hobostreamer', row.user_id),
@@ -2398,11 +2429,13 @@ async function writeMediaDatasets(context) {
         });
         context.stats.bump('media/objects', 'source_records');
         context.stats.bump('media/objects', 'written_records');
+        writeThumbnailRecord(row, { kind: 'vod', legacyTable: 'vods', parentMediaId: mediaId });
     });
 
     await forEachNdjson(tableFile(context.sourceRoots.hobostreamer, 'clips'), async (row) => {
+        const mediaId = buildEntityId('media', 'hobostreamer-clip', row.id);
         mediaWriter.write({
-            id: buildEntityId('media', 'hobostreamer-clip', row.id),
+            id: mediaId,
             source: 'hobostreamer',
             legacy_table: 'clips',
             owner_user_id: canonicalUserIdFor(context, 'hobostreamer', row.user_id),
@@ -2424,6 +2457,7 @@ async function writeMediaDatasets(context) {
         });
         context.stats.bump('media/objects', 'source_records');
         context.stats.bump('media/objects', 'written_records');
+        writeThumbnailRecord(row, { kind: 'clip', legacyTable: 'clips', parentMediaId: mediaId });
     });
 
     await forEachNdjson(tableFile(context.sourceRoots.hobostreamer, 'users'), async (row) => {

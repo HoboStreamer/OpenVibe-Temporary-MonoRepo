@@ -39,6 +39,46 @@ const ended = model.upsertStream({
     thumbnail_url: '/api/thumbnails/alice-ended.svg',
     metadata: { clip_media_ids: ['clip_1'], clip_count: 1 },
 });
+const vodCard = {
+    id: 'media:hobostreamer-vod:7',
+    kind: 'vod',
+    legacy_id: '7',
+    route_url: '/vod/7',
+    cta_label: 'Open vod →',
+    title: 'archive run',
+    channel_slug: 'alice',
+    channel_name: 'Alice',
+    category: 'Speedrun',
+    thumbnail_url: '/api/thumbnails/alice-vod.webp',
+    created_at: '2026-01-02T03:00:00Z',
+    updated_at: '2026-01-02T03:00:00Z',
+    duration_seconds: 7200,
+    view_count: 42,
+    playback_ready: true,
+    playback_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-vod%3A7/playback?redirect=true',
+    status: 'ready',
+    source: 'hobostreamer',
+};
+const clipCard = {
+    id: 'media:hobostreamer-clip:3',
+    kind: 'clip',
+    legacy_id: '3',
+    route_url: '/clip/3',
+    cta_label: 'Open clip →',
+    title: 'top deck glitch',
+    channel_slug: 'alice',
+    channel_name: 'Alice',
+    category: 'Speedrun',
+    thumbnail_url: '/api/thumbnails/alice-clip.webp',
+    created_at: '2026-01-02T03:30:00Z',
+    updated_at: '2026-01-02T03:30:00Z',
+    duration_seconds: 37,
+    view_count: 19,
+    playback_ready: true,
+    playback_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-clip%3A3/playback?redirect=true',
+    status: 'ready',
+    source: 'hobostreamer',
+};
 
 const channelHtml = ssr.renderChannelPage({ channel: ch, currentStream: s, recentStreams: [s], baseUrl: config.publicBaseUrl });
 assert.ok(/<title>Alice — LIVE NOW — openvibe\.live<\/title>/.test(channelHtml), 'channel page has live title');
@@ -54,6 +94,11 @@ const streamHtml = ssr.renderStreamPage({ channel: ch, stream: s, baseUrl: confi
 assert.ok(/<title>speedrun — Alice — openvibe\.live<\/title>/.test(streamHtml));
 assert.ok(/<link rel="canonical" href="[^"]+\/@alice\/s\/strm_1"/.test(streamHtml));
 
+const vodHtml = ssr.renderMediaDetailPage({ item: vodCard, channel: ch, baseUrl: config.publicBaseUrl });
+assert.ok(/archive run/.test(vodHtml), 'media detail page renders canonical vod title');
+assert.ok(/Playback ready/.test(vodHtml), 'media detail page renders playback-ready state');
+assert.ok(/openvibe\.media playback/.test(vodHtml), 'media detail page links to canonical media playback');
+
 const homeHtml = ssr.renderHomePage({
     channels: model.listChannels({ limit: 50 }),
     featuredChannels: model.listFeaturedChannels({ limit: 8 }),
@@ -61,11 +106,25 @@ const homeHtml = ssr.renderHomePage({
     liveNow: model.listLiveNow({ limit: 12 }),
     recentlyEnded: model.listRecentlyEnded({ limit: 12 }),
     recentlyOnlineChannels: [Object.assign({}, ch, { stats: model.getChannelStats('alice'), recentStream: ended })],
-    recentVods: model.listRecentVodStreams({ limit: 12 }),
-    recentClips: model.listRecentClips({ limit: 12 }),
+    recentVods: [vodCard],
+    recentClips: [clipCard],
     categories: model.listTopCategories({ limit: 10 }),
-    stats: model.getHomeStats(),
-    community: { recentThreads: [], recentPastes: [], discordRelays: [] },
+    stats: Object.assign({}, model.getHomeStats(), { vods: 1, clips: 1 }),
+    community: {
+        recentThreads: [],
+        recentPastes: [{
+            slug: 'migration-screenshot',
+            title: 'Migration screenshot',
+            kind: 'screenshot',
+            image_url: '/api/community-assets/home-proof.webp',
+            route_url: 'https://openvibe.community/',
+            created_at: '2026-01-02T04:00:00Z',
+            view_count: 11,
+            source: 'hobostreamer',
+            preview_text: 'Migrated screenshot paste preview.',
+        }],
+        discordRelays: [],
+    },
     chat: { publicRooms: [], activeCalls: [] },
     baseUrl: config.publicBaseUrl,
 });
@@ -74,13 +133,16 @@ assert.ok(/Recently online creators/.test(homeHtml), 'home page renders recently
 assert.ok(/Community pulse/.test(homeHtml), 'home page renders community section');
 assert.ok(/Recent VODs/.test(homeHtml), 'home page renders vod section');
 assert.ok(/Recent clips/.test(homeHtml), 'home page renders clips section');
+assert.ok(/Recent pastes/.test(homeHtml), 'home page renders paste section');
 assert.ok(/Go live however you want/.test(homeHtml), 'home page renders onboarding section');
 assert.ok(/Why OpenVibe exists/.test(homeHtml), 'home page renders origin story section');
 assert.ok(/openvibe\.live — native fallback shell/.test(homeHtml), 'home page includes browser-smoke shell marker');
 assert.ok(/Mark updates as seen/.test(homeHtml), 'home page renders unread updates clear action');
 assert.ok(/data-updates-feed/.test(homeHtml), 'home page renders updates feed state marker');
 assert.ok(/openre\.stream/.test(homeHtml), 'home page emphasizes openre.stream');
-assert.ok(/vod stream/.test(homeHtml), 'home page shows ended stream');
+assert.ok(/archive run/.test(homeHtml), 'home page shows canonical vod card');
+assert.ok(/top deck glitch/.test(homeHtml), 'home page shows canonical clip card');
+assert.ok(/Migration screenshot/.test(homeHtml), 'home page shows migrated paste card');
 assert.ok(homeHtml.indexOf('Live now') < homeHtml.indexOf('Category pulse'), 'live now renders immediately after the hero');
 assert.ok(homeHtml.indexOf('Recent clips') < homeHtml.indexOf('Recent VODs'), 'clips render before vods on the homepage');
 

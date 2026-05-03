@@ -907,8 +907,12 @@ function mediaLegacyKind(row) {
     switch (row.legacy_table) {
         case 'vods':
             return 'vod';
+        case 'vods.thumbnail_url':
+            return 'vod-thumbnail';
         case 'clips':
             return 'clip';
+        case 'clips.thumbnail_url':
+            return 'clip-thumbnail';
         case 'users.avatar_url':
             return 'avatar';
         case 'emotes':
@@ -1560,10 +1564,35 @@ function upsertMediaObject(context, row) {
             owner_id = excluded.owner_id,
             namespace = excluded.namespace,
             type = excluded.type,
-            status = excluded.status,
+            status = CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM media_object_locations
+                    WHERE media_id = media_objects.id
+                        AND status = 'active'
+                ) THEN 'ready'
+                WHEN media_objects.status = 'ready' THEN media_objects.status
+                ELSE excluded.status
+            END,
             visibility = excluded.visibility,
-            storage_tier = excluded.storage_tier,
-            storage_provider = excluded.storage_provider,
+            storage_tier = CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM media_object_locations
+                    WHERE media_id = media_objects.id
+                        AND status = 'active'
+                ) THEN COALESCE(media_objects.storage_tier, excluded.storage_tier)
+                ELSE excluded.storage_tier
+            END,
+            storage_provider = CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM media_object_locations
+                    WHERE media_id = media_objects.id
+                        AND status = 'active'
+                ) THEN COALESCE(media_objects.storage_provider, excluded.storage_provider)
+                ELSE excluded.storage_provider
+            END,
             size_bytes = excluded.size_bytes,
             metadata_json = excluded.metadata_json,
             updated_at = CURRENT_TIMESTAMP
@@ -2522,11 +2551,61 @@ function loadDatasetRow(context, dataset, row) {
     }
 }
 
+function deleteRowsByIds(db, tableName, columnName, ids) {
+    if (!ids.length) return 0;
+    const placeholders = ids.map(() => '?').join(', ');
+    const result = db.prepare(`DELETE FROM ${tableName} WHERE ${columnName} IN (${placeholders})`).run(...ids);
+    return result && typeof result.changes === 'number' ? result.changes : 0;
+}
+
+function reconcileMediaObjectsDataset(context, loadedIds) {
+    if (context.dryRun || !shouldWriteService(context, 'media')) return;
+    const migratedIds = context.dbs.media.prepare(`
+        SELECT id
+        FROM media_objects
+        WHERE id LIKE 'media:hobostreamer-%'
+    `).all().map((row) => String(row.id));
+    const staleIds = migratedIds.filter((id) => !loadedIds.has(id));
+    if (!staleIds.length) return;
+
+    const relatedTables = [
+        ['media_access_rollups', 'media_id'],
+        ['analysis_candidates', 'media_id'],
+        ['scene_markers', 'media_id'],
+        ['transcript_segments', 'media_id'],
+        ['media_lifecycle_audit', 'media_id'],
+        ['media_object_locations', 'media_id'],
+        ['media_legacy_map', 'media_id'],
+        ['media_objects', 'id'],
+    ];
+
+    for (const [tableName, columnName] of relatedTables) {
+        if (!hasTable(context.dbs.media, tableName)) continue;
+        deleteRowsByIds(context.dbs.media, tableName, columnName, staleIds);
+    }
+
+    const datasetReport = ensureDatasetReport(context.report, 'media/objects');
+    datasetReport.reconciled_deletions = (datasetReport.reconciled_deletions || 0) + staleIds.length;
+    const serviceReport = ensureServiceReport(context.report, 'media', context.dbPaths.media);
+    serviceReport.reconciled_deletions = (serviceReport.reconciled_deletions || 0) + staleIds.length;
+
+    if (context.logger) {
+        context.logger.info(`[staging-loader] Removed ${staleIds.length} stale migrated media object(s) absent from the current bundle.`);
+    }
+}
+
 async function loadDatasetFile(context, dataset, filePath) {
     if (!fs.existsSync(filePath)) return;
+    const loadedMediaIds = dataset === 'media/objects' ? new Set() : null;
     await forEachNdjson(filePath, async (row) => {
         loadDatasetRow(context, dataset, row);
+        if (loadedMediaIds) {
+            loadedMediaIds.add(String(row.id));
+        }
     });
+    if (loadedMediaIds) {
+        reconcileMediaObjectsDataset(context, loadedMediaIds);
+    }
 }
 
 function datasetLoadOrder(importReport) {

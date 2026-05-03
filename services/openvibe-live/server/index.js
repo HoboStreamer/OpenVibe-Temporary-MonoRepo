@@ -15,6 +15,7 @@ const model = require('./model');
 const ssr = require('./ssr');
 const integrations = require('./integrations');
 const { applyStreamEvent } = require('./ingestion');
+const { createFeedBridge } = require('./feed-bridge');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const communityDb = require('../../openvibe-community/server/db');
 const communityModel = require('../../openvibe-community/server/model');
@@ -81,6 +82,12 @@ function publicFilePath(fileName) {
     return path.join(__dirname, '..', 'public', fileName);
 }
 
+function asyncRoute(handler) {
+    return function wrappedAsyncRoute(req, res, next) {
+        Promise.resolve(handler(req, res, next)).catch(next);
+    };
+}
+
 function buildApp() {
     db.init(config.db.path);
     const authClient = buildAuthClient(config);
@@ -104,7 +111,7 @@ function buildApp() {
         console.warn('[openvibe-live] chat feed unavailable:', error.message);
     }
 
-    function buildCommunityViewModel() {
+    function buildCommunityFallback() {
         if (!optionalData.community) {
             return {
                 recentThreads: [],
@@ -128,7 +135,7 @@ function buildApp() {
         }
     }
 
-    function buildChatViewModel() {
+    function buildChatFallback() {
         if (!optionalData.chat) {
             return {
                 publicRooms: [],
@@ -151,57 +158,33 @@ function buildApp() {
         }
     }
 
-    function buildHomeViewModel() {
-        const channels = model.listChannels({ limit: 96 });
-        const recentlyEnded = model.listRecentlyEnded({ limit: 24 });
-        const channelMap = new Map(channels.map((channel) => [channel.slug, channel]));
-        const recentlyOnlineChannels = [];
-        const seenChannels = new Set();
+    const feedBridge = createFeedBridge({
+        config,
+        model,
+        buildCommunityFallback,
+        buildChatFallback,
+    });
 
-        for (const stream of recentlyEnded) {
-            const slug = String(stream && stream.channel_slug || '').trim();
-            if (!slug || seenChannels.has(slug)) continue;
-            const channel = channelMap.get(slug) || model.getChannelBySlug(slug);
-            if (!channel) continue;
-            recentlyOnlineChannels.push(Object.assign({}, channel, {
-                stats: model.getChannelStats(slug),
-                recentStream: stream,
-            }));
-            seenChannels.add(slug);
-            if (recentlyOnlineChannels.length >= 8) break;
-        }
-
-        return {
-            channels,
-            featuredChannels: model.listFeaturedChannels({ limit: 8 }),
-            trendingNow: model.listTrendingStreams({ limit: 6 }),
-            liveNow: model.listLiveNow({ limit: 12 }),
-            recentlyEnded: recentlyEnded.slice(0, 12),
-            recentlyOnlineChannels,
-            recentVods: model.listVods({ limit: 12 }),
-            recentClips: model.listClips({ limit: 12 }),
-            categories: model.listTopCategories({ limit: 10 }),
-            stats: model.getHomeStats(),
-            community: buildCommunityViewModel(),
-            chat: buildChatViewModel(),
-        };
-    }
-
-    function renderChannelRoute(req, res, slug) {
+    async function renderChannelRoute(req, res, slug) {
         const channel = model.getChannelBySlug(slug);
         if (!channel) {
             return res.status(404).type('html').send(ssr.renderOfflinePage({ slug, baseUrl: deriveBaseUrl(req) }));
         }
         const currentStream = model.getCurrentLiveStream(slug);
         const recentStreams = model.listStreams({ channel_slug: slug, limit: 20 });
-        const channelStats = model.getChannelStats(slug);
+        const channelMedia = await feedBridge.buildChannelMedia(slug);
+        const baseChannelStats = model.getChannelStats(slug);
+        const channelStats = Object.assign({}, baseChannelStats, {
+            vods: Math.max(Number(baseChannelStats.vods || 0), channelMedia.vods.total),
+            clips: Math.max(Number(baseChannelStats.clips || 0), channelMedia.clips.total),
+        });
         const relatedChannels = model.listFeaturedChannels({ limit: 12 }).filter((candidate) => candidate.slug !== channel.slug).slice(0, 4);
         return res.type('html').send(ssr.renderChannelPage({
             channel,
             currentStream,
             recentStreams,
-            recentVods: model.listVods({ channel_slug: slug, limit: 6 }),
-            recentClips: model.listClips({ channel_slug: slug, limit: 6 }),
+            recentVods: channelMedia.vods.items.slice(0, 6),
+            recentClips: channelMedia.clips.items.slice(0, 6),
             channelStats,
             relatedChannels,
             baseUrl: deriveBaseUrl(req),
@@ -216,6 +199,15 @@ function buildApp() {
         const channel = model.getChannelBySlug(slug);
         const moreFromChannel = model.listStreams({ channel_slug: slug, limit: 12 }).filter((item) => item.id !== stream.id).slice(0, 6);
         return res.type('html').send(ssr.renderStreamPage({ channel, stream, moreFromChannel, baseUrl: deriveBaseUrl(req) }));
+    }
+
+    async function renderMediaDetailRoute(req, res, kind, mediaId) {
+        const item = await feedBridge.getCanonicalMedia(kind, mediaId);
+        if (!item) {
+            return res.status(404).type('html').send(ssr.renderMissingMediaPage({ kind, mediaId, baseUrl: deriveBaseUrl(req) }));
+        }
+        const channel = item.channel_slug ? model.getChannelBySlug(item.channel_slug) : null;
+        return res.type('html').send(ssr.renderMediaDetailPage({ item, channel, baseUrl: deriveBaseUrl(req) }));
     }
 
     const app = express();
@@ -272,14 +264,27 @@ function buildApp() {
         if (fs.existsSync(filePath)) {
             return res.sendFile(filePath);
         }
+        const legacyThumbnailPath = feedBridge.resolveLegacyThumbnailPath(fileName);
+        if (legacyThumbnailPath) {
+            return res.sendFile(legacyThumbnailPath);
+        }
         res.set('Cache-Control', 'public, max-age=300');
         return res.type('image/svg+xml').send(buildThumbnailPlaceholder(fileName));
     });
 
-    // ── SSR pages ────────────────────────────────────────────
-    app.get('/', (req, res) => {
-        res.type('html').send(ssr.renderHomePage({ ...buildHomeViewModel(), baseUrl: deriveBaseUrl(req) }));
+    app.get('/api/community-assets/:fileName', (req, res) => {
+        const fileName = path.basename(String(req.params.fileName || 'asset'));
+        const filePath = feedBridge.resolveLegacyPasteAssetPath(fileName);
+        if (!filePath) {
+            return res.status(404).json({ error: 'not found' });
+        }
+        return res.sendFile(filePath);
     });
+
+    // ── SSR pages ────────────────────────────────────────────
+    app.get('/', asyncRoute(async (req, res) => {
+        res.type('html').send(ssr.renderHomePage({ ...(await feedBridge.buildHomeViewModel()), baseUrl: deriveBaseUrl(req) }));
+    }));
 
     app.get('/channels', (req, res) => {
         res.type('html').send(ssr.renderChannelsPage({
@@ -290,29 +295,37 @@ function buildApp() {
         }));
     });
 
-    app.get('/vods', (req, res) => {
+    app.get('/vods', asyncRoute(async (req, res) => {
         const channelSlug = req.query.channel ? String(req.query.channel) : null;
         res.type('html').send(ssr.renderCollectionPage({
             kind: 'vods',
             title: 'OpenVibe VOD Library',
-            description: 'Browse recent broadcast replays attached to the OpenVibe live graph.',
-            emptyMessage: 'No VOD-linked streams are available yet. Once VOD attachments land in the canonical model, they show up here automatically.',
-            items: model.listVods({ channel_slug: channelSlug, limit: 200 }),
+            description: 'Browse migrated and native broadcast replays staged through the canonical OpenVibe media service.',
+            emptyMessage: 'No public VOD media objects are available yet for this creator. When canonical replay items land, they show up here automatically.',
+            items: await feedBridge.listCanonicalVods({ channelSlug, limit: 200 }),
             baseUrl: deriveBaseUrl(req),
         }));
-    });
+    }));
 
-    app.get('/clips', (req, res) => {
+    app.get('/clips', asyncRoute(async (req, res) => {
         const channelSlug = req.query.channel ? String(req.query.channel) : null;
         res.type('html').send(ssr.renderCollectionPage({
             kind: 'clips',
             title: 'OpenVibe Clips',
-            description: 'Fast highlights, standout moments, and clip-ready broadcasts from the OpenVibe live graph.',
-            emptyMessage: 'Clip metadata has not been staged yet for these channels. The page stays honest instead of pretending every stream already has clips.',
-            items: model.listClips({ channel_slug: channelSlug, limit: 200 }),
+            description: 'Fast highlights and standout moments surfaced from canonical OpenVibe clip media objects.',
+            emptyMessage: 'No public clip media objects are available yet for these channels. The page stays honest instead of pretending every stream already has clips.',
+            items: await feedBridge.listCanonicalClips({ channelSlug, limit: 200 }),
             baseUrl: deriveBaseUrl(req),
         }));
-    });
+    }));
+
+    app.get('/vod/:id', asyncRoute(async (req, res) => {
+        await renderMediaDetailRoute(req, res, 'vod', req.params.id);
+    }));
+
+    app.get('/clip/:id', asyncRoute(async (req, res) => {
+        await renderMediaDetailRoute(req, res, 'clip', req.params.id);
+    }));
 
     app.get('/go-live', (req, res) => {
         res.type('html').send(ssr.renderGoLivePage({ baseUrl: deriveBaseUrl(req) }));
@@ -322,9 +335,9 @@ function buildApp() {
         res.type('html').send(ssr.renderUpdatesPage({ baseUrl: deriveBaseUrl(req) }));
     });
 
-    app.get('/@:slug', (req, res) => {
-        renderChannelRoute(req, res, req.params.slug);
-    });
+    app.get('/@:slug', asyncRoute(async (req, res) => {
+        await renderChannelRoute(req, res, req.params.slug);
+    }));
 
     app.get('/@:slug/s/:streamId', (req, res) => {
         renderStreamRoute(req, res, req.params.slug, req.params.streamId);
@@ -350,22 +363,33 @@ function buildApp() {
     const json = express.json({ limit: '256kb' });
     const guarded = serviceActorMiddleware(config.internalKey);
 
-    app.get('/api/v1/home', (_req, res) => res.json(buildHomeViewModel()));
+    app.get('/api/v1/home', asyncRoute(async (_req, res) => res.json(await feedBridge.buildHomeViewModel())));
     app.get('/api/v1/channels', (req, res) => res.json({ items: model.listChannels({ limit: req.query.limit || 200 }) }));
-    app.get('/api/v1/channels/:slug', (req, res) => {
+    app.get('/api/v1/channels/:slug', asyncRoute(async (req, res) => {
         const c = model.getChannelBySlug(req.params.slug);
         if (!c) return res.status(404).json({ error: 'not found' });
+        const channelMedia = await feedBridge.buildChannelMedia(req.params.slug);
+        const baseStats = model.getChannelStats(req.params.slug);
         res.json({
             channel: c,
             current_stream: model.getCurrentLiveStream(req.params.slug) || null,
             recent_streams: model.listStreams({ channel_slug: req.params.slug, limit: req.query.limit || 20 }),
-            stats: model.getChannelStats(req.params.slug),
+            recent_vods: channelMedia.vods.items,
+            recent_clips: channelMedia.clips.items,
+            stats: Object.assign({}, baseStats, {
+                vods: Math.max(Number(baseStats.vods || 0), channelMedia.vods.total),
+                clips: Math.max(Number(baseStats.clips || 0), channelMedia.clips.total),
+            }),
         });
-    });
+    }));
     app.get('/api/v1/featured-channels', (_req, res) => res.json({ items: model.listFeaturedChannels({ limit: 12 }) }));
     app.get('/api/v1/categories', (_req, res) => res.json({ items: model.listTopCategories({ limit: 24 }) }));
-    app.get('/api/v1/vods', (req, res) => res.json({ items: model.listVods({ channel_slug: req.query.channel_slug, limit: req.query.limit || 100 }) }));
-    app.get('/api/v1/clips', (req, res) => res.json({ items: model.listClips({ channel_slug: req.query.channel_slug, limit: req.query.limit || 100 }) }));
+    app.get('/api/v1/vods', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalVods({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
+    app.get('/api/v1/clips', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalClips({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
+    app.get('/api/v1/pastes', asyncRoute(async (_req, res) => {
+        const community = await feedBridge.buildCommunityViewModel();
+        res.json({ items: community.recentPastes || [] });
+    }));
     app.get('/api/v1/streams', (req, res) => res.json({ items: model.listStreams({ channel_slug: req.query.channel_slug, status: req.query.status, limit: req.query.limit }) }));
     app.get('/api/v1/streams/:id', (req, res) => {
         const stream = model.getStreamById(req.params.id);

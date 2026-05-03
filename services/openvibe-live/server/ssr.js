@@ -1539,22 +1539,50 @@ function renderMediaThumb({ url, title, eyebrow, subtitle, initials, baseUrl }) 
 function renderStreamCard(stream, channel, baseUrl, options) {
     const opts = options || {};
     const slug = stream.channel_slug || (channel && channel.slug) || 'unknown';
-    const channelName = (channel && (channel.display_name || channel.slug)) || slug;
+    const channelName = stream.channel_name || (channel && (channel.display_name || channel.slug)) || slug;
+    const isReplayMedia = stream.kind === 'vod' || stream.kind === 'clip';
+    const href = stream.route_url || streamPath(slug, stream.id);
+    const audiencePill = stream.is_live
+        ? renderPill(`${formatCompactNumber(stream.viewer_count || 0)} watching`, 'live')
+        : (isReplayMedia
+            ? renderPill(`${formatCompactNumber(stream.view_count || 0)} views`, 'soft')
+            : renderPill(`Peak ${formatCompactNumber(stream.peak_viewers || 0)}`, 'soft'));
+    const readinessPill = isReplayMedia
+        ? renderPill(stream.playback_ready ? 'Playback ready' : labelizeKey(stream.status || 'staged'), stream.playback_ready ? 'success' : 'warn')
+        : '';
     const tags = [
         opts.badge ? renderPill(opts.badge, opts.badgeTone || 'primary') : '',
-        stream.is_live ? renderPill(`${formatCompactNumber(stream.viewer_count || 0)} watching`, 'live') : renderPill(`Peak ${formatCompactNumber(stream.peak_viewers || 0)}`, 'soft'),
+        audiencePill,
+        readinessPill,
         stream.category ? renderPill(stream.category, 'muted') : '',
         stream.source === 'hobostreamer' ? renderPill('Migrated', 'warn') : renderPill('Native', 'success'),
     ].filter(Boolean).join('');
-    const summary = stream.is_live
+    const summary = stream.summary || (stream.is_live
         ? `Started ${timeAgo(stream.started_at)}${stream.protocol ? ` · ${stream.protocol}` : ''}`
-        : `${stream.ended_at ? `Ended ${timeAgo(stream.ended_at)}` : `Updated ${timeAgo(stream.started_at || stream.updated_at)}`}${stream.protocol ? ` · ${stream.protocol}` : ''}`;
-    const detailBits = [
-        `@${slug}`,
-        stream.vod_media_id ? 'VOD attached' : 'No VOD yet',
-        stream.has_clips ? `${formatNumber(stream.clip_count)} clip${stream.clip_count === 1 ? '' : 's'}` : 'No clips yet',
-    ];
+        : (isReplayMedia
+            ? `${stream.playback_ready ? 'Canonical playback ready' : `Status ${labelizeKey(stream.status || 'staged')}`} · ${timeAgo(stream.created_at || stream.updated_at)}`
+            : `${stream.ended_at ? `Ended ${timeAgo(stream.ended_at)}` : `Updated ${timeAgo(stream.started_at || stream.updated_at)}`}${stream.protocol ? ` · ${stream.protocol}` : ''}`));
+    const detailBits = Array.isArray(stream.detail_bits) && stream.detail_bits.length
+        ? stream.detail_bits.filter(Boolean)
+        : (isReplayMedia
+            ? [
+                slug ? `@${slug}` : null,
+                stream.duration_seconds ? formatDurationSeconds(stream.duration_seconds) : null,
+                stream.kind === 'vod' ? 'Replay library' : 'Highlight clip',
+            ].filter(Boolean)
+            : [
+                `@${slug}`,
+                stream.vod_media_id ? 'VOD attached' : 'No VOD yet',
+                stream.has_clips ? `${formatNumber(stream.clip_count)} clip${stream.clip_count === 1 ? '' : 's'}` : 'No clips yet',
+            ]);
     const filterText = `${stream.title || ''} ${slug} ${channelName} ${stream.category || ''} ${summary} ${detailBits.join(' ')}`.toLowerCase();
+    const kicker = isReplayMedia
+        ? `From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(summary)}`
+        : `By <a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a> · ${escapeHtml(summary)}`;
+    const footerMeta = stream.footer_meta || (isReplayMedia
+        ? formatDateTime(stream.created_at || stream.updated_at)
+        : (stream.started_at ? formatDateTime(stream.started_at) : 'Schedule TBD'));
+    const ctaLabel = stream.cta_label || (isReplayMedia ? `Open ${stream.kind} →` : 'Open stream →');
     return `
         <article class="glass-card is-inline" data-reveal data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
             ${renderMediaThumb({
@@ -1566,12 +1594,12 @@ function renderStreamCard(stream, channel, baseUrl, options) {
                 baseUrl,
             })}
             <div class="pill-row">${tags}</div>
-            <a class="card-link" href="${streamPath(slug, stream.id)}"><h3 class="card-title">${escapeHtml(stream.title || 'Untitled stream')}</h3></a>
-            <div class="card-kicker">By <a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a> · ${escapeHtml(summary)}</div>
+            <a class="card-link" href="${href}"><h3 class="card-title">${escapeHtml(stream.title || 'Untitled stream')}</h3></a>
+            <div class="card-kicker">${kicker}</div>
             <p class="card-body">${escapeHtml(detailBits.join(' · '))}</p>
             <div class="card-footer">
-                <span class="meta-item">${escapeHtml(stream.started_at ? formatDateTime(stream.started_at) : 'Schedule TBD')}</span>
-                <a class="link-inline" href="${streamPath(slug, stream.id)}">Open stream →</a>
+                <span class="meta-item">${escapeHtml(footerMeta)}</span>
+                <a class="link-inline" href="${href}">${escapeHtml(ctaLabel)}</a>
             </div>
         </article>`;
 }
@@ -1706,6 +1734,37 @@ function renderEmptyState(title, body, href, label) {
         </div>`;
 }
 
+function renderPasteCard(paste, baseUrl) {
+    const title = paste.title || paste.slug || 'Untitled paste';
+    const preview = truncateText(paste.preview_text || paste.body || 'Migrated community paste.', 160);
+    const sourceLabel = paste.source === 'hobostreamer' ? 'Migrated paste' : 'Community paste';
+    const kindLabel = paste.kind === 'screenshot' ? 'Screenshot' : 'Paste';
+    return `
+        <article class="glass-card is-inline" data-reveal>
+            ${renderMediaThumb({
+                url: paste.image_url || null,
+                title,
+                eyebrow: kindLabel,
+                subtitle: title,
+                initials: initialsFrom(title),
+                baseUrl,
+            })}
+            <div class="pill-row">
+                ${renderPill(kindLabel, 'primary')}
+                ${paste.language ? renderPill(labelizeKey(paste.language), 'soft') : ''}
+                ${renderPill(`${formatNumber(paste.view_count || 0)} views`, 'muted')}
+                ${renderPill(sourceLabel, paste.source === 'hobostreamer' ? 'warn' : 'success')}
+            </div>
+            <h3 class="card-title">${escapeHtml(title)}</h3>
+            <div class="card-kicker">${escapeHtml(timeAgo(paste.created_at))} · ${escapeHtml(paste.slug || 'community')}</div>
+            <p class="card-body">${escapeHtml(preview || 'Community paste imported into the OpenVibe network.')}</p>
+            <div class="card-footer">
+                <span class="meta-item">${escapeHtml(paste.image_url ? 'Preview available' : 'Text-first paste')}</span>
+                <a class="link-inline" href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}">Open community →</a>
+            </div>
+        </article>`;
+}
+
 function renderSection({ id, title, subtitle, actionHref, actionLabel, content, emptyTitle, emptyBody, emptyHref, emptyLabel }) {
     return `
         <section class="section-panel" ${id ? `id="${escapeHtml(id)}"` : ''}>
@@ -1726,8 +1785,8 @@ function renderStatsStrip(stats) {
         { label: 'Channels', value: stats.channels || 0, meta: 'creator routes', format: 'integer' },
         { label: 'Current viewers', value: stats.current_viewers || 0, meta: 'across live sessions', format: 'compact' },
         { label: 'Peak live viewers', value: stats.peak_live_viewers || 0, meta: 'sum of current live peaks', format: 'compact' },
-        { label: 'VOD-linked streams', value: stats.vods || 0, meta: 'replay-ready sessions', format: 'integer' },
-        { label: 'Tracked categories', value: stats.categories || 0, meta: 'active discovery buckets', format: 'integer' },
+        { label: 'Public VODs', value: stats.vods || 0, meta: 'canonical replay objects', format: 'integer' },
+        { label: 'Public clips', value: stats.clips || 0, meta: 'canonical highlight objects', format: 'integer' },
     ];
     return `<div class="stat-grid">${items.map((item) => `
         <article class="stat-card" data-reveal>
@@ -1885,12 +1944,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             : 'Cross-service discussion surface prepared for live, VOD, clip, and creator context.',
         meta: `Last activity ${timeAgo(thread.last_activity_at)} · ${labelizeKey(thread.status || 'open')}`,
     })).join('');
-    const recentPastesHtml = (communityData.recentPastes || []).slice(0, 4).map((paste) => renderSignalCard({
-        eyebrow: paste.language ? labelizeKey(paste.language) : 'Paste',
-        title: paste.title || paste.slug || 'Untitled paste',
-        body: truncateText(paste.body || 'Shared from OpenVibe Community.', 96),
-        meta: `${formatNumber(paste.view_count || 0)} views · ${timeAgo(paste.created_at)}`,
-    })).join('');
+    const recentPastesHtml = (communityData.recentPastes || []).slice(0, 10).map((paste) => renderPasteCard(paste, baseUrl)).join('');
     const relaySignalsHtml = (communityData.discordRelays || []).slice(0, 4).map((relay) => renderSignalCard({
         eyebrow: 'Discord relay',
         title: `#${relay.discord_channel_id}`,
@@ -2088,26 +2142,38 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${renderSection({
             title: 'Recent clips',
-            subtitle: 'Highlights stay explicit and ready once clip metadata is staged.',
+            subtitle: 'Highlights stay explicit and ready once canonical clip media is staged.',
             actionHref: '/clips',
             actionLabel: 'Open clips route',
             content: recentClipsHtml ? `<div class="card-grid">${recentClipsHtml}</div>` : null,
-            emptyTitle: 'Clip metadata is still pending',
-            emptyBody: 'The route is live and styled, but it will only populate when real clip metadata exists in the mirrored stream graph.',
+            emptyTitle: 'Clip media is still pending',
+            emptyBody: 'The route is live and styled, but it will only populate when canonical clip media exists in OpenVibe storage.',
             emptyHref: '/clips',
             emptyLabel: 'Open clips route',
         })}
 
         ${renderSection({
             title: 'Recent VODs',
-            subtitle: 'Replay-ready streams get their own library and card treatment.',
+            subtitle: 'Canonical replay media keeps the HoboStreamer-style home feed alive on the new network.',
             actionHref: '/vods',
             actionLabel: 'Open VOD library',
             content: recentVodsHtml ? `<div class="card-grid">${recentVodsHtml}</div>` : null,
-            emptyTitle: 'No VOD attachments yet',
-            emptyBody: 'When replay media is attached in the canonical model, VOD cards appear here and in the dedicated VOD route.',
+            emptyTitle: 'No public VOD objects yet',
+            emptyBody: 'When replay media is staged in canonical storage, VOD cards appear here and in the dedicated VOD route.',
             emptyHref: '/vods',
             emptyLabel: 'Open the VOD route',
+        })}
+
+        ${renderSection({
+            title: 'Recent pastes',
+            subtitle: 'Screenshots, snippets, notes, and logs from the canonical OpenVibe community surface.',
+            actionHref: LIVE_NETWORK_URLS.community,
+            actionLabel: 'Open community',
+            content: recentPastesHtml ? `<div class="card-grid">${recentPastesHtml}</div>` : null,
+            emptyTitle: 'No public pastes yet',
+            emptyBody: 'Once public pastes are staged in openvibe.community, they appear here right alongside live, clips, and VODs.',
+            emptyHref: LIVE_NETWORK_URLS.community,
+            emptyLabel: 'Open community',
         })}
 
         ${renderSection({
@@ -2126,7 +2192,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Community pulse</h2>
-                    <p class="section-subtitle">Recent threads, fresh pastes, Discord relay readiness, and chat/call activity from the canonical OpenVibe community and chat services.</p>
+                    <p class="section-subtitle">Recent threads, Discord relay readiness, and chat/call activity from the canonical OpenVibe community and chat services.</p>
                 </div>
                 <div class="inline-actions">
                     <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
@@ -2135,18 +2201,12 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             </div>
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Threads and pastes</div>
+                    <div class="eyebrow">Threads</div>
                     <div class="list-stack">
                         <div>
                             <h3 class="card-title">Recent discussions</h3>
                             <div class="data-points" style="margin-top:0.85rem;">
                                 ${recentThreadsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Threads will show up here', body: 'Once openvibe.community threads begin filling with creator and stream-linked discussion, this panel will surface them automatically.', meta: 'No public threads yet' })}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 class="card-title">Fresh pastes</h3>
-                            <div class="data-points" style="margin-top:0.85rem;">
-                                ${recentPastesHtml || renderSignalCard({ eyebrow: 'Pastes', title: 'Recent pastes will show up here', body: 'The home page is ready to surface Hobo-style paste activity once public entries are present in openvibe.community.', meta: 'No public pastes yet' })}
                             </div>
                         </div>
                     </div>
@@ -2512,6 +2572,89 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
     });
 }
 
+function renderMediaDetailPage({ item, channel, baseUrl }) {
+    const kind = item && item.kind === 'clip' ? 'clip' : 'vod';
+    const kindLabel = kind === 'clip' ? 'Clip' : 'VOD';
+    const slug = item.channel_slug || (channel && channel.slug) || 'unknown';
+    const channelName = item.channel_name || (channel && (channel.display_name || channel.slug)) || slug;
+    const title = `${item.title || `Untitled ${kindLabel}` } — ${channelName} — openvibe.live`;
+    const description = item.description
+        || `${kindLabel} from ${channelName} on openvibe.live, backed by canonical OpenVibe media storage.`;
+    const canonicalId = encodeURIComponent(item.legacy_id || item.id);
+    const canonical = `${baseUrl}/${kind}/${canonicalId}`;
+    const ogImage = absoluteUrl(item.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
+    const playbackStage = item.playback_ready && item.playback_url
+        ? `<video controls preload="metadata" playsinline poster="${escapeHtml(ogImage || '')}" style="width:100%;aspect-ratio:16/9;border-radius:20px;background:rgba(5,9,22,0.88);" src="${escapeHtml(item.playback_url)}"></video>`
+        : renderMediaThumb({
+            url: item.thumbnail_url || (channel && channel.avatar_url) || null,
+            title: item.title || `Untitled ${kindLabel}`,
+            eyebrow: kindLabel,
+            subtitle: channelName,
+            initials: initialsFrom(channelName),
+            baseUrl,
+        });
+    const pageContent = `
+        <section class="hero-panel compact">
+            <div class="hero-copy" data-reveal>
+                <div class="eyebrow">Canonical ${escapeHtml(kindLabel)}</div>
+                <h1 class="hero-heading" style="max-width:12ch"><span class="hero-gradient">${escapeHtml(item.title || `Untitled ${kindLabel}`)}</span></h1>
+                <p>From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(item.playback_ready ? 'Playback is ready through openvibe.media.' : `Playback status is currently ${labelizeKey(item.status || 'staged')}.`)}</p>
+                <div class="hero-actions">
+                    ${slug && slug !== 'unknown' ? `<a class="button" href="${channelPath(slug)}">Open creator channel</a>` : `<a class="button" href="/channels">Browse creators</a>`}
+                    <a class="button-secondary" href="/${kind === 'clip' ? 'clips' : 'vods'}${slug && slug !== 'unknown' ? `?channel=${encodeURIComponent(slug)}` : ''}">Browse more ${escapeHtml(kind === 'clip' ? 'clips' : 'VODs')}</a>
+                    <a class="button-ghost" href="/">Back to live home</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="section-panel">
+            <div class="split-grid">
+                <article class="glass-card media-stage" data-reveal>
+                    ${playbackStage}
+                    <div class="pill-row">
+                        ${renderPill(kindLabel, kind === 'clip' ? 'primary' : 'success')}
+                        ${renderPill(item.playback_ready ? 'Playback ready' : labelizeKey(item.status || 'staged'), item.playback_ready ? 'success' : 'warn')}
+                        ${item.category ? renderPill(item.category, 'muted') : ''}
+                        ${item.source === 'hobostreamer' ? renderPill('Migrated from HoboStreamer', 'warn') : renderPill('Native OpenVibe media', 'soft')}
+                    </div>
+                    <p class="card-body">${escapeHtml(item.playback_ready
+                        ? 'This media object is already staged and can be played directly through the canonical OpenVibe media service.'
+                        : 'The metadata is present, but the backing bytes or playback state are still being finalized. The page stays honest instead of pretending the file is ready.')}</p>
+                </article>
+                <aside class="list-stack">
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Media details</div>
+                        <div class="data-points">
+                            <div class="data-point"><div class="data-point-label">Views</div><div class="data-point-value">${escapeHtml(formatNumber(item.view_count || 0))}</div></div>
+                            <div class="data-point"><div class="data-point-label">Duration</div><div class="data-point-value">${escapeHtml(item.duration_seconds ? formatDurationSeconds(item.duration_seconds) : 'Unknown')}</div></div>
+                            <div class="data-point"><div class="data-point-label">Status</div><div class="data-point-value">${escapeHtml(labelizeKey(item.status || 'staged'))}</div></div>
+                            <div class="data-point"><div class="data-point-label">Created</div><div class="data-point-value">${escapeHtml(formatDateTime(item.created_at || item.updated_at))}</div></div>
+                        </div>
+                    </article>
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Canonical links</div>
+                        <ul class="flow-list">
+                            <li>Media ID: <code>${escapeHtml(item.id)}</code></li>
+                            <li>Route ID: <code>${escapeHtml(item.legacy_id || item.id)}</code></li>
+                            <li>Creator route: ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">@${escapeHtml(slug)}</a>` : 'unbound'}</li>
+                            <li>Playback: ${item.playback_ready && item.playback_url ? `<a class="link-inline" href="${escapeHtml(item.playback_url)}">openvibe.media playback</a>` : 'not ready yet'}</li>
+                        </ul>
+                    </article>
+                </aside>
+            </div>
+        </section>`;
+    return renderPage({
+        title,
+        description,
+        canonical,
+        ogType: 'video.other',
+        ogImage,
+        activeNav: kind === 'clip' ? 'clips' : 'vods',
+        bodyHtml: pageContent,
+        baseUrl,
+    });
+}
+
 function renderGoLivePage({ baseUrl }) {
     const tracksHtml = GO_LIVE_TRACKS.map((track) => `
         <article class="glass-card" data-reveal>
@@ -2636,6 +2779,32 @@ function renderUpdatesPage({ baseUrl }) {
     });
 }
 
+function renderMissingMediaPage({ kind, mediaId, baseUrl }) {
+    const label = kind === 'clip' ? 'clip' : 'VOD';
+    const route = `/${kind}/${encodeURIComponent(String(mediaId || 'missing'))}`;
+    const pageContent = `
+        <section class="hero-panel compact">
+            <div class="hero-copy" data-reveal>
+                <div class="eyebrow">${escapeHtml(label)} not found</div>
+                <h1 class="hero-heading">This ${escapeHtml(label)} is <span class="hero-gradient">missing or not yet staged</span></h1>
+                <p>The route exists, but the canonical media object could not be resolved from the current OpenVibe media service.</p>
+                <div class="hero-actions">
+                    <a class="button" href="/${kind === 'clip' ? 'clips' : 'vods'}">Browse ${escapeHtml(kind === 'clip' ? 'clips' : 'VODs')}</a>
+                    <a class="button-secondary" href="/channels">Browse creators</a>
+                    <a class="button-ghost" href="/">Return home</a>
+                </div>
+            </div>
+        </section>`;
+    return renderPage({
+        title: `${label} missing — openvibe.live`,
+        description: `The requested ${label} could not be found in the current canonical media surface.`,
+        canonical: `${baseUrl}${route}`,
+        activeNav: kind === 'clip' ? 'clips' : 'vods',
+        bodyHtml: pageContent,
+        baseUrl,
+    });
+}
+
 function renderOfflinePage({ slug, baseUrl }) {
     const pageContent = `
         <section class="hero-panel compact">
@@ -2663,11 +2832,13 @@ function renderOfflinePage({ slug, baseUrl }) {
 module.exports = {
     renderChannelPage,
     renderStreamPage,
+    renderMediaDetailPage,
     renderHomePage,
     renderCollectionPage,
     renderChannelsPage,
     renderGoLivePage,
     renderUpdatesPage,
+    renderMissingMediaPage,
     renderOfflinePage,
     escapeHtml,
 };

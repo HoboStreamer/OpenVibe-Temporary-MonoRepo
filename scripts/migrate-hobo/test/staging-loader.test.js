@@ -63,10 +63,16 @@ const { loadStagingBundle, __test } = require('../lib/staging-loader');
 (function battleStatsSchemaSupportsFractionalTotals() {
     const sqliteSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-games', 'server', 'db.js'), 'utf8');
     const postgresSchema = fs.readFileSync(path.join(repoRoot, 'services', 'openvibe-games', 'server', 'migrations', 'postgres', '001_init.sql'), 'utf8');
+    const canonicalPostgresSchema = fs.readFileSync(path.join(repoRoot, 'scripts', 'migrate-hobo', 'postgres', 'schema', '050_games.sql'), 'utf8');
+    const canonicalPostgresEvolution = fs.readFileSync(path.join(repoRoot, 'scripts', 'migrate-hobo', 'postgres', 'schema', '051_games_fractional_totals.sql'), 'utf8');
     assert.match(sqliteSchema, /total_stolen REAL NOT NULL DEFAULT 0/);
     assert.match(sqliteSchema, /total_lost REAL NOT NULL DEFAULT 0/);
     assert.match(postgresSchema, /total_stolen REAL NOT NULL DEFAULT 0/);
     assert.match(postgresSchema, /total_lost REAL NOT NULL DEFAULT 0/);
+    assert.match(canonicalPostgresSchema, /total_stolen\s+REAL NOT NULL DEFAULT 0/);
+    assert.match(canonicalPostgresSchema, /total_lost\s+REAL NOT NULL DEFAULT 0/);
+    assert.match(canonicalPostgresEvolution, /ALTER TABLE game_battle_stats[\s\S]*ALTER COLUMN total_stolen TYPE REAL/);
+    assert.match(canonicalPostgresEvolution, /ALTER TABLE game_battle_stats[\s\S]*ALTER COLUMN total_lost TYPE REAL/);
 })();
 
 (function mediaSchemaSupportsLargeByteValues() {
@@ -494,6 +500,65 @@ async function main() {
             runId: 'staging-loader-test',
             logger: { info() {}, warn() {}, error() {} },
         });
+
+        {
+            const preserveDb = new Database(dbPaths.media);
+            try {
+                preserveDb.prepare(`
+                    UPDATE media_objects
+                    SET status = 'ready', storage_provider = 'b2', storage_tier = 'warm'
+                    WHERE id = 'media:hobostreamer-vod:51'
+                `).run();
+                preserveDb.prepare(`
+                    INSERT INTO media_object_locations (
+                        media_id, provider_name, role, storage_key, public_url, size_bytes, status, metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    'media:hobostreamer-vod:51',
+                    'b2',
+                    'canonical',
+                    'live/vods/vod1.mp4',
+                    'https://openvibe.media/files/vod1.mp4',
+                    3063137389,
+                    'active',
+                    '{}'
+                );
+                preserveDb.prepare(`
+                    INSERT INTO media_objects (
+                        id, owner_type, owner_id, namespace, type, status, visibility,
+                        storage_tier, storage_provider, storage_key, public_url, cdn_url,
+                        size_bytes, mime_type, sha256, metadata_json,
+                        created_by_actor_type, created_by_actor_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    'media:hobostreamer-vod:999',
+                    'user',
+                    'user:hobotools:1',
+                    'live.vods',
+                    'vod',
+                    'initialized',
+                    'public',
+                    'hot',
+                    'local',
+                    null,
+                    null,
+                    null,
+                    123,
+                    null,
+                    null,
+                    JSON.stringify({ source: 'hobostreamer', file_path: './data/vods/ghost.webm' }),
+                    'service',
+                    'migration-loader'
+                );
+                preserveDb.prepare(`
+                    INSERT INTO media_legacy_map (source, kind, legacy_id, media_id)
+                    VALUES (?, ?, ?, ?)
+                `).run('hobostreamer', 'vod', '999', 'media:hobostreamer-vod:999');
+            } finally {
+                preserveDb.close();
+            }
+        }
+
         await loadStagingBundle({
             bundleDir,
             dbPaths,
@@ -641,8 +706,10 @@ async function main() {
         assert.strictEqual(mediaDb.prepare('SELECT COUNT(*) AS count FROM media_objects').get().count, 1);
         assert.deepStrictEqual(
             mediaDb.prepare("SELECT size_bytes, storage_provider, status FROM media_objects WHERE id = 'media:hobostreamer-vod:51'").get(),
-            { size_bytes: 3063137389, storage_provider: 'local', status: 'initialized' }
+            { size_bytes: 3063137389, storage_provider: 'b2', status: 'ready' }
         );
+        assert.strictEqual(mediaDb.prepare("SELECT COUNT(*) AS count FROM media_objects WHERE id = 'media:hobostreamer-vod:999'").get().count, 0);
+        assert.strictEqual(mediaDb.prepare("SELECT COUNT(*) AS count FROM media_legacy_map WHERE media_id = 'media:hobostreamer-vod:999'").get().count, 0);
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'billing/subscriptions'").get().count, 1);
         assert.strictEqual(billingDb.prepare("SELECT COUNT(*) AS count FROM staging_import_records WHERE dataset = 'loyalty/coin-transactions'").get().count, 1);
         assert.strictEqual(gamesDb.prepare('SELECT COUNT(*) AS count FROM game_players').get().count, 1);

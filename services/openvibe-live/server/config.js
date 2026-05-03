@@ -17,10 +17,14 @@ module.exports = {
 
     db: { path: process.env.DB_PATH || path.resolve(process.cwd(), 'data/openvibe-live.db') },
 
-    events:  { url: process.env.OPENVIBE_EVENTS_URL  || 'http://127.0.0.1:4400' },
-    network: { url: resolvePublicOrigin({ surface: 'network' }) },
-    stream:  { url: resolvePublicOrigin({ surface: 'restream' }) },
-    media:   { url: resolvePublicOrigin({ surface: 'media' }) },
+    events:    { url: process.env.OPENVIBE_EVENTS_URL || 'http://127.0.0.1:4400' },
+    network:   { url: resolvePublicOrigin({ surface: 'network' }) },
+    stream:    { url: resolvePublicOrigin({ surface: 'restream' }) },
+    media:     { url: process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
+    community: { url: process.env.OPENVIBE_COMMUNITY_URL || resolvePublicOrigin({ surface: 'community' }) },
+    legacy: {
+        hobostreamerRoot: process.env.OPENVIBE_HOBOSTREAMER_ROOT || '/opt/hobostreamer',
+    },
     auth: {
         issuer: resolveAuthIssuer(),
         url: resolvePublicOrigin({ surface: 'auth' }),
