@@ -604,18 +604,22 @@
             }
 
             function signInUrl(returnTo) {
-                return `${resolveSurfaceUrl('network')}/api/v1/session/bridge?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo || window.location.href))}`;
+                const url = new URL('/auth/login', window.location.origin);
+                url.searchParams.set('return_to', bridgeReturnUrl(returnTo || window.location.href));
+                return url.toString();
             }
 
             function switchAccountUrl(returnTo) {
-                const authorizeUrl = new URL('/oauth/authorize', resolveSurfaceUrl('auth'));
-                authorizeUrl.searchParams.set('prompt', 'login');
-                authorizeUrl.searchParams.set('return_to', signInUrl(returnTo || window.location.href));
-                return authorizeUrl.toString();
+                const url = new URL('/auth/login', window.location.origin);
+                url.searchParams.set('prompt', 'login');
+                url.searchParams.set('return_to', bridgeReturnUrl(returnTo || window.location.href));
+                return url.toString();
             }
 
             function signOutUrl(returnTo) {
-                return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo || window.location.href))}`;
+                const url = new URL('/auth/logout', window.location.origin);
+                url.searchParams.set('return_to', bridgeReturnUrl(returnTo || window.location.href));
+                return url.toString();
             }
 
             function loadBridgeToken() {
@@ -694,53 +698,19 @@
                     authenticated: !!user && !anonymous,
                     anonymous,
                     user,
-                    access_token: exchange && exchange.access_token ? exchange.access_token : loadBridgeToken(),
+                    access_token: '',
                 };
             }
 
             async function loadSession(force) {
-                consumeBridgeToken();
                 if (!force && sessionPromise) return sessionPromise;
-                sessionPromise = (async () => {
-                    try {
-                        const exchange = await networkRequestJson('/api/v1/session/exchange', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: '{}',
-                        });
-                        if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
-                        return normalizeSession(exchange || {});
-                    } catch (error) {
-                        if (error.status === 401 && loadBridgeToken()) {
-                            clearBridgeToken();
-                            try {
-                                const exchange = await networkRequestJson('/api/v1/session/exchange', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: '{}',
-                                    omitStoredToken: true,
-                                });
-                                if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
-                                return normalizeSession(exchange || {});
-                            } catch {
-                                // fall through to guest response
-                            }
-                        }
-                        return { authenticated: false, anonymous: false, user: null, access_token: '' };
-                    }
-                })();
+                sessionPromise = fetchJson('/api/v1/session').then((session) => normalizeSession(session || {})).catch(() => ({ authenticated: false, anonymous: false, user: null, access_token: '' }));
                 return sessionPromise;
             }
 
             async function fetchJson(url, options) {
                 const request = Object.assign({}, options || {});
                 const headers = Object.assign({ Accept: 'application/json' }, request.headers || {});
-                if (!headers.Authorization && !headers.authorization) {
-                    const session = await loadSession(false);
-                    if (session && session.access_token) {
-                        headers.Authorization = `Bearer ${session.access_token}`;
-                    }
-                }
                 request.headers = headers;
                 if (!Object.prototype.hasOwnProperty.call(request, 'credentials')) {
                     request.credentials = /^[a-z]+:/i.test(String(url || '')) ? 'include' : 'same-origin';

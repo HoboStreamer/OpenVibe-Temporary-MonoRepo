@@ -103,9 +103,22 @@ assert.ok(/<title>speedrun — Alice — openvibe\.live<\/title>/.test(streamHtm
 assert.ok(/<link rel="canonical" href="[^"]+\/@alice\/s\/strm_1"/.test(streamHtml));
 
 const goLiveHtml = ssr.renderGoLivePage({ baseUrl: config.publicBaseUrl });
-assert.ok(/Your stream manager/.test(goLiveHtml), 'go-live page renders the creator dashboard section');
+assert.ok(/Sign in to unlock your stream manager/.test(goLiveHtml), 'go-live page gates creator controls for guests');
 assert.ok(/data-go-live-session/.test(goLiveHtml), 'go-live page includes the session-aware dashboard mount');
-assert.ok(/Open openre\.stream/.test(goLiveHtml), 'go-live page links into openre.stream');
+assert.ok(/Sign in with OpenVibe/.test(goLiveHtml), 'go-live page exposes a working local sign-in CTA');
+assert.ok(!/id="go-live-channel-form"/.test(goLiveHtml), 'go-live page should not show channel creation controls to guests');
+
+const signedInGoLiveHtml = ssr.renderGoLivePage({
+    baseUrl: config.publicBaseUrl,
+    session: {
+        authenticated: true,
+        anonymous: false,
+        user: { id: '42', username: 'alice', display_name: 'Alice' },
+    },
+});
+assert.ok(/Your stream manager/.test(signedInGoLiveHtml), 'go-live page renders the creator dashboard section for signed-in users');
+assert.ok(/id="go-live-channel-form"/.test(signedInGoLiveHtml), 'go-live page renders channel creation controls for signed-in users');
+assert.ok(/Open openre\.stream/.test(signedInGoLiveHtml), 'go-live page links into openre.stream');
 
 const vodHtml = ssr.renderMediaDetailPage({ item: vodCard, channel: ch, baseUrl: config.publicBaseUrl });
 assert.ok(/archive run/.test(vodHtml), 'media detail page renders canonical vod title');

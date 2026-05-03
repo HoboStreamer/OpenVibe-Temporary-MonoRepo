@@ -62,5 +62,7 @@ assert.ok(model.listClipProjects({ stream_id: s.id }).length >= 1);
 const shellHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert.ok(shellHtml.includes('Creator dashboard'), 'openre shell should expose the creator dashboard');
 assert.ok(shellHtml.includes('Own your ingest, routes, and'), 'openre shell should expose the new hero copy');
+assert.ok(shellHtml.includes('/auth/login'), 'openre shell should use a local sign-in route');
+assert.ok(shellHtml.includes('/api/v1/session'), 'openre shell should query a local session endpoint');
 
 console.log('openre-stream lifecycle tests OK');
