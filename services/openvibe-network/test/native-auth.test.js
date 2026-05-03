@@ -18,6 +18,9 @@ process.env.OPENVIBE_API_URL = 'http://api.openvibe.network';
 process.env.OPENVIBE_MY_URL = 'http://my.openvibe.network';
 process.env.OPENVIBE_THEMES_URL = 'http://themes.openvibe.network';
 process.env.OPENVIBE_ADMIN_URL = 'http://admin.openvibe.network';
+process.env.OPENVIBE_LIVE_URL = 'http://openvibe.live';
+process.env.OPENVIBE_MEDIA_URL = 'http://openvibe.media';
+process.env.OPENVIBE_CHAT_URL = 'http://openvibe.chat';
 process.env.HOBO_TOOLS_URL = '';
 process.env.HOBO_TOOLS_PUBLIC_KEY = '';
 process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
@@ -366,6 +369,24 @@ function request({ port, hostHeader, method = 'GET', requestPath = '/', headers,
         assert.strictEqual(bridgedUrl.origin, 'http://openvibe.chat.localhost:4800');
         const bridgedHash = new URLSearchParams(bridgedUrl.hash.slice(1));
         assert.ok(bridgedHash.get('openvibe_token'), 'session bridge should return a bearer token in the URL fragment');
+
+        const liveBridgeRes = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            requestPath: '/api/v1/session/bridge?return_to=' + encodeURIComponent('http://openvibe.live/go-live'),
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(liveBridgeRes.status, 302);
+        assert.strictEqual(new URL(liveBridgeRes.headers.location).origin, 'http://openvibe.live');
+
+        const mediaBridgeRes = await request({
+            port,
+            hostHeader: 'openvibe.network',
+            requestPath: '/api/v1/session/bridge?return_to=' + encodeURIComponent('http://openvibe.media/upload'),
+            headers: { cookie: authCookie },
+        });
+        assert.strictEqual(mediaBridgeRes.status, 302);
+        assert.strictEqual(new URL(mediaBridgeRes.headers.location).origin, 'http://openvibe.media');
 
         const exchangeRes = await request({
             port,
