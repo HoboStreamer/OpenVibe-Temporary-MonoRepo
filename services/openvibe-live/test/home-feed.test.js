@@ -46,14 +46,19 @@ function request(server, requestPath, host) {
     fs.mkdirSync(path.join(legacyRoot, 'data', 'pastes', 'screenshots'), { recursive: true });
     fs.writeFileSync(path.join(legacyRoot, 'data', 'thumbnails', 'archive-run.webp'), 'thumb-bytes');
     fs.writeFileSync(path.join(legacyRoot, 'data', 'pastes', 'screenshots', 'home-proof.webp'), 'paste-bytes');
+    const mediaCounts = { list: 0, get: 0 };
+    const communityCounts = { pastes: 0, threads: 0, relays: 0 };
 
     const mediaItems = {
         'media:hobostreamer-vod:7': {
             id: 'media:hobostreamer-vod:7',
             namespace: 'live.vods',
             type: 'vod',
-            status: 'ready',
+            status: 'initialized',
             visibility: 'public',
+            storage_key: 'legacy/vods/archive-run.webm',
+            public_url: 'http://media.test/files/media%3Ahobostreamer-vod%3A7',
+            size_bytes: 1024,
             created_at: '2026-01-02T03:00:00Z',
             updated_at: '2026-01-02T03:00:00Z',
             metadata: {
@@ -71,6 +76,9 @@ function request(server, requestPath, host) {
             type: 'clip',
             status: 'ready',
             visibility: 'public',
+            storage_key: 'legacy/clips/top-deck-glitch.webm',
+            public_url: 'http://media.test/files/media%3Ahobostreamer-clip%3A3',
+            size_bytes: 512,
             created_at: '2026-01-02T03:30:00Z',
             updated_at: '2026-01-02T03:30:00Z',
             metadata: {
@@ -87,6 +95,7 @@ function request(server, requestPath, host) {
     const mediaServer = await listen(http.createServer((req, res) => {
         const url = new URL(req.url, 'http://127.0.0.1');
         if (url.pathname === '/api/v1/media') {
+            mediaCounts.list += 1;
             const namespace = url.searchParams.get('namespace');
             const items = Object.values(mediaItems).filter((item) => !namespace || item.namespace === namespace);
             res.writeHead(200, { 'content-type': 'application/json' });
@@ -94,6 +103,7 @@ function request(server, requestPath, host) {
             return;
         }
         if (url.pathname.startsWith('/api/v1/media/')) {
+            mediaCounts.get += 1;
             const id = decodeURIComponent(url.pathname.replace('/api/v1/media/', ''));
             const media = mediaItems[id];
             if (!media) {
@@ -112,6 +122,7 @@ function request(server, requestPath, host) {
     const communityServer = await listen(http.createServer((req, res) => {
         const url = new URL(req.url, 'http://127.0.0.1');
         if (url.pathname === '/api/community/pastes') {
+            communityCounts.pastes += 1;
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({
                 items: [{
@@ -130,11 +141,13 @@ function request(server, requestPath, host) {
             return;
         }
         if (url.pathname === '/api/community/threads') {
+            communityCounts.threads += 1;
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ items: [] }));
             return;
         }
         if (url.pathname === '/api/community/discord/relays') {
+            communityCounts.relays += 1;
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ items: [] }));
             return;
@@ -190,10 +203,21 @@ function request(server, requestPath, host) {
         assert.ok(homePage.body.includes('Recent pastes'), 'home page renders paste section');
         assert.ok(homePage.body.includes('Migration screenshot'), 'home page renders paste card');
 
+        const secondHomePage = await request(server, '/');
+        assert.strictEqual(secondHomePage.status, 200, 'second home page request returns 200');
+        assert.strictEqual(mediaCounts.list, 2, 'home feed caches media namespace fanout across requests');
+        assert.strictEqual(communityCounts.threads, 1, 'home feed caches community thread fanout across requests');
+        assert.strictEqual(communityCounts.pastes, 1, 'home feed caches community paste fanout across requests');
+        assert.strictEqual(communityCounts.relays, 1, 'home feed caches discord relay fanout across requests');
+
         const vodPage = await request(server, '/vod/7');
         assert.strictEqual(vodPage.status, 200, 'vod detail route returns 200');
         assert.ok(vodPage.body.includes('archive run'), 'vod detail renders canonical media title');
         assert.ok(vodPage.body.includes('openvibe.media playback'), 'vod detail links to canonical playback');
+        assert.ok(vodPage.body.includes('Playback ready'), 'vod detail treats storage-backed media as playable even when status lags');
+        assert.ok(vodPage.body.includes('data-ov-player'), 'vod detail renders custom player shell');
+        assert.ok(vodPage.body.includes('/files/media%3Ahobostreamer-vod%3A7'), 'vod detail uses direct file playback source');
+        assert.strictEqual(mediaCounts.get, 1, 'detail route fetches the canonical media object once');
 
         const thumb = await request(server, '/api/thumbnails/archive-run.webp');
         assert.strictEqual(thumb.status, 200, 'legacy thumbnail proxy returns 200');

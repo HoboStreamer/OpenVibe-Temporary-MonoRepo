@@ -1,23 +1,23 @@
 {
-  "name": "@openvibe/sdk",
-  "version": "0.1.0",
-  "description": "OpenVibe SDK: auth client, Express middleware, registry + events HTTP clients.",
-  "main": "index.js",
-  "exports": {
-    ".": "./index.js",
-    "./auth-client": "./auth-client.js",
-    "./middleware": "./middleware.js",
-    "./http": "./http.js",
-    "./url-defaults": "./url-defaults.js",
-    "./registry-client": "./registry-client.js",
-    "./events-client": "./events-client.js",
-    "./media-client": "./media-client.js",
-    "./stream-client": "./stream-client.js",
-    "./chat-client": "./chat-client.js",
-    "./community-client": "./community-client.js"
-  },
-  "license": "MIT",
-  "dependencies": {
-    "jsonwebtoken": "^9.0.0"
-  }
+	"name": "@openvibe/sdk",
+	"version": "0.1.0",
+	"description": "OpenVibe SDK: auth client, Express middleware, registry + events HTTP clients.",
+	"main": "index.js",
+	"exports": {
+		".": "./index.js",
+		"./auth-client": "./auth-client.js",
+		"./middleware": "./middleware.js",
+		"./http": "./http.js",
+		"./url-defaults": "./url-defaults.js",
+		"./registry-client": "./registry-client.js",
+		"./events-client": "./events-client.js",
+		"./media-client": "./media-client.js",
+		"./stream-client": "./stream-client.js",
+		"./chat-client": "./chat-client.js",
+		"./community-client": "./community-client.js"
+	},
+	"license": "MIT",
+	"dependencies": {
+		"jsonwebtoken": "^9.0.0"
+	}
 }

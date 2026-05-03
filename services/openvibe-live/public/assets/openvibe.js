@@ -392,6 +392,22 @@
 
     async function exchangeNetworkSession() {
         consumeBridgeToken();
+        if (!loadBridgeToken()) {
+            try {
+                const currentSession = await networkRequestJson('/api/v1/session', {
+                    method: 'GET',
+                    omitStoredToken: true,
+                });
+                const normalizedCurrent = normalizeSession(currentSession || {});
+                if (!normalizedCurrent.user) {
+                    const guestSession = { authenticated: false, anonymous: false, user: null, access_token: '' };
+                    dispatchAuthChanged(guestSession);
+                    return guestSession;
+                }
+            } catch {
+                // fall through to exchange if the session probe fails unexpectedly
+            }
+        }
         try {
             const exchange = await networkRequestJson('/api/v1/session/exchange', {
                 method: 'POST',

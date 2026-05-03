@@ -37,7 +37,6 @@ const { validatePublicPlaybackSize } = require('../server/size-validator');
         status: 'uploading',
         visibility: 'public',
         storage_provider: 'local',
-        mime_type: 'video/mp4',
         size_bytes: 1024,
     });
 
@@ -58,7 +57,7 @@ const { validatePublicPlaybackSize } = require('../server/size-validator');
         namespace: media.namespace,
         mediaId: media.id,
         type: media.type,
-        extension: 'mp4',
+        extension: 'webm',
     });
     await storage.writeMultipartPart({ providerName: 'local', uploadId: upload.uploadId, partNumber: 1, buffer: Buffer.from('open') });
     await storage.writeMultipartPart({ providerName: 'local', uploadId: upload.uploadId, partNumber: 2, buffer: Buffer.from('vibe') });
@@ -93,6 +92,8 @@ const { validatePublicPlaybackSize } = require('../server/size-validator');
     const playback = await resolvePlayback(updated, storageModel.listLocations(updated.id), storage, {});
     assert.strictEqual(playback.ok, true);
     assert.strictEqual(playback.url, `http://media.test/files/${encodeURIComponent(updated.id)}`);
+    assert.strictEqual(playback.content_type, 'video/webm');
+    assert.strictEqual(playback.headers['Content-Type'], 'video/webm');
 })();
 
 (function publicPlaybackSizeGuardFlagsOversizedObjects() {

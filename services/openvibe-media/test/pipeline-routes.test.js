@@ -82,12 +82,14 @@ function request(server, method, requestPath, body, extraHeaders) {
             status: 'ready',
             visibility: 'public',
             storage_provider: 'local',
-            storage_key: 'live/vods/stream_1.mp4',
-            public_url: 'http://media.test/files/stream_1.mp4',
-            mime_type: 'video/mp4',
-            size_bytes: 4096,
+            storage_key: 'live/vods/stream_1.webm',
+            public_url: 'http://media.test/files/stream_1.webm',
+            size_bytes: 8,
             metadata: { duration_seconds: 120 },
         });
+        const mediaFilePath = path.join(process.env.OPENVIBE_MEDIA_HOT_ROOT, media.storage_key);
+        fs.mkdirSync(path.dirname(mediaFilePath), { recursive: true });
+        fs.writeFileSync(mediaFilePath, Buffer.from('OPENVIBE'));
         storageModel.recordLocation({
             mediaId: media.id,
             providerName: 'local',
@@ -133,6 +135,15 @@ function request(server, method, requestPath, body, extraHeaders) {
         const playback = JSON.parse(playbackResponse.body);
         assert.strictEqual(playback.stream_id, 'stream_1');
         assert.strictEqual(playback.playback.url, `http://media.test/files/${encodeURIComponent(media.id)}`);
+
+        const rangedFileResponse = await request(server, 'GET', `/files/${encodeURIComponent(media.id)}`, null, {
+            Range: 'bytes=0-1',
+        });
+        assert.strictEqual(rangedFileResponse.status, 206);
+        assert.strictEqual(rangedFileResponse.headers['content-type'], 'video/webm');
+        assert.strictEqual(rangedFileResponse.headers['accept-ranges'], 'bytes');
+        assert.strictEqual(rangedFileResponse.headers['content-range'], 'bytes 0-1/8');
+        assert.strictEqual(rangedFileResponse.body, 'OP');
 
         const locationsResponse = await request(server, 'GET', `/api/v1/media/${encodeURIComponent(media.id)}/locations`);
         assert.strictEqual(locationsResponse.status, 200);

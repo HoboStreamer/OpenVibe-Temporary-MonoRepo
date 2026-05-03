@@ -5,6 +5,9 @@ const path = require('path');
 const { resolveAuthIssuer, resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
 
 const port = parseInt(process.env.PORT, 10) || 4600;
+const LIVE_HOME_FEED_CACHE_TTL_MS = parseInt(process.env.OPENVIBE_LIVE_HOME_FEED_CACHE_TTL_MS, 10) || 15000;
+const LIVE_REMOTE_TIMEOUT_MS = parseInt(process.env.OPENVIBE_LIVE_REMOTE_TIMEOUT_MS, 10) || 4000;
+const MEDIA_PUBLIC_PLAYBACK_MAX_BYTES = parseInt(process.env.OPENVIBE_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES, 10) || (500 * 1024 * 1024);
 
 module.exports = {
     port,
@@ -12,6 +15,9 @@ module.exports = {
     nodeEnv: process.env.NODE_ENV || 'development',
     serviceId: 'openvibe-live',
     publicBaseUrl: resolvePublicOrigin({ surface: 'live', envKeys: ['PUBLIC_BASE_URL', 'OPENVIBE_LIVE_URL'] }),
+    homeFeedCacheTtlMs: LIVE_HOME_FEED_CACHE_TTL_MS,
+    remoteTimeoutMs: LIVE_REMOTE_TIMEOUT_MS,
+    mediaPublicPlaybackMaxBytes: MEDIA_PUBLIC_PLAYBACK_MAX_BYTES,
 
     internalKey: process.env.INTERNAL_API_KEY || 'change-me-in-production',
 

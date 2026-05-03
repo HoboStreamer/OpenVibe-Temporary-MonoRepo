@@ -55,7 +55,11 @@ const vodCard = {
     duration_seconds: 7200,
     view_count: 42,
     playback_ready: true,
-    playback_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-vod%3A7/playback?redirect=true',
+    playback_url: 'https://openvibe.media/files/media%3Ahobostreamer-vod%3A7',
+    playback_api_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-vod%3A7/playback?redirect=true',
+    playback_api_ready: true,
+    playback_mode: 'file-direct',
+    playback_mime_type: 'video/webm',
     status: 'ready',
     source: 'hobostreamer',
 };
@@ -75,7 +79,11 @@ const clipCard = {
     duration_seconds: 37,
     view_count: 19,
     playback_ready: true,
-    playback_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-clip%3A3/playback?redirect=true',
+    playback_url: 'https://openvibe.media/files/media%3Ahobostreamer-clip%3A3',
+    playback_api_url: 'https://openvibe.media/api/v1/media/media%3Ahobostreamer-clip%3A3/playback?redirect=true',
+    playback_api_ready: true,
+    playback_mode: 'file-direct',
+    playback_mime_type: 'video/webm',
     status: 'ready',
     source: 'hobostreamer',
 };
@@ -98,6 +106,8 @@ const vodHtml = ssr.renderMediaDetailPage({ item: vodCard, channel: ch, baseUrl:
 assert.ok(/archive run/.test(vodHtml), 'media detail page renders canonical vod title');
 assert.ok(/Playback ready/.test(vodHtml), 'media detail page renders playback-ready state');
 assert.ok(/openvibe\.media playback/.test(vodHtml), 'media detail page links to canonical media playback');
+assert.ok(/data-ov-player/.test(vodHtml), 'media detail page renders the custom player shell');
+assert.ok(/Detected type/.test(vodHtml), 'media detail page surfaces detected playback type');
 
 const homeHtml = ssr.renderHomePage({
     channels: model.listChannels({ limit: 50 }),

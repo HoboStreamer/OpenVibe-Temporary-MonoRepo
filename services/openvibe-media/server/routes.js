@@ -21,6 +21,7 @@ const quotas = require('./quotas');
 const processing = require('./processing');
 const storageModel = require('./storage-model');
 const vodModel = require('./vod-model');
+const { resolveMediaContentType } = require('./content-type');
 const { materializeClipProject: sharedMaterializeClipProject } = require('./clip-materializer');
 const { reconcileLifecycle: sharedReconcileLifecycle } = require('./lifecycle-reconciler');
 const { createPlaybackPayloadBuilder, inferLocationRoleForStorage } = require('./playback');
@@ -1444,6 +1445,49 @@ function buildRouter({ storage, eventBus, internalKey, authClient }) {
     return r;
 }
 
+function parseByteRange(rangeHeader, totalSize) {
+    const size = Number(totalSize || 0);
+    if (!rangeHeader || !size || !/^bytes=/i.test(String(rangeHeader))) {
+        return null;
+    }
+    const value = String(rangeHeader).replace(/^bytes=/i, '').trim();
+    if (!value || value.includes(',')) {
+        return { invalid: true };
+    }
+    const [startRaw, endRaw] = value.split('-', 2).map((part) => part.trim());
+    let start = null;
+    let end = null;
+
+    if (!startRaw) {
+        const suffixLength = Number(endRaw);
+        if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+            return { invalid: true };
+        }
+        start = Math.max(size - suffixLength, 0);
+        end = size - 1;
+    } else {
+        start = Number(startRaw);
+        if (!Number.isFinite(start) || start < 0 || start >= size) {
+            return { invalid: true };
+        }
+        if (!endRaw) {
+            end = size - 1;
+        } else {
+            end = Number(endRaw);
+            if (!Number.isFinite(end) || end < start) {
+                return { invalid: true };
+            }
+            end = Math.min(end, size - 1);
+        }
+    }
+
+    return {
+        start,
+        end,
+        length: (end - start) + 1,
+    };
+}
+
 function buildFilesRouter({ storage }) {
     const r = express.Router();
     r.get('/:id', asyncRoute(async (req, res) => {
@@ -1475,9 +1519,39 @@ function buildFilesRouter({ storage }) {
 
         const stat = await storage.stat(playback.storage_key, { providerName: playback.provider_name });
         if (!stat) return res.status(404).end();
-        res.setHeader('Content-Type', media.mime_type || 'application/octet-stream');
-        res.setHeader('Content-Length', stat.size);
-        storage.readStream(playback.storage_key, { providerName: playback.provider_name }).pipe(res);
+        const totalSize = Number(stat.size || 0);
+        const contentType = playback.content_type
+            || resolveMediaContentType(media, { storage_key: playback.storage_key, public_url: playback.url })
+            || 'application/octet-stream';
+        const fullPath = storage.pathFor(playback.storage_key, { providerName: playback.provider_name });
+        if (!fullPath) return res.status(404).end();
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        const range = parseByteRange(req.headers.range, totalSize);
+        if (range && range.invalid) {
+            res.status(416);
+            res.setHeader('Content-Range', `bytes */${totalSize}`);
+            return res.end();
+        }
+
+        if (range) {
+            res.status(206);
+            res.setHeader('Content-Length', range.length);
+            res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${totalSize}`);
+            if (req.method === 'HEAD') {
+                return res.end();
+            }
+            fs.createReadStream(fullPath, { start: range.start, end: range.end }).pipe(res);
+            return;
+        }
+
+        res.setHeader('Content-Length', totalSize);
+        if (req.method === 'HEAD') {
+            return res.end();
+        }
+        fs.createReadStream(fullPath).pipe(res);
     }));
     return r;
 }

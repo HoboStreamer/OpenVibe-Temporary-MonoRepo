@@ -9,6 +9,35 @@ const HOME_VOD_LIMIT = 12;
 const HOME_CLIP_LIMIT = 12;
 const HOME_PASTE_LIMIT = 10;
 const CHANNEL_MEDIA_LIMIT = 24;
+const DEFAULT_HOME_FEED_CACHE_TTL_MS = 15000;
+const DEFAULT_REMOTE_TIMEOUT_MS = 4000;
+const DEFAULT_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES = 500 * 1024 * 1024;
+const MIME_TYPE_BY_EXTENSION = Object.freeze({
+    '.aac': 'audio/aac',
+    '.flac': 'audio/flac',
+    '.gif': 'image/gif',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.json': 'application/json; charset=utf-8',
+    '.m3u8': 'application/vnd.apple.mpegurl',
+    '.m4a': 'audio/mp4',
+    '.m4v': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg',
+    '.mp4': 'video/mp4',
+    '.mpeg': 'video/mpeg',
+    '.mpg': 'video/mpeg',
+    '.oga': 'audio/ogg',
+    '.ogg': 'audio/ogg',
+    '.ogv': 'video/ogg',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.ts': 'video/mp2t',
+    '.wav': 'audio/wav',
+    '.webm': 'video/webm',
+    '.webp': 'image/webp',
+});
 
 function safeNumber(value, fallback) {
     const numeric = Number(value);
@@ -27,6 +56,35 @@ function rewritePasteAssetUrl(rawPath) {
     const value = String(rawPath || '').trim();
     if (!value) return null;
     return `/api/community-assets/${encodeURIComponent(path.basename(value))}`;
+}
+
+function inferMimeTypeFromValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const withoutQuery = raw.split(/[?#]/, 1)[0];
+    const ext = path.extname(withoutQuery).toLowerCase();
+    return MIME_TYPE_BY_EXTENSION[ext] || null;
+}
+
+function resolveMediaMimeType(record, metadata) {
+    const source = metadata || record && record.metadata || {};
+    const directMimeType = String(record && record.mime_type || source.mime_type || '').trim();
+    if (directMimeType) return directMimeType;
+    const candidates = [
+        record && record.storage_key,
+        record && record.public_url,
+        source.storage_key,
+        source.public_url,
+        source.file_name,
+        source.original_file_name,
+        source.original_filename,
+        source.legacy_path,
+    ];
+    for (const candidate of candidates) {
+        const inferred = inferMimeTypeFromValue(candidate);
+        if (inferred) return inferred;
+    }
+    return null;
 }
 
 function parseLegacyMediaId(kind, mediaId) {
@@ -48,9 +106,93 @@ function normalizeStats(stats, overrides) {
     return base;
 }
 
-function buildPlaybackUrl(mediaBaseUrl, mediaId) {
+function buildPlaybackApiUrl(mediaBaseUrl, mediaId) {
     if (!mediaBaseUrl || !mediaId) return null;
     return `${String(mediaBaseUrl).replace(/\/$/, '')}/api/v1/media/${encodeURIComponent(String(mediaId))}/playback?redirect=true`;
+}
+
+function buildPlaybackFileUrl(mediaBaseUrl, mediaId) {
+    if (!mediaBaseUrl || !mediaId) return null;
+    return `${String(mediaBaseUrl).replace(/\/$/, '')}/files/${encodeURIComponent(String(mediaId))}`;
+}
+
+function cloneValue(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function createAsyncTimedCache(ttlMs) {
+    let entry = null;
+    let pending = null;
+    return {
+        async getOrLoad(loader) {
+            const now = Date.now();
+            if (entry && entry.expiresAt > now) {
+                return cloneValue(entry.value);
+            }
+            if (pending) {
+                return cloneValue(await pending);
+            }
+            pending = Promise.resolve().then(loader);
+            try {
+                const value = await pending;
+                pending = null;
+                entry = ttlMs > 0
+                    ? { value: cloneValue(value), expiresAt: Date.now() + ttlMs }
+                    : null;
+                return cloneValue(value);
+            } catch (error) {
+                pending = null;
+                throw error;
+            }
+        },
+        clear() {
+            entry = null;
+            pending = null;
+        },
+    };
+}
+
+async function withTimeout(promise, timeoutMs, fallbackValue) {
+    const timeout = Math.max(0, Number(timeoutMs) || 0);
+    if (!timeout) return promise;
+    let timer = null;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((resolve) => {
+                timer = setTimeout(() => resolve(cloneValue(fallbackValue)), timeout);
+            }),
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+function derivePlaybackState(record, config, metadata) {
+    const source = metadata || record && record.metadata || {};
+    const mediaId = record && record.id ? String(record.id) : null;
+    const sizeBytes = Math.max(0, safeNumber(record && record.size_bytes, 0));
+    const mimeType = resolveMediaMimeType(record, source);
+    const hasBacking = !!String(record && record.storage_key || '').trim() || !!String(record && record.public_url || '').trim();
+    const publicPlaybackMaxBytes = Math.max(0, safeNumber(config && config.mediaPublicPlaybackMaxBytes, DEFAULT_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES));
+    const withinApiSizeGuard = !sizeBytes || sizeBytes <= publicPlaybackMaxBytes;
+    const playbackApiUrl = buildPlaybackApiUrl(config && config.media && config.media.url, mediaId);
+    const playbackFileUrl = buildPlaybackFileUrl(config && config.media && config.media.url, mediaId);
+    const playbackReady = !!(mediaId && hasBacking && mimeType);
+    return {
+        playbackReady,
+        playbackUrl: playbackReady ? playbackFileUrl : null,
+        playbackApiUrl,
+        playbackApiReady: playbackReady && withinApiSizeGuard,
+        playbackMode: playbackReady ? (withinApiSizeGuard ? 'file-direct' : 'file-direct-oversize') : 'pending',
+        playbackNote: playbackReady && !withinApiSizeGuard
+            ? 'Direct OpenVibe media file playback is being used because the canonical playback API blocks oversized objects until they are repartitioned.'
+            : null,
+        playbackMimeType: mimeType,
+        playbackBlockedReason: !playbackReady
+            ? (hasBacking ? 'mime_type_unknown' : 'backing_pending')
+            : (!withinApiSizeGuard ? 'api_size_guard' : null),
+    };
 }
 
 function createFeedBridge(options) {
@@ -78,6 +220,10 @@ function createFeedBridge(options) {
         : null;
     const legacyThumbnailDir = legacyRoot ? path.join(legacyRoot, 'data', 'thumbnails') : null;
     const legacyPasteScreenshotDir = legacyRoot ? path.join(legacyRoot, 'data', 'pastes', 'screenshots') : null;
+    const remoteTimeoutMs = Math.max(0, safeNumber(config.remoteTimeoutMs, DEFAULT_REMOTE_TIMEOUT_MS));
+    const cacheTtlMs = Math.max(0, safeNumber(config.homeFeedCacheTtlMs, DEFAULT_HOME_FEED_CACHE_TTL_MS));
+    const canonicalMediaCache = new Map();
+    const communityCache = createAsyncTimedCache(cacheTtlMs);
 
     function resolveExistingFile(dirPath, fileName) {
         if (!dirPath || !fileName) return null;
@@ -103,10 +249,10 @@ function createFeedBridge(options) {
         const legacyId = parseLegacyMediaId(kind, record.id);
         const title = String(metadata.title || record.title || `${kind === 'clip' ? 'Untitled clip' : 'Untitled VOD'}`);
         const status = String(record.status || 'initialized');
-        const playbackReady = status === 'ready';
         const source = metadata.source || (liveStream && liveStream.source) || 'openvibe';
         const createdAt = record.created_at || metadata.created_at || (liveStream && (liveStream.ended_at || liveStream.started_at)) || null;
         const updatedAt = record.updated_at || createdAt || null;
+        const playback = derivePlaybackState(record, config, metadata);
         return {
             id: String(record.id),
             kind,
@@ -124,8 +270,14 @@ function createFeedBridge(options) {
             started_at: metadata.started_at || (liveStream && liveStream.started_at) || createdAt,
             duration_seconds: safeNumber(metadata.duration_seconds),
             view_count: safeNumber(metadata.view_count),
-            playback_ready: playbackReady,
-            playback_url: buildPlaybackUrl(config.media && config.media.url, record.id),
+            playback_ready: playback.playbackReady,
+            playback_url: playback.playbackUrl,
+            playback_api_url: playback.playbackApiUrl,
+            playback_api_ready: playback.playbackApiReady,
+            playback_mode: playback.playbackMode,
+            playback_note: playback.playbackNote,
+            playback_mime_type: playback.playbackMimeType,
+            playback_blocked_reason: playback.playbackBlockedReason,
             status,
             source,
             is_live: false,
@@ -136,6 +288,10 @@ function createFeedBridge(options) {
             vod_media_id: kind === 'vod' ? String(record.id) : null,
             protocol: (liveStream && liveStream.protocol) || null,
             description: String(metadata.description || '').trim() || null,
+            storage_key: record.storage_key || null,
+            public_url: record.public_url || null,
+            size_bytes: safeNumber(record.size_bytes),
+            mime_type: record.mime_type || null,
         };
     }
 
@@ -151,42 +307,42 @@ function createFeedBridge(options) {
         });
     }
 
-    async function listCanonicalMedia(kind, channelSlug, limit) {
+    async function getCachedCanonicalMedia(kind) {
         if (!mediaClient) return [];
+        const cacheKey = String(kind || 'vod');
+        let cache = canonicalMediaCache.get(cacheKey);
+        if (!cache) {
+            cache = createAsyncTimedCache(cacheTtlMs);
+            canonicalMediaCache.set(cacheKey, cache);
+        }
         const namespace = kind === 'clip' ? 'live.clips' : 'live.vods';
-        try {
-            const response = await mediaClient.listMedia({
+        return cache.getOrLoad(async () => {
+            const response = await withTimeout(mediaClient.listMedia({
                 namespace,
                 visibility: 'public',
                 limit: MAX_CANONICAL_FEED_ITEMS,
-            });
-            const normalized = Array.isArray(response && response.items)
-                ? response.items
-                    .map((item) => normalizeMediaRecord(item, kind))
-                    .filter(Boolean)
-                    .filter((item) => !channelSlug || item.channel_slug === channelSlug)
+            }), remoteTimeoutMs, { items: [] });
+            return Array.isArray(response && response.items)
+                ? response.items.map((item) => normalizeMediaRecord(item, kind)).filter(Boolean)
                 : [];
-            return normalized.slice(0, Math.max(1, safeNumber(limit, HOME_VOD_LIMIT)));
+        });
+    }
+
+    async function listCanonicalMedia(kind, channelSlug, limit) {
+        try {
+            const normalized = await getCachedCanonicalMedia(kind);
+            return normalized
+                .filter((item) => !channelSlug || item.channel_slug === channelSlug)
+                .slice(0, Math.max(1, safeNumber(limit, HOME_VOD_LIMIT)));
         } catch (_error) {
             return [];
         }
     }
 
     async function listCanonicalMediaWithCount(kind, channelSlug, limit) {
-        if (!mediaClient) return { items: [], total: 0 };
-        const namespace = kind === 'clip' ? 'live.clips' : 'live.vods';
         try {
-            const response = await mediaClient.listMedia({
-                namespace,
-                visibility: 'public',
-                limit: MAX_CANONICAL_FEED_ITEMS,
-            });
-            const normalized = Array.isArray(response && response.items)
-                ? response.items
-                    .map((item) => normalizeMediaRecord(item, kind))
-                    .filter(Boolean)
-                    .filter((item) => !channelSlug || item.channel_slug === channelSlug)
-                : [];
+            const normalized = (await getCachedCanonicalMedia(kind))
+                .filter((item) => !channelSlug || item.channel_slug === channelSlug);
             return {
                 items: normalized.slice(0, Math.max(1, safeNumber(limit, HOME_VOD_LIMIT))),
                 total: normalized.length,
@@ -198,20 +354,22 @@ function createFeedBridge(options) {
 
     async function buildCommunityViewModel() {
         if (!communityClient) return Promise.resolve(buildCommunityFallback());
-        try {
-            const [threads, pastes, relays] = await Promise.all([
-                communityClient.listThreads({ visibility: 'public', limit: 8 }),
-                communityClient.listPastes({ visibility: 'public', limit: HOME_PASTE_LIMIT }),
-                communityClient.listRelays(),
-            ]);
-            return {
-                recentThreads: Array.isArray(threads && threads.items) ? threads.items.slice(0, 8) : [],
-                recentPastes: Array.isArray(pastes && pastes.items) ? pastes.items.slice(0, HOME_PASTE_LIMIT).map(normalizePasteRecord).filter(Boolean) : [],
-                discordRelays: Array.isArray(relays && relays.items) ? relays.items.slice(0, 8) : [],
-            };
-        } catch (_error) {
-            return Promise.resolve(buildCommunityFallback());
-        }
+        return communityCache.getOrLoad(async () => {
+            try {
+                const [threads, pastes, relays] = await Promise.all([
+                    withTimeout(communityClient.listThreads({ visibility: 'public', limit: 8 }), remoteTimeoutMs, { items: [] }),
+                    withTimeout(communityClient.listPastes({ visibility: 'public', limit: HOME_PASTE_LIMIT }), remoteTimeoutMs, { items: [] }),
+                    withTimeout(communityClient.listRelays(), remoteTimeoutMs, { items: [] }),
+                ]);
+                return {
+                    recentThreads: Array.isArray(threads && threads.items) ? threads.items.slice(0, 8) : [],
+                    recentPastes: Array.isArray(pastes && pastes.items) ? pastes.items.slice(0, HOME_PASTE_LIMIT).map(normalizePasteRecord).filter(Boolean) : [],
+                    discordRelays: Array.isArray(relays && relays.items) ? relays.items.slice(0, 8) : [],
+                };
+            } catch (_error) {
+                return buildCommunityFallback();
+            }
+        });
     }
 
     async function buildHomeViewModel() {

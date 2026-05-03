@@ -6,6 +6,7 @@ const {
     resolveCachePolicy,
     resolveSurrogateControl,
 } = require('@openvibe/storage');
+const { resolveMediaContentType } = require('./content-type');
 
 function resolveLocation(media, locations, storage, options) {
     const source = options || {};
@@ -64,13 +65,14 @@ async function resolvePlayback(media, locations, storage, options) {
     }
 
     const signed = requiresSignedPlayback({ visibility: media.visibility, signed: source.forceSigned === true || location.signed_url_required });
+    const contentType = resolveMediaContentType(media, location);
     const download = signed
         ? await storage.signDownload({
             providerName: location.provider_name,
             mediaId: media.id,
             storageKey: location.storage_key,
             visibility: media.visibility,
-            contentType: media.mime_type,
+            contentType,
             fileName: source.fileName,
             expiresInSeconds: source.expiresInSeconds,
         })
@@ -87,7 +89,7 @@ async function resolvePlayback(media, locations, storage, options) {
         visibility: media.visibility,
         mediaType: media.type,
         signed,
-        contentType: media.mime_type,
+        contentType,
         contentDisposition: source.fileName ? `inline; filename="${String(source.fileName).replace(/[\r\n"]/g, '_')}"` : null,
     });
 
@@ -106,6 +108,7 @@ async function resolvePlayback(media, locations, storage, options) {
         signed,
         url: download.url,
         expires_at: download.expires_at || null,
+        content_type: contentType || null,
         headers,
         cache_control: headers['Cache-Control'],
         surrogate_control: headers['Surrogate-Control'],

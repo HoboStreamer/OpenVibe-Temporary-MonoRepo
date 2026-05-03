@@ -1139,6 +1139,66 @@ function _shellStyles() {
             border-radius: 20px;
             background: rgba(5, 9, 22, 0.8);
         }
+        .ov-media-player {
+            display: grid;
+            gap: 0.85rem;
+            padding: 0.85rem;
+            border-radius: 24px;
+            border: 1px solid rgba(34, 211, 238, 0.16);
+            background:
+                radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 52%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(7, 13, 28, 0.94));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+        .ov-media-player video {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border-radius: 20px;
+            display: block;
+            background: rgba(5, 9, 22, 0.92);
+        }
+        .ov-player-controls {
+            display: grid;
+            gap: 0.75rem;
+            align-items: center;
+            grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+        }
+        .ov-player-button {
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.06);
+            color: white;
+            border-radius: 999px;
+            padding: 0.62rem 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+        .ov-player-button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34, 211, 238, 0.32);
+            background: rgba(34, 211, 238, 0.12);
+        }
+        .ov-player-range,
+        .ov-player-volume {
+            width: 100%;
+            accent-color: #22d3ee;
+        }
+        .ov-player-volume {
+            min-width: 84px;
+            max-width: 108px;
+        }
+        .ov-player-time {
+            font-size: 0.92rem;
+            color: var(--muted-strong);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .ov-player-status {
+            color: var(--muted);
+            font-size: 0.92rem;
+            min-height: 1.25em;
+        }
         [data-reveal] {
             opacity: 1;
             transform: none;
@@ -1189,6 +1249,14 @@ function _shellStyles() {
             .button-row {
                 flex-direction: column;
                 align-items: stretch;
+            }
+            .ov-player-controls {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .ov-player-time,
+            .ov-player-range,
+            .ov-player-volume {
+                grid-column: 1 / -1;
             }
             .page-shell {
                 width: min(var(--max-width), calc(100vw - 1.2rem));
@@ -1396,6 +1464,146 @@ function _shellScript() {
                     target.focus();
                 });
             });
+
+            function formatPlayerTime(seconds) {
+                const value = Number(seconds);
+                if (!Number.isFinite(value) || value < 0) return '--:--';
+                const total = Math.floor(value);
+                const hours = Math.floor(total / 3600);
+                const minutes = Math.floor((total % 3600) / 60);
+                const secs = total % 60;
+                if (hours > 0) {
+                    return String(hours) + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                }
+                return String(minutes) + ':' + String(secs).padStart(2, '0');
+            }
+
+            document.querySelectorAll('[data-ov-player]').forEach((root) => {
+                const video = root.querySelector('video');
+                if (!video) return;
+                const playToggle = root.querySelector('[data-player-action="toggle"]');
+                const muteToggle = root.querySelector('[data-player-action="mute"]');
+                const fullscreenToggle = root.querySelector('[data-player-action="fullscreen"]');
+                const seek = root.querySelector('[data-player-seek]');
+                const volume = root.querySelector('[data-player-volume]');
+                const time = root.querySelector('[data-player-time]');
+                const status = root.querySelector('[data-player-status]');
+
+                const setStatus = (message) => {
+                    if (status) status.textContent = message;
+                };
+
+                const sync = () => {
+                    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+                    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+                    if (playToggle) playToggle.textContent = video.paused || video.ended ? 'Play' : 'Pause';
+                    if (muteToggle) muteToggle.textContent = video.muted || video.volume === 0 ? 'Unmute' : 'Mute';
+                    if (time) time.textContent = formatPlayerTime(current) + ' / ' + formatPlayerTime(duration);
+                    if (seek && seek.dataset.seeking !== 'true') {
+                        seek.disabled = !duration;
+                        seek.value = duration ? String(Math.round((current / duration) * 1000)) : '0';
+                    }
+                    if (volume && document.activeElement !== volume) {
+                        volume.value = String(video.muted ? 0 : video.volume);
+                    }
+                };
+
+                video.controls = false;
+                video.preload = 'metadata';
+                setStatus('Ready to play');
+                sync();
+
+                if (playToggle) {
+                    playToggle.addEventListener('click', async () => {
+                        try {
+                            if (video.paused || video.ended) {
+                                await video.play();
+                            } else {
+                                video.pause();
+                            }
+                        } catch (_error) {
+                            setStatus('Playback could not start in this browser session.');
+                        }
+                        sync();
+                    });
+                }
+
+                if (muteToggle) {
+                    muteToggle.addEventListener('click', () => {
+                        video.muted = !video.muted;
+                        if (!video.muted && video.volume === 0) {
+                            video.volume = 0.7;
+                        }
+                        sync();
+                    });
+                }
+
+                if (fullscreenToggle) {
+                    fullscreenToggle.addEventListener('click', async () => {
+                        try {
+                            if (document.fullscreenElement) {
+                                await document.exitFullscreen();
+                            } else if (root.requestFullscreen) {
+                                await root.requestFullscreen();
+                            }
+                        } catch (_error) {
+                            setStatus('Fullscreen is not available here.');
+                        }
+                    });
+                }
+
+                if (seek) {
+                    seek.addEventListener('input', () => {
+                        seek.dataset.seeking = 'true';
+                        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+                        if (time && duration) {
+                            const nextTime = (Number(seek.value) / 1000) * duration;
+                            time.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(duration);
+                        }
+                    });
+                    seek.addEventListener('change', () => {
+                        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+                        if (duration) {
+                            video.currentTime = (Number(seek.value) / 1000) * duration;
+                        }
+                        delete seek.dataset.seeking;
+                        sync();
+                    });
+                }
+
+                if (volume) {
+                    volume.addEventListener('input', () => {
+                        const nextVolume = Math.max(0, Math.min(1, Number(volume.value)));
+                        video.volume = nextVolume;
+                        video.muted = nextVolume === 0;
+                        sync();
+                    });
+                }
+
+                video.addEventListener('loadedmetadata', sync);
+                video.addEventListener('durationchange', sync);
+                video.addEventListener('timeupdate', sync);
+                video.addEventListener('volumechange', sync);
+                video.addEventListener('play', () => {
+                    setStatus('Playing');
+                    sync();
+                });
+                video.addEventListener('pause', () => {
+                    setStatus(video.ended ? 'Playback finished' : 'Paused');
+                    sync();
+                });
+                video.addEventListener('waiting', () => setStatus('Buffering…'));
+                video.addEventListener('canplay', () => {
+                    if (video.paused && !video.ended) setStatus('Ready to play');
+                });
+                video.addEventListener('ended', () => {
+                    setStatus('Playback finished');
+                    sync();
+                });
+                video.addEventListener('error', () => {
+                    setStatus('Playback error: the bytes exist, but this browser could not open the source.');
+                });
+            });
         })();
     </script>`;
 }
@@ -1513,7 +1721,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                 ${bodyHtml}
             </main>
             ${renderFooter(baseUrl)}
-            <script src="/assets/openvibe.js?v=20260501-3"></script>
+            <script src="/assets/openvibe.js?v=20260503-1"></script>
             ${_shellScript()}
         </body>
         </html>`;
@@ -2583,8 +2791,23 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
     const canonicalId = encodeURIComponent(item.legacy_id || item.id);
     const canonical = `${baseUrl}/${kind}/${canonicalId}`;
     const ogImage = absoluteUrl(item.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
+    const playbackHref = item.player_playback_url || item.playback_url || null;
+    const playbackSummary = item.playback_ready
+        ? (item.playback_note || 'This media object is already staged and can be played directly through the canonical OpenVibe media service.')
+        : 'The metadata is present, but the backing bytes or playback state are still being finalized. The page stays honest instead of pretending the file is ready.';
+    const playbackHeroCopy = item.playback_ready
+        ? (item.playback_mode === 'file-direct-oversize'
+            ? 'Playback is ready through direct OpenVibe file delivery.'
+            : 'Playback is ready through openvibe.media.')
+        : `Playback status is currently ${labelizeKey(item.status || 'staged')}.`;
     const playbackStage = item.playback_ready && item.playback_url
-        ? `<video controls preload="metadata" playsinline poster="${escapeHtml(ogImage || '')}" style="width:100%;aspect-ratio:16/9;border-radius:20px;background:rgba(5,9,22,0.88);" src="${escapeHtml(item.playback_url)}"></video>`
+        ? renderCustomMediaPlayer({
+            title: item.title || `Untitled ${kindLabel}`,
+            playbackUrl: item.playback_url,
+            posterUrl: ogImage || '',
+            mimeType: item.playback_mime_type || item.mime_type || '',
+            statusText: item.playback_note || 'Ready to play',
+        })
         : renderMediaThumb({
             url: item.thumbnail_url || (channel && channel.avatar_url) || null,
             title: item.title || `Untitled ${kindLabel}`,
@@ -2598,7 +2821,7 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
             <div class="hero-copy" data-reveal>
                 <div class="eyebrow">Canonical ${escapeHtml(kindLabel)}</div>
                 <h1 class="hero-heading" style="max-width:12ch"><span class="hero-gradient">${escapeHtml(item.title || `Untitled ${kindLabel}`)}</span></h1>
-                <p>From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(item.playback_ready ? 'Playback is ready through openvibe.media.' : `Playback status is currently ${labelizeKey(item.status || 'staged')}.`)}</p>
+                <p>From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(playbackHeroCopy)}</p>
                 <div class="hero-actions">
                     ${slug && slug !== 'unknown' ? `<a class="button" href="${channelPath(slug)}">Open creator channel</a>` : `<a class="button" href="/channels">Browse creators</a>`}
                     <a class="button-secondary" href="/${kind === 'clip' ? 'clips' : 'vods'}${slug && slug !== 'unknown' ? `?channel=${encodeURIComponent(slug)}` : ''}">Browse more ${escapeHtml(kind === 'clip' ? 'clips' : 'VODs')}</a>
@@ -2615,11 +2838,10 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
                         ${renderPill(kindLabel, kind === 'clip' ? 'primary' : 'success')}
                         ${renderPill(item.playback_ready ? 'Playback ready' : labelizeKey(item.status || 'staged'), item.playback_ready ? 'success' : 'warn')}
                         ${item.category ? renderPill(item.category, 'muted') : ''}
+                        ${item.playback_mode === 'file-direct-oversize' ? renderPill('Direct file delivery', 'warn') : ''}
                         ${item.source === 'hobostreamer' ? renderPill('Migrated from HoboStreamer', 'warn') : renderPill('Native OpenVibe media', 'soft')}
                     </div>
-                    <p class="card-body">${escapeHtml(item.playback_ready
-                        ? 'This media object is already staged and can be played directly through the canonical OpenVibe media service.'
-                        : 'The metadata is present, but the backing bytes or playback state are still being finalized. The page stays honest instead of pretending the file is ready.')}</p>
+                    <p class="card-body">${escapeHtml(playbackSummary)}</p>
                 </article>
                 <aside class="list-stack">
                     <article class="glass-card" data-reveal>
@@ -2637,7 +2859,9 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
                             <li>Media ID: <code>${escapeHtml(item.id)}</code></li>
                             <li>Route ID: <code>${escapeHtml(item.legacy_id || item.id)}</code></li>
                             <li>Creator route: ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">@${escapeHtml(slug)}</a>` : 'unbound'}</li>
-                            <li>Playback: ${item.playback_ready && item.playback_url ? `<a class="link-inline" href="${escapeHtml(item.playback_url)}">openvibe.media playback</a>` : 'not ready yet'}</li>
+                            <li>Player source: ${item.playback_ready && playbackHref ? `<a class="link-inline" href="${escapeHtml(playbackHref)}">openvibe.media playback</a>` : 'not ready yet'}</li>
+                            ${item.playback_api_url ? `<li>Playback API: ${item.playback_api_ready ? `<a class="link-inline" href="${escapeHtml(item.playback_api_url)}">redirect-enabled playback</a>` : 'size-limited or not yet ready for redirect playback'}</li>` : ''}
+                            ${item.playback_mime_type ? `<li>Detected type: <code>${escapeHtml(item.playback_mime_type)}</code></li>` : ''}
                         </ul>
                     </article>
                 </aside>
@@ -2653,6 +2877,26 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
         bodyHtml: pageContent,
         baseUrl,
     });
+}
+
+function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, statusText }) {
+    return `
+        <div class="ov-media-player" data-ov-player>
+            <video controls playsinline preload="metadata" poster="${escapeHtml(posterUrl || '')}" aria-label="${escapeHtml(title || 'OpenVibe media playback')}">
+                <source src="${escapeHtml(playbackUrl || '')}"${mimeType ? ` type="${escapeHtml(mimeType)}"` : ''}>
+            </video>
+            <div class="ov-player-controls">
+                <button class="ov-player-button" type="button" data-player-action="toggle">Play</button>
+                <button class="ov-player-button" type="button" data-player-action="mute">Mute</button>
+                <input class="ov-player-range" type="range" min="0" max="1000" step="1" value="0" data-player-seek aria-label="Seek playback position">
+                <div class="ov-player-time" data-player-time>0:00 / --:--</div>
+                <div style="display:flex;gap:0.6rem;align-items:center;justify-content:flex-end;">
+                    <input class="ov-player-volume" type="range" min="0" max="1" step="0.05" value="1" data-player-volume aria-label="Playback volume">
+                    <button class="ov-player-button" type="button" data-player-action="fullscreen">Full screen</button>
+                </div>
+            </div>
+            <div class="ov-player-status" data-player-status role="status" aria-live="polite">${escapeHtml(statusText || 'Ready to play')}</div>
+        </div>`;
 }
 
 function renderGoLivePage({ baseUrl }) {
