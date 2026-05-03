@@ -26,6 +26,8 @@ const model = require('../server/model');
 const ch = model.upsertChannel({ slug: 'alice', owner_user_id: '42', display_name: 'Alice' });
 assert.strictEqual(ch.slug, 'alice');
 assert.ok(ch.id.startsWith('chn_'));
+assert.strictEqual(model.listChannels({ owner_user_id: '42' }).length, 1, 'owner filter should return owned channels');
+assert.strictEqual(model.listChannels({ owner_user_id: '99' }).length, 0, 'owner filter should exclude other channels');
 
 const s = model.createStream({ channel_id: ch.id, protocol: 'rtmp', title: 'hello' });
 assert.ok(s.id.startsWith('strm_'));
@@ -56,5 +58,9 @@ assert.strictEqual(segment.segment_index, 1);
 const clip = model.createClipProject({ stream_id: s.id, owner_user_id: '42', title: 'Best moment', start_ms: 1000, end_ms: 5000 });
 assert.strictEqual(clip.stream_id, s.id);
 assert.ok(model.listClipProjects({ stream_id: s.id }).length >= 1);
+
+const shellHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+assert.ok(shellHtml.includes('Creator dashboard'), 'openre shell should expose the creator dashboard');
+assert.ok(shellHtml.includes('Own your ingest, routes, and'), 'openre shell should expose the new hero copy');
 
 console.log('openre-stream lifecycle tests OK');

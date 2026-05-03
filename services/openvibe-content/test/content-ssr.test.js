@@ -9,12 +9,25 @@ const path = require('path');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-content-ssr-'));
 process.env.NODE_ENV = 'development';
 process.env.OPENVIBE_ENV = 'development';
+process.env.OPENVIBE_URL_MODE = 'local';
+process.env.OPENVIBE_LOCAL_PROTOCOL = 'http';
+process.env.OPENVIBE_LOCAL_HOST_SUFFIX = 'localhost';
 process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_OPENVIBE_CONTENT_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_CONTENT_DB_PATH = path.join(tmpDir, 'content-ssr.db');
 process.env.OPENVIBE_DATABASE_URL = '';
 process.env.OPENVIBE_STAGING_DATABASE_URL = '';
 process.env.OPENVIBE_OPENVIBE_CONTENT_DATABASE_URL = '';
+process.env.OPENVIBE_CODES_URL = '';
+process.env.OPENVIBE_CONTENT_URL = '';
+process.env.OPENVIBE_BLOG_URL = '';
+process.env.OPENVIBE_WIKI_URL = '';
+process.env.OPENVIBE_NEWS_URL = '';
+process.env.OPENVIBE_REVIEWS_URL = '';
+process.env.OPENVIBE_DEALS_URL = '';
+process.env.OPENVIBE_COUPONS_URL = '';
+process.env.OPENVIBE_TRADE_URL = '';
+process.env.OPENVIBE_HOST_URL = '';
 
 const { buildApp } = require('../server/index');
 

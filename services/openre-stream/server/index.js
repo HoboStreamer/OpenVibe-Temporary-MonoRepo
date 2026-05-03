@@ -11,16 +11,17 @@ const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
-const { serviceActorMiddleware } = require('./middleware');
+const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 
 function buildApp() {
     db.init(config.db.path);
     const eventBus = buildEventBus(config);
+    const authClient = buildAuthClient(config);
 
     const app = express();
     app.set('trust proxy', 1);
     app.use(helmet({ contentSecurityPolicy: false }));
-    app.use(cors());
+    app.use(cors({ origin: true, credentials: true }));
     app.use(cookieParser());
 
     const runtime = createServiceRuntime({
@@ -28,6 +29,7 @@ function buildApp() {
         getHealth: () => ({
             persistence: db.describePersistence(),
             ingest: config.ingest || null,
+            auth_issuer: config.auth && config.auth.issuer || null,
         }),
         getReadiness: () => ({
             persistence: db.describePersistence(),
@@ -45,11 +47,18 @@ function buildApp() {
                     details: config.ingest || {},
                     message: Object.values(config.ingest || {}).filter(Boolean).length > 0 ? null : 'Ingest URLs are not configured yet; this runtime is control-plane only.',
                 },
+                {
+                    name: 'auth_issuer_configured',
+                    ok: !!(config.auth && config.auth.issuer),
+                    critical: true,
+                    details: { issuer: config.auth && config.auth.issuer || null },
+                },
             ],
         }),
     });
     runtime.attach(app);
 
+    app.use(optionalOpenVibeAuth(authClient));
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config }));

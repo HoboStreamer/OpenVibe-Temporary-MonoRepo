@@ -2,21 +2,1123 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>openre.stream</title>
+    <title>openre.stream — ingest and restream control</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="openre.stream — ingest, restream, and stream lifecycle for the OpenVibe network.">
-    <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#1d2330}code{background:#f3f4f8;padding:0 .25rem;border-radius:3px}</style>
+    <meta name="description" content="openre.stream — OpenVibe’s restream and ingest control plane for channels, stream records, RTMP targets, and live routing.">
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #07101d;
+            --bg-elev: rgba(14, 23, 42, 0.88);
+            --bg-elev-2: rgba(19, 31, 56, 0.94);
+            --text: #eef4ff;
+            --muted: #a7b5d2;
+            --border: rgba(148, 163, 184, 0.16);
+            --primary: #8b5cf6;
+            --accent: #22d3ee;
+            --success: #34d399;
+            --warn: #f59e0b;
+            --danger: #fb7185;
+            --shadow: 0 28px 90px rgba(2, 8, 23, 0.42);
+        }
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(139, 92, 246, 0.26), transparent 32%),
+                radial-gradient(circle at 85% 12%, rgba(34, 211, 238, 0.18), transparent 25%),
+                linear-gradient(180deg, #050914 0%, #07101d 42%, #050914 100%);
+            color: var(--text);
+        }
+        a { color: inherit; text-decoration: none; }
+        code {
+            font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            padding: 0.16rem 0.5rem;
+            font-size: 0.82rem;
+        }
+        .page-shell {
+            width: min(1240px, calc(100vw - 2rem));
+            margin: 0 auto;
+        }
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(18px);
+            background: rgba(5, 9, 20, 0.74);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .topbar-inner {
+            min-height: 74px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+        .brand-mark {
+            width: 2.8rem;
+            height: 2.8rem;
+            border-radius: 18px;
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            box-shadow: var(--shadow);
+        }
+        .brand-copy b {
+            display: block;
+            letter-spacing: 0.02em;
+        }
+        .brand-copy span {
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+        .nav-links,
+        .button-row,
+        .pill-row,
+        .quick-links,
+        .form-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .nav-links a,
+        .quick-link {
+            padding: 0.68rem 0.92rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #dbeafe;
+            font-size: 0.9rem;
+        }
+        .nav-links a:hover,
+        .quick-link:hover,
+        .button:hover,
+        .button-secondary:hover,
+        .button-ghost:hover {
+            transform: translateY(-2px);
+        }
+        .button,
+        .button-secondary,
+        .button-ghost {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            padding: 0.9rem 1.15rem;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            font-weight: 700;
+            transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+        }
+        .button {
+            background: linear-gradient(135deg, var(--primary), #4f46e5 60%, var(--accent));
+            color: white;
+        }
+        .button-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        .button-ghost {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: var(--muted);
+        }
+        main.page-shell {
+            padding: 1.5rem 0 4rem;
+        }
+        .panel,
+        .glass-card {
+            background: linear-gradient(180deg, var(--bg-elev-2), var(--bg-elev));
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+        .panel {
+            border-radius: 34px;
+            padding: 1.35rem;
+            margin-bottom: 1.1rem;
+        }
+        .glass-card {
+            border-radius: 22px;
+            padding: 1rem;
+        }
+        .hero {
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            background: linear-gradient(120deg, rgba(139, 92, 246, 0.18), transparent 32%, rgba(34, 211, 238, 0.14));
+            pointer-events: none;
+        }
+        .hero-grid,
+        .story-grid,
+        .card-grid,
+        .data-points {
+            display: grid;
+            gap: 1rem;
+        }
+        .hero-grid {
+            grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
+            align-items: stretch;
+            position: relative;
+            z-index: 1;
+        }
+        .story-grid {
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        }
+        .hero-kicker,
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.48rem 0.78rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(191, 219, 254, 0.92);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            font-weight: 800;
+        }
+        h1,
+        h2,
+        h3,
+        h4,
+        p {
+            margin-top: 0;
+        }
+        .hero h1 {
+            font-size: clamp(2.6rem, 6vw, 4.6rem);
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+            margin: 1rem 0;
+            max-width: 12ch;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, var(--text) 0%, #ddd6fe 32%, #67e8f9 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .body-copy,
+        .card-copy,
+        .note,
+        .meta,
+        .input-help {
+            color: var(--muted);
+            line-height: 1.65;
+        }
+        .quick-links {
+            margin-top: 1rem;
+        }
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 1rem;
+        }
+        .section-head h2 {
+            margin-bottom: 0.2rem;
+            font-size: clamp(1.4rem, 3vw, 2rem);
+            letter-spacing: -0.03em;
+        }
+        .data-points {
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+        .data-point,
+        .stack-item {
+            padding: 0.95rem;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .data-point-label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+        }
+        .data-point-value {
+            margin-top: 0.35rem;
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.42rem;
+            border-radius: 999px;
+            padding: 0.42rem 0.72rem;
+            font-size: 0.78rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(230, 238, 255, 0.9);
+        }
+        .pill.live { background: rgba(251, 113, 133, 0.14); border-color: rgba(251, 113, 133, 0.24); color: #fecdd3; }
+        .pill.soft { background: rgba(34, 211, 238, 0.12); border-color: rgba(34, 211, 238, 0.24); color: #cffafe; }
+        .pill.primary { background: rgba(139, 92, 246, 0.16); border-color: rgba(139, 92, 246, 0.28); color: #ddd6fe; }
+        .pill.warn { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.28); color: #fef3c7; }
+        .pill.muted { color: var(--muted); }
+        .form-stack {
+            display: grid;
+            gap: 0.8rem;
+        }
+        .form-stack label {
+            display: grid;
+            gap: 0.35rem;
+        }
+        .field-input {
+            width: 100%;
+            padding: 0.95rem 1rem;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            font-size: 0.98rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .field-input:focus {
+            border-color: rgba(34, 211, 238, 0.34);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+        }
+        .stack-list {
+            display: grid;
+            gap: 0.9rem;
+        }
+        .flow-list {
+            margin: 0;
+            padding-left: 1.1rem;
+            color: #dbeafe;
+            line-height: 1.7;
+        }
+        .flow-list li + li { margin-top: 0.45rem; }
+        .footer-note {
+            margin-top: 1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        @media (max-width: 960px) {
+            .hero-grid,
+            .story-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 760px) {
+            .topbar-inner {
+                flex-wrap: wrap;
+                justify-content: center;
+                padding: 0.85rem 0;
+            }
+            .button,
+            .button-secondary,
+            .button-ghost {
+                width: 100%;
+            }
+            .page-shell {
+                width: min(1240px, calc(100vw - 1.2rem));
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>openre.stream</h1>
-    <p>Ingest + restream service. Owns stream lifecycle events on the <code>stream.events</code> bus topic.</p>
-    <ul>
-        <li><code>POST /api/v1/channels</code></li>
-        <li><code>POST /api/v1/streams</code></li>
-        <li><code>POST /api/v1/streams/:id/start</code></li>
-        <li><code>POST /api/v1/streams/:id/end</code></li>
-        <li><code>POST /api/v1/ingest/connected</code> / <code>/api/v1/ingest/disconnected</code></li>
-        <li><code>POST /api/v1/destinations</code></li>
-    </ul>
+    <header class="topbar">
+        <div class="page-shell topbar-inner">
+            <a class="brand" href="#top">
+                <span class="brand-mark">OR</span>
+                <span class="brand-copy">
+                    <b>openre.stream</b>
+                    <span>Ingest and restream control for OpenVibe</span>
+                </span>
+            </a>
+            <nav class="nav-links" aria-label="Primary">
+                <a href="https://openvibe.live">openvibe.live</a>
+                <a href="https://openvibe.community">community</a>
+                <a href="https://openvibe.chat">chat</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="panel hero" id="top">
+            <div class="hero-grid">
+                <div>
+                    <span class="hero-kicker">Restream control plane</span>
+                    <h1>Own your ingest, routes, and <span class="hero-gradient">multistream</span>.</h1>
+                    <p class="body-copy">openre.stream is the routing cockpit behind OpenVibe Live. Create stream records, grab ingest URLs, save RTMP destinations, and keep everything tied back to your public creator route.</p>
+                    <div class="button-row" style="margin-top:1.3rem;">
+                        <a class="button" href="#dashboard">Open creator dashboard</a>
+                        <a class="button-secondary" href="https://openvibe.live/go-live">Open openvibe.live/go-live</a>
+                        <a class="button-ghost" href="https://openvibe.live">Back to live discovery</a>
+                    </div>
+                    <div class="quick-links">
+                        <a class="quick-link" href="https://openvibe.live/@">Creator routes</a>
+                        <a class="quick-link" href="https://openvibe.live/vods">Replays</a>
+                        <a class="quick-link" href="https://openvibe.live/clips">Clips</a>
+                        <a class="quick-link" href="https://openvibe.community">Community</a>
+                        <a class="quick-link" href="https://openvibe.chat">Chat</a>
+                    </div>
+                </div>
+                <article class="glass-card">
+                    <span class="eyebrow">Why it exists</span>
+                    <h3>Keep routing separate from discovery.</h3>
+                    <p class="card-copy">Use <strong>openvibe.live</strong> for the public creator home. Use <strong>openre.stream</strong> when you need the operator-facing workflow: ingest URLs, RTMP targets, and stream state control.</p>
+                    <div class="pill-row" style="margin-top:0.85rem;">
+                        <span class="pill soft">One account across both</span>
+                        <span class="pill primary">Channel-first routing</span>
+                        <span class="pill warn">Built for real multistream setups</span>
+                    </div>
+                    <p class="footer-note">Create the stream here. Mirror it back into the OpenVibe live graph. Let VODs, clips, and community stay attached to the same creator route.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel" id="dashboard">
+            <div class="section-head">
+                <div>
+                    <h2>Creator dashboard</h2>
+                    <p class="body-copy">Sign in with your OpenVibe account to load your channels, destinations, and recent streams here.</p>
+                </div>
+                <div class="form-actions">
+                    <a class="button-secondary" href="https://openvibe.live/go-live">Open live-side manager</a>
+                </div>
+            </div>
+
+            <div class="story-grid">
+                <article class="glass-card" data-dashboard-session>
+                    <span class="eyebrow">Account status</span>
+                    <h3>Checking your OpenVibe session…</h3>
+                    <p class="card-copy">Sign in to claim handles, create stream records, and reveal ingest URLs.</p>
+                </article>
+                <article class="glass-card">
+                    <span class="eyebrow">What you can do here</span>
+                    <div class="data-points">
+                        <div class="data-point"><div class="data-point-label">Channel</div><div class="data-point-value">Claim a handle</div></div>
+                        <div class="data-point"><div class="data-point-label">Targets</div><div class="data-point-value">Save RTMP outputs</div></div>
+                        <div class="data-point"><div class="data-point-label">Streams</div><div class="data-point-value">Create and control</div></div>
+                        <div class="data-point"><div class="data-point-label">Mirror</div><div class="data-point-value">Feed openvibe.live</div></div>
+                    </div>
+                </article>
+            </div>
+
+            <div class="story-grid" style="margin-top:1rem;">
+                <article class="glass-card">
+                    <span class="eyebrow">Channels</span>
+                    <div class="stack-list" data-dashboard-channels>
+                        <p class="note">Checking your channels…</p>
+                    </div>
+                    <form class="form-stack" id="channel-form" style="margin-top:1rem;">
+                        <label>
+                            <span class="data-point-label">Handle</span>
+                            <input class="field-input" type="text" name="slug" placeholder="your-handle" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Display name</span>
+                            <input class="field-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
+                        </label>
+                        <div class="form-actions">
+                            <button class="button" type="submit">Create channel</button>
+                            <span class="input-help">Claim your public @route before your next stream.</span>
+                        </div>
+                    </form>
+                </article>
+
+                <article class="glass-card">
+                    <span class="eyebrow">Destinations</span>
+                    <div class="stack-list" data-dashboard-destinations>
+                        <p class="note">Checking your destinations…</p>
+                    </div>
+                    <form class="form-stack" id="destination-form" style="margin-top:1rem;">
+                        <label>
+                            <span class="data-point-label">Kind</span>
+                            <select class="field-input" name="kind">
+                                <option value="custom">Custom RTMP</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="kick">Kick</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="data-point-label">Label</span>
+                            <input class="field-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Target URL</span>
+                            <input class="field-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Stream key</span>
+                            <input class="field-input" type="text" name="target_key" placeholder="Paste the destination key" autocomplete="off">
+                        </label>
+                        <div class="form-actions">
+                            <button class="button-secondary" type="submit">Save destination</button>
+                            <span class="input-help">These routes belong to your signed-in OpenVibe account.</span>
+                        </div>
+                    </form>
+                </article>
+            </div>
+
+            <div class="story-grid" style="margin-top:1rem;">
+                <article class="glass-card">
+                    <span class="eyebrow">Create a stream</span>
+                    <form class="form-stack" id="stream-form">
+                        <label>
+                            <span class="data-point-label">Channel</span>
+                            <select class="field-input" name="channel_slug">
+                                <option value="">Select a channel</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="data-point-label">Title</span>
+                            <input class="field-input" type="text" name="title" placeholder="Tonight’s stream title" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Category</span>
+                            <input class="field-input" type="text" name="category" placeholder="Art, coding, games, music…" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Protocol</span>
+                            <select class="field-input" name="protocol">
+                                <option value="rtmp">RTMP / OBS</option>
+                                <option value="whip">WHIP</option>
+                                <option value="browser">Browser quick-start</option>
+                            </select>
+                        </label>
+                        <div class="form-actions">
+                            <button class="button" type="submit">Create stream</button>
+                            <span class="input-help">This returns fresh ingest details for your encoder or restream chain.</span>
+                        </div>
+                    </form>
+                    <div class="stack-list" data-dashboard-ingest style="margin-top:1rem;">
+                        <p class="note">Create a stream to reveal ingest details and hand-off info for OBS or your routing stack.</p>
+                    </div>
+                </article>
+
+                <article class="glass-card">
+                    <span class="eyebrow">Recent streams</span>
+                    <div class="stack-list" data-dashboard-streams>
+                        <p class="note">Checking your recent streams…</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="section-head">
+                <div>
+                    <h2>How it fits into OpenVibe</h2>
+                    <p class="body-copy">Keep routing and restream complexity here while the public creator story stays on openvibe.live.</p>
+                </div>
+            </div>
+            <div class="story-grid">
+                <article class="glass-card">
+                    <span class="eyebrow">Best use of openre.stream</span>
+                    <ul class="flow-list">
+                        <li>Create stream records and grab ingest URLs.</li>
+                        <li>Save RTMP targets for multistream and mirrored output.</li>
+                        <li>Start and end stream state without losing your creator route.</li>
+                        <li>Feed the resulting session back into openvibe.live for discovery, VODs, and clips.</li>
+                    </ul>
+                </article>
+                <article class="glass-card">
+                    <span class="eyebrow">Best use of openvibe.live</span>
+                    <ul class="flow-list">
+                        <li>Canonical public @channel pages.</li>
+                        <li>Live-now discovery and recent creator activity.</li>
+                        <li>Replay and clip routes tied to the same creator home.</li>
+                        <li>Community and chat links that stay near the stream.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const SURFACES = {
+                network: { origin: 'https://openvibe.network', localHost: 'openvibe.network.localhost', port: 4100 },
+                auth: { origin: 'https://auth.openvibe.network', localHost: 'auth.openvibe.network.localhost', port: 4100 },
+                my: { origin: 'https://my.openvibe.network', localHost: 'my.openvibe.network.localhost', port: 4100 },
+                live: { origin: 'https://openvibe.live', localHost: 'openvibe.live.localhost', port: 4600 },
+                restream: { origin: 'https://openre.stream', localHost: 'openre.stream.localhost', port: 4700 },
+                chat: { origin: 'https://openvibe.chat', localHost: 'openvibe.chat.localhost', port: 4800 },
+                community: { origin: 'https://openvibe.community', localHost: 'openvibe.community.localhost', port: 4900 },
+            };
+
+            const BRIDGE_TOKEN_KEY = 'openvibe.bridge.token';
+            let sessionPromise = null;
+            let dashboardPromise = null;
+            let dashboardKey = '';
+            let latestIngestPayload = null;
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function isLocalHostname() {
+                return /localhost$/i.test(window.location.hostname || '');
+            }
+
+            function resolveSurfaceUrl(surface) {
+                const cfg = SURFACES[surface];
+                if (!cfg) return '#';
+                if (isLocalHostname()) {
+                    return `${window.location.protocol || 'http:'}//${cfg.localHost}:${cfg.port}`;
+                }
+                return cfg.origin;
+            }
+
+            function bridgeReturnUrl(returnTo) {
+                const target = new URL(returnTo || window.location.href, window.location.href);
+                target.hash = '';
+                return target.toString();
+            }
+
+            function signInUrl(returnTo) {
+                return `${resolveSurfaceUrl('network')}/api/v1/session/bridge?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo || window.location.href))}`;
+            }
+
+            function switchAccountUrl(returnTo) {
+                const authorizeUrl = new URL('/oauth/authorize', resolveSurfaceUrl('auth'));
+                authorizeUrl.searchParams.set('prompt', 'login');
+                authorizeUrl.searchParams.set('return_to', signInUrl(returnTo || window.location.href));
+                return authorizeUrl.toString();
+            }
+
+            function signOutUrl(returnTo) {
+                return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo || window.location.href))}`;
+            }
+
+            function loadBridgeToken() {
+                try {
+                    return window.sessionStorage.getItem(BRIDGE_TOKEN_KEY) || '';
+                } catch {
+                    return '';
+                }
+            }
+
+            function saveBridgeToken(token) {
+                try {
+                    if (token) window.sessionStorage.setItem(BRIDGE_TOKEN_KEY, token);
+                    else window.sessionStorage.removeItem(BRIDGE_TOKEN_KEY);
+                } catch {
+                    // ignore storage failures
+                }
+            }
+
+            function clearBridgeToken() {
+                saveBridgeToken('');
+            }
+
+            function consumeBridgeToken() {
+                const hash = String(window.location.hash || '').replace(/^#/, '');
+                if (!hash) return '';
+                const params = new URLSearchParams(hash);
+                const token = params.get('openvibe_token');
+                if (!token) return '';
+                saveBridgeToken(token);
+                params.delete('openvibe_token');
+                const nextHash = params.toString();
+                const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ''}`;
+                window.history.replaceState({}, document.title, nextUrl);
+                return token;
+            }
+
+            async function parseJsonResponse(response) {
+                const text = await response.text();
+                let body = null;
+                try {
+                    body = text ? JSON.parse(text) : null;
+                } catch {
+                    body = text;
+                }
+                if (!response.ok) {
+                    const error = new Error(body && body.error ? body.error : `Request failed (${response.status})`);
+                    error.status = response.status;
+                    error.body = body;
+                    throw error;
+                }
+                return body;
+            }
+
+            async function networkRequestJson(pathname, options) {
+                const request = Object.assign({}, options || {});
+                const omitStoredToken = !!request.omitStoredToken;
+                delete request.omitStoredToken;
+                const headers = Object.assign({ Accept: 'application/json' }, request.headers || {});
+                const storedToken = omitStoredToken ? '' : loadBridgeToken();
+                if (storedToken && !headers.Authorization && !headers.authorization) {
+                    headers.Authorization = `Bearer ${storedToken}`;
+                }
+                request.headers = headers;
+                if (!Object.prototype.hasOwnProperty.call(request, 'credentials')) {
+                    request.credentials = 'include';
+                }
+                const response = await fetch(`${resolveSurfaceUrl('network')}${pathname}`, request);
+                return parseJsonResponse(response);
+            }
+
+            function normalizeSession(exchange) {
+                const user = exchange && exchange.user ? exchange.user : null;
+                const anonymous = !!(exchange && exchange.anonymous);
+                return {
+                    authenticated: !!user && !anonymous,
+                    anonymous,
+                    user,
+                    access_token: exchange && exchange.access_token ? exchange.access_token : loadBridgeToken(),
+                };
+            }
+
+            async function loadSession(force) {
+                consumeBridgeToken();
+                if (!force && sessionPromise) return sessionPromise;
+                sessionPromise = (async () => {
+                    try {
+                        const exchange = await networkRequestJson('/api/v1/session/exchange', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: '{}',
+                        });
+                        if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
+                        return normalizeSession(exchange || {});
+                    } catch (error) {
+                        if (error.status === 401 && loadBridgeToken()) {
+                            clearBridgeToken();
+                            try {
+                                const exchange = await networkRequestJson('/api/v1/session/exchange', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: '{}',
+                                    omitStoredToken: true,
+                                });
+                                if (exchange && exchange.access_token) saveBridgeToken(exchange.access_token);
+                                return normalizeSession(exchange || {});
+                            } catch {
+                                // fall through to guest response
+                            }
+                        }
+                        return { authenticated: false, anonymous: false, user: null, access_token: '' };
+                    }
+                })();
+                return sessionPromise;
+            }
+
+            async function fetchJson(url, options) {
+                const request = Object.assign({}, options || {});
+                const headers = Object.assign({ Accept: 'application/json' }, request.headers || {});
+                if (!headers.Authorization && !headers.authorization) {
+                    const session = await loadSession(false);
+                    if (session && session.access_token) {
+                        headers.Authorization = `Bearer ${session.access_token}`;
+                    }
+                }
+                request.headers = headers;
+                if (!Object.prototype.hasOwnProperty.call(request, 'credentials')) {
+                    request.credentials = /^[a-z]+:/i.test(String(url || '')) ? 'include' : 'same-origin';
+                }
+                const response = await fetch(url, request);
+                return parseJsonResponse(response);
+            }
+
+            function getIdentity(session) {
+                const user = session && session.user ? session.user : null;
+                if (!user) return null;
+                const id = String(user.id || user.sub || '').trim();
+                if (!id) return null;
+                return {
+                    id,
+                    handle: String(user.username || user.handle || user.slug || '').trim(),
+                    displayName: String(user.display_name || user.username || user.handle || 'OpenVibe creator').trim(),
+                    anonymous: !!(session && session.anonymous),
+                };
+            }
+
+            function relativeTime(value) {
+                if (!value) return 'just now';
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) return 'just now';
+                const diffSeconds = Math.round((Date.now() - parsed.getTime()) / 1000);
+                const abs = Math.abs(diffSeconds);
+                if (abs < 60) return diffSeconds >= 0 ? 'just now' : 'in moments';
+                const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+                for (const [unit, size] of units) {
+                    if (abs >= size) {
+                        const amount = Math.round(diffSeconds / size);
+                        return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(amount, unit);
+                    }
+                }
+                return 'just now';
+            }
+
+            function formatTimestamp(value) {
+                if (!value) return 'Unknown';
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) return String(value);
+                return parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            }
+
+            function slugify(value) {
+                return String(value || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '')
+                    .slice(0, 48);
+            }
+
+            function setFormDisabled(form, disabled) {
+                if (!form) return;
+                form.querySelectorAll('input, select, textarea, button').forEach((element) => {
+                    element.disabled = !!disabled;
+                });
+            }
+
+            function streamTone(stream) {
+                if (stream && stream.status === 'started') return 'live';
+                if (stream && stream.status === 'ended') return 'soft';
+                return 'primary';
+            }
+
+            function sortByRecent(a, b) {
+                const aStamp = new Date(a.updated_at || a.started_at || a.created_at || a.ended_at || 0).getTime() || 0;
+                const bStamp = new Date(b.updated_at || b.started_at || b.created_at || b.ended_at || 0).getTime() || 0;
+                return bStamp - aStamp;
+            }
+
+            async function loadDashboard(force) {
+                const session = await loadSession(!!force);
+                const identity = getIdentity(session);
+                const key = identity && identity.id ? identity.id : 'guest';
+                if (!force && dashboardPromise && dashboardKey === key) return dashboardPromise;
+                dashboardKey = key;
+                dashboardPromise = (async () => {
+                    const state = {
+                        session,
+                        identity,
+                        channels: [],
+                        destinations: [],
+                        streams: [],
+                        error: null,
+                    };
+                    if (!identity || !identity.id || !session.authenticated || identity.anonymous) return state;
+                    try {
+                        const channelsPayload = await fetchJson('/api/v1/channels?owner_user_id=' + encodeURIComponent(identity.id) + '&limit=24');
+                        state.channels = Array.isArray(channelsPayload && channelsPayload.items) ? channelsPayload.items : [];
+                        const destinationsPayload = await fetchJson('/api/v1/destinations?owner_user_id=' + encodeURIComponent(identity.id));
+                        state.destinations = Array.isArray(destinationsPayload && destinationsPayload.items) ? destinationsPayload.items : [];
+                        const streamLists = await Promise.all(state.channels.map(async (channel) => {
+                            try {
+                                const payload = await fetchJson('/api/v1/streams?channel_id=' + encodeURIComponent(channel.id) + '&limit=8');
+                                const items = Array.isArray(payload && payload.items) ? payload.items : [];
+                                return items.map((stream) => Object.assign({}, stream, { channel_slug: stream.channel_slug || channel.slug }));
+                            } catch {
+                                return [];
+                            }
+                        }));
+                        state.streams = streamLists.flat().sort(sortByRecent).slice(0, 12);
+                    } catch (error) {
+                        state.error = error;
+                    }
+                    return state;
+                })();
+                return dashboardPromise;
+            }
+
+            function renderSessionPanel(state) {
+                const root = document.querySelector('[data-dashboard-session]');
+                if (!root) return;
+                const identity = state.identity;
+                if (!identity) {
+                    root.innerHTML = `
+                        <span class="eyebrow">Account status</span>
+                        <h3>Sign in to load your creator dashboard</h3>
+                        <p class="card-copy">Use one OpenVibe account across openvibe.live, chat, community, and openre.stream.</p>
+                        <div class="form-actions" style="margin-top:1rem;">
+                            <a class="button" href="${escapeHtml(signInUrl(window.location.href))}">Sign in</a>
+                            <a class="button-secondary" href="${escapeHtml(resolveSurfaceUrl('network'))}">Create account</a>
+                        </div>`;
+                    return;
+                }
+                if (identity.anonymous || !(state.session && state.session.authenticated)) {
+                    root.innerHTML = `
+                        <span class="eyebrow">Account status</span>
+                        <h3>Browsing as ${escapeHtml(identity.displayName)}</h3>
+                        <p class="card-copy">Anonymous browsing works for reading, but channel creation and stream controls need a full OpenVibe account.</p>
+                        <div class="form-actions" style="margin-top:1rem;">
+                            <a class="button" href="${escapeHtml(signInUrl(window.location.href))}">Create full account</a>
+                            <a class="button-ghost" href="${escapeHtml(resolveSurfaceUrl('live'))}">Back to live</a>
+                        </div>`;
+                    return;
+                }
+                if (state.error) {
+                    root.innerHTML = `
+                        <span class="eyebrow">Account status</span>
+                        <h3>${escapeHtml(identity.displayName)}</h3>
+                        <p class="card-copy">Your account is signed in, but the dashboard data could not load right now.</p>
+                        <div class="form-actions" style="margin-top:1rem;">
+                            <a class="button-secondary" href="${escapeHtml(resolveSurfaceUrl('live'))}/go-live">Open live-side manager</a>
+                            <a class="button-ghost" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
+                        </div>`;
+                    return;
+                }
+                const activeStream = state.streams.find((stream) => stream.status === 'started') || null;
+                root.innerHTML = `
+                    <span class="eyebrow">Account status</span>
+                    <h3>${escapeHtml(identity.displayName)}</h3>
+                    <p class="card-copy">${escapeHtml(activeStream ? 'You have an active stream record. Keep it moving from the controls below.' : 'You are signed in and ready to prep your next stream.')}</p>
+                    <div class="data-points">
+                        <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(String(state.channels.length))}</div></div>
+                        <div class="data-point"><div class="data-point-label">Destinations</div><div class="data-point-value">${escapeHtml(String(state.destinations.length))}</div></div>
+                        <div class="data-point"><div class="data-point-label">Latest stream</div><div class="data-point-value">${escapeHtml(activeStream ? 'Live' : (state.streams[0] && state.streams[0].status) || 'Ready')}</div></div>
+                    </div>
+                    <div class="form-actions" style="margin-top:1rem;">
+                        <a class="button-secondary" href="${escapeHtml(resolveSurfaceUrl('live'))}/go-live">Live-side manager</a>
+                        <a class="button-ghost" href="${escapeHtml(switchAccountUrl(window.location.href))}">Switch account</a>
+                        <a class="button-ghost" href="${escapeHtml(signOutUrl(window.location.href))}">Sign out</a>
+                    </div>`;
+            }
+
+            function renderChannelItems(channels) {
+                const root = document.querySelector('[data-dashboard-channels]');
+                if (!root) return;
+                if (!channels.length) {
+                    root.innerHTML = '<p class="note">No channels yet. Claim your public handle here, or start from openvibe.live/go-live.</p>';
+                    return;
+                }
+                root.innerHTML = channels.map((channel) => `
+                    <div class="stack-item">
+                        <div class="pill-row">
+                            <span class="pill primary">@${escapeHtml(channel.slug)}</span>
+                            ${channel.category ? `<span class="pill muted">${escapeHtml(channel.category)}</span>` : ''}
+                        </div>
+                        <h4 style="margin:0.75rem 0 0;">${escapeHtml(channel.display_name || channel.slug)}</h4>
+                        <p class="note">${escapeHtml(channel.description || 'Public creator route ready for live sessions, replays, and clips.')}</p>
+                        <div class="form-actions" style="margin-top:0.85rem;">
+                            <a class="button-secondary" href="${escapeHtml(resolveSurfaceUrl('live'))}/@${encodeURIComponent(channel.slug)}">Open channel</a>
+                        </div>
+                    </div>`).join('');
+            }
+
+            function renderDestinationItems(destinations) {
+                const root = document.querySelector('[data-dashboard-destinations]');
+                if (!root) return;
+                if (!destinations.length) {
+                    root.innerHTML = '<p class="note">No restream destinations saved yet. Add RTMP targets here to reuse them in your workflow.</p>';
+                    return;
+                }
+                root.innerHTML = destinations.map((destination) => `
+                    <div class="stack-item">
+                        <div class="pill-row">
+                            <span class="pill soft">${escapeHtml(destination.kind || 'custom')}</span>
+                            <span class="pill muted">${escapeHtml(destination.enabled === false ? 'Disabled' : 'Enabled')}</span>
+                        </div>
+                        <h4 style="margin:0.75rem 0 0;">${escapeHtml(destination.label || destination.kind || 'Destination')}</h4>
+                        <p class="note">${escapeHtml(destination.target_url || 'Target URL unavailable')}</p>
+                    </div>`).join('');
+            }
+
+            function renderStreamItems(streams) {
+                const root = document.querySelector('[data-dashboard-streams]');
+                if (!root) return;
+                if (!streams.length) {
+                    root.innerHTML = '<p class="note">No streams yet. Create one to generate fresh ingest details and mirror it back into openvibe.live.</p>';
+                    return;
+                }
+                root.innerHTML = streams.map((stream) => {
+                    const channelSlug = stream.channel_slug || 'unknown';
+                    const canStart = stream.status !== 'started' && stream.status !== 'ended';
+                    const canEnd = stream.status === 'started';
+                    return `
+                        <div class="stack-item">
+                            <div class="pill-row">
+                                <span class="pill ${streamTone(stream)}">${escapeHtml(stream.status || 'created')}</span>
+                                ${stream.protocol ? `<span class="pill muted">${escapeHtml(stream.protocol)}</span>` : ''}
+                                ${stream.category ? `<span class="pill muted">${escapeHtml(stream.category)}</span>` : ''}
+                            </div>
+                            <h4 style="margin:0.75rem 0 0;">${escapeHtml(stream.title || 'Untitled stream')}</h4>
+                            <p class="note">@${escapeHtml(channelSlug)} · ${escapeHtml(relativeTime(stream.started_at || stream.created_at || stream.updated_at))} · ${escapeHtml(formatTimestamp(stream.started_at || stream.created_at || stream.updated_at))}</p>
+                            <div class="form-actions" style="margin-top:0.85rem;">
+                                ${canStart ? `<button class="button-secondary" type="button" data-stream-action="start" data-stream-id="${escapeHtml(stream.id)}">Mark started</button>` : ''}
+                                ${canEnd ? `<button class="button-secondary" type="button" data-stream-action="end" data-stream-id="${escapeHtml(stream.id)}">Mark ended</button>` : ''}
+                                <a class="button-ghost" href="${escapeHtml(resolveSurfaceUrl('live'))}/@${encodeURIComponent(channelSlug)}/s/${encodeURIComponent(stream.id)}">Open route</a>
+                            </div>
+                        </div>`;
+                }).join('');
+            }
+
+            function renderIngestPanel(payload) {
+                const root = document.querySelector('[data-dashboard-ingest]');
+                if (!root) return;
+                if (!payload || !payload.ingest || !payload.stream || !payload.channel) {
+                    root.innerHTML = '<p class="note">Create a stream to reveal ingest details and hand-off info for OBS or your routing stack.</p>';
+                    return;
+                }
+                root.innerHTML = `
+                    <div class="stack-item">
+                        <div class="pill-row">
+                            <span class="pill primary">@${escapeHtml(payload.channel.slug)}</span>
+                            <span class="pill soft">${escapeHtml(payload.stream.protocol || 'rtmp')}</span>
+                        </div>
+                        <h4 style="margin:0.75rem 0 0;">${escapeHtml(payload.stream.title || 'Untitled stream')}</h4>
+                        <p class="note">Use the matching ingest URL below in OBS, WHIP-compatible tools, or your restream chain.</p>
+                        <ul class="flow-list" style="margin-top:0.75rem;">
+                            <li><strong>RTMP</strong> — <code>${escapeHtml(payload.ingest.rtmp || '')}</code></li>
+                            <li><strong>WHIP</strong> — <code>${escapeHtml(payload.ingest.whip || '')}</code></li>
+                            <li><strong>JSMPEG</strong> — <code>${escapeHtml(payload.ingest.jsmpeg || '')}</code></li>
+                        </ul>
+                    </div>`;
+            }
+
+            function populateChannelSelect(channels) {
+                const select = document.querySelector('#stream-form select[name="channel_slug"]');
+                if (!select) return;
+                const currentValue = select.value;
+                select.innerHTML = ['<option value="">Select a channel</option>']
+                    .concat(channels.map((channel) => `<option value="${escapeHtml(channel.slug)}">${escapeHtml(channel.display_name || channel.slug)} (@${escapeHtml(channel.slug)})</option>`))
+                    .join('');
+                if (currentValue && channels.some((channel) => channel.slug === currentValue)) {
+                    select.value = currentValue;
+                }
+            }
+
+            function renderDashboard(state) {
+                renderSessionPanel(state);
+                const signedIn = !!(state.identity && state.session && state.session.authenticated && !state.identity.anonymous && !state.error);
+                renderChannelItems(signedIn ? state.channels : []);
+                renderDestinationItems(signedIn ? state.destinations : []);
+                renderStreamItems(signedIn ? state.streams : []);
+                renderIngestPanel(latestIngestPayload);
+                populateChannelSelect(signedIn ? state.channels : []);
+                setFormDisabled(document.getElementById('channel-form'), !signedIn);
+                setFormDisabled(document.getElementById('destination-form'), !signedIn);
+                setFormDisabled(document.getElementById('stream-form'), !signedIn || !(state.channels && state.channels.length));
+            }
+
+            async function refreshDashboard(force) {
+                const state = await loadDashboard(force);
+                renderDashboard(state);
+                return state;
+            }
+
+            const channelForm = document.getElementById('channel-form');
+            if (channelForm) {
+                channelForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const state = await loadDashboard(false);
+                    if (!state.identity || !state.session || !state.session.authenticated || state.identity.anonymous) return;
+                    const payload = {
+                        owner_user_id: state.identity.id,
+                        slug: slugify(channelForm.querySelector('[name="slug"]').value || state.identity.handle || state.identity.displayName),
+                        display_name: String(channelForm.querySelector('[name="display_name"]').value || state.identity.displayName || '').trim(),
+                    };
+                    if (!payload.slug) return;
+                    await fetchJson('/api/v1/channels', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    channelForm.reset();
+                    await refreshDashboard(true);
+                });
+            }
+
+            const destinationForm = document.getElementById('destination-form');
+            if (destinationForm) {
+                destinationForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const state = await loadDashboard(false);
+                    if (!state.identity || !state.session || !state.session.authenticated || state.identity.anonymous) return;
+                    const payload = {
+                        owner_user_id: state.identity.id,
+                        kind: String(destinationForm.querySelector('[name="kind"]').value || 'custom').trim(),
+                        label: String(destinationForm.querySelector('[name="label"]').value || '').trim(),
+                        target_url: String(destinationForm.querySelector('[name="target_url"]').value || '').trim(),
+                        target_key: String(destinationForm.querySelector('[name="target_key"]').value || '').trim(),
+                    };
+                    if (!payload.target_url) return;
+                    await fetchJson('/api/v1/destinations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    destinationForm.reset();
+                    await refreshDashboard(true);
+                });
+            }
+
+            const streamForm = document.getElementById('stream-form');
+            if (streamForm) {
+                streamForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const state = await loadDashboard(false);
+                    if (!state.identity || !state.session || !state.session.authenticated || state.identity.anonymous) return;
+                    const payload = {
+                        channel_slug: String(streamForm.querySelector('[name="channel_slug"]').value || '').trim(),
+                        title: String(streamForm.querySelector('[name="title"]').value || '').trim(),
+                        category: String(streamForm.querySelector('[name="category"]').value || '').trim(),
+                        protocol: String(streamForm.querySelector('[name="protocol"]').value || 'rtmp').trim(),
+                    };
+                    if (!payload.channel_slug) return;
+                    latestIngestPayload = await fetchJson('/api/v1/streams', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    streamForm.reset();
+                    await refreshDashboard(true);
+                });
+            }
+
+            const streamsRoot = document.querySelector('[data-dashboard-streams]');
+            if (streamsRoot) {
+                streamsRoot.addEventListener('click', async (event) => {
+                    const button = event.target.closest('[data-stream-action]');
+                    if (!button) return;
+                    const state = await loadDashboard(false);
+                    if (!state.identity || !state.session || !state.session.authenticated || state.identity.anonymous) return;
+                    const streamId = String(button.dataset.streamId || '').trim();
+                    const action = String(button.dataset.streamAction || '').trim();
+                    if (!streamId || !action) return;
+                    await fetchJson(`/api/v1/streams/${encodeURIComponent(streamId)}/${action === 'start' ? 'start' : 'end'}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}',
+                    });
+                    await refreshDashboard(true);
+                });
+            }
+
+            refreshDashboard(false).catch(() => {});
+        })();
+    </script>
 </body>
 </html>

@@ -87,8 +87,13 @@ function getChannelById(id) {
 function getChannelBySlug(slug) {
     return hydrateChannel(db.get().prepare(`SELECT * FROM channels WHERE slug = ?`).get(String(slug)));
 }
-function listChannels({ limit }) {
+function listChannels({ owner_user_id, limit }) {
     const cap = Math.min(parseInt(limit, 10) || 50, 200);
+    if (owner_user_id) {
+        return db.get().prepare(`SELECT * FROM channels WHERE owner_user_id = ? ORDER BY rowid DESC LIMIT ?`)
+            .all(String(owner_user_id), cap)
+            .map(hydrateChannel);
+    }
     return db.get().prepare(`SELECT * FROM channels ORDER BY rowid DESC LIMIT ?`).all(cap).map(hydrateChannel);
 }
 

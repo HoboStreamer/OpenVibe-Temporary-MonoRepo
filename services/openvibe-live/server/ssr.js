@@ -36,568 +36,309 @@ const BUILD_UPDATES = [
     },
 ];
 
-const FEATURE_MATRIX = [
-    {
-        eyebrow: 'Discovery',
-        title: 'Live-first without the clutter',
-        body: 'The homepage keeps active streams, recent broadcasts, creators, VODs, and clips within one smooth discovery flow.',
-    },
-    {
-        eyebrow: 'Broadcasting',
-        title: 'Multiple ways to go live',
-        body: 'Browser, OBS, RTMP, WHIP, and restream entry points stay visible so creators can choose the workflow that fits.',
-    },
-    {
-        eyebrow: 'Canonical data',
-        title: 'Truthful migration surfaces',
-        body: 'If VODs or clips have not been staged yet, the page says so plainly instead of faking a finished product.',
-    },
-    {
-        eyebrow: 'SEO + sharing',
-        title: 'Channel and stream SSR by default',
-        body: 'Every creator and broadcast route gets real titles, metadata, canonical URLs, and a meaningful first paint.',
-    },
-    {
-        eyebrow: 'Polish',
-        title: 'Fast interactions with motion',
-        body: 'Hover lift, soft reveal animations, counter motion, and responsive panels make the experience feel modern without overwhelming it.',
-    },
-    {
-        eyebrow: 'Connected platform',
-        title: 'Built to plug into the rest of OpenVibe',
-        body: 'The live surface is ready to connect outward to chat, community, media, tools, and account flows as the broader plan lands.',
-    },
-];
-
-const LIVE_SURFACES = [
-    {
-        href: '/channels',
-        label: 'Creator directory',
-        title: 'Browse every staged channel',
-        body: 'Search creators, inspect their activity, and jump directly into current or recent broadcasts.',
-    },
-    {
-        href: '/vods',
-        label: 'Replay library',
-        title: 'Keep the VOD path first-class',
-        body: 'Streams with replay attachments show up in a dedicated VOD surface rather than being buried inside channel pages.',
-    },
-    {
-        href: '/clips',
-        label: 'Highlights',
-        title: 'Clip-ready discovery',
-        body: 'When clip metadata exists it has a home, and when it does not the empty state tells the truth cleanly.',
-    },
-    {
-        href: '/go-live',
-        label: 'Broadcast path',
-        title: 'Clear go-live onboarding',
-        body: 'Browser, OBS, RTMP, WHIP, and restream routes are explained in one place for streamers and operators.',
-    },
-    {
-        href: '/updates',
-        label: 'Release notes',
-        title: 'See what changed recently',
-        body: 'Track current work, parity progress, and product changes without digging through implementation details.',
-    },
-    {
-        href: '/',
-        label: 'Watch now',
-        title: 'Live and recent on one stage',
-        body: 'The main landing page keeps current broadcasts, recent activity, featured creators, and stats in a single flow.',
-    },
-];
-
 const GO_LIVE_TRACKS = [
     {
         label: 'Browser broadcast',
         title: 'Quickest route to first pixels',
-        body: 'Ideal for creators who want to go live without a full desktop studio setup.',
-        meta: 'Best for quick sessions, demos, and lighter-weight streams',
+        body: 'Ideal for creators who want to go live fast without hauling a full desktop studio into the room.',
+        meta: 'Good for quick sessions, talks, and lighter-weight streams',
     },
     {
         label: 'OBS / RTMP',
         title: 'Traditional desktop workflow',
-        body: 'Use a familiar scene-based studio with overlays, capture stacks, and higher production control.',
-        meta: 'Fits the standard creator workflow and downstream restream setups',
+        body: 'Bring your scenes, overlays, alerts, and production muscle while keeping the same OpenVibe creator route.',
+        meta: 'Best for polished broadcasts and multi-scene production',
     },
     {
-        label: 'WHIP',
-        title: 'Direct, modern live publishing',
-        body: 'Use WHIP-compatible tooling where available for lower-friction real-time ingest paths.',
-        meta: 'Useful for newer live pipelines and API-driven broadcasting',
+        label: 'WHIP / remote tools',
+        title: 'Native ingest for modern pipelines',
+        body: 'Use WHIP-compatible tooling or remote encoders when you need lower-friction infrastructure handoffs.',
+        meta: 'Best for custom tooling, hosted ingest, and experiments',
     },
     {
-        label: 'Restream',
-        title: 'Push once, publish wider',
-        body: 'Keep the OpenVibe channel canonical while still distributing to other RTMP-compatible destinations.',
-        meta: 'Great for multi-platform creators who do not want duplicate control panels',
-    },
-];
-
-const OPENVIBE_NETWORK_LINKS = [
-    {
-        href: LIVE_NETWORK_URLS.restream,
-        label: 'OpenRe.Stream',
-        title: 'Restream control plane',
-        body: 'Keep OBS, RTMP, WHIP, and multi-destination publishing under an OpenVibe-owned ingest and routing layer.',
-    },
-    {
-        href: LIVE_NETWORK_URLS.chat,
-        label: 'OpenVibe Chat',
-        title: 'Chat, DMs, calls, and TTS',
-        body: 'Move stream chat, private conversations, voice/video calls, and TTS queue management into a reusable network product.',
-    },
-    {
-        href: LIVE_NETWORK_URLS.community,
-        label: 'OpenVibe Community',
-        title: 'Pastes, threads, and Discord relay',
-        body: 'Bring Hobo-style pastes, social discussion, and relay-aware community surfaces into a native OpenVibe home.',
-    },
-    {
-        href: LIVE_NETWORK_URLS.network,
-        label: 'OpenVibe Network',
-        title: 'Accounts, themes, and platform control',
-        body: 'Tie together identity, operator visibility, themes, service discovery, and account management without losing creator ownership.',
+        label: 'Restream control room',
+        title: 'Hand streams off to openre.stream',
+        body: 'OpenVibe Live keeps the public route simple while openre.stream handles the fuller destination-and-ingest cockpit.',
+        meta: 'Best for multi-destination publishing and reusable endpoints',
     },
 ];
 
 const MISSION_PILLARS = [
-    'Build a calmer alternative to engagement-maximizing streaming platforms.',
-    'Keep creator identity portable with canonical @username routes and honest metadata.',
-    'Prefer open tooling, visible governance, and a path toward community stewardship over growth-at-all-costs.',
-    'Leave legal, DMCA, and contact surfaces visible instead of burying them behind support mazes.',
+    'Keep canonical @username routes stable across live, VODs, and clips.',
+    'Make stream management obvious without hiding the rest of the OpenVibe network.',
+    'Tell the truth about migration and playback readiness instead of pretending every surface is finished.',
 ];
 
-function escapeHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
+const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const RELATIVE_TIME_FORMATTER = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
-function canRenderImageUrl(url) {
-    if (!url) return false;
-    const value = String(url);
-    return /^(https?:)?\/\//i.test(value) || /^data:/i.test(value) || value.startsWith('/');
+function absoluteUrl(value, baseUrl) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        return new URL(raw, baseUrl || LIVE_NETWORK_URLS.network).toString();
+    } catch {
+        return raw;
+    }
 }
 
-function absoluteUrl(url, baseUrl) {
-    if (!url) return '';
-    const value = String(url);
-    if (/^https?:\/\//i.test(value) || /^data:/i.test(value)) return value;
-    if (value.startsWith('//')) return `https:${value}`;
-    if (value.startsWith('/')) return `${baseUrl.replace(/\/$/, '')}${value}`;
-    return `${baseUrl.replace(/\/$/, '')}/${value.replace(/^\//, '')}`;
-}
-
-function toDate(value) {
-    if (!value) return null;
-    const raw = String(value);
-    const normalized = raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`;
-    const parsed = new Date(normalized);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatNumber(value, options) {
-    const numeric = Number(value || 0);
-    if (!Number.isFinite(numeric)) return '0';
-    return new Intl.NumberFormat('en-US', options || {}).format(numeric);
+function formatNumber(value) {
+    return NUMBER_FORMATTER.format(Number(value) || 0);
 }
 
 function formatCompactNumber(value) {
-    const numeric = Number(value || 0);
-    if (!Number.isFinite(numeric)) return '0';
-    return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(numeric);
+    return COMPACT_NUMBER_FORMATTER.format(Number(value) || 0);
+}
+
+function formatDurationSeconds(value) {
+    const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
 }
 
 function formatDateTime(value) {
-    const parsed = toDate(value);
-    return parsed
-        ? parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-        : String(value || 'Unknown');
+    if (!value) return 'Unknown';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
+    return parsed.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
 }
 
 function timeAgo(value) {
-    const parsed = toDate(value);
-    if (!parsed) return 'just now';
-    const diff = Date.now() - parsed.getTime();
-    if (diff <= 0) return 'just now';
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    const weeks = Math.floor(days / 7);
-    if (weeks < 6) return `${weeks}w ago`;
-    return formatDateTime(value);
+    if (!value) return 'just now';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return 'just now';
+    const deltaSeconds = Math.round((parsed.getTime() - Date.now()) / 1000);
+    const ranges = [
+        ['year', 31536000],
+        ['month', 2592000],
+        ['day', 86400],
+        ['hour', 3600],
+        ['minute', 60],
+    ];
+    for (const [unit, size] of ranges) {
+        if (Math.abs(deltaSeconds) >= size) {
+            return RELATIVE_TIME_FORMATTER.format(Math.round(deltaSeconds / size), unit);
+        }
+    }
+    return RELATIVE_TIME_FORMATTER.format(deltaSeconds, 'second');
 }
 
 function initialsFrom(value) {
-    const words = String(value || 'OV')
-        .replace(/[^a-z0-9\s]/gi, ' ')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2);
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
     if (!words.length) return 'OV';
-    return words.map((part) => part.charAt(0).toUpperCase()).join('');
-}
-
-function pageTitle(baseTitle, suffix) {
-    return suffix ? `${baseTitle} — ${suffix}` : baseTitle;
-}
-
-function channelPath(slug) {
-    return `/@${encodeURIComponent(String(slug || 'unknown'))}`;
-}
-
-function streamPath(slug, streamId) {
-    return `${channelPath(slug)}/s/${encodeURIComponent(String(streamId || 'unknown'))}`;
-}
-
-function formatDurationSeconds(totalSeconds) {
-    const numeric = Math.max(0, Number(totalSeconds || 0));
-    if (!Number.isFinite(numeric) || numeric <= 0) return '0m';
-    const days = Math.floor(numeric / 86400);
-    const hours = Math.floor((numeric % 86400) / 3600);
-    const minutes = Math.floor((numeric % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${Math.max(1, minutes)}m`;
-}
-
-function truncateText(value, maxLength) {
-    const text = String(value == null ? '' : value).trim();
-    const cap = Number.isFinite(maxLength) ? maxLength : 120;
-    if (!text) return '';
-    if (text.length <= cap) return text;
-    return `${text.slice(0, Math.max(0, cap - 1)).trimEnd()}…`;
+    return words.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
 }
 
 function labelizeKey(value) {
-    return String(value || 'unknown')
-        .replace(/[-_]+/g, ' ')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
+    return String(value || '')
+        .replace(/[_-]+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function channelPath(slug) {
+    return `/@${encodeURIComponent(String(slug || 'unknown').trim() || 'unknown')}`;
+}
+
+function streamPath(slug, streamId) {
+    return `${channelPath(slug)}/s/${encodeURIComponent(String(streamId || '').trim())}`;
+}
+
+function canRenderImageUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+    return /\.(png|jpe?g|gif|webp|svg|avif)(\?.*)?$/i.test(raw);
 }
 
 function _meta({ title, description, canonical, ogType, ogImage }) {
-    const desc = description || 'OpenVibe Live — creator-first discovery and broadcasting across the OpenVibe network.';
+    const pageTitle = escapeHtml(title || 'OpenVibe Live');
+    const pageDescription = escapeHtml(description || 'OpenVibe Live');
+    const pageCanonical = canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : '';
+    const pageOgType = escapeHtml(ogType || 'website');
+    const pageOgUrl = canonical ? `<meta property="og:url" content="${escapeHtml(canonical)}">` : '';
+    const pageOgImage = ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}">` : '';
+    const twitterCard = ogImage ? 'summary_large_image' : 'summary';
     return `
-        <title>${escapeHtml(title)}</title>
-        <meta name="description" content="${escapeHtml(desc)}">
-        <link rel="canonical" href="${escapeHtml(canonical)}">
-        <meta property="og:type" content="${escapeHtml(ogType || 'website')}">
-        <meta property="og:title" content="${escapeHtml(title)}">
-        <meta property="og:description" content="${escapeHtml(desc)}">
-        ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}">` : ''}
-        <meta property="og:url" content="${escapeHtml(canonical)}">
-        <meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}">
-        <meta name="twitter:title" content="${escapeHtml(title)}">
-        <meta name="twitter:description" content="${escapeHtml(desc)}">
-        ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}">` : ''}
-    `;
+            <title>${pageTitle}</title>
+            <meta name="description" content="${pageDescription}">
+            ${pageCanonical}
+            <meta property="og:title" content="${pageTitle}">
+            <meta property="og:description" content="${pageDescription}">
+            <meta property="og:type" content="${pageOgType}">
+            ${pageOgUrl}
+            ${pageOgImage}
+            <meta name="twitter:card" content="${twitterCard}">
+            <meta name="twitter:title" content="${pageTitle}">
+            <meta name="twitter:description" content="${pageDescription}">`;
 }
 
 function _shellStyles() {
     return `<style>
         :root {
-            color-scheme: dark;
-            --ov-accent: #8b5cf6;
-            --ov-accent-2: #22d3ee;
-            --ov-bg: #060916;
-            --ov-bg-elev: rgba(10, 18, 38, 0.82);
-            --ov-bg-elev-2: rgba(14, 23, 46, 0.92);
-            --ov-text: #edf3ff;
-            --ov-text-dim: #9fb0cf;
-            --ov-text-faint: #c7d4ee;
-            --ov-border: rgba(148, 163, 184, 0.16);
-            --ov-shadow: 0 28px 90px rgba(2, 8, 23, 0.52);
-            --bg: var(--ov-bg);
-            --bg-elev: var(--ov-bg-elev);
-            --bg-elev-strong: var(--ov-bg-elev-2);
-            --bg-soft: rgba(19, 31, 62, 0.68);
-            --surface: rgba(255, 255, 255, 0.05);
-            --surface-2: rgba(255, 255, 255, 0.08);
-            --surface-3: rgba(255, 255, 255, 0.12);
-            --border: var(--ov-border);
-            --border-strong: rgba(148, 163, 184, 0.26);
-            --text: var(--ov-text);
-            --muted: var(--ov-text-dim);
-            --muted-strong: var(--ov-text-faint);
-            --primary: var(--ov-accent);
-            --primary-2: #6d28d9;
-            --accent: var(--ov-accent-2);
-            --success: #34d399;
-            --warn: #f59e0b;
-            --danger: #fb7185;
-            --shadow: var(--ov-shadow);
+            --bg: #050916;
+            --panel: rgba(15, 23, 42, 0.82);
+            --panel-strong: rgba(15, 23, 42, 0.94);
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --muted-strong: #cbd5e1;
+            --accent: #22d3ee;
+            --accent-2: #8b5cf6;
             --radius: 28px;
-            --radius-lg: 36px;
-            --radius-md: 20px;
-            --radius-sm: 14px;
-            --max-width: 1280px;
+            color-scheme: dark;
         }
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
         body {
             margin: 0;
-            min-height: 100vh;
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background:
-                radial-gradient(circle at top left, rgba(139, 92, 246, 0.30), transparent 30%),
-                radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.18), transparent 25%),
-                radial-gradient(circle at 20% 100%, rgba(37, 99, 235, 0.16), transparent 26%),
-                linear-gradient(180deg, #050814 0%, #07101f 42%, #050814 100%);
+                radial-gradient(circle at top, rgba(34, 211, 238, 0.14), transparent 30%),
+                radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.18), transparent 35%),
+                linear-gradient(180deg, #020617 0%, #050916 32%, #0f172a 100%);
             color: var(--text);
-            overflow-x: hidden;
-        }
-        body::before,
-        body::after {
-            content: '';
-            position: fixed;
-            inset: auto;
-            width: 28rem;
-            height: 28rem;
-            border-radius: 999px;
-            pointer-events: none;
-            filter: blur(90px);
-            opacity: 0.32;
-            z-index: -1;
-        }
-        body::before {
-            top: -8rem;
-            left: -6rem;
-            background: rgba(139, 92, 246, 0.55);
-        }
-        body::after {
-            bottom: -10rem;
-            right: -8rem;
-            background: rgba(34, 211, 238, 0.35);
+            line-height: 1.6;
         }
         a { color: inherit; text-decoration: none; }
-        img { display: block; max-width: 100%; }
         code {
-            font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 999px;
-            padding: 0.16rem 0.55rem;
-            font-size: 0.8rem;
-            color: #d8e6ff;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.92em;
         }
         .page-shell {
-            width: min(var(--max-width), calc(100vw - 2rem));
+            width: min(1180px, calc(100vw - 2rem));
             margin: 0 auto;
         }
         .topbar {
             position: sticky;
             top: 0;
-            z-index: 50;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            background: rgba(5, 9, 22, 0.68);
+            z-index: 20;
             backdrop-filter: blur(18px);
-            box-shadow: 0 12px 30px rgba(2, 8, 23, 0.16);
+            background: rgba(5, 9, 22, 0.72);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
         .topbar-inner {
             display: flex;
+            gap: 1rem;
             align-items: center;
             justify-content: space-between;
-            gap: 1rem;
-            min-height: 74px;
+            padding: 0.95rem 0;
         }
         .brand {
             display: inline-flex;
             align-items: center;
-            gap: 0.85rem;
+            gap: 0.9rem;
             min-width: 0;
         }
-        .brand-mark {
-            width: 2.8rem;
-            height: 2.8rem;
-            border-radius: 18px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            display: grid;
+        .brand-mark,
+        .avatar-shell {
+            display: inline-grid;
             place-items: center;
+            width: 2.7rem;
+            height: 2.7rem;
+            border-radius: 16px;
             font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-2), var(--accent));
             color: white;
-            box-shadow: var(--shadow);
         }
         .brand-copy {
+            display: grid;
             min-width: 0;
         }
-        .brand-name {
-            font-size: 1rem;
-            font-weight: 750;
-            letter-spacing: 0.02em;
-        }
-        .brand-sub {
-            color: var(--muted);
-            font-size: 0.82rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .nav-links {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .nav-link {
-            padding: 0.72rem 1rem;
-            border-radius: 999px;
-            color: var(--muted-strong);
-            font-size: 0.92rem;
-            transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
-            border: 1px solid transparent;
-        }
-        .nav-link:hover,
-        .nav-link.active {
-            background: var(--surface-2);
-            border-color: var(--surface-2);
-            color: white;
-            transform: translateY(-1px);
-        }
-        .nav-cta {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.55rem;
-            padding: 0.78rem 1.1rem;
-            border-radius: 999px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-2) 60%, var(--accent));
-            color: white;
-            font-weight: 700;
-            border: 0;
-            box-shadow: var(--shadow);
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
-        }
-        .nav-cta:hover { transform: translateY(-2px); box-shadow: 0 24px 56px rgba(99, 102, 241, 0.42); }
-        main.page-shell {
-            padding: 1.6rem 0 4.5rem;
-        }
-        .hero-panel,
-        .glass-card,
-        .section-panel,
-        .timeline-card,
-        .stat-card,
-        .footer-card {
-            background: linear-gradient(180deg, var(--bg-elev-strong), var(--bg-elev));
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
-        }
-        .hero-panel {
-            position: relative;
-            overflow: hidden;
-            border-radius: var(--radius-lg);
-            padding: clamp(1.4rem, 2vw, 2rem);
-            margin-bottom: 1.25rem;
-        }
-        .hero-panel::before {
-            content: '';
-            position: absolute;
-            inset: -1px;
-            background: linear-gradient(120deg, rgba(139, 92, 246, 0.18), transparent 32%, rgba(34, 211, 238, 0.14));
-            pointer-events: none;
-            border-radius: inherit;
-        }
-        .live-home-hero .hero-grid,
-        .live-home-hero .hero-signal-rail,
-        .live-home-hero .stat-grid {
-            position: relative;
-            z-index: 1;
-        }
-        .hero-stage {
-            position: absolute;
-            inset: 0;
-            overflow: hidden;
-            border-radius: inherit;
-            pointer-events: none;
-        }
-        .hero-frame {
-            position: absolute;
-            inset: 0;
-            opacity: 0;
-            transform: scale(1.04);
-            background-position: center;
-            background-size: cover;
-            transition: opacity 1.1s ease, transform 6.5s ease;
-        }
-        .hero-frame::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                linear-gradient(180deg, rgba(5, 9, 22, 0.35), rgba(5, 9, 22, 0.82) 70%, rgba(5, 9, 22, 0.94)),
-                radial-gradient(circle at top right, rgba(34, 211, 238, 0.20), transparent 34%),
-                radial-gradient(circle at 18% 24%, rgba(139, 92, 246, 0.26), transparent 38%);
-        }
-        .hero-frame.is-active {
-            opacity: 1;
-            transform: scale(1);
-        }
-        .hero-stage-copy {
-            position: absolute;
-            right: 1.1rem;
-            bottom: 1.1rem;
-            display: grid;
-            gap: 0.25rem;
-            max-width: min(26rem, calc(100% - 2.2rem));
-            padding: 0.85rem 1rem;
-            border-radius: 18px;
-            background: rgba(5, 9, 22, 0.56);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(18px);
-            color: white;
-        }
-        .hero-stage-copy strong {
-            font-size: 0.98rem;
-            letter-spacing: -0.02em;
-        }
-        .hero-stage-copy span:last-child {
-            color: rgba(226, 232, 240, 0.82);
-            font-size: 0.84rem;
-        }
-        .hero-aside-stack {
-            display: grid;
-            gap: 1rem;
-            align-content: start;
-            position: relative;
-            z-index: 1;
-        }
-        .hero-signal-rail {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            margin-top: 1rem;
-        }
-        .hero-signal-card {
-            min-height: 100%;
-        }
-        .timeline-tools {
+        .brand-name { font-weight: 800; letter-spacing: -0.03em; }
+        .brand-sub,
+        .subtle-copy,
+        .card-kicker,
+        .footer-copy,
+        .manager-note,
+        .input-help,
+        .muted-text { color: var(--muted); }
+        .nav-links,
+        .pill-row,
+        .footer-links,
+        .footer-legal-links,
+        .form-actions {
             display: flex;
             gap: 0.75rem;
-            align-items: center;
-            justify-content: space-between;
             flex-wrap: wrap;
-            margin-bottom: 1rem;
+            align-items: center;
         }
-        .timeline-status {
-            color: var(--muted-strong);
-        }
-        .timeline-clear {
-            cursor: pointer;
-        }
-        .update-badge {
-            display: none;
-        }
-        .timeline-card.is-unread {
-            border-color: rgba(34, 211, 238, 0.28);
-            box-shadow: 0 22px 60px rgba(8, 47, 73, 0.36);
-        }
-        .timeline-card.is-unread .update-badge {
+        .nav-link,
+        .nav-cta,
+        .button,
+        .button-secondary,
+        .button-ghost,
+        .section-link,
+        .utility-link,
+        .ov-player-button {
             display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            min-height: 2.7rem;
+            padding: 0.68rem 1rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.04);
+            color: white;
+            font-weight: 700;
+            transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
         }
+        .nav-link:hover,
+        .nav-cta:hover,
+        .button:hover,
+        .button-secondary:hover,
+        .button-ghost:hover,
+        .section-link:hover,
+        .utility-link:hover,
+        .ov-player-button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34, 211, 238, 0.35);
+            background: rgba(34, 211, 238, 0.1);
+        }
+        .nav-link.active,
+        .button,
+        .nav-cta {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.88), rgba(34, 211, 238, 0.72));
+            border-color: transparent;
+        }
+        main.page-shell { padding: 1.35rem 0 3rem; }
+        section + section { margin-top: 1.2rem; }
+        .glass-card,
+        .hero-panel,
+        .footer-card,
+        .empty-state,
+        .stack-item,
+        .data-point,
+        .media-thumb,
+        .ov-media-player {
+            border-radius: var(--radius);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(7, 13, 28, 0.94));
+            border: 1px solid var(--border);
+            box-shadow: 0 22px 60px rgba(2, 6, 23, 0.34);
+        }
+        .glass-card,
+        .hero-panel,
+        .footer-card,
+        .empty-state { padding: 1.2rem; }
         .hero-grid,
         .split-grid,
         .story-grid,
@@ -606,253 +347,104 @@ function _shellStyles() {
         .card-grid,
         .stat-grid,
         .channel-grid,
-        .collection-grid {
+        .collection-grid,
+        .footer-grid,
+        .data-points,
+        .list-stack,
+        .form-grid,
+        .hero-aside-stack,
+        .ov-media-player,
+        .footer-links.is-column {
             display: grid;
             gap: 1rem;
         }
-        .hero-grid {
-            grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
-            align-items: stretch;
-        }
-        .hero-copy,
-        .hero-spotlight {
-            position: relative;
-            z-index: 1;
-        }
+        .hero-grid,
+        .split-grid,
+        .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .card-grid,
+        .channel-grid,
+        .collection-grid,
+        .feature-grid,
+        .surface-grid,
+        .story-grid,
+        .stat-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .data-points { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
         .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            font-size: 0.76rem;
+            color: var(--accent);
+            font-size: 0.78rem;
             text-transform: uppercase;
             letter-spacing: 0.14em;
             font-weight: 800;
-            color: rgba(191, 219, 254, 0.9);
-            padding: 0.5rem 0.8rem;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.07);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
-        .hero-heading {
-            font-size: clamp(2.3rem, 6vw, 4.5rem);
-            line-height: 0.96;
+        .hero-heading,
+        .section-heading,
+        .footer-title {
+            margin: 0;
+            line-height: 1.05;
             letter-spacing: -0.04em;
-            margin: 0 0 1rem;
-            max-width: 10ch;
         }
+        .hero-heading { font-size: clamp(2.4rem, 7vw, 4.5rem); }
         .hero-gradient {
-            background: linear-gradient(135deg, var(--text) 0%, color-mix(in srgb, var(--text) 72%, var(--primary) 28%) 30%, color-mix(in srgb, var(--text) 46%, var(--accent) 54%) 100%);
+            background: linear-gradient(135deg, #e879f9 0%, #22d3ee 100%);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
         }
-        .hero-rotator {
-            display: inline-block;
-            color: #67e8f9;
-            min-width: 8ch;
-            transition: opacity 0.18s ease, transform 0.18s ease;
-        }
-        .hero-rotator:not(.is-active) {
-            opacity: 0.72;
-            transform: translateY(4px);
-        }
-        .hero-copy p,
-        .hero-note,
         .section-subtitle,
         .card-body,
-        .body-copy,
-        .subtle-copy,
-        .empty-copy,
-        .stream-meta,
-        .card-kicker,
-        .footer-copy {
-            color: var(--muted);
-            line-height: 1.65;
-        }
-        .hero-copy p {
-            max-width: 58rem;
-            font-size: 1.03rem;
-            margin: 0;
-        }
-        .hero-actions,
-        .button-row,
-        .footer-links,
-        .pill-row,
-        .meta-row,
-        .chip-cloud,
-        .card-footer,
-        .inline-actions {
-            display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .hero-actions {
-            margin-top: 1.4rem;
-        }
-        .button,
-        .button-secondary,
-        .button-ghost {
+        .footer-copy,
+        .manager-note,
+        .input-help { margin: 0.5rem 0 0; }
+        .card-title { margin: 0; font-size: 1.08rem; }
+        .pill {
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            gap: 0.55rem;
-            padding: 0.88rem 1.15rem;
+            gap: 0.35rem;
+            padding: 0.35rem 0.7rem;
             border-radius: 999px;
-            font-weight: 700;
-            border: 1px solid transparent;
-            transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-        }
-        .button {
-            background: linear-gradient(135deg, var(--primary), #4f46e5 64%, var(--accent));
-            color: white;
-            box-shadow: 0 16px 36px rgba(99, 102, 241, 0.34);
-        }
-        .button:hover,
-        .button-secondary:hover,
-        .button-ghost:hover {
-            transform: translateY(-2px);
-        }
-        .button-secondary {
-            background: rgba(255, 255, 255, 0.08);
-            color: white;
-            border-color: rgba(255, 255, 255, 0.1);
-        }
-        .button-ghost {
-            color: var(--muted-strong);
-            border-color: rgba(255, 255, 255, 0.08);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .hero-note {
-            margin-top: 1.15rem;
-            max-width: 48rem;
-        }
-        .hero-spotlight {
-            border-radius: var(--radius);
-            padding: 1rem;
-        }
-        .hero-spotlight .spotlight-title {
-            font-size: 1.1rem;
-            margin: 0.65rem 0 0.45rem;
-        }
-        .hero-spotlight .spotlight-copy {
-            color: var(--muted);
-            line-height: 1.6;
-            margin: 0;
-        }
-        .stat-grid {
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            margin-top: 1.15rem;
-        }
-        .stat-card {
-            border-radius: var(--radius-md);
-            padding: 1rem 1rem 1.05rem;
-            position: relative;
-            overflow: hidden;
-        }
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            inset: auto 1rem 0;
-            height: 4px;
-            border-radius: 999px;
-            background: linear-gradient(90deg, rgba(139, 92, 246, 0.95), rgba(34, 211, 238, 0.9));
-        }
-        .stat-label {
-            color: rgba(191, 219, 254, 0.72);
-            font-size: 0.78rem;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
-            font-weight: 800;
-        }
-        .stat-value {
-            font-size: clamp(1.45rem, 4vw, 2.2rem);
-            font-weight: 800;
-            margin-top: 0.35rem;
-            letter-spacing: -0.04em;
-        }
-        .stat-meta {
-            font-size: 0.86rem;
-            color: var(--muted);
-            margin-top: 0.35rem;
-        }
-        .section-panel {
-            border-radius: var(--radius);
-            padding: 1.25rem;
-            margin-top: 1.1rem;
-        }
-        .section-head {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            align-items: flex-end;
-            margin-bottom: 1rem;
-        }
-        .section-title {
-            margin: 0;
-            font-size: clamp(1.4rem, 3vw, 2rem);
-            letter-spacing: -0.03em;
-        }
-        .section-subtitle {
-            margin-top: 0.32rem;
-            max-width: 54rem;
-        }
-        .section-link {
-            padding: 0.76rem 0.95rem;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            color: var(--muted-strong);
-            font-size: 0.9rem;
-            white-space: nowrap;
         }
-        .card-grid,
-        .channel-grid,
-        .feature-grid,
-        .surface-grid,
-        .collection-grid {
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        .pill.primary,
+        .pill.live { background: rgba(34, 211, 238, 0.16); border-color: rgba(34, 211, 238, 0.32); }
+        .pill.success { background: rgba(74, 222, 128, 0.14); border-color: rgba(74, 222, 128, 0.32); }
+        .pill.warn { background: rgba(251, 191, 36, 0.14); border-color: rgba(251, 191, 36, 0.32); }
+        .pill.soft,
+        .pill.muted { color: var(--muted-strong); }
+        .data-point { padding: 0.95rem; }
+        .data-point-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
+        .data-point-value { margin-top: 0.35rem; font-size: 1.15rem; font-weight: 800; }
+        .link-inline { color: var(--accent); text-decoration: underline; text-underline-offset: 0.2em; }
+        .search-bar { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
+        .filter-input,
+        .form-field input,
+        .form-field select,
+        .form-field textarea {
+            width: 100%;
+            min-height: 2.9rem;
+            padding: 0.85rem 0.95rem;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
         }
-        .split-grid {
-            grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
-            align-items: start;
-            margin-top: 1.1rem;
+        .form-field {
+            display: grid;
+            gap: 0.35rem;
         }
-        .story-grid {
-            grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-            align-items: stretch;
-        }
-        .glass-card,
-        .timeline-card {
-            border-radius: var(--radius-md);
-            padding: 1rem;
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.2, 1), border-color 0.32s ease, background 0.32s ease, box-shadow 0.32s ease;
-        }
-        .glass-card:hover,
-        .timeline-card:hover {
-            transform: translateY(-6px);
-            border-color: rgba(96, 165, 250, 0.26);
-            background: linear-gradient(180deg, rgba(18, 30, 59, 0.95), rgba(10, 17, 34, 0.96));
-            box-shadow: 0 30px 70px rgba(2, 8, 23, 0.5);
-        }
-        .glass-card.is-inline {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
+        .stack-item { padding: 0.95rem; }
         .media-thumb {
             position: relative;
-            aspect-ratio: 16 / 9;
-            border-radius: 20px;
             overflow: hidden;
+            min-height: 220px;
             background:
                 radial-gradient(circle at top left, rgba(139, 92, 246, 0.42), transparent 40%),
                 linear-gradient(135deg, rgba(14, 23, 46, 0.96), rgba(8, 13, 28, 0.96));
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            margin-bottom: 1rem;
         }
         .media-thumb img {
             width: 100%;
@@ -869,9 +461,7 @@ function _shellStyles() {
             padding: 1rem;
             background: linear-gradient(180deg, rgba(8, 13, 28, 0.08), rgba(8, 13, 28, 0.86));
         }
-        .media-thumb.has-image .media-fallback-copy {
-            display: none;
-        }
+        .media-thumb.has-image .media-fallback-copy { display: none; }
         .media-kicker {
             display: inline-flex;
             width: fit-content;
@@ -886,169 +476,266 @@ function _shellStyles() {
             letter-spacing: 0.12em;
             text-transform: uppercase;
         }
-        .media-fallback-copy strong {
-            font-size: 1.15rem;
-            line-height: 1.1;
-            letter-spacing: -0.03em;
-        }
-        .media-fallback-copy span {
-            color: rgba(219, 234, 254, 0.8);
-            font-size: 0.92rem;
-        }
-        .card-title {
-            margin: 0;
-            font-size: 1.15rem;
-            letter-spacing: -0.03em;
-        }
-        .card-link { display: inline-flex; }
-        .card-body {
-            margin-top: 0.55rem;
-            font-size: 0.96rem;
-        }
-        .card-kicker {
-            font-size: 0.84rem;
-            margin-top: 0.5rem;
-        }
-        .meta-row {
-            margin-top: 0.85rem;
-        }
-        .meta-item,
-        .pill,
-        .category-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.42rem;
-            border-radius: 999px;
-            padding: 0.42rem 0.72rem;
-            font-size: 0.78rem;
-            line-height: 1;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(255, 255, 255, 0.05);
-            color: rgba(230, 238, 255, 0.9);
-        }
-        .pill.live {
-            background: color-mix(in srgb, var(--danger) 18%, transparent);
-            border-color: color-mix(in srgb, var(--danger) 34%, transparent);
-            color: color-mix(in srgb, white 78%, var(--danger) 22%);
-        }
-        .pill.success {
-            background: rgba(52, 211, 153, 0.14);
-            border-color: rgba(52, 211, 153, 0.24);
-            color: #bbf7d0;
-        }
-        .pill.warn {
-            background: color-mix(in srgb, var(--warn) 16%, transparent);
-            border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-            color: color-mix(in srgb, white 72%, var(--warn) 28%);
-        }
-        .pill.primary {
-            background: rgba(139, 92, 246, 0.16);
-            border-color: rgba(139, 92, 246, 0.28);
-            color: #ddd6fe;
-        }
-        .pill.soft {
-            background: color-mix(in srgb, var(--accent) 15%, transparent);
-            border-color: color-mix(in srgb, var(--accent) 26%, transparent);
-            color: color-mix(in srgb, white 70%, var(--accent) 30%);
-        }
-        .pill.muted {
-            color: var(--muted);
-        }
-        .card-footer {
-            margin-top: 1rem;
-            justify-content: space-between;
-        }
-        .link-inline {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            color: #c7d2fe;
-            font-weight: 650;
-        }
-        .avatar-badge {
-            width: 3.4rem;
-            height: 3.4rem;
-            border-radius: 1.2rem;
-            overflow: hidden;
-            display: grid;
-            place-items: center;
-            flex: none;
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.48), rgba(34, 211, 238, 0.28));
-            color: white;
-            font-weight: 800;
-            font-size: 1.05rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .avatar-badge img {
+        .media-stage iframe,
+        .ov-media-player video {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            aspect-ratio: 16 / 9;
+            border-radius: 20px;
+            border: 0;
+            background: rgba(5, 9, 22, 0.92);
         }
-        .channel-head {
-            display: flex;
-            align-items: center;
-            gap: 0.85rem;
-        }
-        .channel-name {
-            margin: 0;
-            font-size: 1.08rem;
-        }
-        .channel-handle,
-        .subtle-copy,
-        .directory-status,
-        .empty-copy {
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-        .chip-cloud {
-            margin-top: 1rem;
-        }
-        .category-chip {
-            cursor: pointer;
-            transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
-        }
-        .category-chip:hover {
-            transform: translateY(-2px);
-            border-color: rgba(34, 211, 238, 0.28);
-            background: rgba(34, 211, 238, 0.12);
-        }
-        .search-bar {
-            display: flex;
-            gap: 0.8rem;
-            flex-wrap: wrap;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        .filter-input {
-            flex: 1 1 280px;
-            min-width: 240px;
-            padding: 0.95rem 1rem;
-            border-radius: 18px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.05);
-            color: white;
-            font-size: 0.98rem;
-            outline: none;
-            transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
-        }
-        .filter-input:focus {
-            border-color: rgba(34, 211, 238, 0.36);
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
-        }
-        .empty-state {
-            padding: 1.2rem;
-            border-radius: 22px;
-            border: 1px dashed rgba(148, 163, 184, 0.26);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .empty-state h3 {
-            margin: 0 0 0.45rem;
-            font-size: 1.08rem;
-        }
-        .list-stack {
+        .ov-player-controls {
             display: grid;
-            gap: 0.9rem;
+            gap: 0.75rem;
+            align-items: center;
+            grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+        }
+        .ov-player-range,
+        .ov-player-volume { width: 100%; accent-color: #22d3ee; }
+        .ov-player-volume { min-width: 84px; max-width: 108px; }
+        .ov-player-time { font-size: 0.92rem; color: var(--muted-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .ov-player-status { color: var(--muted); font-size: 0.92rem; min-height: 1.25em; }
+        [data-reveal] { opacity: 1; transform: none; }
+        [data-reveal].is-visible { opacity: 1; transform: none; }
+        @media (max-width: 980px) {
+            .hero-grid,
+            .split-grid,
+            .footer-grid,
+            .ov-player-controls {
+                grid-template-columns: 1fr;
+            }
+            .topbar-inner { flex-wrap: wrap; justify-content: center; }
+            .nav-links { justify-content: center; }
+        }
+    </style>`;
+}
+
+function _shellScript() {
+    return `<script>
+        (function () {
+            if (window.OpenVibe && typeof window.OpenVibe.primeTheme === 'function') {
+                Promise.resolve(window.OpenVibe.primeTheme()).catch(function () {});
+            }
+
+            Array.prototype.forEach.call(document.querySelectorAll('[data-reveal]'), function (element) {
+                element.classList.add('is-visible');
+            });
+
+            var updatesFeed = document.querySelector('[data-updates-feed]');
+            if (updatesFeed) {
+                var storageKey = 'openvibe-live:updates-seen';
+                var signature = updatesFeed.dataset.updatesFeed || '';
+                var cards = Array.prototype.slice.call(updatesFeed.querySelectorAll('[data-update-id]'));
+                var status = updatesFeed.querySelector('[data-updates-status]');
+                var clearButton = updatesFeed.querySelector('[data-updates-clear]');
+                var seen = false;
+                try {
+                    seen = !!window.localStorage && window.localStorage.getItem(storageKey) === signature;
+                } catch (_storageError) {
+                    seen = false;
+                }
+                var applyUpdatesState = function (allSeen) {
+                    cards.forEach(function (card) {
+                        card.classList.toggle('is-unread', !allSeen);
+                    });
+                    if (status) {
+                        status.textContent = allSeen ? 'All caught up' : String(cards.length) + ' recent changes';
+                    }
+                    if (clearButton) clearButton.hidden = allSeen;
+                };
+                applyUpdatesState(seen || !cards.length);
+                if (clearButton) {
+                    clearButton.addEventListener('click', function () {
+                        try {
+                            if (window.localStorage) window.localStorage.setItem(storageKey, signature);
+                        } catch (_storageError) {
+                            // ignore storage failures
+                        }
+                        applyUpdatesState(true);
+                    });
+                }
+            }
+
+            Array.prototype.forEach.call(document.querySelectorAll('[data-filter-input]'), function (input) {
+                var group = input.dataset.filterInput;
+                var cards = Array.prototype.slice.call(document.querySelectorAll('[data-filter-group="' + group + '"]'));
+                var status = document.querySelector('[data-filter-status="' + group + '"]');
+                var apply = function () {
+                    var query = String(input.value || '').trim().toLowerCase();
+                    var visible = 0;
+                    cards.forEach(function (card) {
+                        var haystack = String(card.dataset.filterText || '').toLowerCase();
+                        var show = !query || haystack.indexOf(query) !== -1;
+                        card.hidden = !show;
+                        if (show) visible += 1;
+                    });
+                    if (status) {
+                        status.textContent = query ? String(visible) + ' matching results' : String(cards.length) + ' total items';
+                    }
+                };
+                input.addEventListener('input', apply);
+                apply();
+            });
+
+            Array.prototype.forEach.call(document.querySelectorAll('[data-chip-target]'), function (chip) {
+                chip.addEventListener('click', function () {
+                    var target = document.querySelector(chip.dataset.chipTarget || '');
+                    if (!target) return;
+                    target.value = chip.dataset.chipValue || '';
+                    target.dispatchEvent(new Event('input', { bubbles: true }));
+                    target.focus();
+                });
+            });
+
+            function formatPlayerTime(seconds) {
+                var value = Number(seconds);
+                if (!Number.isFinite(value) || value < 0) return '--:--';
+                var total = Math.floor(value);
+                var hours = Math.floor(total / 3600);
+                var minutes = Math.floor((total % 3600) / 60);
+                var secs = total % 60;
+                if (hours > 0) {
+                    return String(hours) + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+                }
+                return String(minutes) + ':' + String(secs).padStart(2, '0');
+            }
+
+            Array.prototype.forEach.call(document.querySelectorAll('[data-ov-player]'), function (root) {
+                var video = root.querySelector('video');
+                if (!video) return;
+                var playToggle = root.querySelector('[data-player-action="toggle"]');
+                var muteToggle = root.querySelector('[data-player-action="mute"]');
+                var fullscreenToggle = root.querySelector('[data-player-action="fullscreen"]');
+                var seek = root.querySelector('[data-player-seek]');
+                var volume = root.querySelector('[data-player-volume]');
+                var time = root.querySelector('[data-player-time]');
+                var status = root.querySelector('[data-player-status]');
+
+                var setStatus = function (message) {
+                    if (status) status.textContent = message;
+                };
+
+                var sync = function () {
+                    var duration = Number.isFinite(video.duration) ? video.duration : 0;
+                    var current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+                    if (playToggle) playToggle.textContent = video.paused || video.ended ? 'Play' : 'Pause';
+                    if (muteToggle) muteToggle.textContent = video.muted || video.volume === 0 ? 'Unmute' : 'Mute';
+                    if (time) time.textContent = formatPlayerTime(current) + ' / ' + formatPlayerTime(duration);
+                    if (seek && seek.dataset.seeking !== 'true') {
+                        seek.disabled = !duration;
+                        seek.value = duration ? String(Math.round((current / duration) * 1000)) : '0';
+                    }
+                    if (volume && document.activeElement !== volume) {
+                        volume.value = String(video.muted ? 0 : video.volume);
+                    }
+                };
+
+                video.controls = false;
+                video.preload = 'metadata';
+                setStatus('Ready to play');
+                sync();
+
+                if (playToggle) {
+                    playToggle.addEventListener('click', function () {
+                        var action = video.paused || video.ended ? video.play() : Promise.resolve(video.pause());
+                        Promise.resolve(action).catch(function () {
+                            setStatus('Playback could not start in this browser session.');
+                        }).finally(sync);
+                    });
+                }
+
+                if (muteToggle) {
+                    muteToggle.addEventListener('click', function () {
+                        video.muted = !video.muted;
+                        if (!video.muted && video.volume === 0) {
+                            video.volume = 0.7;
+                        }
+                        sync();
+                    });
+                }
+
+                if (fullscreenToggle) {
+                    fullscreenToggle.addEventListener('click', function () {
+                        if (document.fullscreenElement && document.exitFullscreen) {
+                            document.exitFullscreen().catch(function () {
+                                setStatus('Fullscreen is not available here.');
+                            });
+                            return;
+                        }
+                        if (root.requestFullscreen) {
+                            root.requestFullscreen().catch(function () {
+                                setStatus('Fullscreen is not available here.');
+                            });
+                        }
+                    });
+                }
+
+                if (seek) {
+                    seek.addEventListener('input', function () {
+                        seek.dataset.seeking = 'true';
+                        var duration = Number.isFinite(video.duration) ? video.duration : 0;
+                        if (time && duration) {
+                            var nextTime = (Number(seek.value) / 1000) * duration;
+                            time.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(duration);
+                        }
+                    });
+                    seek.addEventListener('change', function () {
+                        var duration = Number.isFinite(video.duration) ? video.duration : 0;
+                        if (duration) {
+                            video.currentTime = (Number(seek.value) / 1000) * duration;
+                        }
+                        delete seek.dataset.seeking;
+                        sync();
+                    });
+                }
+
+                if (volume) {
+                    volume.addEventListener('input', function () {
+                        var nextVolume = Math.max(0, Math.min(1, Number(volume.value)));
+                        video.volume = nextVolume;
+                        video.muted = nextVolume === 0;
+                        sync();
+                    });
+                }
+
+                video.addEventListener('loadedmetadata', sync);
+                video.addEventListener('durationchange', sync);
+                video.addEventListener('timeupdate', sync);
+                video.addEventListener('volumechange', sync);
+                video.addEventListener('play', function () { setStatus('Playing'); sync(); });
+                video.addEventListener('pause', function () { setStatus(video.ended ? 'Playback finished' : 'Paused'); sync(); });
+                video.addEventListener('waiting', function () { setStatus('Buffering…'); });
+                video.addEventListener('canplay', function () {
+                    if (video.paused && !video.ended) setStatus('Ready to play');
+                });
+                video.addEventListener('ended', function () { setStatus('Playback finished'); sync(); });
+                video.addEventListener('error', function () {
+                    setStatus('Playback error: the bytes exist, but this browser could not open the source.');
+                });
+            });
+        })();
+    </script>`;
+}
+
+/*
+        .manager-note,
+        .input-help {
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .stack-item {
+            padding: 0.95rem;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .stack-item h4 {
+            margin: 0;
+            font-size: 1rem;
+        }
+        .stack-item p {
+            margin: 0.45rem 0 0;
         }
         .timeline-card .card-title,
         .footer-title {
@@ -1608,6 +1295,8 @@ function _shellScript() {
     </script>`;
 }
 
+*/
+
 function renderNav(activeNav) {
     const items = [
         { href: '/', label: 'Home', id: 'home' },
@@ -1627,8 +1316,8 @@ function renderFooter() {
                 <div class="footer-grid">
                     <div>
                         <div class="eyebrow">OpenVibe Live</div>
-                        <h2 class="footer-title" style="margin:0 0 0.55rem">Creator-first discovery, open infrastructure, and visible escape hatches.</h2>
-                        <p class="footer-copy">OpenVibe Live is being shaped as a creator-owned alternative: canonical @handles, reusable platform services, honest migration state, and legal/reporting links that stay obvious instead of disappearing into a support void.</p>
+                        <h2 class="footer-title" style="margin:0 0 0.55rem">Watch live, rewind fast, clip the good parts, and keep the creator route intact.</h2>
+                        <p class="footer-copy">OpenVibe Live is being built to feel more like old-school creator web: clear channel routes, obvious community links, visible reporting paths, and a platform that does not hide how it works.</p>
                         <div class="data-points" style="margin-top:1rem;">
                             <div class="data-point">
                                 <div class="data-point-label">Model</div>
@@ -1680,7 +1369,7 @@ function renderFooter() {
                     </div>
                 </div>
                 <div class="footer-legal">
-                    <p class="footer-copy" style="margin:0">OpenVibe Live surfaces what the current runtime can prove right now: live sessions, recent activity, creator routes, media linkage state, and the adjacent community/chat systems already available across the network.</p>
+                    <p class="footer-copy" style="margin:0">OpenVibe Live shows what the network can actually prove right now: live sessions, recent activity, creator routes, replay links, and the nearby chat and community surfaces that already exist.</p>
                     <div class="footer-legal-links">
                         <span class="pill soft">Open source & community-run</span>
                         <span class="pill primary">Canonical @username routes</span>
@@ -1708,7 +1397,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                         <span class="brand-mark">OV</span>
                         <span class="brand-copy">
                             <span class="brand-name">openvibe.live</span>
-                            <span class="brand-sub">Native live discovery for the OpenVibe graph</span>
+                            <span class="brand-sub">Watch live, catch replays, and go live with one account</span>
                         </span>
                     </a>
                     <nav class="nav-links" aria-label="Primary">
@@ -1722,6 +1411,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             </main>
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
+            <script src="/assets/live-dashboard.js?v=20260503-2"></script>
             ${_shellScript()}
         </body>
         </html>`;
@@ -1838,508 +1528,6 @@ function renderChannelCard(channel, baseUrl, options) {
                 eyebrow: currentStream ? 'Live creator' : (previewStream ? 'Recent creator' : 'Creator route'),
                 subtitle: channel.display_name || channel.slug,
                 initials: initialsFrom(channel.display_name || channel.slug),
-                baseUrl,
-            })}
-            <div class="channel-head">
-                <div class="avatar-badge">
-                    ${canRenderImageUrl(channel.avatar_url)
-                        ? `<img src="${escapeHtml(absoluteUrl(channel.avatar_url, baseUrl))}" alt="${escapeHtml(channel.display_name || channel.slug)} avatar" loading="lazy" onerror="this.parentElement.textContent='${escapeHtml(initialsFrom(channel.display_name || channel.slug))}'">`
-                        : escapeHtml(initialsFrom(channel.display_name || channel.slug))}
-                </div>
-                <div>
-                    <div class="pill-row">${liveLabel}${channel.source === 'hobostreamer' ? renderPill('Migrated account', 'warn') : ''}</div>
-                    <a class="card-link" href="${channelPath(channel.slug)}"><h3 class="channel-name">${escapeHtml(channel.display_name || channel.slug)}</h3></a>
-                    <div class="channel-handle">${escapeHtml(descriptorBits.join(' · ') || `@${channel.slug}`)}</div>
-                </div>
-            </div>
-            <p class="card-body">${escapeHtml(channel.description || (currentStream ? `Currently live with “${currentStream.title || 'Untitled stream'}”.` : 'Offline right now, but ready for channel discovery and replay links.'))}</p>
-            <div class="pill-row">${(channel.tags || []).slice(0, 4).map((tag) => renderPill(tag, 'soft')).join('')}</div>
-            ${statBits.length ? `<div class="meta-row">${statBits.map((item) => `<span class="meta-item">${escapeHtml(item)}</span>`).join('')}</div>` : ''}
-            <div class="card-footer">
-                <span class="meta-item">${stats && stats.last_activity_at ? `Last active ${timeAgo(stats.last_activity_at)}` : 'Waiting for next stream'}</span>
-                <a class="link-inline" href="${channelPath(channel.slug)}">Open channel →</a>
-            </div>
-        </article>`;
-}
-
-function collectHeroFrames({ trendingNow, liveNow, recentlyEnded, channelMap, baseUrl }) {
-    const frames = [];
-    const seen = new Set();
-    [trendingNow || [], liveNow || [], recentlyEnded || []].forEach((list) => {
-        list.forEach((stream) => {
-            const channel = channelMap && channelMap.get(stream.channel_slug);
-            const rawUrl = stream.thumbnail_url || (channel && channel.avatar_url) || null;
-            if (!canRenderImageUrl(rawUrl)) return;
-            const url = absoluteUrl(rawUrl, baseUrl);
-            if (!url || seen.has(url)) return;
-            seen.add(url);
-            frames.push({
-                url,
-                title: stream.title || 'Untitled stream',
-                subtitle: (channel && (channel.display_name || channel.slug)) || stream.channel_slug || 'OpenVibe creator',
-                eyebrow: stream.is_live ? 'Live frame' : 'Recent frame',
-            });
-        });
-    });
-    return frames.slice(0, 6);
-}
-
-function renderRecentlyOnlineChannelCard(entry, baseUrl) {
-    const channel = entry || {};
-    const stats = channel.stats || {};
-    const recentStream = channel.recentStream || channel.lastStream || null;
-    const title = channel.display_name || channel.slug || 'Unknown creator';
-    const totalLive = formatDurationSeconds(stats.stream_time_seconds || 0);
-    const previewTitle = (recentStream && recentStream.title) || `${title} recently online`;
-    const recentLabel = recentStream && recentStream.ended_at
-        ? `Ended ${timeAgo(recentStream.ended_at)}`
-        : (stats.last_ended_at ? `Ended ${timeAgo(stats.last_ended_at)}` : 'Recently online');
-    return `
-        <article class="glass-card is-inline" data-reveal>
-            ${renderMediaThumb({
-                url: (recentStream && recentStream.thumbnail_url) || channel.avatar_url || null,
-                title: previewTitle,
-                eyebrow: 'Recently online',
-                subtitle: title,
-                initials: initialsFrom(title),
-                baseUrl,
-            })}
-            <div class="pill-row">
-                ${renderPill('Recently online', 'soft')}
-                ${renderPill(`${totalLive} total live`, 'primary')}
-                ${recentStream && recentStream.category ? renderPill(recentStream.category, 'muted') : ''}
-            </div>
-            <a class="card-link" href="${channelPath(channel.slug)}"><h3 class="card-title">${escapeHtml(title)}</h3></a>
-            <div class="card-kicker">@${escapeHtml(channel.slug || 'unknown')} · ${escapeHtml(recentLabel)}</div>
-            <p class="card-body">${escapeHtml(previewTitle)}${recentStream && recentStream.vod_media_id ? ' · VOD attached' : ''}${recentStream && recentStream.has_clips ? ' · Clips ready' : ''}</p>
-            <div class="data-points" style="margin-top:0.95rem;">
-                <div class="data-point">
-                    <div class="data-point-label">Stream time</div>
-                    <div class="data-point-value">${escapeHtml(totalLive)}</div>
-                </div>
-                <div class="data-point">
-                    <div class="data-point-label">Streams tracked</div>
-                    <div class="data-point-value">${escapeHtml(formatNumber(stats.total_streams || 0))}</div>
-                </div>
-                <div class="data-point">
-                    <div class="data-point-label">Peak viewers</div>
-                    <div class="data-point-value">${escapeHtml(formatCompactNumber(stats.peak_viewers || 0))}</div>
-                </div>
-            </div>
-            <div class="card-footer">
-                <span class="meta-item">${escapeHtml(stats.last_activity_at ? `Last activity ${timeAgo(stats.last_activity_at)}` : 'Waiting for the next session')}</span>
-                <a class="link-inline" href="${recentStream ? streamPath(channel.slug, recentStream.id) : channelPath(channel.slug)}">${recentStream ? 'Open latest stream →' : 'Open channel →'}</a>
-            </div>
-        </article>`;
-}
-
-function renderEmptyState(title, body, href, label) {
-    return `
-        <div class="empty-state" data-reveal>
-            <h3>${escapeHtml(title)}</h3>
-            <p class="empty-copy">${escapeHtml(body)}</p>
-            ${href && label ? `<div class="inline-actions"><a class="button-secondary" href="${href}">${escapeHtml(label)}</a></div>` : ''}
-        </div>`;
-}
-
-function renderPasteCard(paste, baseUrl) {
-    const title = paste.title || paste.slug || 'Untitled paste';
-    const preview = truncateText(paste.preview_text || paste.body || 'Migrated community paste.', 160);
-    const sourceLabel = paste.source === 'hobostreamer' ? 'Migrated paste' : 'Community paste';
-    const kindLabel = paste.kind === 'screenshot' ? 'Screenshot' : 'Paste';
-    return `
-        <article class="glass-card is-inline" data-reveal>
-            ${renderMediaThumb({
-                url: paste.image_url || null,
-                title,
-                eyebrow: kindLabel,
-                subtitle: title,
-                initials: initialsFrom(title),
-                baseUrl,
-            })}
-            <div class="pill-row">
-                ${renderPill(kindLabel, 'primary')}
-                ${paste.language ? renderPill(labelizeKey(paste.language), 'soft') : ''}
-                ${renderPill(`${formatNumber(paste.view_count || 0)} views`, 'muted')}
-                ${renderPill(sourceLabel, paste.source === 'hobostreamer' ? 'warn' : 'success')}
-            </div>
-            <h3 class="card-title">${escapeHtml(title)}</h3>
-            <div class="card-kicker">${escapeHtml(timeAgo(paste.created_at))} · ${escapeHtml(paste.slug || 'community')}</div>
-            <p class="card-body">${escapeHtml(preview || 'Community paste imported into the OpenVibe network.')}</p>
-            <div class="card-footer">
-                <span class="meta-item">${escapeHtml(paste.image_url ? 'Preview available' : 'Text-first paste')}</span>
-                <a class="link-inline" href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}">Open community →</a>
-            </div>
-        </article>`;
-}
-
-function renderSection({ id, title, subtitle, actionHref, actionLabel, content, emptyTitle, emptyBody, emptyHref, emptyLabel }) {
-    return `
-        <section class="section-panel" ${id ? `id="${escapeHtml(id)}"` : ''}>
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">${escapeHtml(title)}</h2>
-                    ${subtitle ? `<p class="section-subtitle">${escapeHtml(subtitle)}</p>` : ''}
-                </div>
-                ${actionHref && actionLabel ? `<a class="section-link" href="${actionHref}">${escapeHtml(actionLabel)}</a>` : ''}
-            </div>
-            ${content ? content : renderEmptyState(emptyTitle || title, emptyBody || 'Nothing to show yet.', emptyHref, emptyLabel)}
-        </section>`;
-}
-
-function renderStatsStrip(stats) {
-    const items = [
-        { label: 'Live now', value: stats.live_now || 0, meta: 'active sessions', format: 'integer' },
-        { label: 'Channels', value: stats.channels || 0, meta: 'creator routes', format: 'integer' },
-        { label: 'Current viewers', value: stats.current_viewers || 0, meta: 'across live sessions', format: 'compact' },
-        { label: 'Peak live viewers', value: stats.peak_live_viewers || 0, meta: 'sum of current live peaks', format: 'compact' },
-        { label: 'Public VODs', value: stats.vods || 0, meta: 'canonical replay objects', format: 'integer' },
-        { label: 'Public clips', value: stats.clips || 0, meta: 'canonical highlight objects', format: 'integer' },
-    ];
-    return `<div class="stat-grid">${items.map((item) => `
-        <article class="stat-card" data-reveal>
-            <div class="stat-label">${escapeHtml(item.label)}</div>
-            <div class="stat-value">${escapeHtml(item.format === 'compact' ? formatCompactNumber(item.value) : formatNumber(item.value))}</div>
-            <div class="stat-meta">${escapeHtml(item.meta)}</div>
-        </article>
-    `).join('')}</div>`;
-}
-
-function renderSignalCard({ eyebrow, title, body, meta, href }) {
-    return `
-        <article class="data-point">
-            <div class="data-point-label">${escapeHtml(eyebrow || 'Signal')}</div>
-            <div class="data-point-value" style="font-size:1rem; line-height:1.25;">
-                ${href ? `<a class="link-inline" href="${href}">${escapeHtml(title || 'Untitled')}</a>` : escapeHtml(title || 'Untitled')}
-            </div>
-            ${body ? `<div class="subtle-copy" style="margin-top:0.35rem;">${escapeHtml(body)}</div>` : ''}
-            ${meta ? `<div class="subtle-copy" style="margin-top:0.35rem;">${escapeHtml(meta)}</div>` : ''}
-        </article>`;
-}
-
-function renderCollectionPage({ kind, title, description, emptyMessage, items, baseUrl }) {
-    const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">${escapeHtml(kind === 'vods' ? 'Replay library' : 'Highlights library')}</div>
-                <h1 class="hero-heading"><span class="hero-gradient">${escapeHtml(title)}</span></h1>
-                <p>${escapeHtml(description)}</p>
-                <div class="hero-actions">
-                    <a class="button" href="/">Back to live discovery</a>
-                    <a class="button-secondary" href="/channels">Browse channels</a>
-                    <a class="button-ghost" href="/go-live">Go live on OpenVibe</a>
-                </div>
-            </div>
-        </section>
-        ${renderSection({
-            title,
-            subtitle: kind === 'vods'
-                ? 'Replays stay first-class even when live sessions end.'
-                : 'Fast highlights stay visible as clip metadata arrives.',
-            content: items && items.length
-                ? `<div>
-                    <div class="search-bar">
-                        <input class="filter-input" type="search" placeholder="Filter ${escapeHtml(kind)} by title, creator, or category" data-filter-input="${escapeHtml(kind)}">
-                        <div class="directory-status" data-filter-status="${escapeHtml(kind)}">${escapeHtml(items.length)} total items</div>
-                    </div>
-                    <div class="collection-grid">${items.map((item, index) => renderStreamCard(item, null, baseUrl, {
-                        badge: kind === 'vods' ? 'VOD' : 'CLIP',
-                        badgeTone: kind === 'vods' ? 'success' : 'primary',
-                        filterGroup: kind,
-                        transitionDelay: index,
-                    })).join('')}</div>
-                </div>`
-                : null,
-            emptyTitle: kind === 'vods' ? 'No VODs staged yet' : 'No clips staged yet',
-            emptyBody: emptyMessage,
-            emptyHref: '/go-live',
-            emptyLabel: 'Open go-live guide',
-        })}
-    `;
-    return renderPage({
-        title: pageTitle(title, 'openvibe.live'),
-        description,
-        canonical: `${baseUrl}/${kind}`,
-        activeNav: kind,
-        bodyHtml: pageContent,
-        baseUrl,
-    });
-}
-
-function renderChannelsPage({ channels, featuredChannels, categories, baseUrl }) {
-    const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-grid">
-                <div class="hero-copy" data-reveal>
-                    <div class="eyebrow">Creator directory</div>
-                    <h1 class="hero-heading">Browse the <span class="hero-gradient">OpenVibe creator graph</span></h1>
-                    <p>Channels are searchable, activity-aware, and linked directly into live sessions, recent broadcasts, VOD routes, and clip state.</p>
-                    <div class="hero-actions">
-                        <a class="button" href="/">Watch what is live</a>
-                        <a class="button-secondary" href="/go-live">Set up your stream</a>
-                    </div>
-                </div>
-                <div class="glass-card" data-reveal>
-                    <div class="eyebrow">Featured now</div>
-                    <div class="list-stack">${(featuredChannels || []).slice(0, 3).map((channel) => `
-                        <div class="data-point">
-                            <div class="data-point-label">${escapeHtml(channel.currentStream ? 'Live creator' : 'Creator to watch')}</div>
-                            <div class="data-point-value"><a class="link-inline" href="${channelPath(channel.slug)}">${escapeHtml(channel.display_name || channel.slug)}</a></div>
-                            <div class="subtle-copy">${escapeHtml(channel.currentStream ? (channel.currentStream.title || 'Live now') : ((channel.stats && channel.stats.last_activity_at) ? `Last active ${timeAgo(channel.stats.last_activity_at)}` : 'Waiting for next stream'))}</div>
-                        </div>
-                    `).join('')}</div>
-                </div>
-            </div>
-            <div class="chip-cloud">
-                ${(categories || []).map((category) => `<button class="category-chip" type="button" data-chip-target="[data-filter-input=channels]" data-chip-value="${escapeHtml(category.label)}">${escapeHtml(category.label)} · ${escapeHtml(category.count)}</button>`).join('')}
-            </div>
-        </section>
-        ${renderSection({
-            id: 'channels-directory',
-            title: 'All channels',
-            subtitle: 'Search by creator, category, or metadata already staged in the live graph.',
-            content: channels && channels.length
-                ? `<div>
-                    <div class="search-bar">
-                        <input class="filter-input" type="search" placeholder="Find a creator by name, handle, category, or tag" data-filter-input="channels">
-                        <div class="directory-status" data-filter-status="channels">${escapeHtml(channels.length)} total channels</div>
-                    </div>
-                    <div class="channel-grid">${channels.map((channel) => renderChannelCard(channel, baseUrl, { filterGroup: 'channels' })).join('')}</div>
-                </div>`
-                : null,
-            emptyTitle: 'No channels in the live graph yet',
-            emptyBody: 'Channels appear here as they are mirrored into the live service or created natively through the wider OpenVibe platform.',
-            emptyHref: '/go-live',
-            emptyLabel: 'Learn how to go live',
-        })}
-    `;
-    return renderPage({
-        title: 'Channels — openvibe.live',
-        description: 'Browse staged creators, live creators, and recent OpenVibe channels.',
-        canonical: `${baseUrl}/channels`,
-        activeNav: 'channels',
-        bodyHtml: pageContent,
-        baseUrl,
-    });
-}
-
-function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, recentlyEnded, recentlyOnlineChannels, recentVods, recentClips, categories, stats, community, chat, baseUrl }) {
-    const channelMap = new Map((channels || []).map((channel) => [channel.slug, channel]));
-    const communityData = community || {};
-    const chatData = chat || {};
-    const spotlightStream = (trendingNow && trendingNow[0]) || (liveNow && liveNow[0]) || (recentlyEnded && recentlyEnded[0]) || null;
-    const spotlightChannel = spotlightStream ? channelMap.get(spotlightStream.channel_slug) : null;
-    const heroFrames = collectHeroFrames({ trendingNow, liveNow, recentlyEnded, channelMap, baseUrl });
-    const liveNowHtml = (liveNow || []).map((stream) => renderStreamCard(stream, channelMap.get(stream.channel_slug), baseUrl, { badge: 'Live now', badgeTone: 'live', filterGroup: 'home-live' })).join('');
-    const featuredChannelsHtml = (featuredChannels || []).map((channel) => renderChannelCard(channel, baseUrl, { currentStream: channel.currentStream, previewStream: channel.currentStream || channel.recentStream || null, stats: channel.stats })).join('');
-    const recentlyOnlineEntries = Array.isArray(recentlyOnlineChannels) && recentlyOnlineChannels.length
-        ? recentlyOnlineChannels
-        : (recentlyEnded || []).reduce((list, stream) => {
-            if (!stream || !stream.channel_slug || list.some((entry) => entry.slug === stream.channel_slug)) return list;
-            const channel = channelMap.get(stream.channel_slug);
-            if (!channel) return list;
-            list.push(Object.assign({}, channel, { recentStream: stream }));
-            return list;
-        }, []);
-    const recentlyOnlineHtml = recentlyOnlineEntries.map((entry) => renderRecentlyOnlineChannelCard(entry, baseUrl)).join('');
-    const recentVodsHtml = (recentVods || []).map((stream) => renderStreamCard(stream, channelMap.get(stream.channel_slug), baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
-    const recentClipsHtml = (recentClips || []).map((stream) => renderStreamCard(stream, channelMap.get(stream.channel_slug), baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
-    const recentThreadsHtml = (communityData.recentThreads || []).slice(0, 4).map((thread) => renderSignalCard({
-        eyebrow: thread.ref_type === 'discord_channel' ? 'Discord thread' : labelizeKey(thread.thread_type || 'discussion'),
-        title: thread.title || thread.slug || 'Untitled thread',
-        body: thread.ref_type === 'discord_channel'
-            ? 'Relayed discussion ready for broader OpenVibe-native participation.'
-            : 'Cross-service discussion surface prepared for live, VOD, clip, and creator context.',
-        meta: `Last activity ${timeAgo(thread.last_activity_at)} · ${labelizeKey(thread.status || 'open')}`,
-    })).join('');
-    const recentPastesHtml = (communityData.recentPastes || []).slice(0, 10).map((paste) => renderPasteCard(paste, baseUrl)).join('');
-    const relaySignalsHtml = (communityData.discordRelays || []).slice(0, 4).map((relay) => renderSignalCard({
-        eyebrow: 'Discord relay',
-        title: `#${relay.discord_channel_id}`,
-        body: relay.openvibe_thread_id
-            ? `Bound to thread ${relay.openvibe_thread_id}.`
-            : 'Relay mapping is live and waiting for a linked thread.',
-        meta: `${labelizeKey(relay.relay_direction)} · ${relay.enabled ? 'Enabled' : 'Disabled'}`,
-    })).join('');
-    const roomSignalsHtml = (chatData.publicRooms || []).slice(0, 4).map((room) => renderSignalCard({
-        eyebrow: labelizeKey(room.room_type || 'room'),
-        title: room.title || labelizeKey(room.external_ref_type || 'public room'),
-        body: room.external_ref_id ? `Reference ${room.external_ref_id}` : 'Reusable conversation surface for live-adjacent chat.',
-        meta: `Updated ${timeAgo(room.updated_at)}`,
-    })).join('');
-    const activeCallsHtml = (chatData.activeCalls || []).slice(0, 3).map((call) => renderSignalCard({
-        eyebrow: 'Active call',
-        title: `${labelizeKey(call.call_type)} ${labelizeKey(call.status)}`,
-        body: `Room ${call.room_id}`,
-        meta: `Started ${timeAgo(call.started_at)}`,
-    })).join('');
-    const featureCards = FEATURE_MATRIX.map((feature) => `
-        <article class="glass-card" data-reveal>
-            <div class="eyebrow">${escapeHtml(feature.eyebrow)}</div>
-            <h3 class="card-title">${escapeHtml(feature.title)}</h3>
-            <p class="card-body">${escapeHtml(feature.body)}</p>
-        </article>
-    `).join('');
-    const liveSurfaceCards = LIVE_SURFACES.map((surface) => `
-        <article class="glass-card" data-reveal>
-            <div class="eyebrow">${escapeHtml(surface.label)}</div>
-            <a class="card-link" href="${surface.href}"><h3 class="card-title">${escapeHtml(surface.title)}</h3></a>
-            <p class="card-body">${escapeHtml(surface.body)}</p>
-            <div class="card-footer">
-                <span class="meta-item">live surface</span>
-                <a class="link-inline" href="${surface.href}">Open →</a>
-            </div>
-        </article>
-    `).join('');
-    const networkCards = OPENVIBE_NETWORK_LINKS.map((surface) => `
-        <article class="glass-card" data-reveal>
-            <div class="eyebrow">${escapeHtml(surface.label)}</div>
-            <a class="card-link" href="${surface.href}"><h3 class="card-title">${escapeHtml(surface.title)}</h3></a>
-            <p class="card-body">${escapeHtml(surface.body)}</p>
-            <div class="card-footer">
-                <span class="meta-item">network surface</span>
-                <a class="link-inline" href="${surface.href}">Open →</a>
-            </div>
-        </article>
-    `).join('');
-    const updatesHtml = BUILD_UPDATES.slice(0, 4).map((item) => `
-        <article class="timeline-card" data-reveal data-update-id="${escapeHtml(item.id || `${item.date}-${item.title}`)}">
-            <div class="eyebrow">${escapeHtml(item.date)}</div>
-            <h3 class="card-title">${escapeHtml(item.title)}</h3>
-            <p class="card-body">${escapeHtml(item.body)}</p>
-            <div class="pill-row" style="margin-top:0.85rem;">
-                <span class="pill primary update-badge">Unseen</span>
-                <span class="pill soft">Shipping note</span>
-            </div>
-        </article>
-    `).join('');
-    const updatesSignature = BUILD_UPDATES.map((item) => item.id || `${item.date}:${item.title}`).join('|');
-    const categoriesHtml = (categories || []).map((category) => `<button class="category-chip" type="button" data-chip-target="[data-filter-input=home-live]" data-chip-value="${escapeHtml(category.label)}">${escapeHtml(category.label)} · ${escapeHtml(category.count)}</button>`).join('');
-    const heroSignalsHtml = [
-        {
-            eyebrow: 'Low latency first',
-            title: 'Start fast, then graduate to openre.stream',
-            body: 'Browser + WHIP quick-start paths stay up front, while OBS/RTMP and multi-destination routing push into openre.stream as the serious broadcast control plane.',
-        },
-        {
-            eyebrow: 'After the stream',
-            title: 'Clips, VODs, chat, and community stay on the same story arc',
-            body: 'Viewers can slide from the live session into highlights, replays, threads, pastes, DMs, calls, and Discord-aware community surfaces without losing the creator thread.',
-        },
-        {
-            eyebrow: 'Creator permanence',
-            title: 'Canonical @handles, visible legal paths, and better platform memory',
-            body: 'Routes, support links, DMCA reporting, and account-aware discovery stay visible instead of being buried behind a growth-loop UI maze.',
-        },
-    ].map((signal) => `
-        <article class="glass-card hero-signal-card" data-reveal>
-            <div class="eyebrow">${escapeHtml(signal.eyebrow)}</div>
-            <h3 class="card-title">${escapeHtml(signal.title)}</h3>
-            <p class="card-body">${escapeHtml(signal.body)}</p>
-        </article>
-    `).join('');
-    const heroStageHtml = heroFrames.length ? `
-        <div class="hero-stage" data-hero-stage aria-hidden="true">
-            ${heroFrames.map((frame, index) => `
-                <div class="hero-frame${index === 0 ? ' is-active' : ''}" data-hero-frame style="background-image:url('${escapeHtml(frame.url)}')">
-                    <div class="hero-stage-copy">
-                        <span class="pill ${index === 0 ? 'live' : 'soft'}">${escapeHtml(frame.eyebrow)}</span>
-                        <strong>${escapeHtml(frame.title)}</strong>
-                        <span>${escapeHtml(frame.subtitle)}</span>
-                    </div>
-                </div>
-            `).join('')}
-        </div>` : '';
-    const pageContent = `
-        <section class="hero-panel live-home-hero" data-shell-marker="openvibe.live — native fallback shell">
-            ${heroStageHtml}
-            <div class="hero-grid">
-                <div class="hero-copy" data-reveal>
-                    <div class="eyebrow">Native streaming discovery</div>
-                    <h1 class="hero-heading">OpenVibe Live for <span class="hero-gradient hero-rotator" data-rotating-words="builders|makers|communities|multi-stream creators"></span></h1>
-                    <p>Discover what is live, who just wrapped a session, which creators are active, and which adjacent community/chat surfaces are already awake — all without falling back to a legacy UI shell or a vibes-only broadcast stack.</p>
-                    <div class="hero-actions">
-                        <a class="button" href="#live-now">Watch live now</a>
-                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                        <a class="button-ghost" href="/go-live">Set up your stream</a>
-                    </div>
-                    <p class="hero-note">Fresh now: animated live-frame hero transitions, live-now immediately under the fold, creator recap cards with total live time, clipped highlights ahead of VODs, and a recent-changes feed that stays visibly unread until you clear it.</p>
-                </div>
-                <div class="hero-aside-stack">
-                    <aside class="hero-spotlight glass-card" data-reveal>
-                        <div class="eyebrow">Spotlight</div>
-                        ${spotlightStream
-                            ? `${renderMediaThumb({
-                                url: spotlightStream.thumbnail_url || (spotlightChannel && spotlightChannel.avatar_url) || null,
-                                title: spotlightStream.title || 'Untitled stream',
-                                eyebrow: spotlightStream.is_live ? 'Trending live' : 'Recent highlight',
-                                subtitle: spotlightChannel ? (spotlightChannel.display_name || spotlightChannel.slug) : (spotlightStream.channel_slug || 'openvibe'),
-                                initials: initialsFrom(spotlightStream.channel_slug || 'OV'),
-                                baseUrl,
-                            })}
-                            <div class="pill-row">
-                                ${renderPill(spotlightStream.is_live ? 'Live now' : 'Recent session', spotlightStream.is_live ? 'live' : 'soft')}
-                                ${renderPill(`${formatCompactNumber(spotlightStream.peak_viewers || 0)} peak`, 'primary')}
-                                ${spotlightStream.category ? renderPill(spotlightStream.category, 'muted') : ''}
-                            </div>
-                            <h2 class="spotlight-title"><a href="${streamPath(spotlightStream.channel_slug, spotlightStream.id)}">${escapeHtml(spotlightStream.title || 'Untitled stream')}</a></h2>
-                            <p class="spotlight-copy">By <a class="link-inline" href="${channelPath(spotlightStream.channel_slug)}">${escapeHtml((spotlightChannel && (spotlightChannel.display_name || spotlightChannel.slug)) || spotlightStream.channel_slug || 'unknown')}</a> · ${escapeHtml(spotlightStream.is_live ? `${formatCompactNumber(spotlightStream.viewer_count || 0)} currently watching` : `Last active ${timeAgo(spotlightStream.ended_at || spotlightStream.started_at)}`)}</p>
-                            <div class="card-footer">
-                                <span class="meta-item">${escapeHtml(formatDateTime(spotlightStream.started_at || spotlightStream.ended_at || spotlightStream.updated_at))}</span>
-                                <a class="link-inline" href="${streamPath(spotlightStream.channel_slug, spotlightStream.id)}">Watch stream →</a>
-                            </div>`
-                            : renderEmptyState('No spotlight stream yet', 'As live and recent broadcasts arrive, this panel automatically highlights the most relevant session.', '/go-live', 'Open go-live guide')}
-                    </aside>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Low-latency route</div>
-                        <h3 class="card-title">Keep <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> obvious</h3>
-                        <p class="card-body">Use openvibe.live for discovery, canonical creator routing, clips, and VOD visibility. Use openre.stream when you need ingest control, multi-destination restreaming, and a stronger operational cockpit.</p>
-                        <div class="pill-row" style="margin-top:0.9rem;">
-                            ${renderPill('Discovery on openvibe.live', 'soft')}
-                            ${renderPill('Routing on openre.stream', 'warn')}
-                        </div>
-                    </article>
-                </div>
-            </div>
-            <div class="hero-signal-rail">${heroSignalsHtml}</div>
-            ${renderStatsStrip(stats || {})}
-        </section>
-
-        ${renderSection({
-            id: 'live-now',
-            title: 'Live now',
-            subtitle: 'Current broadcasts mirrored into openvibe.live with viewer and peak context, directly after the hero where they belong.',
-            actionHref: '/channels',
-            actionLabel: 'Browse all channels',
-            content: liveNowHtml
-                ? `<div>
-                    <div class="search-bar">
-                        <input class="filter-input" type="search" placeholder="Filter live streams by creator, title, or category" data-filter-input="home-live">
-                        <div class="directory-status" data-filter-status="home-live">${escapeHtml((liveNow || []).length)} live items</div>
-                    </div>
-                    <div class="card-grid">${liveNowHtml}</div>
-                </div>`
-                : null,
-            emptyTitle: 'No one is live right now',
-            emptyBody: 'The live stage is ready. When the next session starts, it appears here automatically with channel and stream routes.',
-            emptyHref: '/go-live',
-            emptyLabel: 'Be the first to go live',
-        })}
-
-        <section class="section-panel" data-reveal>
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Category pulse</h2>
-                    <p class="section-subtitle">Use the current live graph to pivot quickly into the kinds of broadcasts you want to watch or build.</p>
-                </div>
-            </div>
-            <div class="chip-cloud">${categoriesHtml || '<span class="muted-text">No categories are staged yet.</span>'}</div>
-        </section>
-
-        ${renderSection({
-            title: 'Recently online creators',
-            subtitle: 'Catch creators who just wrapped a stream, complete with thumbnails, total live time, and replay/hightlight hints.',
-            actionHref: '/channels',
             actionLabel: 'Browse creators',
             content: recentlyOnlineHtml ? `<div class="channel-grid">${recentlyOnlineHtml}</div>` : null,
             emptyTitle: 'No creators have wrapped a stream yet',
@@ -2350,7 +1538,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${renderSection({
             title: 'Recent clips',
-            subtitle: 'Highlights stay explicit and ready once canonical clip media is staged.',
+            subtitle: 'Short highlights for quick discovery and easy sharing.',
             actionHref: '/clips',
             actionLabel: 'Open clips route',
             content: recentClipsHtml ? `<div class="card-grid">${recentClipsHtml}</div>` : null,
@@ -2362,7 +1550,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${renderSection({
             title: 'Recent VODs',
-            subtitle: 'Canonical replay media keeps the HoboStreamer-style home feed alive on the new network.',
+            subtitle: 'Replays stay easy to find after the stream ends.',
             actionHref: '/vods',
             actionLabel: 'Open VOD library',
             content: recentVodsHtml ? `<div class="card-grid">${recentVodsHtml}</div>` : null,
@@ -2373,20 +1561,8 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         })}
 
         ${renderSection({
-            title: 'Recent pastes',
-            subtitle: 'Screenshots, snippets, notes, and logs from the canonical OpenVibe community surface.',
-            actionHref: LIVE_NETWORK_URLS.community,
-            actionLabel: 'Open community',
-            content: recentPastesHtml ? `<div class="card-grid">${recentPastesHtml}</div>` : null,
-            emptyTitle: 'No public pastes yet',
-            emptyBody: 'Once public pastes are staged in openvibe.community, they appear here right alongside live, clips, and VODs.',
-            emptyHref: LIVE_NETWORK_URLS.community,
-            emptyLabel: 'Open community',
-        })}
-
-        ${renderSection({
             title: 'Featured creators',
-            subtitle: 'Channels are ranked using live state, recent activity, and current viewer momentum.',
+            subtitle: 'Creators worth checking right now based on live status, recent activity, and current momentum.',
             actionHref: '/channels',
             actionLabel: 'Open creator directory',
             content: featuredChannelsHtml ? `<div class="channel-grid">${featuredChannelsHtml}</div>` : null,
@@ -2400,7 +1576,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Community pulse</h2>
-                    <p class="section-subtitle">Recent threads, Discord relay readiness, and chat/call activity from the canonical OpenVibe community and chat services.</p>
+                    <p class="section-subtitle">Threads, pastes, rooms, calls, and relay signals that keep each creator’s orbit feeling alive.</p>
                 </div>
                 <div class="inline-actions">
                     <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
@@ -2409,29 +1585,35 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             </div>
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Threads</div>
+                    <div class="eyebrow">Threads and pastes</div>
                     <div class="list-stack">
                         <div>
                             <h3 class="card-title">Recent discussions</h3>
                             <div class="data-points" style="margin-top:0.85rem;">
-                                ${recentThreadsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Threads will show up here', body: 'Once openvibe.community threads begin filling with creator and stream-linked discussion, this panel will surface them automatically.', meta: 'No public threads yet' })}
+                                ${recentThreadsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Threads will show up here', body: 'Once openvibe.community fills with stream-linked discussion, this panel will surface it automatically.', meta: 'No public threads yet' })}
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="card-title">Recent pastes</h3>
+                            <div class="data-points" style="margin-top:0.85rem;">
+                                ${recentPasteSignalsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Public pastes will show up here', body: 'Screenshots, notes, logs, and text drops from openvibe.community land here once they are public.', meta: 'No public pastes yet' })}
                             </div>
                         </div>
                     </div>
                 </article>
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Discord and chat</div>
+                    <div class="eyebrow">Chat and relay</div>
                     <div class="list-stack">
                         <div>
-                            <h3 class="card-title">Relay readiness</h3>
+                            <h3 class="card-title">Relay status</h3>
                             <div class="data-points" style="margin-top:0.85rem;">
-                                ${relaySignalsHtml || renderSignalCard({ eyebrow: 'Discord relay', title: 'Relay mappings will surface here', body: 'OpenVibe Community already has relay tables and loop-prevention plumbing; this panel highlights the current read-only state.', meta: 'No enabled relay mappings yet' })}
+                                ${relaySignalsHtml || renderSignalCard({ eyebrow: 'Discord relay', title: 'Relay mappings will surface here', body: 'OpenVibe Community already has relay tables and loop-prevention plumbing; this panel shows when they are active.', meta: 'No enabled relay mappings yet' })}
                             </div>
                         </div>
                         <div>
                             <h3 class="card-title">Conversation surfaces</h3>
                             <div class="data-points" style="margin-top:0.85rem;">
-                                ${roomSignalsHtml || renderSignalCard({ eyebrow: 'Chat room', title: 'Public rooms will surface here', body: 'OpenVibe Chat already exposes reusable room, DM, call, and TTS primitives ready for deeper live integration.', meta: 'No public rooms yet' })}
+                                ${roomSignalsHtml || renderSignalCard({ eyebrow: 'Chat room', title: 'Public rooms will surface here', body: 'OpenVibe Chat already exposes reusable rooms, DMs, calls, and TTS for deeper live integration.', meta: 'No public rooms yet' })}
                                 ${activeCallsHtml}
                             </div>
                         </div>
@@ -2443,10 +1625,13 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">Go live however you want</h2>
-                    <p class="section-subtitle">The product should make the broadcast path obvious, flexible, non-mysterious, and connected to openre.stream when you need a stronger control plane.</p>
+                    <h2 class="section-title">Go live your way</h2>
+                    <p class="section-subtitle">Keep the quick route obvious, and keep <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> close when you need more control.</p>
                 </div>
-                <a class="section-link" href="/go-live">Open full guide</a>
+                <div class="inline-actions">
+                    <a class="section-link" href="/go-live">Open stream manager</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                </div>
             </div>
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
@@ -2464,25 +1649,6 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">Why this feels better</div>
                     <div class="feature-grid">${featureCards}</div>
-                </article>
-            </div>
-        </section>
-
-        <section class="section-panel">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Explore OpenVibe</h2>
-                    <p class="section-subtitle">Live is only one surface. The broader platform fills in identity, chat, community, media, themes, and restream control without fragmenting the creator story.</p>
-                </div>
-            </div>
-            <div class="story-grid">
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Live surfaces</div>
-                    <div class="surface-grid">${liveSurfaceCards}</div>
-                </article>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Connected network</div>
-                    <div class="surface-grid">${networkCards}</div>
                 </article>
             </div>
         </section>
@@ -2506,13 +1672,13 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Why OpenVibe exists</h2>
-                    <p class="section-subtitle">This is meant to feel like a real exit from ad-first platform design: calmer discovery, portable identity, visible legal/reporting paths, and a platform that can be stewarded openly.</p>
+                    <p class="section-subtitle">This is meant to feel like a real exit from ad-first platform design: calmer discovery, portable identity, visible support links, and community memory that does not get paved over.</p>
                 </div>
             </div>
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">Origin story</div>
-                    <p class="body-copy">OpenVibe is being built for creators and communities who want out of opaque recommendation loops, missing support links, and growth-at-all-costs product decisions. The goal is practical: give creators canonical identities, better control of their routing stack, and platform services they can actually understand.</p>
+                    <p class="body-copy">OpenVibe is being built for creators and communities who miss when the web felt more human: clear pages, real creator homes, portable identity, and a platform that does not turn every decision into a growth trap. The goal is practical: give creators canonical identities, better control of their routing stack, and services they can actually understand.</p>
                     <div class="data-points">
                         <div class="data-point">
                             <div class="data-point-label">Creator routes</div>
@@ -2524,7 +1690,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                         </div>
                         <div class="data-point">
                             <div class="data-point-label">Direction</div>
-                            <div class="data-point-value">Not-for-profit minded</div>
+                            <div class="data-point-value">Creator-first</div>
                         </div>
                     </div>
                 </article>
@@ -2899,6 +2065,430 @@ function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, stat
         </div>`;
 }
 
+function renderSection({ title, subtitle, actionHref, actionLabel, content, emptyTitle, emptyBody, emptyHref, emptyLabel }) {
+    const actionHtml = actionHref && actionLabel
+        ? `<a class="section-link" href="${actionHref}">${escapeHtml(actionLabel)}</a>`
+        : '';
+    const bodyHtml = content && String(content).trim()
+        ? content
+        : `
+            <article class="empty-state" data-reveal>
+                <h3 class="card-title">${escapeHtml(emptyTitle || 'Nothing here yet')}</h3>
+                <p class="card-body">${escapeHtml(emptyBody || 'This section will populate when more public activity is available.')}</p>
+                ${emptyHref && emptyLabel ? `<div class="form-actions" style="margin-top:1rem;"><a class="button-secondary" href="${emptyHref}">${escapeHtml(emptyLabel)}</a></div>` : ''}
+            </article>`;
+    return `
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">${escapeHtml(title || 'Section')}</h2>
+                    ${subtitle ? `<p class="section-subtitle">${subtitle}</p>` : ''}
+                </div>
+                ${actionHtml}
+            </div>
+            ${bodyHtml}
+        </section>`;
+}
+
+function renderSignalCard({ eyebrow, title, body, meta, href }) {
+    const content = `
+        <div class="eyebrow">${escapeHtml(eyebrow || 'Signal')}</div>
+        <h3 class="card-title">${escapeHtml(title || 'Untitled signal')}</h3>
+        <p class="card-body">${escapeHtml(body || '')}</p>
+        ${meta ? `<div class="card-kicker">${escapeHtml(meta)}</div>` : ''}`;
+    return href
+        ? `<a class="glass-card" data-reveal href="${href}">${content}</a>`
+        : `<article class="glass-card" data-reveal>${content}</article>`;
+}
+
+function renderChannelCard(channel, baseUrl, options) {
+    const opts = options || {};
+    const currentStream = opts.currentStream || channel.currentStream || null;
+    const previewStream = opts.previewStream || currentStream || channel.recentStream || null;
+    const stats = opts.stats || channel.stats || null;
+    const slug = channel.slug || 'unknown';
+    const displayName = channel.display_name || slug;
+    const descriptorBits = [
+        `@${slug}`,
+        channel.category || null,
+        previewStream && previewStream.category ? previewStream.category : null,
+    ].filter(Boolean);
+    const statsBits = [];
+    if (stats) {
+        statsBits.push(`${formatNumber(stats.total_streams || 0)} stream${Number(stats.total_streams || 0) === 1 ? '' : 's'}`);
+        if (stats.vods) statsBits.push(`${formatNumber(stats.vods)} VOD${Number(stats.vods) === 1 ? '' : 's'}`);
+        if (stats.clips) statsBits.push(`${formatNumber(stats.clips)} clip${Number(stats.clips) === 1 ? '' : 's'}`);
+    }
+    const filterText = `${displayName} ${slug} ${descriptorBits.join(' ')} ${statsBits.join(' ')}`.toLowerCase();
+    return `
+        <article class="glass-card is-inline" data-reveal data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
+            ${renderMediaThumb({
+                url: (previewStream && previewStream.thumbnail_url) || channel.avatar_url || null,
+                title: (previewStream && previewStream.title) || `${displayName} channel`,
+                eyebrow: currentStream ? 'Live creator' : (previewStream ? 'Recent creator' : 'Creator route'),
+                subtitle: displayName,
+                initials: initialsFrom(displayName),
+                baseUrl,
+            })}
+            <div class="pill-row">
+                ${currentStream ? renderPill('Live now', 'live') : renderPill('Offline', 'muted')}
+                ${channel.category ? renderPill(channel.category, 'primary') : ''}
+                ${previewStream && previewStream.category ? renderPill(previewStream.category, 'soft') : ''}
+            </div>
+            <a class="card-link" href="${channelPath(slug)}"><h3 class="card-title">${escapeHtml(displayName)}</h3></a>
+            <div class="card-kicker">@${escapeHtml(slug)}${descriptorBits.length > 1 ? ` · ${escapeHtml(descriptorBits.slice(1).join(' · '))}` : ''}</div>
+            <p class="card-body">${escapeHtml(channel.description || (previewStream ? `Latest stream: ${previewStream.title || 'Untitled stream'}` : 'Creator route ready for live sessions, VODs, and clips.'))}</p>
+            <div class="card-footer">
+                <span class="meta-item">${escapeHtml(statsBits.join(' · ') || (previewStream && previewStream.started_at ? `Last active ${timeAgo(previewStream.started_at)}` : 'Waiting for the next stream'))}</span>
+                <a class="link-inline" href="${channelPath(slug)}">Open creator →</a>
+            </div>
+        </article>`;
+}
+
+function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, recentlyEnded, recentlyOnlineChannels, recentVods, recentClips, categories, stats, community, chat, baseUrl }) {
+    const liveNowHtml = (liveNow || []).slice(0, 6).map((stream) => renderStreamCard(stream, null, baseUrl, { badge: 'Live now', badgeTone: 'live' })).join('');
+    const recentlyOnlineHtml = (recentlyOnlineChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentClipsHtml = (recentClips || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
+    const recentVodsHtml = (recentVods || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
+    const featuredChannelsHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentPastesHtml = (((community && community.recentPastes) || []).slice(0, 4)).map((paste) => renderSignalCard({
+        eyebrow: paste.kind || 'Paste',
+        title: paste.title || paste.slug || 'Untitled paste',
+        body: paste.preview_text || paste.body || 'Open the paste on openvibe.community.',
+        meta: `${formatDateTime(paste.created_at)} · ${formatNumber(paste.view_count || 0)} views`,
+        href: paste.route_url || LIVE_NETWORK_URLS.community,
+    })).join('');
+    const recentThreadsHtml = (((community && community.recentThreads) || []).slice(0, 3)).map((thread) => renderSignalCard({
+        eyebrow: 'Thread',
+        title: thread.title || 'Untitled thread',
+        body: thread.preview_text || thread.body || 'Recent thread activity from openvibe.community.',
+        meta: thread.created_at ? formatDateTime(thread.created_at) : 'OpenVibe Community',
+        href: thread.route_url || LIVE_NETWORK_URLS.community,
+    })).join('');
+    const roomSignalsHtml = (((chat && chat.publicRooms) || []).slice(0, 3)).map((room) => renderSignalCard({
+        eyebrow: 'Chat room',
+        title: room.display_name || room.slug || 'Open room',
+        body: room.description || 'Public room available for creators and viewers.',
+        meta: room.member_count ? `${formatNumber(room.member_count)} members` : 'Public room',
+        href: LIVE_NETWORK_URLS.chat,
+    })).join('');
+    const callSignalsHtml = (((chat && chat.activeCalls) || []).slice(0, 2)).map((call) => renderSignalCard({
+        eyebrow: 'Active call',
+        title: call.title || call.room_name || 'Live call',
+        body: 'A live conversation is active nearby in OpenVibe Chat.',
+        meta: call.started_at ? `Started ${timeAgo(call.started_at)}` : 'Happening now',
+        href: LIVE_NETWORK_URLS.chat,
+    })).join('');
+    const categoryChips = (categories || []).slice(0, 8).map((category) => `<button class="button-ghost" type="button" data-chip-target="#live-home-filter" data-chip-value="${escapeHtml(category.name || category.category || category.label || '')}">${escapeHtml(category.name || category.category || category.label || 'Uncategorized')}</button>`).join('');
+    const updatesSignature = BUILD_UPDATES.map((item) => item.id).join('|');
+    const updatesHtml = BUILD_UPDATES.map((item) => `
+        <article class="timeline-card glass-card" data-reveal data-update-id="${escapeHtml(item.id)}">
+            <div class="eyebrow">${escapeHtml(item.date)}</div>
+            <h3 class="card-title">${escapeHtml(item.title)}</h3>
+            <p class="card-body">${escapeHtml(item.body)}</p>
+        </article>`).join('');
+    const atAGlanceHtml = `
+        <div class="data-points">
+            <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.channels) || (channels && channels.length) || 0))}</div></div>
+            <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value">${escapeHtml(formatNumber((liveNow && liveNow.length) || 0))}</div></div>
+            <div class="data-point"><div class="data-point-label">VODs</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.vods) || (recentVods && recentVods.length) || 0))}</div></div>
+            <div class="data-point"><div class="data-point-label">Clips</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.clips) || (recentClips && recentClips.length) || 0))}</div></div>
+            <div class="data-point"><div class="data-point-label">Stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds((stats && stats.stream_time_seconds) || 0))}</div></div>
+        </div>`;
+    const pageContent = `
+        <section class="hero-panel compact live-home-hero">
+            <div class="hero-grid">
+                <div class="hero-copy" data-reveal>
+                    <div class="eyebrow">OpenVibe Live</div>
+                    <h1 class="hero-heading">Watch live, catch replays, and keep your <span class="hero-gradient">creator route</span> intact.</h1>
+                    <p>OpenVibe Live keeps active streams, recent clips, replay routes, and the nearby community surfaces connected without burying creators in needless platform noise.</p>
+                    <div class="form-actions" style="margin-top:1rem;">
+                        <a class="button" href="/go-live">Open stream manager</a>
+                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                        <a class="button-ghost" href="/channels">Browse creators</a>
+                    </div>
+                    <div class="footer-legal-links" style="margin-top:1rem;">
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
+                    </div>
+                    <p class="muted-text" style="margin-top:1rem;">openvibe.live — native fallback shell</p>
+                </div>
+                <aside class="glass-card hero-panel" data-reveal data-live-account-panel>
+                    <div class="eyebrow">Your account</div>
+                    <h3 class="card-title">Loading your channel tools</h3>
+                    <p class="card-body">Sign in once and use the same OpenVibe identity across live, community, chat, and openre.stream.</p>
+                </aside>
+            </div>
+        </section>
+
+        ${renderSection({
+            title: 'Live now',
+            subtitle: 'Current broadcasts that are active on the native OpenVibe live graph right now.',
+            actionHref: '/channels',
+            actionLabel: 'Browse all channels',
+            content: `
+                <div class="search-bar">
+                    <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter live and replay cards" data-filter-input="home-media" aria-label="Filter home media cards">
+                    ${categoryChips}
+                </div>
+                ${liveNowHtml ? `<div class="card-grid">${liveNowHtml}</div>` : ''}`,
+            emptyTitle: 'No one is live right now',
+            emptyBody: 'When creators go live, the homepage surfaces them here first instead of sending you on a scavenger hunt.',
+            emptyHref: '/go-live',
+            emptyLabel: 'See go-live options',
+        })}
+
+        ${renderSection({
+            title: 'At a glance',
+            subtitle: 'A quick view of the current native live footprint.',
+            content: atAGlanceHtml,
+        })}
+
+        ${renderSection({
+            title: 'Recently online creators',
+            subtitle: 'Channels that were recently active, with their public creator routes ready for replay discovery.',
+            actionHref: '/channels',
+            actionLabel: 'Browse creators',
+            content: recentlyOnlineHtml ? `<div class="channel-grid" data-filter-status="home-media">${recentlyOnlineHtml}</div>` : null,
+            emptyTitle: 'No creators have wrapped a stream yet',
+            emptyBody: 'As soon as creators finish their first broadcasts, they show up here with richer recap cards instead of a flat ended-session list.',
+            emptyHref: '/channels',
+            emptyLabel: 'Browse creators',
+        })}
+
+        ${renderSection({
+            title: 'Recent pastes',
+            subtitle: 'Screenshots, notes, and other creator breadcrumbs pulled in from openvibe.community.',
+            actionHref: LIVE_NETWORK_URLS.community,
+            actionLabel: 'Open community',
+            content: recentPastesHtml ? `<div class="story-grid">${recentPastesHtml}</div>` : null,
+            emptyTitle: 'Public pastes will show up here',
+            emptyBody: 'Screenshots, notes, logs, and text drops land here once they are public.',
+            emptyHref: LIVE_NETWORK_URLS.community,
+            emptyLabel: 'Open community',
+        })}
+
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Community pulse</h2>
+                    <p class="section-subtitle">Threads, rooms, calls, and community surfaces that keep the network feeling alive beyond the stream itself.</p>
+                </div>
+                <div class="form-actions">
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Open chat</a>
+                </div>
+            </div>
+            <div class="story-grid">
+                <div class="list-stack">
+                    ${recentThreadsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Threads will show up here', body: 'Recent public discussion from openvibe.community will land here automatically.', meta: 'No public threads yet' })}
+                    ${recentPastesHtml || renderSignalCard({ eyebrow: 'Community', title: 'Pastes stay visible', body: 'Creator screenshots, notes, and logs remain easy to find from live surfaces.', meta: 'No public pastes yet' })}
+                </div>
+                <div class="list-stack">
+                    ${roomSignalsHtml || renderSignalCard({ eyebrow: 'Chat room', title: 'Public rooms will surface here', body: 'OpenVibe Chat rooms stay close to the live surface for fast conversation hops.', meta: 'No public rooms yet' })}
+                    ${callSignalsHtml || renderSignalCard({ eyebrow: 'Active calls', title: 'Calls show up here', body: 'When conversations are live nearby, this panel points toward them.', meta: 'No active calls yet' })}
+                </div>
+            </div>
+        </section>
+
+        ${renderSection({
+            title: 'Recent clips',
+            subtitle: 'Short highlights for quick discovery and easy sharing.',
+            actionHref: '/clips',
+            actionLabel: 'Open clips route',
+            content: recentClipsHtml ? `<div class="card-grid">${recentClipsHtml}</div>` : null,
+            emptyTitle: 'Clip media is still pending',
+            emptyBody: 'The route is live and styled, but it will only populate when canonical clip media exists in OpenVibe storage.',
+            emptyHref: '/clips',
+            emptyLabel: 'Open clips route',
+        })}
+
+        ${renderSection({
+            title: 'Recent VODs',
+            subtitle: 'Replays stay easy to find after the stream ends.',
+            actionHref: '/vods',
+            actionLabel: 'Open VOD library',
+            content: recentVodsHtml ? `<div class="card-grid">${recentVodsHtml}</div>` : null,
+            emptyTitle: 'No public VOD objects yet',
+            emptyBody: 'When replay media is staged in canonical storage, VOD cards appear here and in the dedicated VOD route.',
+            emptyHref: '/vods',
+            emptyLabel: 'Open the VOD route',
+        })}
+
+        ${renderSection({
+            title: 'Featured creators',
+            subtitle: 'Channels worth checking right now based on live status, recent activity, and current momentum.',
+            actionHref: '/channels',
+            actionLabel: 'Open creator directory',
+            content: featuredChannelsHtml ? `<div class="channel-grid">${featuredChannelsHtml}</div>` : null,
+            emptyTitle: 'Featured creators will appear here',
+            emptyBody: 'Once the live graph has enough channel activity, featured ranking is derived automatically from that data.',
+            emptyHref: '/channels',
+            emptyLabel: 'Browse channels',
+        })}
+
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Go live your way</h2>
+                    <p class="section-subtitle">Keep the quick route obvious, and keep <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> close when you need more control.</p>
+                </div>
+                <div class="form-actions">
+                    <a class="section-link" href="/go-live">Open stream manager</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                </div>
+            </div>
+            <div class="story-grid">
+                <div class="feature-grid">
+                    ${GO_LIVE_TRACKS.map((track) => renderSignalCard({ eyebrow: track.label, title: track.title, body: track.body, meta: track.meta, href: track.label === 'Restream control room' ? LIVE_NETWORK_URLS.restream : '/go-live' })).join('')}
+                </div>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Why this feels better</div>
+                    <p class="card-body">One OpenVibe account can sign into live, community, chat, and openre.stream without forcing creators to memorize a maze of disconnected setup paths.</p>
+                    <div class="data-points" style="margin-top:0.85rem;">
+                        <div class="data-point"><div class="data-point-label">Identity</div><div class="data-point-value">One account</div></div>
+                        <div class="data-point"><div class="data-point-label">Public route</div><div class="data-point-value">Canonical @username</div></div>
+                        <div class="data-point"><div class="data-point-label">Control room</div><div class="data-point-value">openre.stream</div></div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="section-panel" id="recent-changes">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Recent changes</h2>
+                    <p class="section-subtitle">${BUILD_UPDATES.length} fresh notes from the native live product surface, with an unread state that stays visible until you clear it.</p>
+                </div>
+                <a class="section-link" href="/updates">View all updates</a>
+            </div>
+            <div class="timeline-tools" data-updates-feed="${escapeHtml(updatesSignature)}">
+                <span class="pill soft timeline-status" data-updates-status>Checking for unseen changes…</span>
+                <button class="button-ghost timeline-clear" type="button" data-updates-clear>Mark updates as seen</button>
+            </div>
+            <div class="surface-grid">${updatesHtml}</div>
+        </section>
+
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Why OpenVibe exists</h2>
+                    <p class="section-subtitle">This is meant to feel like a real exit from ad-first platform design: calmer discovery, portable identity, visible support links, and community memory that does not get paved over.</p>
+                </div>
+            </div>
+            <div class="story-grid">
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Origin story</div>
+                    <p class="card-body">OpenVibe is being built for creators and communities who miss when the web felt more human: clear pages, real creator homes, portable identity, and a platform that does not turn every decision into a growth trap.</p>
+                    <div class="data-points" style="margin-top:0.85rem;">
+                        <div class="data-point"><div class="data-point-label">Creator routes</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.channels) || (channels && channels.length) || 0))}</div></div>
+                        <div class="data-point"><div class="data-point-label">Mirrored stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds((stats && stats.stream_time_seconds) || 0))}</div></div>
+                        <div class="data-point"><div class="data-point-label">Direction</div><div class="data-point-value">Creator-first</div></div>
+                    </div>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Promises we want to keep</div>
+                    <ul class="flow-list">
+                        ${MISSION_PILLARS.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+                    </ul>
+                    <div class="form-actions" style="margin-top:1rem;">
+                        <a class="button-secondary" href="https://github.com/openvibe">GitHub</a>
+                        <a class="button-ghost" href="/tos">Terms</a>
+                        <a class="button-ghost" href="/dmca">DMCA</a>
+                    </div>
+                </article>
+            </div>
+        </section>`;
+    return renderPage({
+        title: 'openvibe.live — discover live channels',
+        description: 'A modern native discovery surface for OpenVibe live channels, recent broadcasts, VODs, clips, and go-live paths.',
+        canonical: `${baseUrl}/`,
+        activeNav: 'home',
+        bodyHtml: pageContent,
+        baseUrl,
+    });
+}
+
+function renderChannelsPage({ channels, featuredChannels, categories, baseUrl }) {
+    const featuredHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, currentStream: channel.currentStream, previewStream: channel.recentStream })).join('');
+    const allChannelsHtml = (channels || []).slice(0, 200).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, currentStream: channel.currentStream, previewStream: channel.recentStream, filterGroup: 'channels' })).join('');
+    const categoryChips = (categories || []).slice(0, 10).map((category) => `<button class="button-ghost" type="button" data-chip-target="#channels-filter" data-chip-value="${escapeHtml(category.name || category.category || category.label || '')}">${escapeHtml(category.name || category.category || category.label || 'Uncategorized')}</button>`).join('');
+    const pageContent = `
+        <section class="hero-panel compact">
+            <div class="hero-copy" data-reveal>
+                <div class="eyebrow">Creator directory</div>
+                <h1 class="hero-heading">Browse every staged <span class="hero-gradient">creator route</span></h1>
+                <p>Search channels, inspect their recent activity, and jump directly into current or replay-ready broadcasts.</p>
+            </div>
+        </section>
+        ${renderSection({
+            title: 'Featured creators',
+            subtitle: 'Channels with live momentum or strong recent activity.',
+            content: featuredHtml ? `<div class="channel-grid">${featuredHtml}</div>` : null,
+            emptyTitle: 'Featured creators will appear here',
+            emptyBody: 'Once more activity lands in the live graph, featured ranking becomes more useful.',
+        })}
+        ${renderSection({
+            title: 'All channels',
+            subtitle: 'Filter by handle, category, or recent activity.',
+            content: `
+                <div class="search-bar">
+                    <input id="channels-filter" class="filter-input" type="search" placeholder="Search creators" data-filter-input="channels" aria-label="Search creators">
+                    ${categoryChips}
+                </div>
+                ${allChannelsHtml ? `<div class="channel-grid">${allChannelsHtml}</div>` : ''}`,
+            emptyTitle: 'No channels are staged yet',
+            emptyBody: 'Creator routes will show up here once the live service has channel records to expose.',
+            emptyHref: '/go-live',
+            emptyLabel: 'Open go-live',
+        })}`;
+    return renderPage({
+        title: 'Channels — openvibe.live',
+        description: 'Browse every staged OpenVibe Live creator route.',
+        canonical: `${baseUrl}/channels`,
+        activeNav: 'channels',
+        bodyHtml: pageContent,
+        baseUrl,
+    });
+}
+
+function renderCollectionPage({ kind, title, description, emptyMessage, items, baseUrl }) {
+    const navKey = kind === 'clips' ? 'clips' : 'vods';
+    const badgeTone = kind === 'clips' ? 'primary' : 'success';
+    const badgeLabel = kind === 'clips' ? 'Clip' : 'VOD';
+    const cardsHtml = (items || []).slice(0, 200).map((item) => renderStreamCard(item, null, baseUrl, { badge: badgeLabel, badgeTone, filterGroup: navKey })).join('');
+    const pageContent = `
+        <section class="hero-panel compact">
+            <div class="hero-copy" data-reveal>
+                <div class="eyebrow">${escapeHtml(navKey)}</div>
+                <h1 class="hero-heading">${escapeHtml(title || (navKey === 'clips' ? 'OpenVibe Clips' : 'OpenVibe VOD Library'))}</h1>
+                <p>${escapeHtml(description || '')}</p>
+            </div>
+        </section>
+        ${renderSection({
+            title: navKey === 'clips' ? 'Recent clips' : 'Recent VODs',
+            subtitle: navKey === 'clips' ? 'Fast highlights surfaced from canonical media objects.' : 'Replay media staged through the canonical OpenVibe media service.',
+            content: `
+                <div class="search-bar">
+                    <input class="filter-input" type="search" placeholder="Filter this library" data-filter-input="${navKey}" aria-label="Filter ${navKey}">
+                </div>
+                ${cardsHtml ? `<div class="card-grid">${cardsHtml}</div>` : ''}`,
+            emptyTitle: navKey === 'clips' ? 'No public clip media yet' : 'No public VOD media yet',
+            emptyBody: emptyMessage || 'This route stays honest until canonical media objects exist.',
+            emptyHref: '/channels',
+            emptyLabel: 'Browse creators',
+        })}`;
+    return renderPage({
+        title: `${escapeHtml(title || (navKey === 'clips' ? 'OpenVibe Clips' : 'OpenVibe VOD Library'))} — openvibe.live`,
+        description: description || '',
+        canonical: `${baseUrl}/${navKey}`,
+        activeNav: navKey,
+        bodyHtml: pageContent,
+        baseUrl,
+    });
+}
+
 function renderGoLivePage({ baseUrl }) {
     const tracksHtml = GO_LIVE_TRACKS.map((track) => `
         <article class="glass-card" data-reveal>
@@ -2910,16 +2500,164 @@ function renderGoLivePage({ baseUrl }) {
     `).join('');
     const pageContent = `
         <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">Broadcast guide</div>
-                <h1 class="hero-heading">Go live on <span class="hero-gradient">OpenVibe</span></h1>
-                <p>OpenVibe Live keeps the broadcast path explicit: start quickly in-browser, use a studio route like OBS/RTMP, adopt WHIP where available, or hand the heavier multi-destination and ingest-control work to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> without hiding your canonical creator route.</p>
-                <div class="hero-actions">
-                    <a class="button" href="/channels">Browse channels first</a>
-                    <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                    <a class="button-secondary" href="/updates">See recent product work</a>
-                    <a class="button-ghost" href="/">Back to live discovery</a>
+            <div class="hero-grid">
+                <div class="hero-copy" data-reveal>
+                    <div class="eyebrow">Creator dashboard</div>
+                    <h1 class="hero-heading">Go live with <span class="hero-gradient">OpenVibe</span></h1>
+                    <p>Use one OpenVibe account to claim your creator route, prep your ingest, start a stream, and keep VODs, clips, chat, and community tied to the same channel.</p>
+                    <div class="hero-actions">
+                        <a class="button" href="#stream-manager">Open stream manager</a>
+                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                        <a class="button-ghost" href="/">Back to live discovery</a>
+                    </div>
+                    <div class="utility-links">
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
+                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
+                        <a class="utility-link" href="/channels">Browse channels</a>
+                    </div>
                 </div>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">How it fits</div>
+                    <h3 class="card-title">Discovery on openvibe.live. Routing on openre.stream.</h3>
+                    <p class="card-body">Use this page when you want your public creator route and your basic stream controls in one place. Jump to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> when you want the fuller restream cockpit.</p>
+                    <div class="pill-row" style="margin-top:0.85rem;">
+                        ${renderPill('Creator route on openvibe.live', 'soft')}
+                        ${renderPill('Routing on openre.stream', 'warn')}
+                        ${renderPill('One account across both', 'primary')}
+                    </div>
+                </article>
+            </div>
+        </section>
+        <section class="section-panel" id="stream-manager">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Your stream manager</h2>
+                    <p class="section-subtitle">Signed-in creators can load their channels, destinations, and recent streams right here, then jump to openre.stream for the heavier restream control plane.</p>
+                </div>
+                <div class="inline-actions">
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.network}">Open account</a>
+                </div>
+            </div>
+            <div class="story-grid">
+                <article class="glass-card" data-reveal data-go-live-session>
+                    <div class="eyebrow">Account status</div>
+                    <h3 class="card-title">Checking your OpenVibe account…</h3>
+                    <p class="card-body">Sign in to load your creator route, connected destinations, and recent stream control state.</p>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">What this page can do</div>
+                    <div class="data-points">
+                        <div class="data-point">
+                            <div class="data-point-label">Channel</div>
+                            <div class="data-point-value">Claim a handle</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">Destinations</div>
+                            <div class="data-point-value">Save RTMP targets</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">Streams</div>
+                            <div class="data-point-value">Create and mark live</div>
+                        </div>
+                        <div class="data-point">
+                            <div class="data-point-label">After the stream</div>
+                            <div class="data-point-value">Keep VODs + clips tied in</div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+            <div class="story-grid" style="margin-top:1rem;">
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Channels</div>
+                    <div data-go-live-channels class="list-stack"><p class="manager-note">Checking your channels…</p></div>
+                    <form class="form-stack" id="go-live-channel-form" style="margin-top:1rem;">
+                        <label>
+                            <span class="data-point-label">Handle</span>
+                            <input class="filter-input" type="text" name="slug" placeholder="your-handle" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Display name</span>
+                            <input class="filter-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
+                        </label>
+                        <div class="form-actions">
+                            <button class="button" type="submit">Create channel</button>
+                            <span class="input-help">Claim your public @route before the next stream.</span>
+                        </div>
+                    </form>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Destinations</div>
+                    <div data-go-live-destinations class="list-stack"><p class="manager-note">Checking your destinations…</p></div>
+                    <form class="form-stack" id="go-live-destination-form" style="margin-top:1rem;">
+                        <label>
+                            <span class="data-point-label">Kind</span>
+                            <select class="filter-input" name="kind">
+                                <option value="custom">Custom RTMP</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="kick">Kick</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="data-point-label">Label</span>
+                            <input class="filter-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Target URL</span>
+                            <input class="filter-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Stream key</span>
+                            <input class="filter-input" type="text" name="target_key" placeholder="Paste the destination key" autocomplete="off">
+                        </label>
+                        <div class="form-actions">
+                            <button class="button-secondary" type="submit">Save destination</button>
+                            <span class="input-help">These routes belong to your signed-in OpenVibe account.</span>
+                        </div>
+                    </form>
+                </article>
+            </div>
+            <div class="story-grid" style="margin-top:1rem;">
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Create a stream</div>
+                    <form class="form-stack" id="go-live-stream-form">
+                        <label>
+                            <span class="data-point-label">Channel</span>
+                            <select class="filter-input" name="channel_slug">
+                                <option value="">Select a channel</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="data-point-label">Title</span>
+                            <input class="filter-input" type="text" name="title" placeholder="Tonight’s stream title" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Category</span>
+                            <input class="filter-input" type="text" name="category" placeholder="Art, coding, games, music…" autocomplete="off">
+                        </label>
+                        <label>
+                            <span class="data-point-label">Protocol</span>
+                            <select class="filter-input" name="protocol">
+                                <option value="rtmp">RTMP / OBS</option>
+                                <option value="whip">WHIP</option>
+                                <option value="browser">Browser quick-start</option>
+                            </select>
+                        </label>
+                        <div class="form-actions">
+                            <button class="button" type="submit">Create stream</button>
+                            <span class="input-help">This creates the stream record and returns fresh ingest details.</span>
+                        </div>
+                    </form>
+                    <div data-go-live-ingest class="list-stack" style="margin-top:1rem;">
+                        <p class="manager-note">Create a stream to reveal ingest details and hand-off info for OBS or your restream workflow.</p>
+                    </div>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Recent streams</div>
+                    <div data-go-live-streams class="list-stack"><p class="manager-note">Checking your recent streams…</p></div>
+                </article>
             </div>
         </section>
         ${renderSection({
@@ -2928,22 +2666,22 @@ function renderGoLivePage({ baseUrl }) {
             content: `<div class="feature-grid">${tracksHtml}</div>`,
         })}
         ${renderSection({
-            title: 'Practical rollout sequence',
-            subtitle: 'A clean, low-friction path for creators and operators.',
+            title: 'A simple creator loop',
+            subtitle: 'Keep the public route, the live session, and the after-stream surface tied together.',
             content: `
                 <div class="story-grid">
                     <article class="glass-card" data-reveal>
                         <div class="eyebrow">Streamer flow</div>
                         <ol class="flow-list">
-                            <li>Claim or verify the creator account and channel identity.</li>
-                            <li>Choose a broadcast path: browser, OBS/RTMP, WHIP, or restream.</li>
+                            <li>Claim or verify the creator account and public channel handle.</li>
+                            <li>Create a stream record and grab the ingest details you need.</li>
                             <li>Go live and let the session mirror into the canonical OpenVibe live graph.</li>
-                            <li>Use the live, VOD, and clip routes to keep discovery flowing after the stream ends.</li>
+                            <li>Keep VODs, clips, chat, and community tied back to that same creator route.</li>
                         </ol>
                     </article>
                     <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Operator truth</div>
-                        <p class="card-body">The live surface is intentionally honest about what is already connected. It will show live sessions, recent broadcasts, viewer counts, VOD linkage, and clip state when those facts exist — and clean empty states when they do not.</p>
+                        <div class="eyebrow">Truth first</div>
+                        <p class="card-body">The live surface stays honest. It shows live sessions, recent broadcasts, viewer counts, VOD linkage, and clip state when those facts exist — and clean empty states when they do not.</p>
                     </article>
                 </div>`,
         })}

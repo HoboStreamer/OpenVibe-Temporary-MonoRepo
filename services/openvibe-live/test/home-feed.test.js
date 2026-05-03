@@ -52,6 +52,8 @@ function request(server, requestPath, host) {
     const mediaItems = {
         'media:hobostreamer-vod:7': {
             id: 'media:hobostreamer-vod:7',
+            owner_type: 'user',
+            owner_id: '42',
             namespace: 'live.vods',
             type: 'vod',
             status: 'initialized',
@@ -64,7 +66,6 @@ function request(server, requestPath, host) {
             metadata: {
                 source: 'hobostreamer',
                 title: 'archive run',
-                stream_session_id: 'stream-session:hobostreamer:7',
                 thumbnail_url: '/api/thumbnails/archive-run.webp',
                 duration_seconds: 7200,
                 view_count: 42,
@@ -72,6 +73,8 @@ function request(server, requestPath, host) {
         },
         'media:hobostreamer-clip:3': {
             id: 'media:hobostreamer-clip:3',
+            owner_type: 'user',
+            owner_id: '42',
             namespace: 'live.clips',
             type: 'clip',
             status: 'ready',
@@ -84,7 +87,6 @@ function request(server, requestPath, host) {
             metadata: {
                 source: 'hobostreamer',
                 title: 'top deck glitch',
-                stream_session_id: 'stream-session:hobostreamer:7',
                 thumbnail_url: '/api/thumbnails/archive-run.webp',
                 duration_seconds: 37,
                 view_count: 19,
@@ -173,7 +175,7 @@ function request(server, requestPath, host) {
     const model = require('../server/model');
     const { app } = buildApp();
 
-    model.upsertChannel({ slug: 'alice', display_name: 'Alice', description: 'streamer' });
+    model.upsertChannel({ slug: 'alice', display_name: 'Alice', owner_user_id: '42', description: 'streamer' });
     model.upsertStream({
         id: 'stream-session:hobostreamer:7',
         channel_slug: 'alice',
@@ -192,6 +194,8 @@ function request(server, requestPath, host) {
         const parsedHome = JSON.parse(homeApi.body);
         assert.strictEqual(parsedHome.recentVods.length, 1, 'home api returns canonical vod feed');
         assert.strictEqual(parsedHome.recentClips.length, 1, 'home api returns canonical clip feed');
+        assert.strictEqual(parsedHome.recentVods[0].channel_slug, 'alice', 'owner-linked VOD resolves channel slug without stream_session_id');
+        assert.strictEqual(parsedHome.recentClips[0].channel_name, 'Alice', 'owner-linked clip resolves channel name without stream_session_id');
         assert.strictEqual(parsedHome.community.recentPastes.length, 1, 'home api returns canonical paste feed');
         assert.ok(Number(parsedHome.stats.vods) >= 1, 'home api reports canonical vod count');
         assert.ok(Number(parsedHome.stats.clips) >= 1, 'home api reports canonical clip count');
@@ -200,6 +204,7 @@ function request(server, requestPath, host) {
         assert.strictEqual(homePage.status, 200, 'home page returns 200');
         assert.ok(homePage.body.includes('archive run'), 'home page renders canonical vod title');
         assert.ok(homePage.body.includes('top deck glitch'), 'home page renders canonical clip title');
+        assert.ok(!homePage.body.includes('From unknown'), 'home page avoids unknown creator fallback when owner-linked channel exists');
         assert.ok(homePage.body.includes('Recent pastes'), 'home page renders paste section');
         assert.ok(homePage.body.includes('Migration screenshot'), 'home page renders paste card');
 

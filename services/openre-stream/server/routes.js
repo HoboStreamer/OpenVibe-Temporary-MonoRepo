@@ -27,7 +27,7 @@ function buildRouter({ eventBus, config }) {
         const ch = model.upsertChannel(b);
         res.status(201).json({ channel: ch });
     });
-    r.get('/channels', (_req, res) => res.json({ items: model.listChannels({}) }));
+    r.get('/channels', (req, res) => res.json({ items: model.listChannels({ owner_user_id: req.query.owner_user_id, limit: req.query.limit }) }));
     r.get('/channels/:slug', (req, res) => {
         const ch = model.getChannelBySlug(req.params.slug);
         if (!ch) return res.status(404).json({ error: 'not found' });

@@ -136,6 +136,16 @@ function getChannelBySlug(slug) {
     return hydrateChannel(db.get().prepare(`SELECT * FROM live_channels WHERE slug = ?`).get(String(slug)));
 }
 
+function getChannelByOwnerUserId(ownerUserId) {
+    if (!ownerUserId) return null;
+    return hydrateChannel(db.get().prepare(`
+        SELECT * FROM live_channels
+        WHERE owner_user_id = ?
+        ORDER BY rowid DESC
+        LIMIT 1
+    `).get(String(ownerUserId)));
+}
+
 function listChannels({ limit }) {
     const cap = clampLimit(limit, 50);
     return db.get().prepare(`SELECT * FROM live_channels ORDER BY rowid DESC LIMIT ?`).all(cap).map(hydrateChannel);
@@ -409,7 +419,7 @@ function recordLegacy({ source, kind, legacy_id, new_id }) {
 }
 
 module.exports = {
-    upsertChannel, getChannelBySlug, listChannels,
+    upsertChannel, getChannelBySlug, getChannelByOwnerUserId, listChannels,
     upsertStream, getStreamById, listStreams, listLiveNow, listRecentlyEnded, listRecentVodStreams, listRecentClips, listVods, listClips,
     listFeaturedChannels, listTrendingStreams, listTopCategories, getChannelStats, getHomeStats, getCurrentLiveStream,
     getStreamTimeline,

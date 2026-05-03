@@ -168,5 +168,7 @@ const fs2 = require('fs');
 const path2 = require('path');
 const shellHtml = fs2.readFileSync(path2.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 assert.ok(shellHtml.includes('community-phase16-chip'), 'community shell should expose the Phase 16 product/status chip');
+assert.ok(shellHtml.includes('community-links'), 'community shell should expose quick links instead of the old probe console');
+assert.ok(!shellHtml.includes('community-probe-output'), 'community shell should no longer center the runtime probe console');
 
 console.log('openvibe-community smoke OK');

@@ -44,6 +44,14 @@ function safeNumber(value, fallback) {
     return Number.isFinite(numeric) ? numeric : (fallback == null ? 0 : fallback);
 }
 
+function firstString(...values) {
+    for (const value of values) {
+        const normalized = String(value == null ? '' : value).trim();
+        if (normalized) return normalized;
+    }
+    return null;
+}
+
 function rewriteThumbnailUrl(rawUrl) {
     const value = String(rawUrl || '').trim();
     if (!value) return null;
@@ -234,18 +242,49 @@ function createFeedBridge(options) {
 
     function channelContextForMedia(record) {
         const metadata = record && record.metadata || {};
-        const streamId = metadata.stream_session_id ? String(metadata.stream_session_id) : null;
+        const nestedMetadata = metadata.metadata && typeof metadata.metadata === 'object'
+            ? metadata.metadata
+            : {};
+        const streamId = firstString(
+            metadata.stream_session_id,
+            metadata.source_stream_id,
+            metadata.stream_id,
+            nestedMetadata.stream_session_id,
+            nestedMetadata.source_stream_id,
+            nestedMetadata.stream_id
+        );
         const liveStream = streamId ? model.getStreamById(streamId) : null;
-        const channelSlug = liveStream && liveStream.channel_slug
-            ? liveStream.channel_slug
-            : (metadata.channel_slug ? String(metadata.channel_slug) : null);
-        const channel = channelSlug ? model.getChannelBySlug(channelSlug) : null;
-        return { metadata, liveStream, channel, channelSlug };
+        let channelSlug = firstString(
+            liveStream && liveStream.channel_slug,
+            metadata.channel_slug,
+            metadata.source_channel_slug,
+            metadata.channel && metadata.channel.slug,
+            nestedMetadata.channel_slug,
+            nestedMetadata.source_channel_slug,
+            nestedMetadata.channel && nestedMetadata.channel.slug
+        );
+        let channel = channelSlug ? model.getChannelBySlug(channelSlug) : null;
+        const ownerUserId = firstString(
+            channel && channel.owner_user_id,
+            record && record.owner_type === 'user' ? record.owner_id : null,
+            metadata.owner_user_id,
+            metadata.creator_id,
+            nestedMetadata.owner_user_id,
+            nestedMetadata.creator_id,
+            liveStream && liveStream.metadata && (liveStream.metadata.owner_user_id || liveStream.metadata.creator_id)
+        );
+        if (!channel && ownerUserId) {
+            channel = model.getChannelByOwnerUserId(ownerUserId);
+        }
+        if (!channelSlug && channel) {
+            channelSlug = channel.slug;
+        }
+        return { metadata, liveStream, channel, channelSlug, ownerUserId, nestedMetadata };
     }
 
     function normalizeMediaRecord(record, kind) {
         if (!record) return null;
-        const { metadata, liveStream, channel, channelSlug } = channelContextForMedia(record);
+        const { metadata, liveStream, channel, channelSlug, ownerUserId, nestedMetadata } = channelContextForMedia(record);
         const legacyId = parseLegacyMediaId(kind, record.id);
         const title = String(metadata.title || record.title || `${kind === 'clip' ? 'Untitled clip' : 'Untitled VOD'}`);
         const status = String(record.status || 'initialized');
@@ -253,6 +292,15 @@ function createFeedBridge(options) {
         const createdAt = record.created_at || metadata.created_at || (liveStream && (liveStream.ended_at || liveStream.started_at)) || null;
         const updatedAt = record.updated_at || createdAt || null;
         const playback = derivePlaybackState(record, config, metadata);
+        const fallbackChannelName = firstString(
+            metadata.channel_name,
+            metadata.display_name,
+            metadata.username,
+            nestedMetadata.channel_name,
+            nestedMetadata.display_name,
+            nestedMetadata.username,
+            channelSlug
+        );
         return {
             id: String(record.id),
             kind,
@@ -261,7 +309,8 @@ function createFeedBridge(options) {
             cta_label: `Open ${kind} →`,
             title,
             channel_slug: channelSlug || null,
-            channel_name: channel ? (channel.display_name || channel.slug) : (channelSlug || null),
+            channel_name: channel ? (channel.display_name || channel.slug) : fallbackChannelName,
+            owner_user_id: ownerUserId,
             category: (liveStream && liveStream.category) || (channel && channel.category) || null,
             thumbnail_url: rewriteThumbnailUrl(metadata.thumbnail_url || (liveStream && liveStream.thumbnail_url) || null),
             created_at: createdAt,

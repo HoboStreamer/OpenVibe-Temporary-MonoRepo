@@ -12,27 +12,28 @@
     <section class="ov-hero">
         <div class="ov-hero-grid">
             <div class="ov-hero-copy">
-                <div class="ov-kicker" id="community-kicker">Community runtime</div>
+                <div class="ov-kicker" id="community-kicker">Threads · pastes · chat · pulse</div>
                 <h1 id="community-title">OpenVibe Community</h1>
-                <p>Spaces, threads, pastes, and comments — the long-form home of the OpenVibe network. This shell now surfaces live counts, faster navigation, and clearer empty/auth states for day-to-day validation.</p>
+                <p>Threads, pastes, screenshots, notes, and the slower conversations that should stay attached to creators long after a stream ends. This page is meant to feel like a real community home, not a probe console.</p>
                 <div class="ov-chip-row">
-                    <span class="ov-chip primary" id="community-domain-chip">Spaces · threads · pastes</span>
+                    <span class="ov-chip primary" id="community-domain-chip">Threads · pastes · pulse</span>
                     <span class="ov-chip soft" id="community-refresh-chip">No refresh yet</span>
-                    <span class="ov-chip" id="community-status-chip">catalog idle</span>
+                    <span class="ov-chip" id="community-status-chip">community idle</span>
                     <span class="ov-chip soft" id="community-phase16-chip" title="Phase 16 community workflow truth (spaces · threads · posts)">Phase 16: checking…</span>
                 </div>
                 <div class="ov-cta-row">
                     <a class="ov-btn ov-btn-primary" href="#new-paste" id="new-paste-link">New paste</a>
+                    <a class="ov-btn" href="https://openvibe.chat" id="open-chat-link">Open chat</a>
                     <button class="ov-btn" type="button" id="refresh-community-btn">Refresh feed</button>
-                    <a class="ov-btn ov-btn-ghost" href="/ready" id="community-ready-link">/ready</a>
+                    <a class="ov-btn ov-btn-ghost" href="https://openvibe.live" id="community-live-link">openvibe.live</a>
                 </div>
             </div>
 
             <section class="ov-panel">
                 <div class="ov-section-head">
                     <div>
-                        <h2 id="community-snapshot-heading">Network snapshot</h2>
-                        <p class="ov-section-sub">Current counts from the public community listing surfaces.</p>
+                        <h2 id="community-snapshot-heading">Community pulse</h2>
+                        <p class="ov-section-sub">What is moving across public threads, pastes, and spaces right now.</p>
                     </div>
                 </div>
                 <div class="ov-stat-strip">
@@ -67,8 +68,8 @@
         <section class="ov-panel">
             <div class="ov-section-head">
                 <div>
-                    <h2 id="highlights-heading">Operator highlights</h2>
-                    <p class="ov-section-sub">Quick, human-readable hints about what the current public community surface is returning.</p>
+                    <h2 id="highlights-heading">Pulse</h2>
+                    <p class="ov-section-sub">Quick reads from the public community surface.</p>
                 </div>
             </div>
             <div class="ov-grid" id="community-highlights"></div>
@@ -77,16 +78,11 @@
         <section class="ov-panel">
             <div class="ov-section-head">
                 <div>
-                    <h2 id="community-probes-heading">Runtime probes</h2>
-                    <p class="ov-section-sub">Use the public service diagnostics without leaving the page.</p>
+                    <h2 id="community-probes-heading">Chat + links</h2>
+                    <p class="ov-section-sub">Jump straight into the nearby OpenVibe surfaces around community activity.</p>
                 </div>
             </div>
-            <div class="ov-toolbar" style="margin-bottom:1rem">
-                <button class="ov-btn" type="button" id="community-health-btn">/health</button>
-                <button class="ov-btn" type="button" id="community-ready-btn">/ready</button>
-                <button class="ov-btn ov-btn-ghost" type="button" id="community-threads-btn">threads API</button>
-            </div>
-            <pre id="community-probe-output" class="ov-code-scroll">click a probe…</pre>
+            <div class="ov-grid" id="community-links"></div>
         </section>
     </div>
 
@@ -183,20 +179,18 @@
     }
 
     function decorateStaticCopy() {
-        document.getElementById('community-kicker').innerHTML = withIcon('community', 'Community runtime');
+        document.getElementById('community-kicker').innerHTML = withIcon('community', 'Threads · pastes · chat · pulse');
         document.getElementById('community-title').innerHTML = withIcon('community', 'OpenVibe Community');
-        document.getElementById('community-domain-chip').innerHTML = withIcon('success', 'Spaces · threads · pastes');
+        document.getElementById('community-domain-chip').innerHTML = withIcon('success', 'Threads · pastes · pulse');
         document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', 'No refresh yet');
-        document.getElementById('community-status-chip').innerHTML = withIcon('info', 'catalog idle');
+        document.getElementById('community-status-chip').innerHTML = withIcon('info', 'community idle');
         document.getElementById('new-paste-link').innerHTML = withIcon('launch', 'New paste');
+        document.getElementById('open-chat-link').innerHTML = withIcon('chat', 'Open chat');
         document.getElementById('refresh-community-btn').innerHTML = withIcon('runtime', 'Refresh feed');
-        document.getElementById('community-ready-link').innerHTML = withIcon('health', '/ready');
-        document.getElementById('community-snapshot-heading').innerHTML = withIcon('search', 'Network snapshot');
-        document.getElementById('highlights-heading').innerHTML = withIcon('info', 'Operator highlights');
-        document.getElementById('community-probes-heading').innerHTML = withIcon('health', 'Runtime probes');
-        document.getElementById('community-health-btn').innerHTML = withIcon('health', '/health');
-        document.getElementById('community-ready-btn').innerHTML = withIcon('runtime', '/ready');
-        document.getElementById('community-threads-btn').innerHTML = withIcon('content', 'threads API');
+        document.getElementById('community-live-link').innerHTML = withIcon('live', 'openvibe.live');
+        document.getElementById('community-snapshot-heading').innerHTML = withIcon('search', 'Community pulse');
+        document.getElementById('highlights-heading').innerHTML = withIcon('info', 'Pulse');
+        document.getElementById('community-probes-heading').innerHTML = withIcon('chat', 'Chat + links');
         document.getElementById('threads-heading').innerHTML = withIcon('community', 'Threads');
         document.getElementById('pastes-heading').innerHTML = withIcon('content', 'Pastes');
         document.getElementById('create-paste-heading').innerHTML = withIcon('launch', 'Create a paste');
@@ -327,7 +321,7 @@
             {
                 title: 'Top space',
                 detail: state.spaces[0] ? (state.spaces[0].name || state.spaces[0].slug || state.spaces[0].id) : 'No spaces published yet',
-                chip: state.spaces.length ? 'space registry visible' : 'waiting for data',
+                chip: state.spaces.length ? 'space lane visible' : 'waiting for data',
             },
             {
                 title: 'Latest thread',
@@ -337,7 +331,7 @@
             {
                 title: 'Paste surface',
                 detail: state.pastes.length ? `${state.pastes.length} paste item${state.pastes.length === 1 ? '' : 's'} visible` : 'No pastes visible yet',
-                chip: 'public API snapshot',
+                chip: 'text + screenshot lane',
             },
         ];
 
@@ -351,6 +345,55 @@
                     <span class="ov-tag">${OpenVibe.escapeHtml(card.chip)}</span>
                 </div>
             </div>
+        `).join('');
+    }
+
+    function renderLinks() {
+        const resolveSurface = OpenVibe.resolveSurfaceUrl
+            ? OpenVibe.resolveSurfaceUrl.bind(OpenVibe)
+            : (surface) => ({
+                live: 'https://openvibe.live',
+                chat: 'https://openvibe.chat',
+                community: 'https://openvibe.community',
+                my: 'https://my.openvibe.network',
+                restream: 'https://openre.stream',
+            }[surface] || '#');
+        const cards = [
+            {
+                title: 'OpenVibe Chat',
+                detail: 'Jump into rooms, DMs, calls, and live-side conversation.',
+                href: resolveSurface('chat'),
+                chip: 'chat',
+            },
+            {
+                title: 'openvibe.live',
+                detail: 'Follow creators, live sessions, clips, and replays.',
+                href: resolveSurface('live'),
+                chip: 'live',
+            },
+            {
+                title: 'My account',
+                detail: 'Keep one account across live, community, and restream.',
+                href: resolveSurface('my'),
+                chip: 'account',
+            },
+            {
+                title: 'openre.stream',
+                detail: 'Open the routing cockpit for ingest URLs and multistream.',
+                href: resolveSurface('restream'),
+                chip: 'restream',
+            },
+        ];
+        document.getElementById('community-links').innerHTML = cards.map((card) => `
+            <a class="ov-card" href="${OpenVibe.escapeHtml(card.href)}">
+                <div class="ov-card-top">
+                    <div>
+                        <div class="ov-service-title">${OpenVibe.escapeHtml(card.title)}</div>
+                        <div class="desc">${OpenVibe.escapeHtml(card.detail)}</div>
+                    </div>
+                    <span class="ov-tag">${OpenVibe.escapeHtml(card.chip)}</span>
+                </div>
+            </a>
         `).join('');
     }
 
@@ -411,25 +454,11 @@
         document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', `Refreshed ${new Date().toLocaleTimeString()}`);
     }
 
-    async function loadProbe(path) {
-        const output = document.getElementById('community-probe-output');
-        output.textContent = 'loading…';
-        try {
-            const body = await fetchJson(path);
-            output.textContent = JSON.stringify(body, null, 2);
-        } catch (error) {
-            output.textContent = JSON.stringify({ error: error.message, status: error.status || 0, body: error.body || null }, null, 2);
-        }
-    }
-
     tabs.forEach((tab) => {
         document.getElementById(`tab-btn-${tab}`).addEventListener('click', () => setActiveTab(tab));
     });
 
     document.getElementById('refresh-community-btn').addEventListener('click', refreshCommunity);
-    document.getElementById('community-health-btn').addEventListener('click', () => loadProbe('/health'));
-    document.getElementById('community-ready-btn').addEventListener('click', () => loadProbe('/ready'));
-    document.getElementById('community-threads-btn').addEventListener('click', () => loadProbe('/api/community/threads'));
     document.getElementById('paste-reset-btn').addEventListener('click', () => {
         document.getElementById('paste-form').reset();
         const status = document.getElementById('paste-status');
@@ -463,6 +492,7 @@
     });
 
     decorateStaticCopy();
+    renderLinks();
     setActiveTab('threads');
     await refreshCommunity();
     await syncPasteComposer();
