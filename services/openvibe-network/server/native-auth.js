@@ -473,6 +473,15 @@ function buildNativeAuth({ config, identity }) {
         }
     }
 
+    function configuredPublicUrls() {
+        const urls = [];
+        for (const value of Object.values(config || {})) {
+            if (!value || typeof value !== 'object') continue;
+            if (typeof value.url === 'string') urls.push(value.url);
+        }
+        return urls;
+    }
+
     function manifestAllowsRedirectUri(clientId, redirectUri) {
         const manifest = getOauthClientManifest(clientId);
         if (!manifest) return null;
@@ -494,6 +503,7 @@ function buildNativeAuth({ config, identity }) {
             const parsed = new URL(String(redirectUri));
             const allowedHosts = new Set(
                 Object.values(config.surfaces || {})
+                    .concat(configuredPublicUrls())
                     .map((surfaceUrl) => {
                         try { return new URL(surfaceUrl).hostname; } catch { return null; }
                     })

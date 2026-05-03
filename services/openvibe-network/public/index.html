@@ -12,28 +12,70 @@
 <div id="nav-mount"></div>
 <main class="ov-shell">
     <section class="ov-hero">
-        <div class="ov-hero-grid">
-            <div class="ov-hero-copy">
-                <span class="ov-kicker">Community-driven · no profit · open source</span>
-                <h1>One account.<br><span class="ov-gradient">Every OpenVibe surface.</span></h1>
-                <p id="hero-copy">Streaming, chat, media, games, billing-without-the-tax, and a pile of weird useful tools — all tied together under one account instead of scattered across a million walled gardens. No investors, no ad surveillance, no startup cosplay. Just an open network that loads.</p>
-                <div class="ov-chip-row">
-                    <span class="ov-chip ok">Native auth online</span>
-                    <span class="ov-chip soft" id="issuer-chip">Loading issuers…</span>
-                    <span class="ov-chip primary" id="session-chip">Checking session…</span>
+        <div id="hero-switcher">
+            <!-- intro view: copy + carousel side by side -->
+            <div id="hero-intro" class="ov-hero-grid ov-hero-view">
+                <div class="ov-hero-copy">
+                    <div class="ov-kicker-row">
+                        <button class="ov-star-toggle" id="hero-star-btn" type="button" aria-label="Switch to favorites feed" title="Switch to favorites &amp; recents">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                        </button>
+                        <span class="ov-kicker">Community-driven · no profit · open source</span>
+                    </div>
+                    <h1>One account.<br><span class="ov-gradient">Every OpenVibe surface.</span></h1>
+                    <p id="hero-copy">Streaming, chat, media, games, billing-without-the-tax, and a pile of weird useful tools — all tied together under one account instead of scattered across a million walled gardens. No investors, no ad surveillance, no startup cosplay. Just an open network that loads.</p>
+                    <div class="ov-chip-row">
+                        <span class="ov-chip ok">Native auth online</span>
+                        <span class="ov-chip soft" id="issuer-chip">Loading issuers…</span>
+                        <span class="ov-chip primary" id="session-chip">Checking session…</span>
+                    </div>
+                    <div class="ov-cta-row" id="hero-actions"></div>
                 </div>
-                <div class="ov-cta-row" id="hero-actions"></div>
+                <aside class="ov-panel ov-network-carousel" aria-label="Network highlights">
+                    <div class="ov-carousel-viewport">
+                        <div class="ov-carousel-track" id="network-slide-track"></div>
+                    </div>
+                    <div class="ov-carousel-controls" aria-label="Slide controls">
+                        <button class="ov-btn ov-carousel-btn" type="button" id="network-slide-prev" aria-label="Previous slide">‹</button>
+                        <div class="ov-carousel-dots" id="network-slide-dots" aria-label="Select slide"></div>
+                        <button class="ov-btn ov-carousel-btn" type="button" id="network-slide-next" aria-label="Next slide">›</button>
+                    </div>
+                </aside>
             </div>
-            <aside class="ov-panel">
-                <div class="ov-section-head" style="margin-bottom:.8rem;">
-                    <div>
-                        <span class="ov-kicker">Your network at a glance</span>
-                        <h2>Launcher, profile, and control-plane pulse</h2>
+            <!-- favorites view: full width crossfade -->
+            <div id="hero-favorites" class="ov-hero-view">
+                <div class="ov-kicker-row" style="margin-bottom:1rem;">
+                    <button class="ov-star-toggle ov-star-active" id="hero-star-btn-fav" type="button" aria-label="Switch back to intro" title="Switch back to intro">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </button>
+                    <span class="ov-kicker">Favorites &amp; recents</span>
+                    <div class="ov-view-toggles" style="margin-left:auto;">
+                        <button class="ov-view-btn active" id="view-card" data-view="card" title="Card view" aria-label="Card view">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="9" height="9" rx="1"/><rect x="13" y="2" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>
+                        </button>
+                        <button class="ov-view-btn" id="view-row" data-view="row" title="Row view" aria-label="Row view">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="3" width="20" height="4" rx="1"/><rect x="2" y="10" width="20" height="4" rx="1"/><rect x="2" y="17" width="20" height="4" rx="1"/></svg>
+                        </button>
+                        <button class="ov-view-btn" id="view-icon" data-view="icon" title="Icon view" aria-label="Icon view">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="5" r="3"/><circle cx="12" cy="5" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="5" cy="12" r="3"/><circle cx="12" cy="12" r="3"/><circle cx="19" cy="12" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="12" cy="19" r="3"/><circle cx="19" cy="19" r="3"/></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="ov-card" id="user-summary-card"></div>
-                <div class="ov-grid" id="quick-lane-grid" style="margin-top:1rem;"></div>
-            </aside>
+                <div class="ov-hero-fav-grid">
+                    <div class="ov-panel">
+                        <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip warn">Favorites</span></div>
+                        <div id="favorites-grid"></div>
+                    </div>
+                    <div class="ov-panel">
+                        <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip soft">Recent launches</span></div>
+                        <div id="recents-grid"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -45,35 +87,13 @@
         <div class="ov-stat"><div class="n" id="stat-themes">—</div><div class="l">built-in themes</div></div>
     </section>
 
-    <section class="ov-section ov-split-grid">
+    <section class="ov-section">
         <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Spotlight surfaces</h2>
-                    <p class="ov-section-sub">The highest-signal places to start: launch, stream, chat, and personalize.</p>
-                </div>
-            </div>
             <div class="ov-grid" id="featured-grid"></div>
         </div>
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Favorites & recents</h2>
-                    <p class="ov-section-sub">Launcher state syncs through <code>control.launcher</code> when you are signed in, and falls back to local storage when you are not.</p>
-                </div>
-            </div>
-            <div style="display:grid; gap:1rem;">
-                <div>
-                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip warn">Favorites</span></div>
-                    <div class="ov-grid" id="favorites-grid"></div>
-                </div>
-                <div>
-                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip soft">Recent launches</span></div>
-                    <div class="ov-grid" id="recents-grid"></div>
-                </div>
-            </div>
-        </div>
     </section>
+
+
 
     <section class="ov-section ov-split-grid">
         <div class="ov-panel">
@@ -177,40 +197,93 @@
 
     OpenVibe.attachLauncher(() => items);
 
+    // ── Favorites view mode ───────────────────────────────────────────
+    const FAV_VIEW_KEY = 'ov-fav-view';
+    let currentFavView = localStorage.getItem(FAV_VIEW_KEY) || 'card';
+    let lastFavoriteItems = [];
+    let lastRecentItems = [];
+
+    function getServiceHref(item) {
+        return item.public_url || '#';
+    }
+
+    function getInitials(name) {
+        return (name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    }
+
+    function renderIconEl(item) {
+        const svgOrEmpty = OpenVibe.icon ? OpenVibe.icon(item.service_id) : '';
+        return svgOrEmpty || `<span style="font-size:.7rem;font-weight:800;">${getInitials(item.display_name || item.service_id)}</span>`;
+    }
+
+    function renderFavGrid(target, items, emptyLabel, emptyMsg) {
+        if (!items.length) {
+            renderEmpty(target, emptyLabel, emptyMsg);
+            return;
+        }
+        if (currentFavView === 'row') {
+            target.innerHTML = '';
+            target.className = 'ov-fav-row-list';
+            items.forEach(item => {
+                const href = getServiceHref(item);
+                const a = document.createElement('a');
+                a.className = 'ov-fav-row-item';
+                a.href = href;
+                a.dataset.launchService = item.service_id;
+                a.innerHTML = `<span class="ov-fav-row-icon">${renderIconEl(item)}</span><span class="ov-fav-row-name">${OpenVibe.escapeHtml(item.display_name || item.service_id)}</span>`;
+                target.appendChild(a);
+            });
+        } else if (currentFavView === 'icon') {
+            target.innerHTML = '';
+            target.className = 'ov-fav-icon-grid';
+            items.forEach(item => {
+                const href = getServiceHref(item);
+                const a = document.createElement('a');
+                a.className = 'ov-fav-icon-item';
+                a.href = href;
+                a.title = item.display_name || item.service_id;
+                a.dataset.launchService = item.service_id;
+                a.innerHTML = `<span class="ov-fav-icon-el">${renderIconEl(item)}</span>`;
+                target.appendChild(a);
+            });
+        } else {
+            // card view — use existing renderer
+            target.className = 'ov-grid';
+            OpenVibe.renderServiceCards(target, items, { onFavoriteChange: renderLauncherSections });
+        }
+    }
+
+    function applyFavView(view) {
+        currentFavView = view;
+        localStorage.setItem(FAV_VIEW_KEY, view);
+        document.querySelectorAll('.ov-view-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+        renderFavGrid(document.getElementById('favorites-grid'), lastFavoriteItems,
+            'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
+        renderFavGrid(document.getElementById('recents-grid'), lastRecentItems,
+            'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
+    }
+
+    document.querySelectorAll('.ov-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyFavView(btn.dataset.view));
+    });
+    // set initial active state from storage
+    document.querySelectorAll('.ov-view-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === currentFavView);
+    });
+
     async function renderLauncherSections(state) {
         const currentState = state || await OpenVibe.loadLauncherState();
-        const favoriteItems = pickByIds(items, currentState.favorites);
-        const recentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
+        lastFavoriteItems = pickByIds(items, currentState.favorites);
+        lastRecentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
 
         await OpenVibe.renderServiceCards(document.getElementById('featured-grid'), featuredItems, { onFavoriteChange: renderLauncherSections });
-        if (favoriteItems.length) {
-            await OpenVibe.renderServiceCards(document.getElementById('favorites-grid'), favoriteItems, { onFavoriteChange: renderLauncherSections });
-        } else {
-            renderEmpty(document.getElementById('favorites-grid'), 'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
-        }
-        if (recentItems.length) {
-            await OpenVibe.renderServiceCards(document.getElementById('recents-grid'), recentItems, { onFavoriteChange: renderLauncherSections });
-        } else {
-            renderEmpty(document.getElementById('recents-grid'), 'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
-        }
 
-        quickLaneGrid.innerHTML = [
-            {
-                title: 'Favorites synced',
-                desc: `${(currentState.favorites || []).length} pinned surface${(currentState.favorites || []).length === 1 ? '' : 's'} ready to relaunch.`,
-                tag: 'launcher',
-            },
-            {
-                title: 'Topics published',
-                desc: `${(topics.items || []).length} runtime topic definitions exposed by the network contracts bundle.`,
-                tag: 'topics',
-            },
-            {
-                title: 'Federation mode',
-                desc: health.federation && health.federation.hobo_tools ? 'Legacy compat is available.' : 'Native-only mode is active.',
-                tag: health.federation && health.federation.hobo_tools ? 'compat' : 'native',
-            },
-        ].map((card) => `<article class="ov-card"><span class="ov-chip primary">${OpenVibe.escapeHtml(card.tag)}</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(card.title)}</h3><p class="ov-muted">${OpenVibe.escapeHtml(card.desc)}</p></article>`).join('');
+        renderFavGrid(document.getElementById('favorites-grid'), lastFavoriteItems,
+            'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
+        renderFavGrid(document.getElementById('recents-grid'), lastRecentItems,
+            'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
     }
 
     async function applyFilter() {
@@ -222,7 +295,6 @@
     document.getElementById('filter').addEventListener('input', function () {
         applyFilter().catch(() => {});
     });
-    const quickLaneGrid = document.getElementById('quick-lane-grid');
     await renderLauncherSections(launcherState);
     await applyFilter();
 
@@ -233,6 +305,7 @@
     document.getElementById('stat-themes').textContent = OpenVibe.BUILTIN_THEMES.length;
     document.getElementById('issuer-chip').textContent = `${(health.trusted_issuers || []).length} trusted issuer${(health.trusted_issuers || []).length === 1 ? '' : 's'}`;
     const isAnonymous = !!(session && session.anonymous && session.user);
+    document.body.dataset.ovSignedIn = (session.authenticated && session.user) ? '1' : '0';
     document.getElementById('session-chip').textContent = session.authenticated && session.user
         ? `Signed in as @${session.user.username || session.user.id}`
         : (isAnonymous
@@ -268,7 +341,7 @@
         });
     }
 
-    document.getElementById('user-summary-card').innerHTML = session.authenticated && session.user
+    const guestSlideHtml = session.authenticated && session.user
         ? `<div class="ov-chip-row" style="margin-bottom:.65rem;">
                 <span class="ov-chip ok">@${OpenVibe.escapeHtml(session.user.username || session.user.id)}</span>
                 <span class="ov-chip soft">${OpenVibe.escapeHtml(session.user.role || 'user')}</span>
@@ -283,6 +356,97 @@
                <h3 class="ov-service-title">Explore first, sign in when ready</h3>
                <p class="ov-muted">You can browse as a numbered anonymous identity or sign in when you want synced favorites, profile settings, and network-wide theme storage.</p>`);
 
+    function setupNetworkSlides(slides) {
+        const track = document.getElementById('network-slide-track');
+        const dots = document.getElementById('network-slide-dots');
+        const prev = document.getElementById('network-slide-prev');
+        const next = document.getElementById('network-slide-next');
+        let activeIndex = 0;
+        let autoTimer = null;
+        let autoPaused = false;
+
+        track.innerHTML = slides.map((slide, index) => `
+            <article class="ov-carousel-slide${index === 0 ? ' active' : ''}" aria-hidden="${index === 0 ? 'false' : 'true'}">
+                <span class="ov-chip ${OpenVibe.escapeHtml(slide.tone || 'primary')}">${OpenVibe.escapeHtml(slide.kicker)}</span>
+                <h2>${OpenVibe.escapeHtml(slide.title)}</h2>
+                <div class="ov-carousel-body">${slide.body}</div>
+            </article>`).join('');
+        dots.innerHTML = slides.map((slide, index) => `
+            <button class="ov-carousel-dot${index === 0 ? ' active' : ''}" type="button" data-slide-index="${index}" aria-label="Show ${OpenVibe.escapeHtml(slide.kicker)} slide" aria-current="${index === 0 ? 'true' : 'false'}"></button>
+        `).join('');
+
+        function showSlide(index) {
+            activeIndex = (index + slides.length) % slides.length;
+            track.style.transform = `translateX(-${activeIndex * 100}%)`;
+            track.querySelectorAll('.ov-carousel-slide').forEach((slide, slideIndex) => {
+                const active = slideIndex === activeIndex;
+                slide.classList.toggle('active', active);
+                slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+            });
+            dots.querySelectorAll('.ov-carousel-dot').forEach((dot, dotIndex) => {
+                const active = dotIndex === activeIndex;
+                dot.classList.toggle('active', active);
+                dot.setAttribute('aria-current', active ? 'true' : 'false');
+            });
+        }
+
+        function stopAuto() {
+            autoPaused = true;
+            if (autoTimer) {
+                clearInterval(autoTimer);
+                autoTimer = null;
+            }
+        }
+
+        prev.addEventListener('click', () => {
+            stopAuto();
+            showSlide(activeIndex - 1);
+        });
+        next.addEventListener('click', () => {
+            stopAuto();
+            showSlide(activeIndex + 1);
+        });
+        dots.querySelectorAll('.ov-carousel-dot').forEach((dot) => {
+            dot.addEventListener('click', () => {
+                stopAuto();
+                showSlide(Number(dot.dataset.slideIndex || 0));
+            });
+        });
+
+        if (!globalThis.matchMedia || !globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            autoTimer = setInterval(() => {
+                if (!autoPaused) showSlide(activeIndex + 1);
+            }, 5200);
+        }
+    }
+
+    setupNetworkSlides([
+        {
+            kicker: 'Guest mode',
+            title: session.authenticated && session.user ? 'Signed in and ready' : (isAnonymous ? 'Anonymous identity active' : 'Browse before you commit'),
+            tone: session.authenticated && session.user ? 'ok' : 'warn',
+            body: guestSlideHtml,
+        },
+        {
+            kicker: 'Launcher',
+            title: `${(launcherState.favorites || []).length} favorite${(launcherState.favorites || []).length === 1 ? '' : 's'} pinned`,
+            tone: 'primary',
+            body: `<p class="ov-muted">Favorites and recents sync when you are signed in, with local storage carrying the launcher while you browse signed out.</p>`,
+        },
+        {
+            kicker: 'Topics',
+            title: `${(topics.items || []).length} topic${(topics.items || []).length === 1 ? '' : 's'} published`,
+            tone: 'soft',
+            body: `<p class="ov-muted">Runtime topic definitions expose what the network can publish and consume across services.</p>`,
+        },
+        {
+            kicker: 'Native',
+            title: health.federation && health.federation.hobo_tools ? 'Compat available' : 'Native-only mode',
+            tone: health.federation && health.federation.hobo_tools ? 'warn' : 'ok',
+            body: `<p class="ov-muted">${OpenVibe.escapeHtml(health.federation && health.federation.hobo_tools ? 'Legacy compatibility is available while native services keep taking over the default routes.' : 'The default route is running on native OpenVibe services without needing a live Hobo process.')}</p>`,
+        },
+    ]);
+
     const pulseGrid = document.getElementById('pulse-grid');
     pulseGrid.innerHTML = [
         { title: 'Health', value: health.ok ? 'OK' : 'Offline', tone: health.ok ? 'ok' : 'danger' },
@@ -296,6 +460,88 @@
         <td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td>
     </tr>`).join('');
     document.getElementById('registry-rows').innerHTML = registryRows || '<tr><td colspan="3">No resolved URLs returned yet.</td></tr>';
+})();
+
+// Hero star toggle — auto-favorites when signed in, persists manual overrides
+(function () {
+    const STORAGE_KEY = 'ov-hero-panel-override';
+    const switcher = document.getElementById('hero-switcher');
+    const intro = document.getElementById('hero-intro');
+    const favs = document.getElementById('hero-favorites');
+    const starBtn = document.getElementById('hero-star-btn');
+    const starBtnFav = document.getElementById('hero-star-btn-fav');
+
+    function getDefault() {
+        return document.body.dataset.ovSignedIn === '1' ? 'favorites' : 'carousel';
+    }
+
+    function applyMode(mode, animate) {
+        const isFav = mode === 'favorites';
+        if (animate) {
+            const outEl = isFav ? intro : favs;
+            const inEl  = isFav ? favs  : intro;
+            outEl.style.transition = 'opacity 0.32s ease';
+            outEl.style.opacity = '0';
+            outEl.style.pointerEvents = 'none';
+            setTimeout(function () {
+                outEl.style.position = 'absolute';
+                outEl.style.visibility = 'hidden';
+                outEl.style.opacity = '';
+                outEl.style.transition = '';
+                inEl.style.position = '';
+                inEl.style.visibility = '';
+                inEl.style.opacity = '0';
+                inEl.style.pointerEvents = '';
+                void inEl.offsetHeight;
+                inEl.style.transition = 'opacity 0.32s ease';
+                inEl.style.opacity = '1';
+                setTimeout(() => { inEl.style.transition = ''; }, 340);
+            }, 320);
+        } else {
+            if (isFav) {
+                intro.style.position = 'absolute';
+                intro.style.visibility = 'hidden';
+                favs.style.position = '';
+                favs.style.visibility = '';
+            } else {
+                favs.style.position = 'absolute';
+                favs.style.visibility = 'hidden';
+                intro.style.position = '';
+                intro.style.visibility = '';
+            }
+            intro.style.opacity = '1';
+            favs.style.opacity  = '1';
+            intro.style.pointerEvents = '';
+            favs.style.pointerEvents  = '';
+        }
+    }
+
+    function toggle() {
+        const next = (localStorage.getItem(STORAGE_KEY) || getDefault()) === 'favorites' ? 'carousel' : 'favorites';
+        localStorage.setItem(STORAGE_KEY, next);
+        applyMode(next, true);
+    }
+
+    starBtn.addEventListener('click', toggle);
+    starBtnFav.addEventListener('click', toggle);
+
+    function init() {
+        const override = localStorage.getItem(STORAGE_KEY);
+        applyMode(override || getDefault(), false);
+    }
+
+    const observer = new MutationObserver(function (mutations) {
+        for (const m of mutations) {
+            if (m.attributeName === 'data-ov-signed-in') {
+                if (!localStorage.getItem(STORAGE_KEY)) {
+                    applyMode(getDefault(), false);
+                }
+            }
+        }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-ov-signed-in'] });
+
+    init();
 })();
 </script>
 </body>

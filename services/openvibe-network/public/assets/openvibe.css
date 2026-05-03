@@ -146,10 +146,10 @@ pre {
 .ov-nav-inner {
     max-width: var(--ov-max);
     margin: 0 auto;
-    padding: 0.9rem 1.25rem;
+    padding: 0.75rem 1.25rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .ov-brand {
@@ -158,7 +158,7 @@ pre {
     gap: 0.8rem;
     color: var(--ov-text);
     font-weight: 700;
-    min-width: 0;
+    flex-shrink: 0;
 }
 
 .ov-brand-mark {
@@ -188,23 +188,26 @@ pre {
     color: var(--ov-text-dim);
     font-size: 0.82rem;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .ov-nav-links {
     display: flex;
-    gap: 0.35rem;
-    flex-wrap: wrap;
+    gap: 0.15rem;
+    flex-wrap: nowrap;
     margin-left: auto;
     align-items: center;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .ov-nav-links a {
     color: var(--ov-text-dim);
-    padding: 0.55rem 0.8rem;
+    padding: 0.45rem 0.6rem;
     border-radius: 999px;
     border: 1px solid transparent;
+    font-size: 0.85rem;
+    white-space: nowrap;
     transition: transform 0.22s ease, background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
 }
 
@@ -218,9 +221,15 @@ pre {
 
 .ov-nav-session {
     display: flex;
-    gap: 0.6rem;
+    gap: 0.5rem;
     align-items: center;
-    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.ov-nav-session .ov-btn {
+    padding: 0.5rem 0.9rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
 }
 
 .ov-kicker,
@@ -415,6 +424,90 @@ textarea {
 .ov-table-wrap {
     border-radius: 28px;
     padding: 1.2rem;
+}
+
+.ov-network-carousel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 26rem;
+}
+
+.ov-carousel-viewport {
+    overflow: hidden;
+    border-radius: 22px;
+    min-height: 20rem;
+}
+
+.ov-carousel-track {
+    display: flex;
+    height: 100%;
+    transition: transform 0.42s ease;
+    will-change: transform;
+}
+
+.ov-carousel-slide {
+    flex: 0 0 100%;
+    min-height: 20rem;
+    padding: 1.05rem;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+        linear-gradient(180deg, rgba(18, 30, 59, 0.92), rgba(9, 15, 31, 0.96));
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.85rem;
+}
+
+.ov-carousel-slide h2 {
+    font-size: clamp(1.55rem, 3vw, 2.25rem);
+    line-height: 1.05;
+}
+
+.ov-carousel-body {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.ov-carousel-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.ov-carousel-btn {
+    width: 2.8rem;
+    height: 2.8rem;
+    padding: 0;
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.ov-carousel-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.ov-carousel-dot {
+    width: 0.72rem;
+    height: 0.72rem;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    transition: width 0.22s ease, background 0.22s ease, border-color 0.22s ease;
+}
+
+.ov-carousel-dot.active {
+    width: 1.9rem;
+    border-color: rgba(34, 211, 238, 0.38);
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.95), rgba(34, 211, 238, 0.88));
 }
 
 .ov-grid,
@@ -731,11 +824,16 @@ button.ov-tab {
 @media (max-width: 860px) {
     .ov-nav-inner {
         flex-wrap: wrap;
-        justify-content: center;
+        justify-content: space-between;
     }
     .ov-nav-links {
         margin-left: 0;
+        order: 3;
+        width: 100%;
         justify-content: center;
+    }
+    .ov-nav-session {
+        margin-left: auto;
     }
     .ov-cta-row,
     .ov-action-row,
@@ -745,6 +843,14 @@ button.ov-tab {
         align-items: stretch;
     }
     .ov-btn { width: 100%; justify-content: center; }
+    .ov-carousel-controls {
+        flex-direction: row;
+        align-items: center;
+    }
+    .ov-carousel-btn {
+        width: 2.8rem;
+        flex: 0 0 2.8rem;
+    }
 }
 
 @media (max-width: 560px) {
@@ -765,4 +871,196 @@ button.ov-tab {
         animation: none !important;
         transition: none !important;
     }
+}
+
+/* ── Hero star toggle ───────────────────────────────────────────── */
+.ov-kicker-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ov-star-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--ov-text-faint);
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.ov-star-toggle:hover {
+    color: var(--ov-warn);
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.24);
+    transform: scale(1.1);
+}
+
+.ov-star-toggle.ov-star-active {
+    color: var(--ov-warn);
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.32);
+}
+
+.ov-star-toggle.ov-star-active svg {
+    fill: var(--ov-warn);
+}
+
+/* Favorites panel matches carousel panel dimensions */
+.ov-favorites-panel {
+    min-height: 26rem;
+    overflow-y: auto;
+}
+
+/* ── Hero switcher crossfade ────────────────────────────────────── */
+#hero-switcher {
+    position: relative;
+}
+
+.ov-hero-view {
+    width: 100%;
+}
+
+/* Favorites & recents panels: always equal height, fill available space */
+.ov-hero-fav-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.ov-hero-fav-grid > .ov-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.ov-hero-fav-grid > .ov-panel .ov-grid {
+    flex: 1;
+}
+
+@media (max-width: 860px) {
+    .ov-hero-fav-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Favorites view toggles ─────────────────────────────────────── */
+.ov-view-toggles {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.ov-view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ov-text-faint);
+    cursor: pointer;
+    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.ov-view-btn:hover {
+    color: var(--ov-text);
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.1);
+}
+
+.ov-view-btn.active {
+    color: var(--ov-accent-2);
+    background: rgba(34,211,238,0.1);
+    border-color: rgba(34,211,238,0.22);
+}
+
+/* ── Row view ───────────────────────────────────────────────────── */
+.ov-fav-row-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.ov-fav-row-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    color: var(--ov-text);
+    text-decoration: none;
+    transition: background 0.18s ease, border-color 0.18s ease;
+    cursor: pointer;
+}
+
+.ov-fav-row-item:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.08);
+}
+
+.ov-fav-row-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(139,92,246,0.9), rgba(34,211,238,0.85));
+    color: white;
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 800;
+}
+
+.ov-fav-row-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* ── Icon view ──────────────────────────────────────────────────── */
+.ov-fav-icon-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.ov-fav-icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    padding: 0.35rem;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.ov-fav-icon-item:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.08);
+}
+
+.ov-fav-icon-el {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(139,92,246,0.9), rgba(34,211,238,0.85));
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 800;
 }
