@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tip Page — OpenVibe Tips</title>
+<style>
+:root{--bg:#0d0d10;--surface:#16161c;--border:#2a2a35;--text:#e5e5ef;--muted:#888;--accent:#f59e0b;--radius:10px;--max:640px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6;min-height:100vh}
+a{color:var(--accent)}
+/* Page layout */
+main{max-width:var(--max);margin:0 auto;padding:40px 20px 80px}
+/* Creator header */
+.creator-header{text-align:center;margin-bottom:40px}
+.creator-avatar{width:80px;height:80px;border-radius:50%;background:var(--surface);border:3px solid var(--accent);object-fit:cover;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto}
+.creator-name{font-size:1.6rem;font-weight:800;margin-bottom:6px}
+.creator-bio{color:var(--muted);font-size:.95rem;max-width:480px;margin:0 auto}
+/* Tip form */
+.tip-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:28px}
+.tip-form h2{font-size:1.1rem;font-weight:700;margin-bottom:20px}
+.field{margin-bottom:16px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px;font-weight:500}
+input,textarea,select{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-size:.95rem;padding:9px 12px;font-family:inherit;transition:border-color .15s;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:72px}
+/* Amount presets */
+.amount-presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.preset-btn{background:var(--bg);border:1.5px solid var(--border);color:var(--text);border-radius:6px;padding:7px 16px;font-size:.9rem;cursor:pointer;transition:all .15s}
+.preset-btn:hover,.preset-btn.active{border-color:var(--accent);color:var(--accent)}
+/* Submit */
+.submit-btn{width:100%;padding:12px;background:var(--accent);color:#000;font-weight:700;font-size:1rem;border:none;border-radius:8px;cursor:pointer;transition:background .15s;margin-top:8px}
+.submit-btn:hover{background:#d97706}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+/* Recent tips */
+.recent-tips{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.recent-tips h2{font-size:1rem;font-weight:700;margin-bottom:16px}
+.tip-item{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.tip-item:last-child{border-bottom:none}
+.tip-item-icon{font-size:1.2rem;flex-shrink:0;margin-top:2px}
+.tip-item-sender{font-weight:700;font-size:.9rem;color:var(--accent)}
+.tip-item-amount{font-size:.85rem;color:var(--text);background:rgba(255,255,255,.06);border-radius:4px;padding:1px 6px;margin-left:6px}
+.tip-item-source{font-size:.72rem;color:var(--muted);margin-left:auto}
+.tip-item-msg{font-size:.85rem;color:var(--muted);margin-top:3px}
+.empty{color:var(--muted);font-size:.9rem;text-align:center;padding:24px 0}
+/* Alerts */
+.alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:.9rem}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+.alert-success{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:#4ade80}
+.hidden{display:none}
+/* Powered by */
+.powered-by{text-align:center;margin-top:32px;font-size:.8rem;color:var(--muted)}
+.powered-by a{color:var(--muted)}
+.powered-by a:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <div id="loading" class="empty">Loading…</div>
+  <div id="not-found" class="empty hidden">Creator not found.</div>
+  <div id="page" class="hidden">
+    <!-- Creator header -->
+    <div class="creator-header">
+      <img id="creator-avatar" class="creator-avatar" src="" alt="" />
+      <div id="creator-name" class="creator-name"></div>
+      <div id="creator-bio" class="creator-bio"></div>
+    </div>
+
+    <!-- Tip form -->
+    <div class="tip-form" id="tip-form-section">
+      <h2>Send a tip 💰</h2>
+      <div id="form-alert"></div>
+      <div class="field">
+        <label>Amount</label>
+        <div class="amount-presets" id="preset-row"></div>
+        <input type="number" id="amount-input" placeholder="Custom amount (USD)" min="0.01" step="0.01" />
+      </div>
+      <div class="field">
+        <label>Your name (optional)</label>
+        <input type="text" id="sender-input" placeholder="Anonymous" maxlength="64" />
+      </div>
+      <div class="field">
+        <label>Message (optional)</label>
+        <textarea id="message-input" placeholder="Say something…" maxlength="512"></textarea>
+      </div>
+      <button class="submit-btn" id="submit-btn" onclick="sendTip()">Send Tip</button>
+    </div>
+
+    <!-- Recent tips -->
+    <div class="recent-tips">
+      <h2>Recent Tips</h2>
+      <div id="tips-list"><div class="empty">No tips yet. Be the first!</div></div>
+    </div>
+
+    <div class="powered-by">Powered by <a href="/" target="_blank">openvibe.tips</a> · <a href="/overlay/" id="overlay-link" target="_blank">OBS Overlay</a></div>
+  </div>
+</main>
+<script>
+(function() {
+  'use strict';
+  const slug   = location.pathname.replace(/^\//, '').split('/')[0];
+  let creator  = null;
+  let presets  = [1, 5, 10, 25];
+  let selected = null;
+
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmt(amount, currency) {
+    const n = parseFloat(amount);
+    if (isNaN(n)) return amount;
+    const sym = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
+    return sym ? sym + n.toFixed(2) : n.toFixed(2) + ' ' + (currency || 'USD');
+  }
+  function srcLabel(src) {
+    const map = {native:'Native',streamlabs:'Streamlabs',streamelements:'StreamElements',powerchat:'PowerChat',generic:'Webhook'};
+    return map[src] || src;
+  }
+
+  function setAlert(type, msg) {
+    const el = document.getElementById('form-alert');
+    el.className = 'alert alert-' + type;
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+  function clearAlert() {
+    const el = document.getElementById('form-alert');
+    el.className = 'hidden';
+    el.textContent = '';
+  }
+
+  function buildPresets(amounts, currency) {
+    const row = document.getElementById('preset-row');
+    row.innerHTML = '';
+    presets = amounts || [1, 5, 10, 25];
+    presets.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = fmt(a, currency || 'USD');
+      btn.onclick = () => {
+        selected = a;
+        document.getElementById('amount-input').value = a;
+        row.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      };
+      row.appendChild(btn);
+    });
+  }
+
+  function renderTips(tips) {
+    const list = document.getElementById('tips-list');
+    if (!tips || tips.length === 0) {
+      list.innerHTML = '<div class="empty">No tips yet. Be the first!</div>';
+      return;
+    }
+    list.innerHTML = tips.map(t => {
+      const icon = t.event_type === 'tip' ? '💰' : '🔔';
+      const msg  = t.message ? '<div class="tip-item-msg">' + esc(t.message) + '</div>' : '';
+      return '<div class="tip-item">'
+        + '<div class="tip-item-icon">' + icon + '</div>'
+        + '<div style="min-width:0;flex:1">'
+        +   '<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap">'
+        +     '<span class="tip-item-sender">' + esc(t.sender || 'Anonymous') + '</span>'
+        +     '<span class="tip-item-amount">' + esc(fmt(t.amount_value, t.amount_currency)) + '</span>'
+        +     '<span class="tip-item-source">' + esc(srcLabel(t.source)) + '</span>'
+        +   '</div>'
+        +   msg
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function load() {
+    fetch('/api/v1/creators/' + encodeURIComponent(slug))
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        document.getElementById('loading').classList.add('hidden');
+        if (!data || !data.creator) {
+          document.getElementById('not-found').classList.remove('hidden');
+          return;
+        }
+        creator = data.creator;
+        document.getElementById('page').classList.remove('hidden');
+        document.title = esc(creator.display_name) + ' — Tips — OpenVibe';
+
+        // Set creator accent color as CSS variable
+        document.documentElement.style.setProperty('--accent', creator.accent_color || '#f59e0b');
+
+        // Avatar
+        const av = document.getElementById('creator-avatar');
+        if (creator.avatar_url) {
+          av.src = creator.avatar_url;
+          av.alt = creator.display_name;
+        } else {
+          av.style.display = 'none';
+        }
+        document.getElementById('creator-name').textContent = creator.display_name;
+        document.getElementById('creator-bio').textContent  = creator.bio || '';
+
+        // Overlay link
+        const ol = document.getElementById('overlay-link');
+        if (ol) ol.href = '/overlay/' + encodeURIComponent(creator.slug);
+
+        // Native tips toggle
+        if (!creator.native_enabled) {
+          document.getElementById('tip-form-section').innerHTML =
+            '<p style="color:var(--muted);text-align:center;padding:16px">This creator is not accepting direct tips at this time.</p>';
+        } else {
+          try {
+            const amounts = JSON.parse(creator.custom_amounts || '[1,5,10,25]');
+            buildPresets(amounts, creator.currency || 'USD');
+          } catch { buildPresets([1, 5, 10, 25], 'USD'); }
+        }
+
+        renderTips(data.recent_tips || []);
+      })
+      .catch(() => {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('not-found').classList.remove('hidden');
+      });
+  }
+
+  window.sendTip = function() {
+    clearAlert();
+    const amountRaw = parseFloat(document.getElementById('amount-input').value);
+    if (!amountRaw || amountRaw <= 0) { setAlert('error', 'Please enter a valid amount.'); return; }
+    const sender  = document.getElementById('sender-input').value.trim() || null;
+    const message = document.getElementById('message-input').value.trim() || null;
+    const currency = creator && creator.currency || 'USD';
+    const amountMinor = Math.round(amountRaw * 100);
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    fetch('/api/v1/tip', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        creator_id:   creator && creator.id,
+        amount_minor: amountMinor,
+        currency,
+        sender,
+        message,
+      }),
+    }).then(r => r.json().then(d => ({ ok: r.ok, d }))).then(({ ok, d }) => {
+      btn.disabled = false;
+      btn.textContent = 'Send Tip';
+      if (!ok) {
+        setAlert('error', d.error || 'Failed to send tip.');
+        return;
+      }
+      setAlert('success', 'Tip sent! Thank you ' + (sender || '') + ' 🎉');
+      document.getElementById('amount-input').value = '';
+      document.getElementById('sender-input').value = '';
+      document.getElementById('message-input').value = '';
+      document.getElementById('preset-row').querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      // Refresh feed
+      fetch('/api/v1/feed?creator_id=' + encodeURIComponent(creator.id) + '&limit=20')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) renderTips(d.events); })
+        .catch(() => {});
+    }).catch(() => {
+      btn.disabled = false;
+      btn.textContent = 'Send Tip';
+      setAlert('error', 'Network error. Please try again.');
+    });
+  };
+
+  load();
+  // Poll for new tips every 15s
+  setInterval(() => {
+    if (!creator) return;
+    fetch('/api/v1/feed?creator_id=' + encodeURIComponent(creator.id) + '&limit=20')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) renderTips(d.events); })
+      .catch(() => {});
+  }, 15000);
+})();
+</script>
+</body>
+</html>

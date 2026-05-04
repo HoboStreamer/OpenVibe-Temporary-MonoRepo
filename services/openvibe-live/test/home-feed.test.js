@@ -205,7 +205,7 @@ function request(server, requestPath, host) {
         assert.ok(homePage.body.includes('archive run'), 'home page renders canonical vod title');
         assert.ok(homePage.body.includes('top deck glitch'), 'home page renders canonical clip title');
         assert.ok(!homePage.body.includes('From unknown'), 'home page avoids unknown creator fallback when owner-linked channel exists');
-        assert.ok(homePage.body.includes('Recent pastes'), 'home page renders paste section');
+        assert.ok(homePage.body.includes('Community pulse'), 'home page renders community section');
         assert.ok(homePage.body.includes('Migration screenshot'), 'home page renders paste card');
 
         const secondHomePage = await request(server, '/');

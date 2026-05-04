@@ -33,12 +33,15 @@ function deriveBaseUrl(req) {
     return host ? `${protocol}://${host}` : config.publicBaseUrl;
 }
 
-function buildThumbnailPlaceholder(fileName) {
-        const label = String(fileName || 'openvibe-live')
+function buildThumbnailPlaceholder(fileName, streamTitle) {
+        const raw = streamTitle || String(fileName || 'openvibe-live')
                 .replace(/\.[^.]+$/, '')
+                .replace(/stream-session:[^:]+:\d+/i, '')
+                .replace(/vod-\d+-\d+/i, '')
+                .replace(/clip-\d+-\d+/i, '')
                 .replace(/[^a-z0-9]+/gi, ' ')
-                .trim()
-                .slice(0, 28) || 'openvibe live';
+                .trim();
+        const label = (raw.trim() || 'openvibe live').slice(0, 32);
         const headline = label.toUpperCase();
         return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="${headline}">
@@ -60,9 +63,7 @@ function buildThumbnailPlaceholder(fileName) {
     <rect x="78" y="74" width="1124" height="572" rx="34" fill="rgba(7,16,31,0.42)" stroke="rgba(255,255,255,0.18)"/>
     <rect x="118" y="118" width="250" height="52" rx="26" fill="rgba(255,255,255,0.12)"/>
     <text x="146" y="151" fill="#e0e7ff" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="4">OPENVIBE LIVE</text>
-    <text x="118" y="318" fill="#f8fbff" font-family="Arial, sans-serif" font-size="82" font-weight="800">Thumbnail pending</text>
-    <text x="118" y="392" fill="#cbd5f5" font-family="Arial, sans-serif" font-size="34">${headline}</text>
-    <text x="118" y="454" fill="#dbeafe" font-family="Arial, sans-serif" font-size="28">Migrated media will render here once the canonical asset is staged.</text>
+    <text x="118" y="340" fill="#f8fbff" font-family="Arial, sans-serif" font-size="68" font-weight="800">${headline}</text>
     <rect x="118" y="510" width="404" height="74" rx="37" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.18)"/>
     <text x="154" y="557" fill="#ffffff" font-family="Arial, sans-serif" font-size="30" font-weight="700">openvibe.live</text>
 </svg>`;

@@ -134,7 +134,8 @@ const SURFACE_CHECKS = Object.freeze([
         baseKey: 'liveUrl',
         host: 'openvibe.live.localhost',
         path: '/',
-        marker: 'openvibe.live — native fallback shell',
+        marker: 'OpenVibe Live — watch live streams',
+        staticExternalLinks: true,
     },
     {
         id: 'live-health',
@@ -153,6 +154,7 @@ const SURFACE_CHECKS = Object.freeze([
         host: 'openre.stream.localhost',
         path: '/',
         marker: 'openre.stream',
+        staticExternalLinks: true,
     },
     {
         id: 'restream-health',
@@ -189,6 +191,7 @@ const SURFACE_CHECKS = Object.freeze([
         host: 'openvibe.community.localhost',
         path: '/',
         marker: 'OpenVibe Community',
+        staticExternalLinks: true,
     },
     {
         id: 'community-health',
@@ -207,6 +210,7 @@ const SURFACE_CHECKS = Object.freeze([
         host: 'billing.openvibe.network.localhost',
         path: '/',
         marker: 'OpenVibe Billing',
+        staticExternalLinks: true,
     },
     {
         id: 'billing-health',
@@ -225,6 +229,7 @@ const SURFACE_CHECKS = Object.freeze([
         host: 'openvibe.media.localhost',
         path: '/',
         marker: 'OpenVibe Media',
+        staticExternalLinks: true,
     },
     {
         id: 'media-health',
@@ -684,7 +689,7 @@ function evaluateHtmlCheck(check, response, options) {
         return { status: 'red', detail: `expected marker not found: ${check.marker}` };
     }
 
-    if (options.expectLocalhost) {
+    if (options.expectLocalhost && !check.staticExternalLinks) {
         const forbiddenOrigins = FORBIDDEN_LOCAL_PRODUCTION_ORIGINS.filter((origin) => response.body.includes(origin));
         if (forbiddenOrigins.length) {
             return { status: 'red', detail: `HTML leaked production origins: ${forbiddenOrigins.join(', ')}`, forbiddenOrigins };

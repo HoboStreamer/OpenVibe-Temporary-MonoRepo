@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crypto Checkout — OpenVibe Credits</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+    margin: 0; min-height: 100vh;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    background: radial-gradient(ellipse at top, rgba(250,204,21,0.12), transparent 40%), #07100d;
+    color: #eef4ff;
+    display: flex; align-items: center; justify-content: center;
+}
+.card {
+    background: rgba(10,18,12,0.92);
+    border: 1px solid rgba(148,163,184,0.14);
+    border-radius: 22px;
+    padding: 36px 32px 28px;
+    width: min(500px, calc(100vw - 2rem));
+    box-shadow: 0 32px 90px rgba(2,6,4,0.56);
+}
+.logo { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 24px; }
+.logo-mark {
+    width: 2.4rem; height: 2.4rem; border-radius: 12px;
+    background: linear-gradient(135deg, #f59e0b, #facc15);
+    display: grid; place-items: center; font-weight: 800; color: #1c1400; font-size: 1.1rem;
+}
+.logo-name { font-weight: 700; font-size: 1rem; }
+.logo-sub { font-size: 0.8rem; color: #64748b; }
+h1 { margin: 0 0 6px; font-size: 1.5rem; font-weight: 700; }
+.muted { color: #94a3b8; font-size: 0.9rem; margin: 0 0 20px; }
+.network-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.tab-btn {
+    padding: 0.5rem 1rem; border-radius: 999px; border: 1px solid rgba(148,163,184,0.16);
+    background: rgba(255,255,255,0.04); color: #94a3b8; cursor: pointer; font-size: 0.85rem;
+}
+.tab-btn.active { background: rgba(250,204,21,0.16); border-color: rgba(250,204,21,0.4); color: #fde68a; }
+.tab-btn:hover { border-color: rgba(148,163,184,0.3); }
+.payment-block { display: none; }
+.payment-block.active { display: block; }
+.amount-display { font-size: 2rem; font-weight: 800; color: #fde68a; margin: 0 0 6px; }
+.address-block {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(148,163,184,0.14);
+    border-radius: 12px; padding: 14px 16px; margin: 16px 0; word-break: break-all;
+    font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.84rem; color: #e2e8f0; position: relative;
+}
+.copy-btn {
+    position: absolute; top: 10px; right: 10px;
+    padding: 0.3rem 0.7rem; border-radius: 6px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(148,163,184,0.18);
+    color: #94a3b8; cursor: pointer; font-size: 0.78rem;
+}
+.copy-btn.copied { color: #6ee7b7; border-color: rgba(52,211,153,0.35); }
+.qr-block { text-align: center; margin: 16px 0; }
+canvas#qr-canvas { border-radius: 10px; background: #fff; padding: 8px; }
+.warning-box {
+    padding: 12px 14px; border-radius: 10px; margin: 16px 0;
+    background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25); color: #fde68a;
+    font-size: 0.84rem; line-height: 1.55;
+}
+.confirm-block { margin-top: 18px; }
+.confirm-row { display: flex; gap: 10px; }
+.confirm-input {
+    flex: 1; padding: 0.7rem 1rem; border-radius: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(148,163,184,0.18);
+    color: #eef4ff; font-size: 0.9rem;
+}
+.confirm-input:focus { outline: none; border-color: rgba(250,204,21,0.45); }
+.confirm-btn {
+    padding: 0.7rem 1.2rem; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(135deg, #f59e0b, #facc15); border: none;
+    color: #1c1400; font-weight: 700; font-size: 0.9rem;
+}
+.confirm-btn:disabled { opacity: 0.5; cursor: default; }
+.status-msg {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+    font-size: 0.88rem; display: none;
+}
+.status-msg.success { background: rgba(52,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(52,211,153,0.25); display: block; }
+.status-msg.error   { background: rgba(251,113,133,0.14); color: #fca5a5; border: 1px solid rgba(251,113,133,0.25); display: block; }
+.status-msg.loading { background: rgba(250,204,21,0.1);   color: #fde68a; border: 1px solid rgba(250,204,21,0.25);  display: block; }
+.divider { border: none; border-top: 1px solid rgba(148,163,184,0.1); margin: 20px 0; }
+.btn-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 16px; padding: 0.6rem 1rem; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid rgba(148,163,184,0.14); color: #94a3b8; font-size: 0.85rem; text-decoration: none; cursor: pointer; }
+.btn-back:hover { border-color: rgba(148,163,184,0.3); }
+.no-addr { padding: 14px; border-radius: 10px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.22); color: #fde68a; font-size: 0.84rem; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">
+        <div class="logo-mark">₿</div>
+        <div>
+            <div class="logo-name">OpenVibe Billing</div>
+            <div class="logo-sub">Crypto checkout</div>
+        </div>
+    </div>
+    <h1>Pay with Crypto</h1>
+    <p class="muted">Send the exact amount to the address below. Your credits will be added after the required confirmations.</p>
+
+    <div class="network-tabs">
+        <button class="tab-btn active" onclick="switchNetwork('btc', this)">₿ Bitcoin</button>
+        <button class="tab-btn" onclick="switchNetwork('eth', this)">⟠ Ethereum</button>
+        <button class="tab-btn" onclick="switchNetwork('usdc', this)">◎ USDC</button>
+    </div>
+
+    <!-- BTC -->
+    <div class="payment-block active" id="block-btc">
+        <div id="btc-amount" class="amount-display"></div>
+        <div style="font-size:0.8rem;color:#64748b;margin-bottom:4px">Send exactly this amount to:</div>
+        <div class="address-block" id="btc-address-block">
+            <span id="btc-address">—</span>
+            <button class="copy-btn" onclick="copyAddress('btc-address', this)">Copy</button>
+        </div>
+        <div class="qr-block"><canvas id="qr-btc" width="160" height="160"></canvas></div>
+        <div class="warning-box">
+            ⚠️ Send only BTC on the Bitcoin mainnet to this address. Sending other tokens or using wrong network will result in permanent loss of funds.
+        </div>
+    </div>
+
+    <!-- ETH -->
+    <div class="payment-block" id="block-eth">
+        <div id="eth-amount" class="amount-display"></div>
+        <div style="font-size:0.8rem;color:#64748b;margin-bottom:4px">Send exactly this amount to:</div>
+        <div class="address-block" id="eth-address-block">
+            <span id="eth-address">—</span>
+            <button class="copy-btn" onclick="copyAddress('eth-address', this)">Copy</button>
+        </div>
+        <div class="qr-block"><canvas id="qr-eth" width="160" height="160"></canvas></div>
+        <div class="warning-box">
+            ⚠️ Send only ETH on Ethereum mainnet. Do not send from smart contract wallets without verifying recipient support.
+        </div>
+    </div>
+
+    <!-- USDC -->
+    <div class="payment-block" id="block-usdc">
+        <div id="usdc-amount" class="amount-display"></div>
+        <div style="font-size:0.8rem;color:#64748b;margin-bottom:4px">Send exactly this amount to (Ethereum mainnet):</div>
+        <div class="address-block" id="usdc-address-block">
+            <span id="usdc-address">—</span>
+            <button class="copy-btn" onclick="copyAddress('usdc-address', this)">Copy</button>
+        </div>
+        <div class="qr-block"><canvas id="qr-usdc" width="160" height="160"></canvas></div>
+        <div class="warning-box">
+            ⚠️ Send only USDC (ERC-20) on Ethereum mainnet to this address.
+        </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#64748b;font-size:0.82rem;margin:0 0 12px">Already sent your transaction? Enter the TX hash below to notify us:</p>
+    <div class="confirm-block">
+        <div class="confirm-row">
+            <input class="confirm-input" id="tx-input" placeholder="Transaction hash (0x… or TXID)" />
+            <button class="confirm-btn" id="confirm-btn" onclick="submitTx()">Submit</button>
+        </div>
+    </div>
+    <div id="status" class="status-msg"></div>
+
+    <a href="/" class="btn-back">← Back to Billing</a>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const params  = new URLSearchParams(location.search);
+    const session = params.get('session')  || '';
+    const network = params.get('network')  || 'btc';
+    const address = params.get('address')  || '';
+    const amount  = params.get('amount')   || '';
+    const unit    = params.get('unit')     || '';
+    const label   = params.get('label')    || 'OpenVibe Credits';
+
+    // Populate addresses and amounts from URL params
+    const config = {
+        btc:  { address: '', amount: '', unit: 'BTC' },
+        eth:  { address: '', amount: '', unit: 'ETH' },
+        usdc: { address: '', amount: '', unit: 'USDC' },
+    };
+
+    // If URL params contain a specific network's data, fill it
+    if (network && config[network]) {
+        config[network].address = address;
+        config[network].amount  = amount;
+        config[network].unit    = unit || config[network].unit;
+    }
+
+    // Populate DOM
+    Object.keys(config).forEach(net => {
+        const addrEl = document.getElementById(net + '-address');
+        const amtEl  = document.getElementById(net + '-amount');
+        if (addrEl) addrEl.textContent = config[net].address || 'Not configured';
+        if (amtEl && config[net].amount) amtEl.textContent = config[net].amount + ' ' + config[net].unit;
+        // Simple QR code via text (no external lib dependency)
+        // Render a placeholder canvas for now
+        renderQr('qr-' + net, config[net].address || '', net, config[net].amount, config[net].unit);
+    });
+
+    // Switch active network tab
+    window.switchNetwork = function (net, btn) {
+        document.querySelectorAll('.payment-block').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        const block = document.getElementById('block-' + net);
+        if (block) block.classList.add('active');
+        if (btn) btn.classList.add('active');
+    };
+
+    // Copy address to clipboard
+    window.copyAddress = function (id, btn) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        navigator.clipboard && navigator.clipboard.writeText(el.textContent).then(() => {
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        });
+    };
+
+    // Submit TX hash
+    window.submitTx = function () {
+        const txHash = document.getElementById('tx-input').value.trim();
+        if (!txHash) return;
+        if (!session) {
+            showStatus('No session ID — cannot submit confirmation.', 'error');
+            return;
+        }
+        const activeNet = document.querySelector('.tab-btn.active');
+        const net = activeNet ? activeNet.textContent.replace(/[^a-z]/gi, '').toLowerCase() : network;
+        showStatus('Submitting transaction…', 'loading');
+        document.getElementById('confirm-btn').disabled = true;
+
+        fetch('/api/billing/webhooks/crypto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: session, tx_hash: txHash, network: net }),
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d && d.ok) {
+                showStatus('Transaction submitted! Credits will be added after confirmation.', 'success');
+            } else {
+                showStatus('Response: ' + JSON.stringify(d), 'error');
+                document.getElementById('confirm-btn').disabled = false;
+            }
+        })
+        .catch(() => {
+            showStatus('Network error. Please contact support with your TX hash.', 'error');
+            document.getElementById('confirm-btn').disabled = false;
+        });
+    };
+
+    function showStatus(msg, type) {
+        const el = document.getElementById('status');
+        el.textContent = msg;
+        el.className = 'status-msg ' + (type || 'loading');
+    }
+
+    // Minimal QR code placeholder — draws address as centered text on canvas.
+    // Replace with a real QR library (qrcode.js etc.) in production.
+    function renderQr(canvasId, addr, net, amt, unitStr) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = 160; canvas.height = 160;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 160, 160);
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(net.toUpperCase(), 80, 24);
+        if (amt) {
+            ctx.font = 'bold 13px monospace';
+            ctx.fillStyle = '#92400e';
+            ctx.fillText(amt + ' ' + unitStr, 80, 44);
+        }
+        ctx.font = '9px monospace';
+        ctx.fillStyle = '#374151';
+        const chunk = 20;
+        const addrStr = addr || 'No address configured';
+        for (let i = 0; i < Math.min(addrStr.length, 80); i += chunk) {
+            ctx.fillText(addrStr.slice(i, i + chunk), 80, 64 + Math.floor(i / chunk) * 14);
+        }
+        // Draw QR placeholder border
+        ctx.strokeStyle = '#d1d5db';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(4, 4, 152, 152);
+        ctx.font = '8px sans-serif';
+        ctx.fillStyle = '#9ca3af';
+        ctx.fillText('QR (install qrcode lib)', 80, 148);
+    }
+
+    // Auto-switch to the network from URL
+    const netBtn = document.querySelector(`.tab-btn[onclick*="'${network}'"]`);
+    if (netBtn) switchNetwork(network, netBtn);
+
+}());
+</script>
+</body>
+</html>

@@ -3,81 +3,456 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>openvibe-billing</title>
+<title>OpenVibe Billing — Credits, Tips & VIP</title>
+<meta name="description" content="OpenVibe Billing: a transparent, open credits economy. Buy credits with PayPal or crypto, tip creators, subscribe to VIP plans, and control every transaction.">
 <link rel="stylesheet" href="/assets/openvibe-icons.css">
 <style>
+:root {
+    color-scheme: dark;
+    --bg: #080e1a;
+    --bg-elev: rgba(12, 20, 38, 0.88);
+    --bg-elev-2: rgba(18, 28, 54, 0.92);
+    --text: #eef4ff;
+    --muted: #94a3b8;
+    --border: rgba(148, 163, 184, 0.14);
+    --primary: #f59e0b;
+    --primary-dim: rgba(245, 158, 11, 0.14);
+    --primary-border: rgba(245, 158, 11, 0.28);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.14);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96, 165, 250, 0.14);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.14);
+    --shadow: 0 32px 100px rgba(2, 6, 18, 0.48);
+}
 * { box-sizing: border-box; }
-body { margin: 0; font: 14px/1.55 system-ui, sans-serif; color: #e6edf7; background: radial-gradient(circle at top, rgba(245, 158, 11, .14), transparent 30%), linear-gradient(180deg, #10131b 0%, #0b1018 100%); }
-main { max-width: 1080px; margin: 0 auto; padding: 36px 20px 56px; }
-a { color: #f5c36c; }
-.hero, .panel { background: rgba(15, 20, 31, .9); border: 1px solid rgba(148, 163, 184, .18); border-radius: 24px; box-shadow: 0 24px 80px rgba(2, 8, 23, .32); }
-.hero { padding: 28px; }
-.eyebrow, .chip, .link-row a { display: inline-flex; align-items: center; gap: .55rem; }
-.eyebrow { padding: .45rem .85rem; border-radius: 999px; background: rgba(245, 158, 11, .14); color: #f8d48b; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: .82rem; }
-h1 { margin: 12px 0 8px; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.05; }
-.muted { color: #b8c5d7; margin: 0; max-width: 62ch; }
-.chip-row, .link-row { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
-.chip { padding: .45rem .8rem; border-radius: 999px; background: rgba(15, 23, 42, .72); border: 1px solid rgba(148, 163, 184, .18); color: #dbe7f8; }
-.chip.primary { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .25); color: #fbd38d; }
-.chip.ok { background: rgba(34, 197, 94, .14); border-color: rgba(34, 197, 94, .24); color: #bbf7d0; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
-.panel { padding: 20px; }
-.panel h2 { margin: 0 0 .35rem; font-size: 1.12rem; }
-.panel p { margin: 0 0 1rem; color: #b8c5d7; }
-pre { margin: 0; padding: 14px; border-radius: 16px; overflow: auto; background: rgba(15, 23, 42, .86); border: 1px solid rgba(148, 163, 184, .14); color: #f8fafc; }
-.link-row a { padding: .75rem 1rem; border-radius: 999px; text-decoration: none; background: rgba(15, 23, 42, .78); border: 1px solid rgba(148, 163, 184, .16); }
-.link-row a:hover { border-color: rgba(245, 158, 11, .34); }
-.icon-inline { display: inline-flex; align-items: center; gap: .55rem; }
+html { scroll-behavior: smooth; }
+body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    background:
+        radial-gradient(ellipse at 15% 0%, rgba(245, 158, 11, 0.22), transparent 38%),
+        radial-gradient(ellipse at 85% 5%, rgba(96, 165, 250, 0.14), transparent 30%),
+        linear-gradient(180deg, #060c18 0%, #080e1a 100%);
+    min-height: 100vh;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code {
+    font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 5px;
+    padding: 0.1em 0.4em;
+    font-size: 0.85em;
+}
+pre {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    overflow: auto;
+    background: rgba(6, 12, 24, 0.92);
+    border: 1px solid var(--border);
+    color: #e2e8f0;
+    font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.83rem;
+    line-height: 1.7;
+}
+
+/* Layout */
+.page { max-width: 1120px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* Topbar */
+.topbar {
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(18px);
+    background: rgba(8, 14, 26, 0.76);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.topbar-inner {
+    max-width: 1120px; margin: 0 auto; padding: 0 24px;
+    min-height: 64px;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.brand { display: inline-flex; align-items: center; gap: 0.75rem; }
+.brand-mark {
+    width: 2.4rem; height: 2.4rem; border-radius: 12px;
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 1rem; color: #fff;
+    background: linear-gradient(135deg, var(--primary), #fb923c);
+}
+.brand-name { font-weight: 700; font-size: 1rem; letter-spacing: 0.01em; }
+.brand-sub { color: var(--muted); font-size: 0.82rem; }
+.nav-links { display: flex; gap: 0.5rem; }
+.nav-links a {
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: #dbeafe;
+    font-size: 0.88rem;
+    transition: border-color 0.15s;
+}
+.nav-links a:hover { border-color: var(--primary-border); text-decoration: none; }
+
+/* Hero */
+.hero {
+    padding: 72px 0 56px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1.5rem;
+}
+.eyebrow {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: var(--primary-dim);
+    border: 1px solid var(--primary-border);
+    color: #fde68a;
+    font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+h1 { margin: 0; font-size: clamp(2.4rem, 5.5vw, 3.6rem); line-height: 1.05; font-weight: 800; }
+h1 span { color: var(--primary); }
+.hero-sub { margin: 0; color: var(--muted); max-width: 58ch; font-size: 1.08rem; line-height: 1.65; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    padding: 0.85rem 1.35rem;
+    border-radius: 999px; border: none; cursor: pointer;
+    font-size: 0.92rem; font-weight: 600; text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn:hover { transform: translateY(-2px); text-decoration: none; }
+.btn-primary {
+    background: linear-gradient(135deg, #f59e0b, #fb923c);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(245,158,11,0.38);
+}
+.btn-secondary {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+/* Stats bar */
+.stats-bar {
+    display: flex; flex-wrap: wrap; gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 48px;
+}
+.stat {
+    flex: 1; min-width: 140px;
+    padding: 18px 22px;
+    background: var(--bg-elev);
+}
+.stat-value { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+.stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+/* Section */
+section.block { margin-bottom: 56px; }
+.section-label {
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 20px;
+}
+h2.section-title { margin: 0 0 8px; font-size: 1.6rem; font-weight: 700; }
+.section-desc { margin: 0 0 28px; color: var(--muted); max-width: 56ch; }
+
+/* Cards grid */
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px 24px;
+    transition: border-color 0.15s;
+}
+.card:hover { border-color: rgba(148,163,184,0.28); }
+.card-icon {
+    width: 2.6rem; height: 2.6rem; border-radius: 12px;
+    display: grid; place-items: center;
+    font-size: 1.3rem; margin-bottom: 14px;
+}
+.card-icon.amber { background: var(--primary-dim); }
+.card-icon.green { background: var(--green-dim); }
+.card-icon.blue { background: var(--blue-dim); }
+.card-icon.purple { background: var(--purple-dim); }
+.card h3 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 700; }
+.card p { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; }
+.card pre { font-size: 0.78rem; }
+
+/* Payment method row */
+.methods { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 0; }
+.method-badge {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.55rem 1rem;
+    border-radius: 999px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    font-size: 0.87rem; color: var(--text);
+}
+.method-badge.paypal { border-color: rgba(0,112,243,0.35); color: #93c5fd; }
+.method-badge.crypto { border-color: rgba(250,204,21,0.35); color: #fde68a; }
+.method-badge.free { border-color: rgba(52,211,153,0.35); color: #86efac; }
+
+/* Pills */
+.pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pill {
+    padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.8rem;
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--muted);
+}
+
+/* Divider */
+hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+/* Footer */
+footer { padding: 32px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.84rem; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; }
+footer a { color: var(--muted); }
+
+@media (max-width: 640px) {
+    .hero { padding: 48px 0 36px; }
+    h1 { font-size: 2rem; }
+    .topbar-inner { min-height: 56px; }
+    .nav-links { display: none; }
+}
 </style>
 </head>
 <body>
-<main>
-	<section class="hero">
-		<div class="eyebrow" id="billing-eyebrow">Economy surface</div>
-		<h1 id="billing-title">OpenVibe Billing</h1>
-		<p class="muted">Credits ledger, tips, VIP plans, entitlements, and operator freeze controls. This page stays intentionally lightweight, but it no longer looks like it was rendered during a coffee outage.</p>
-		<div class="chip-row">
-			<span class="chip primary" id="billing-host">billing.openvibe.network</span>
-			<span class="chip ok" id="billing-domain">credits · tips · subscriptions</span>
-			<span class="chip" id="billing-phase">Phase 6 billing kernel</span>
-		</div>
-		<div class="link-row">
-			<a href="/health" id="billing-health-link">/health</a>
-			<a href="../../docs/openvibe/phase-6-billing-tips-vip.md" id="billing-docs-link">Phase 6 docs</a>
-		</div>
-	</section>
 
-	<div class="grid">
-		<section class="panel">
-			<h2 id="wallet-heading">Wallet & ledger</h2>
-			<p>Core balance retrieval and credit lifecycle APIs.</p>
-			<pre>GET  /api/billing/wallet/:ownerType/:ownerId
+<nav class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="/">
+            <div class="brand-mark">$</div>
+            <div>
+                <div class="brand-name">OpenVibe Billing</div>
+                <div class="brand-sub">credits · tips · VIP</div>
+            </div>
+        </a>
+        <div class="nav-links">
+            <a href="/health">Health</a>
+            <a href="/readiness">Readiness</a>
+            <a href="#payment-methods">Payments</a>
+            <a href="#api-reference">API</a>
+        </div>
+    </div>
+</nav>
+
+<div class="page">
+
+    <!-- Hero -->
+    <header class="hero">
+        <div class="eyebrow">OpenVibe Economy Surface</div>
+        <h1>Billing that <span>actually works</span></h1>
+        <p class="hero-sub">A transparent, open credits economy for the OpenVibe network. Buy credits with PayPal or crypto, send tips, subscribe to VIP plans — every transaction on a tamper-resistant ledger with no hidden fees.</p>
+        <div class="hero-cta">
+            <a href="/checkout/paypal.html" class="btn btn-primary">Buy Credits</a>
+            <a href="#api-reference" class="btn btn-secondary">API Reference</a>
+            <a href="/health" class="btn btn-ghost">Service Status</a>
+        </div>
+    </header>
+
+    <!-- Stats bar (static — updated at deploy) -->
+    <div class="stats-bar">
+        <div class="stat"><div class="stat-value" id="stat-currency">OVC</div><div class="stat-label">Credits currency</div></div>
+        <div class="stat"><div class="stat-value" id="stat-fee">0 bps</div><div class="stat-label">Platform fee</div></div>
+        <div class="stat"><div class="stat-value">3</div><div class="stat-label">Payment methods</div></div>
+        <div class="stat"><div class="stat-value">Open</div><div class="stat-label">Source & self-hostable</div></div>
+    </div>
+
+    <!-- Payment methods -->
+    <section class="block" id="payment-methods">
+        <div class="section-label">Payment methods</div>
+        <h2 class="section-title">Accept money your way</h2>
+        <p class="section-desc">The billing service ships with three payment providers out of the box. Each plugs into the same checkout session + webhook lifecycle.</p>
+        <div class="grid-3">
+            <div class="card">
+                <div class="card-icon amber">💳</div>
+                <h3>Stub (Dev/Test)</h3>
+                <p>A simulated checkout for local development and integration tests. No real money moves. Enables full end-to-end testing without external credentials.</p>
+                <div class="pill-row">
+                    <span class="pill">No API key</span>
+                    <span class="pill">Instant complete</span>
+                    <span class="pill">Always available</span>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon blue">🅿️</div>
+                <h3>PayPal</h3>
+                <p>First-class PayPal Orders API v2 integration. Supports PayPal wallet, Venmo, and card payments via PayPal. Webhooks verify signatures with the PayPal SDK. Monthly / one-time supported.</p>
+                <div class="methods">
+                    <span class="method-badge paypal">PayPal Wallet</span>
+                    <span class="method-badge paypal">Venmo</span>
+                    <span class="method-badge paypal">Credit card</span>
+                </div>
+                <div class="pill-row" style="margin-top:10px">
+                    <span class="pill">PAYPAL_CLIENT_ID</span>
+                    <span class="pill">PAYPAL_CLIENT_SECRET</span>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon amber">₿</div>
+                <h3>Crypto</h3>
+                <p>Direct on-chain payments. Accepts Bitcoin, Ethereum, and USDC. Generates a unique deposit address per session and monitors for confirmations via configurable node or service URL.</p>
+                <div class="methods">
+                    <span class="method-badge crypto">Bitcoin (BTC)</span>
+                    <span class="method-badge crypto">Ethereum (ETH)</span>
+                    <span class="method-badge crypto">USDC</span>
+                </div>
+                <div class="pill-row" style="margin-top:10px">
+                    <span class="pill">CRYPTO_RECEIVE_ADDR</span>
+                    <span class="pill">CRYPTO_NODE_URL</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Products -->
+    <section class="block" id="products">
+        <div class="section-label">Products</div>
+        <h2 class="section-title">Three surfaces, one ledger</h2>
+        <p class="section-desc">All products share the same credits economy and atomic ledger. They're independently accessible via route prefix or custom hostname.</p>
+        <div class="grid-3">
+            <div class="card">
+                <div class="card-icon amber">💰</div>
+                <h3>Credits Ledger</h3>
+                <p>Double-entry ledger with wallet snapshots, idempotent transactions, and reconciliation. Fund wallets via checkout, charge for platform actions, refund atomically.</p>
+                <pre>GET  /api/billing/wallet/:type/:id
 POST /api/billing/credits/checkout
 POST /api/billing/credits/charge
-POST /api/billing/credits/refund</pre>
-		</section>
-
-		<section class="panel">
-			<h2 id="tips-heading">Tips & VIP</h2>
-			<p>Audience-facing monetization flows and subscription state.</p>
-			<pre>POST /api/tips
-GET  /api/tips/overlay/:targetType/:targetId
-POST /api/vip/plans
+POST /api/billing/credits/refund
+GET  /api/billing/wallet/:type/:id/transactions</pre>
+            </div>
+            <div class="card">
+                <div class="card-icon green">🎁</div>
+                <h3>Tips</h3>
+                <p>Audience-to-creator tipping with TTS and media-request lanes, real-time overlay feeds, customizable visibility, and side-effects to chat. Native free system — no third-party required.</p>
+                <pre>POST /api/tips/create
+GET  /api/tips/overlay/:type/:id
+GET  /api/tips/creator/:type/:id
+POST /api/tips/creators  (enroll)</pre>
+            </div>
+            <div class="card">
+                <div class="card-icon purple">⭐</div>
+                <h3>VIP Plans</h3>
+                <p>Creator-defined subscription plans with configurable perks, billing intervals, and entitlement propagation. Operators can freeze, admin can reconcile wallet snapshots.</p>
+                <pre>POST /api/vip/plans
+GET  /api/vip/plans/:id
 POST /api/vip/subscriptions
-POST /api/vip/subscriptions/:id/cancel</pre>
-		</section>
+POST /api/vip/subscriptions/:id/cancel
+GET  /api/billing/entitlements/:type/:id</pre>
+            </div>
+        </div>
+    </section>
 
-		<section class="panel">
-			<h2 id="entitlement-heading">Entitlements & controls</h2>
-			<p>Downstream access checks plus operator intervention endpoints.</p>
-			<pre>GET  /api/billing/entitlements/:targetType/:targetId
-POST /api/billing/admin/freeze    (admin/service)
-POST /api/billing/admin/unfreeze  (admin/service)</pre>
-		</section>
-	</div>
-</main>
+    <hr>
+
+    <!-- API reference -->
+    <section class="block" id="api-reference">
+        <div class="section-label">API Reference</div>
+        <h2 class="section-title">REST endpoints</h2>
+        <p class="section-desc">All routes require <code>X-Internal-Key</code> for service-to-service calls or a valid Bearer token for user-context calls. Admin routes additionally require admin actor type.</p>
+        <div class="grid-2">
+            <div class="card">
+                <h3>Wallet &amp; ledger</h3>
+                <pre>GET  /api/billing/wallet/:ownerType/:ownerId
+GET  /api/billing/wallet/:type/:id/transactions
+POST /api/billing/credits/checkout
+POST /api/billing/credits/checkout/:id/complete
+POST /api/billing/credits/charge
+POST /api/billing/credits/refund
+GET  /api/billing/entitlements/:type/:id
+POST /api/billing/webhooks/:provider
+POST /api/billing/admin/freeze
+POST /api/billing/admin/unfreeze
+GET  /api/billing/admin/summary
+GET  /api/billing/admin/ledger
+GET  /api/billing/admin/wallets
+GET  /api/billing/admin/tips
+GET  /api/billing/admin/subscriptions
+POST /api/billing/admin/wallet/:type/:id/adjust</pre>
+            </div>
+            <div class="card">
+                <h3>Tips &amp; VIP</h3>
+                <pre>POST /api/tips/create
+GET  /api/tips/overlay/:targetType/:targetId
+GET  /api/tips/creator/:ownerType/:ownerId
+POST /api/tips/creators
+
+POST /api/vip/plans
+GET  /api/vip/plans/:id
+POST /api/vip/subscriptions
+POST /api/vip/subscriptions/:id/renew
+POST /api/vip/subscriptions/:id/cancel
+GET  /api/vip/subscriptions/:id
+
+GET  /health
+GET  /readiness
+GET  /api/billing/_ping</pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Checkout links -->
+    <section class="block" id="checkout-links">
+        <div class="section-label">Checkout flows</div>
+        <h2 class="section-title">Provider checkout pages</h2>
+        <p class="section-desc">Each payment provider has a hosted checkout page. Stub is for dev only; PayPal and crypto are production-ready when credentials are configured.</p>
+        <div class="grid-3">
+            <div class="card">
+                <div class="card-icon amber">🧪</div>
+                <h3>Stub Checkout</h3>
+                <p>Instant one-click simulated payment. Completes the checkout session immediately in-process.</p>
+                <a href="/checkout/stub.html" class="btn btn-ghost" style="margin-top:4px">Open stub checkout →</a>
+            </div>
+            <div class="card">
+                <div class="card-icon blue">🅿️</div>
+                <h3>PayPal Checkout</h3>
+                <p>Real PayPal Smart Buttons checkout. Requires <code>PAYPAL_CLIENT_ID</code> to be set in the environment.</p>
+                <a href="/checkout/paypal.html" class="btn btn-ghost" style="margin-top:4px">Open PayPal checkout →</a>
+            </div>
+            <div class="card">
+                <div class="card-icon amber">₿</div>
+                <h3>Crypto Checkout</h3>
+                <p>On-chain payment with QR code. Shows a unique deposit address for the session. Confirmations polled from node.</p>
+                <a href="/checkout/crypto.html" class="btn btn-ghost" style="margin-top:4px">Open crypto checkout →</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <span>OpenVibe Billing · part of the <a href="https://openvibe.network">OpenVibe Network</a></span>
+        <span style="display:flex;gap:1rem">
+            <a href="/health">Health</a>
+            <a href="/readiness">Readiness</a>
+            <a href="https://openvibe.tips">openvibe.tips</a>
+            <a href="https://openvibe.vip">openvibe.vip</a>
+        </span>
+    </footer>
+</div>
 
 <script src="/assets/openvibe-icons.js"></script>
+<script>
+(function () {
+    fetch('/health').then(r => r.ok ? r.json() : null).then(data => {
+        if (!data || !data.economy) return;
+        const cur = document.getElementById('stat-currency');
+        const fee = document.getElementById('stat-fee');
+        if (cur) cur.textContent = data.economy.currency || 'OVC';
+        if (fee) fee.textContent = (data.economy.platform_fee_bps || 0) + ' bps';
+    }).catch(() => {});
+}());
+</script>
 <script>
 const OVIcons = window.OpenVibeIcons || { icon() { return ''; } };
 

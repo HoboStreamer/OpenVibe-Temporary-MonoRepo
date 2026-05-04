@@ -52,11 +52,15 @@
         if (!user) return null;
         const id = String(user.id || user.sub || '').trim();
         if (!id) return null;
+        const anonNum = user.anon_number != null ? String(user.anon_number) : null;
+        const anonLabel = anonNum ? 'Anon #' + anonNum : 'Anonymous';
+        const isAnon = !!(session && session.anonymous) || !!(user.anonymous) || user.actor_type === 'anon';
         return {
             id,
             handle: String(user.username || user.handle || user.slug || '').trim(),
-            displayName: String(user.display_name || user.username || user.handle || 'OpenVibe creator').trim(),
-            anonymous: !!(session && session.anonymous),
+            displayName: isAnon ? anonLabel : String(user.display_name || user.username || user.handle || 'OpenVibe creator').trim(),
+            anonymous: isAnon,
+            anonNumber: anonNum,
         };
     }
 
@@ -191,14 +195,18 @@
         if (!mount) return;
         const identity = state && state.identity;
         if (identity && state.session && state.session.authenticated && !identity.anonymous) {
-            mount.innerHTML = '\n                <span class="nav-session-status">@' + escapeInlineHtml(identity.handle || identity.displayName || 'you') + '</span>\n                <a class="button-ghost" href="' + escapeInlineHtml(resolveSurfaceUrl('my')) + '">Account</a>\n                <a class="button-ghost" href="' + escapeInlineHtml(switchAccountHref()) + '">Switch account</a>\n                <a class="button-secondary" href="' + escapeInlineHtml(signOutHref()) + '">Sign out</a>\n                <a class="nav-cta" href="/go-live">Launch your stream</a>';
+            mount.innerHTML = '<span class="nav-session-status">@' + escapeInlineHtml(identity.handle || identity.displayName || 'you') + '</span>'
+                + '<a class="button-ghost" href="' + escapeInlineHtml(resolveSurfaceUrl('my')) + '">Account</a>'
+                + '<a class="button-ghost" href="' + escapeInlineHtml(switchAccountHref()) + '">Switch</a>'
+                + '<a class="button-secondary" href="' + escapeInlineHtml(signOutHref()) + '">Sign out</a>';
             return;
         }
         if (identity && identity.anonymous) {
-            mount.innerHTML = '\n                <span class="nav-session-status">' + escapeInlineHtml(identity.displayName || 'Anonymous') + '</span>\n                <a class="button-secondary" href="' + escapeInlineHtml(signInHref()) + '">Create full account</a>\n                <a class="nav-cta" href="/go-live">Launch your stream</a>';
+            mount.innerHTML = '<span class="nav-session-status">' + escapeInlineHtml(identity.displayName) + '</span>'
+                + '<a class="button-secondary" href="' + escapeInlineHtml(signInHref()) + '">Sign in</a>';
             return;
         }
-        mount.innerHTML = '\n            <span class="nav-session-status">Guest session</span>\n            <a class="button-secondary" href="' + escapeInlineHtml(signInHref()) + '">Sign in</a>\n            <a class="nav-cta" href="/go-live">Launch your stream</a>';
+        mount.innerHTML = '<a class="button-secondary" href="' + escapeInlineHtml(signInHref()) + '">Sign in</a>';
     }
 
     function renderGuestCard(title, body, extraAction) {

@@ -123,6 +123,19 @@ function formatDateTime(value) {
     });
 }
 
+function formatShortDate(value) {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
+    const now = new Date();
+    const year = parsed.getFullYear();
+    const sameYear = year === now.getFullYear();
+    if (sameYear) {
+        return parsed.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+    }
+    return parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function timeAgo(value) {
     if (!value) return 'just now';
     const parsed = new Date(value);
@@ -1427,7 +1440,6 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                         <span class="brand-mark">OV</span>
                         <span class="brand-copy">
                             <span class="brand-name">openvibe.live</span>
-                            <span class="brand-sub">Watch live, catch replays, and go live with one account</span>
                         </span>
                     </a>
                     <nav class="nav-links" aria-label="Primary">
@@ -1436,7 +1448,6 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                     <div class="nav-account" data-live-nav-session>
                         <span class="nav-session-status">Checking session…</span>
                         <a class="button-secondary" href="${signInHref}">Sign in</a>
-                        <a class="nav-cta" href="/go-live">Launch your stream</a>
                     </div>
                 </div>
             </header>
@@ -1445,7 +1456,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             </main>
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
-            <script src="/assets/live-dashboard-local.js?v=20260503-1"></script>
+            <script src="/assets/live-dashboard-local.js?v=20260504-1"></script>
             ${_shellScript()}
         </body>
         </html>`;
@@ -1479,42 +1490,36 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         : (isReplayMedia
             ? renderPill(`${formatCompactNumber(stream.view_count || 0)} views`, 'soft')
             : renderPill(`Peak ${formatCompactNumber(stream.peak_viewers || 0)}`, 'soft'));
-    const readinessPill = isReplayMedia
-        ? renderPill(stream.playback_ready ? 'Playback ready' : labelizeKey(stream.status || 'staged'), stream.playback_ready ? 'success' : 'warn')
-        : '';
     const tags = [
         opts.badge ? renderPill(opts.badge, opts.badgeTone || 'primary') : '',
         audiencePill,
-        readinessPill,
         stream.category ? renderPill(stream.category, 'muted') : '',
-        stream.source === 'hobostreamer' ? renderPill('Migrated', 'warn') : renderPill('Native', 'success'),
     ].filter(Boolean).join('');
     const summary = stream.summary || (stream.is_live
-        ? `Started ${timeAgo(stream.started_at)}${stream.protocol ? ` · ${stream.protocol}` : ''}`
+        ? `Started ${timeAgo(stream.started_at)}`
         : (isReplayMedia
-            ? `${stream.playback_ready ? 'Canonical playback ready' : `Status ${labelizeKey(stream.status || 'staged')}`} · ${timeAgo(stream.created_at || stream.updated_at)}`
-            : `${stream.ended_at ? `Ended ${timeAgo(stream.ended_at)}` : `Updated ${timeAgo(stream.started_at || stream.updated_at)}`}${stream.protocol ? ` · ${stream.protocol}` : ''}`));
+            ? timeAgo(stream.created_at || stream.updated_at)
+            : `${stream.ended_at ? `Ended ${timeAgo(stream.ended_at)}` : timeAgo(stream.started_at || stream.updated_at)}`));
     const detailBits = Array.isArray(stream.detail_bits) && stream.detail_bits.length
         ? stream.detail_bits.filter(Boolean)
         : (isReplayMedia
             ? [
                 slug ? `@${slug}` : channelName,
                 stream.duration_seconds ? formatDurationSeconds(stream.duration_seconds) : null,
-                stream.kind === 'vod' ? 'Replay library' : 'Highlight clip',
             ].filter(Boolean)
             : [
                 slug ? `@${slug}` : channelName,
-                stream.vod_media_id ? 'VOD attached' : 'No VOD yet',
-                stream.has_clips ? `${formatNumber(stream.clip_count)} clip${stream.clip_count === 1 ? '' : 's'}` : 'No clips yet',
-            ]);
-    const filterText = `${stream.title || ''} ${slug} ${channelName} ${stream.category || ''} ${summary} ${detailBits.join(' ')}`.toLowerCase();
+                stream.has_clips ? `${formatNumber(stream.clip_count)} clip${stream.clip_count === 1 ? '' : 's'}` : null,
+            ].filter(Boolean));
+    const filterText = `${stream.title || ''} ${slug} ${channelName} ${stream.category || ''} ${detailBits.join(' ')}`.toLowerCase();
     const kicker = isReplayMedia
-        ? `From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(summary)}`
-        : `By ${slug ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(summary)}`;
+        ? `<a class="link-inline" href="${channelPath(slug || 'channels')}">${escapeHtml(channelName)}</a> · ${escapeHtml(summary)}`
+        : `<a class="link-inline" href="${channelPath(slug || 'channels')}">${escapeHtml(channelName)}</a> · ${escapeHtml(summary)}`;
+    const rawDate = stream.created_at || stream.updated_at || stream.started_at;
     const footerMeta = stream.footer_meta || (isReplayMedia
-        ? formatDateTime(stream.created_at || stream.updated_at)
-        : (stream.started_at ? formatDateTime(stream.started_at) : 'Schedule TBD'));
-    const ctaLabel = stream.cta_label || (isReplayMedia ? `Open ${stream.kind} →` : 'Open stream →');
+        ? `<span title="${escapeHtml(formatDateTime(rawDate))}">${escapeHtml(formatShortDate(rawDate))}</span>`
+        : (stream.started_at ? `<span title="${escapeHtml(formatDateTime(stream.started_at))}">${escapeHtml(formatShortDate(stream.started_at))}</span>` : ''));
+    const ctaLabel = stream.cta_label || (isReplayMedia ? `Watch ${stream.kind} →` : 'Watch →');
     return `
         <article class="glass-card is-inline" data-reveal data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
             ${renderMediaThumb({
@@ -1528,9 +1533,9 @@ function renderStreamCard(stream, channel, baseUrl, options) {
             <div class="pill-row">${tags}</div>
             <a class="card-link" href="${href}"><h3 class="card-title">${escapeHtml(stream.title || 'Untitled stream')}</h3></a>
             <div class="card-kicker">${kicker}</div>
-            <p class="card-body">${escapeHtml(detailBits.join(' · '))}</p>
+            ${detailBits.length ? `<p class="card-body">${escapeHtml(detailBits.join(' · '))}</p>` : ''}
             <div class="card-footer">
-                <span class="meta-item">${escapeHtml(footerMeta)}</span>
+                <span class="meta-item">${footerMeta}</span>
                 <a class="link-inline" href="${href}">${escapeHtml(ctaLabel)}</a>
             </div>
         </article>`;
@@ -2181,250 +2186,171 @@ function renderChannelCard(channel, baseUrl, options) {
 
 function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, recentlyEnded, recentlyOnlineChannels, recentVods, recentClips, categories, stats, community, chat, baseUrl }) {
     const liveNowHtml = (liveNow || []).slice(0, 6).map((stream) => renderStreamCard(stream, null, baseUrl, { badge: 'Live now', badgeTone: 'live' })).join('');
-    const recentlyOnlineHtml = (recentlyOnlineChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
-    const recentClipsHtml = (recentClips || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
     const recentVodsHtml = (recentVods || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
+    const recentClipsHtml = (recentClips || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
     const featuredChannelsHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentThreadsHtml = (((community && community.recentThreads) || []).slice(0, 4)).map((thread) => renderSignalCard({
+        eyebrow: 'Thread',
+        title: thread.title || 'Untitled thread',
+        body: thread.preview_text || thread.body || 'Recent thread activity.',
+        meta: thread.created_at ? timeAgo(thread.created_at) : '',
+        href: thread.route_url || LIVE_NETWORK_URLS.community,
+    })).join('');
     const recentPastesHtml = (((community && community.recentPastes) || []).slice(0, 4)).map((paste) => renderSignalCard({
         eyebrow: paste.kind || 'Paste',
         title: paste.title || paste.slug || 'Untitled paste',
-        body: paste.preview_text || paste.body || 'Open the paste on openvibe.community.',
-        meta: `${formatDateTime(paste.created_at)} · ${formatNumber(paste.view_count || 0)} views`,
+        body: paste.preview_text || paste.body || 'Open on openvibe.community.',
+        meta: `${timeAgo(paste.created_at)}${paste.view_count ? ` · ${formatNumber(paste.view_count)} views` : ''}`,
         href: paste.route_url || LIVE_NETWORK_URLS.community,
-    })).join('');
-    const recentThreadsHtml = (((community && community.recentThreads) || []).slice(0, 3)).map((thread) => renderSignalCard({
-        eyebrow: 'Thread',
-        title: thread.title || 'Untitled thread',
-        body: thread.preview_text || thread.body || 'Recent thread activity from openvibe.community.',
-        meta: thread.created_at ? formatDateTime(thread.created_at) : 'OpenVibe Community',
-        href: thread.route_url || LIVE_NETWORK_URLS.community,
     })).join('');
     const roomSignalsHtml = (((chat && chat.publicRooms) || []).slice(0, 3)).map((room) => renderSignalCard({
         eyebrow: 'Chat room',
         title: room.display_name || room.slug || 'Open room',
-        body: room.description || 'Public room available for creators and viewers.',
-        meta: room.member_count ? `${formatNumber(room.member_count)} members` : 'Public room',
+        body: room.description || 'Public room open to everyone.',
+        meta: room.member_count ? `${formatNumber(room.member_count)} members` : 'Public',
         href: LIVE_NETWORK_URLS.chat,
     })).join('');
-    const callSignalsHtml = (((chat && chat.activeCalls) || []).slice(0, 2)).map((call) => renderSignalCard({
-        eyebrow: 'Active call',
-        title: call.title || call.room_name || 'Live call',
-        body: 'A live conversation is active nearby in OpenVibe Chat.',
-        meta: call.started_at ? `Started ${timeAgo(call.started_at)}` : 'Happening now',
-        href: LIVE_NETWORK_URLS.chat,
-    })).join('');
-    const categoryChips = (categories || []).slice(0, 8).map((category) => `<button class="button-ghost" type="button" data-chip-target="#live-home-filter" data-chip-value="${escapeHtml(category.name || category.category || category.label || '')}">${escapeHtml(category.name || category.category || category.label || 'Uncategorized')}</button>`).join('');
-    const updatesSignature = BUILD_UPDATES.map((item) => item.id).join('|');
-    const updatesHtml = BUILD_UPDATES.map((item) => `
-        <article class="timeline-card glass-card" data-reveal data-update-id="${escapeHtml(item.id)}">
-            <div class="eyebrow">${escapeHtml(item.date)}</div>
-            <h3 class="card-title">${escapeHtml(item.title)}</h3>
-            <p class="card-body">${escapeHtml(item.body)}</p>
-        </article>`).join('');
-    const atAGlanceHtml = `
-        <div class="data-points">
-            <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.channels) || (channels && channels.length) || 0))}</div></div>
-            <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value">${escapeHtml(formatNumber((liveNow && liveNow.length) || 0))}</div></div>
-            <div class="data-point"><div class="data-point-label">VODs</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.vods) || (recentVods && recentVods.length) || 0))}</div></div>
-            <div class="data-point"><div class="data-point-label">Clips</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.clips) || (recentClips && recentClips.length) || 0))}</div></div>
-            <div class="data-point"><div class="data-point-label">Stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds((stats && stats.stream_time_seconds) || 0))}</div></div>
-        </div>`;
+    const categoryChips = (categories || []).slice(0, 10).map((category) => `<button class="button-ghost" type="button" data-chip-target="#live-home-filter" data-chip-value="${escapeHtml(category.name || category.category || category.label || '')}">${escapeHtml(category.name || category.category || category.label || 'Uncategorized')}</button>`).join('');
+    const liveCount = (liveNow && liveNow.length) || 0;
+    const channelCount = (stats && stats.channels) || (channels && channels.length) || 0;
+    const vodCount = (stats && stats.vods) || (recentVods && recentVods.length) || 0;
+    const clipCount = (stats && stats.clips) || (recentClips && recentClips.length) || 0;
+    const totalViewers = (stats && stats.current_viewers) || 0;
+    const peakViewers = (stats && stats.peak_viewers) || 0;
+    const totalStreams = (stats && stats.total_streams) || 0;
+    const streamTime = (stats && stats.stream_time_seconds) || 0;
+
     const pageContent = `
         <section class="hero-panel compact live-home-hero">
-            <div class="hero-grid">
-                <div class="hero-copy" data-reveal>
-                    <div class="eyebrow">OpenVibe Live</div>
-                    <h1 class="hero-heading">Watch live, catch replays, and keep your <span class="hero-gradient">creator route</span> intact.</h1>
-                    <p>OpenVibe Live keeps active streams, recent clips, replay routes, and the nearby community surfaces connected without burying creators in needless platform noise.</p>
-                    <div class="form-actions" style="margin-top:1rem;">
-                        <a class="button" href="/go-live">Open stream manager</a>
-                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                        <a class="button-ghost" href="/channels">Browse creators</a>
-                    </div>
-                    <div class="footer-legal-links" style="margin-top:1rem;">
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
-                    </div>
-                    <p class="muted-text" style="margin-top:1rem;">openvibe.live — native fallback shell</p>
+            <div class="hero-copy" data-reveal>
+                <div class="eyebrow">OpenVibe Live</div>
+                <h1 class="hero-heading">Watch live, share clips, and <span class="hero-gradient">never lose your route.</span></h1>
+                <p>A live streaming home that keeps your channel, VODs, and community all at the same @handle — no platform churn required.</p>
+                <div class="form-actions" style="margin-top:1.1rem;">
+                    <a class="button" href="/go-live">Go live</a>
+                    <a class="button-secondary" href="/channels">Browse channels</a>
+                    <a class="button-ghost" href="${LIVE_NETWORK_URLS.restream}">Restream control room</a>
                 </div>
-                <aside class="glass-card hero-panel" data-reveal data-live-account-panel>
-                    <div class="eyebrow">Your account</div>
-                    <h3 class="card-title">Loading your channel tools</h3>
-                    <p class="card-body">Sign in once and use the same OpenVibe identity across live, community, chat, and openre.stream.</p>
-                </aside>
             </div>
         </section>
 
-        ${renderSection({
-            title: 'Live now',
-            subtitle: 'Current broadcasts that are active on the native OpenVibe live graph right now.',
-            actionHref: '/channels',
-            actionLabel: 'Browse all channels',
-            content: `
-                <div class="search-bar">
-                    <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter live and replay cards" data-filter-input="home-media" aria-label="Filter home media cards">
-                    ${categoryChips}
-                </div>
-                ${liveNowHtml ? `<div class="card-grid">${liveNowHtml}</div>` : ''}`,
-            emptyTitle: 'No one is live right now',
-            emptyBody: 'When creators go live, the homepage surfaces them here first instead of sending you on a scavenger hunt.',
-            emptyHref: '/go-live',
-            emptyLabel: 'See go-live options',
-        })}
-
-        ${renderSection({
-            title: 'At a glance',
-            subtitle: 'A quick view of the current native live footprint.',
-            content: atAGlanceHtml,
-        })}
-
-        ${renderSection({
-            title: 'Recently online creators',
-            subtitle: 'Channels that were recently active, with their public creator routes ready for replay discovery.',
-            actionHref: '/channels',
-            actionLabel: 'Browse creators',
-            content: recentlyOnlineHtml ? `<div class="channel-grid" data-filter-status="home-media">${recentlyOnlineHtml}</div>` : null,
-            emptyTitle: 'No creators have wrapped a stream yet',
-            emptyBody: 'As soon as creators finish their first broadcasts, they show up here with richer recap cards instead of a flat ended-session list.',
-            emptyHref: '/channels',
-            emptyLabel: 'Browse creators',
-        })}
-
-        ${renderSection({
-            title: 'Recent pastes',
-            subtitle: 'Screenshots, notes, and other creator breadcrumbs pulled in from openvibe.community.',
-            actionHref: LIVE_NETWORK_URLS.community,
-            actionLabel: 'Open community',
-            content: recentPastesHtml ? `<div class="story-grid">${recentPastesHtml}</div>` : null,
-            emptyTitle: 'Public pastes will show up here',
-            emptyBody: 'Screenshots, notes, logs, and text drops land here once they are public.',
-            emptyHref: LIVE_NETWORK_URLS.community,
-            emptyLabel: 'Open community',
-        })}
-
+        ${liveNowHtml ? `
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">Community pulse</h2>
-                    <p class="section-subtitle">Threads, rooms, calls, and community surfaces that keep the network feeling alive beyond the stream itself.</p>
+                    <h2 class="section-title">Live now</h2>
+                    <p class="section-subtitle">${liveCount} channel${liveCount === 1 ? '' : 's'} broadcasting right now.</p>
                 </div>
-                <div class="form-actions">
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Open chat</a>
-                </div>
+                <a class="section-link" href="/channels">All channels →</a>
             </div>
-            <div class="story-grid">
-                <div class="list-stack">
-                    ${recentThreadsHtml || renderSignalCard({ eyebrow: 'Community', title: 'Threads will show up here', body: 'Recent public discussion from openvibe.community will land here automatically.', meta: 'No public threads yet' })}
-                    ${recentPastesHtml || renderSignalCard({ eyebrow: 'Community', title: 'Pastes stay visible', body: 'Creator screenshots, notes, and logs remain easy to find from live surfaces.', meta: 'No public pastes yet' })}
+            <div class="search-bar">
+                <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter streams, VODs, clips" data-filter-input="home-media" aria-label="Filter home media">
+                ${categoryChips}
+            </div>
+            <div class="card-grid">${liveNowHtml}</div>
+        </section>
+        ` : `
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">Live now</h2>
+                    <p class="section-subtitle">Nobody is broadcasting at the moment.</p>
                 </div>
-                <div class="list-stack">
-                    ${roomSignalsHtml || renderSignalCard({ eyebrow: 'Chat room', title: 'Public rooms will surface here', body: 'OpenVibe Chat rooms stay close to the live surface for fast conversation hops.', meta: 'No public rooms yet' })}
-                    ${callSignalsHtml || renderSignalCard({ eyebrow: 'Active calls', title: 'Calls show up here', body: 'When conversations are live nearby, this panel points toward them.', meta: 'No active calls yet' })}
-                </div>
+                <a class="section-link" href="/go-live">Go live →</a>
+            </div>
+            <div class="search-bar">
+                <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter VODs and clips" data-filter-input="home-media" aria-label="Filter home media">
+                ${categoryChips}
             </div>
         </section>
+        `}
 
-        ${renderSection({
-            title: 'Recent clips',
-            subtitle: 'Short highlights for quick discovery and easy sharing.',
-            actionHref: '/clips',
-            actionLabel: 'Open clips route',
-            content: recentClipsHtml ? `<div class="card-grid">${recentClipsHtml}</div>` : null,
-            emptyTitle: 'Clip media is still pending',
-            emptyBody: 'The route is live and styled, but it will only populate when canonical clip media exists in OpenVibe storage.',
-            emptyHref: '/clips',
-            emptyLabel: 'Open clips route',
-        })}
+        <section class="section-panel">
+            <div class="data-points">
+                <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value">${escapeHtml(String(liveCount))}</div></div>
+                <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber(channelCount))}</div></div>
+                ${totalViewers ? `<div class="data-point"><div class="data-point-label">Watching</div><div class="data-point-value">${escapeHtml(formatCompactNumber(totalViewers))}</div></div>` : ''}
+                ${peakViewers ? `<div class="data-point"><div class="data-point-label">Peak viewers</div><div class="data-point-value">${escapeHtml(formatCompactNumber(peakViewers))}</div></div>` : ''}
+                <div class="data-point"><div class="data-point-label">VODs</div><div class="data-point-value">${escapeHtml(formatNumber(vodCount))}</div></div>
+                <div class="data-point"><div class="data-point-label">Clips</div><div class="data-point-value">${escapeHtml(formatNumber(clipCount))}</div></div>
+                ${totalStreams ? `<div class="data-point"><div class="data-point-label">Total streams</div><div class="data-point-value">${escapeHtml(formatNumber(totalStreams))}</div></div>` : ''}
+                ${streamTime ? `<div class="data-point"><div class="data-point-label">Stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds(streamTime))}</div></div>` : ''}
+            </div>
+        </section>
 
         ${renderSection({
             title: 'Recent VODs',
             subtitle: 'Replays stay easy to find after the stream ends.',
             actionHref: '/vods',
             actionLabel: 'Open VOD library',
-            content: recentVodsHtml ? `<div class="card-grid">${recentVodsHtml}</div>` : null,
-            emptyTitle: 'No public VOD objects yet',
-            emptyBody: 'When replay media is staged in canonical storage, VOD cards appear here and in the dedicated VOD route.',
+            content: recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : null,
+            emptyTitle: 'No VODs yet',
+            emptyBody: 'When replays are ready they show up here automatically.',
             emptyHref: '/vods',
-            emptyLabel: 'Open the VOD route',
+            emptyLabel: 'VOD library',
         })}
 
         ${renderSection({
-            title: 'Featured creators',
-            subtitle: 'Channels worth checking right now based on live status, recent activity, and current momentum.',
-            actionHref: '/channels',
-            actionLabel: 'Open creator directory',
-            content: featuredChannelsHtml ? `<div class="channel-grid">${featuredChannelsHtml}</div>` : null,
-            emptyTitle: 'Featured creators will appear here',
-            emptyBody: 'Once the live graph has enough channel activity, featured ranking is derived automatically from that data.',
-            emptyHref: '/channels',
-            emptyLabel: 'Browse channels',
+            title: 'Recent clips',
+            subtitle: 'Short highlights for quick sharing.',
+            actionHref: '/clips',
+            actionLabel: 'Open clips',
+            content: recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : null,
+            emptyTitle: 'No clips yet',
+            emptyBody: 'Clips appear here once they have been saved.',
+            emptyHref: '/clips',
+            emptyLabel: 'Clips library',
         })}
+
+        ${featuredChannelsHtml ? renderSection({
+            title: 'Featured creators',
+            subtitle: 'Channels worth checking based on recent activity.',
+            actionHref: '/channels',
+            actionLabel: 'All channels',
+            content: `<div class="channel-grid">${featuredChannelsHtml}</div>`,
+        }) : ''}
 
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">Go live your way</h2>
-                    <p class="section-subtitle">Keep the quick route obvious, and keep <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> close when you need more control.</p>
+                    <h2 class="section-title">Community pulse</h2>
+                    <p class="section-subtitle">Threads, pastes, and chat rooms from the wider OpenVibe network.</p>
                 </div>
                 <div class="form-actions">
-                    <a class="section-link" href="/go-live">Open stream manager</a>
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
                 </div>
             </div>
+            ${(recentThreadsHtml || recentPastesHtml || roomSignalsHtml) ? `
             <div class="story-grid">
-                <div class="feature-grid">
-                    ${GO_LIVE_TRACKS.map((track) => renderSignalCard({ eyebrow: track.label, title: track.title, body: track.body, meta: track.meta, href: track.label === 'Restream control room' ? LIVE_NETWORK_URLS.restream : '/go-live' })).join('')}
-                </div>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Why this feels better</div>
-                    <p class="card-body">One OpenVibe account can sign into live, community, chat, and openre.stream without forcing creators to memorize a maze of disconnected setup paths.</p>
-                    <div class="data-points" style="margin-top:0.85rem;">
-                        <div class="data-point"><div class="data-point-label">Identity</div><div class="data-point-value">One account</div></div>
-                        <div class="data-point"><div class="data-point-label">Public route</div><div class="data-point-value">Canonical @username</div></div>
-                        <div class="data-point"><div class="data-point-label">Control room</div><div class="data-point-value">openre.stream</div></div>
-                    </div>
-                </article>
-            </div>
-        </section>
-
-        <section class="section-panel" id="recent-changes">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Recent changes</h2>
-                    <p class="section-subtitle">${BUILD_UPDATES.length} fresh notes from the native live product surface, with an unread state that stays visible until you clear it.</p>
-                </div>
-                <a class="section-link" href="/updates">View all updates</a>
-            </div>
-            <div class="timeline-tools" data-updates-feed="${escapeHtml(updatesSignature)}">
-                <span class="pill soft timeline-status" data-updates-status>Checking for unseen changes…</span>
-                <button class="button-ghost timeline-clear" type="button" data-updates-clear>Mark updates as seen</button>
-            </div>
-            <div class="surface-grid">${updatesHtml}</div>
+                ${(recentThreadsHtml || recentPastesHtml) ? `<div class="list-stack">${recentThreadsHtml}${recentPastesHtml}</div>` : ''}
+                ${roomSignalsHtml ? `<div class="list-stack">${roomSignalsHtml}</div>` : ''}
+            </div>` : `
+            <div class="empty-state">
+                <p>Community content will surface here once public threads and pastes exist on <a class="link-inline" href="${LIVE_NETWORK_URLS.community}">openvibe.community</a>.</p>
+            </div>`}
         </section>
 
         <section class="section-panel">
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Why OpenVibe exists</h2>
-                    <p class="section-subtitle">This is meant to feel like a real exit from ad-first platform design: calmer discovery, portable identity, visible support links, and community memory that does not get paved over.</p>
+                    <p class="section-subtitle">Burnout, corporate drift, and the urge to build something worth staying in.</p>
                 </div>
             </div>
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Origin story</div>
-                    <p class="card-body">OpenVibe is being built for creators and communities who miss when the web felt more human: clear pages, real creator homes, portable identity, and a platform that does not turn every decision into a growth trap.</p>
-                    <div class="data-points" style="margin-top:0.85rem;">
-                        <div class="data-point"><div class="data-point-label">Creator routes</div><div class="data-point-value">${escapeHtml(formatNumber((stats && stats.channels) || (channels && channels.length) || 0))}</div></div>
-                        <div class="data-point"><div class="data-point-label">Mirrored stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds((stats && stats.stream_time_seconds) || 0))}</div></div>
-                        <div class="data-point"><div class="data-point-label">Direction</div><div class="data-point-value">Creator-first</div></div>
-                    </div>
+                    <div class="eyebrow">The short version</div>
+                    <p class="card-body">We burned out watching platforms we loved get hollowed out — ad auctions replacing real feeds, AI-generated music flooding every corner of the internet, algorithms nudging creators toward whatever kept engagement metrics green instead of what they actually wanted to make.</p>
+                    <p class="card-body" style="margin-top:0.7rem;">OpenVibe is not for profit. It is an attempt to build a streaming and community space that behaves like it was made for people, not for a growth dashboard.</p>
                 </article>
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Promises we want to keep</div>
+                    <div class="eyebrow">What we actually promise</div>
                     <ul class="flow-list">
-                        ${MISSION_PILLARS.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+                        <li>Your @handle stays the same across live, VODs, clips, and the community — no platform migrations required.</li>
+                        <li>No advertising, no recommendation engine optimizing for addiction, no dark patterns to inflate session time.</li>
+                        <li>If something is broken or incomplete we will say so instead of pretending it is a feature.</li>
+                        <li>Small tools for real people: restreaming, pastes, chat, community threads — without needing five accounts to use all of them.</li>
                     </ul>
                     <div class="form-actions" style="margin-top:1rem;">
                         <a class="button-secondary" href="https://github.com/openvibe">GitHub</a>
@@ -2435,8 +2361,8 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             </div>
         </section>`;
     return renderPage({
-        title: 'openvibe.live — discover live channels',
-        description: 'A modern native discovery surface for OpenVibe live channels, recent broadcasts, VODs, clips, and go-live paths.',
+        title: 'OpenVibe Live — watch live streams',
+        description: 'Watch live channels, catch replays, and find your community. No ads, no algorithm, no bullshit.',
         canonical: `${baseUrl}/`,
         activeNav: 'home',
         bodyHtml: pageContent,

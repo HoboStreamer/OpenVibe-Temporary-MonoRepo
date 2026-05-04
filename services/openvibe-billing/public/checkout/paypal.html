@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PayPal Checkout — OpenVibe Credits</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+    margin: 0; min-height: 100vh;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    background: radial-gradient(ellipse at top, rgba(0,112,243,0.18), transparent 40%), #070f1d;
+    color: #eef4ff;
+    display: flex; align-items: center; justify-content: center;
+}
+.card {
+    background: rgba(12,22,42,0.92);
+    border: 1px solid rgba(148,163,184,0.14);
+    border-radius: 22px;
+    padding: 36px 32px 28px;
+    width: min(460px, calc(100vw - 2rem));
+    box-shadow: 0 32px 90px rgba(2,6,18,0.52);
+}
+.logo { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 24px; }
+.logo-mark {
+    width: 2.4rem; height: 2.4rem; border-radius: 12px;
+    background: linear-gradient(135deg, #f59e0b, #fb923c);
+    display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 1rem;
+}
+.logo-name { font-weight: 700; font-size: 1rem; }
+.logo-sub { font-size: 0.8rem; color: #64748b; }
+h1 { margin: 0 0 6px; font-size: 1.5rem; font-weight: 700; }
+.amount-line { font-size: 2.2rem; font-weight: 800; color: #f59e0b; margin: 18px 0 6px; }
+.session-id { font-size: 0.78rem; color: #475569; font-family: monospace; }
+.divider { border: none; border-top: 1px solid rgba(148,163,184,0.1); margin: 20px 0; }
+#paypal-button-container { min-height: 50px; }
+.status-msg {
+    margin-top: 16px; padding: 12px 14px; border-radius: 10px;
+    font-size: 0.88rem; display: none;
+}
+.status-msg.success { background: rgba(52,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(52,211,153,0.25); display: block; }
+.status-msg.error { background: rgba(251,113,133,0.14); color: #fca5a5; border: 1px solid rgba(251,113,133,0.25); display: block; }
+.status-msg.loading { background: rgba(96,165,250,0.14); color: #bfdbfe; border: 1px solid rgba(96,165,250,0.25); display: block; }
+.btn-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 18px; padding: 0.6rem 1rem; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid rgba(148,163,184,0.14); color: #94a3b8; font-size: 0.85rem; text-decoration: none; cursor: pointer; }
+.btn-back:hover { border-color: rgba(148,163,184,0.3); }
+.no-paypal { margin-top: 14px; padding: 14px; border-radius: 10px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.22); color: #fde68a; font-size: 0.84rem; }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">
+        <div class="logo-mark">$</div>
+        <div>
+            <div class="logo-name">OpenVibe Billing</div>
+            <div class="logo-sub">Secure checkout</div>
+        </div>
+    </div>
+    <h1>Buy Credits</h1>
+    <p style="color:#94a3b8;margin:0 0 4px;font-size:0.9rem">Complete your PayPal payment to receive credits in your OpenVibe wallet.</p>
+    <div id="amount-display" class="amount-line" style="display:none"></div>
+    <div id="session-display" class="session-id"></div>
+    <hr class="divider">
+
+    <div id="paypal-not-configured" class="no-paypal" style="display:none">
+        PayPal is not configured on this instance.<br>
+        Set <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> in the service environment.
+    </div>
+
+    <div id="paypal-button-container"></div>
+
+    <div id="status" class="status-msg"></div>
+
+    <a href="/" class="btn-back">← Back to Billing</a>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const params  = new URLSearchParams(location.search);
+    const session = params.get('session') || '';
+    const result  = params.get('result')  || '';
+
+    const statusEl = document.getElementById('status');
+    const amtEl    = document.getElementById('amount-display');
+    const sessEl   = document.getElementById('session-display');
+    const noPaypal = document.getElementById('paypal-not-configured');
+
+    if (session) sessEl.textContent = 'Session: ' + session;
+
+    function showStatus(msg, type) {
+        statusEl.textContent = msg;
+        statusEl.className   = 'status-msg ' + (type || 'loading');
+    }
+
+    // Handle return from PayPal redirect (result=approved|cancelled)
+    if (result === 'cancelled') {
+        showStatus('Payment cancelled. You can try again.', 'error');
+        return;
+    }
+    if (result === 'approved') {
+        showStatus('Payment approved! Completing your order…', 'loading');
+        // POST to complete the checkout session
+        fetch('/api/billing/credits/checkout/' + encodeURIComponent(session) + '/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'paypal' }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data && data.checkout && data.checkout.status === 'completed') {
+                showStatus('Credits added to your wallet! You can close this tab.', 'success');
+            } else if (data && data.error) {
+                showStatus('Could not complete: ' + data.error, 'error');
+            } else {
+                showStatus('Payment received — credits will be credited shortly.', 'success');
+            }
+        })
+        .catch(() => showStatus('Network error during completion. Contact support.', 'error'));
+        return;
+    }
+
+    // Normal flow — load checkout session then mount PayPal buttons
+    if (!session) {
+        showStatus('No session specified. Return to the app and start a new checkout.', 'error');
+        return;
+    }
+
+    fetch('/api/billing/credits/checkout/' + encodeURIComponent(session))
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => {
+            const checkout = data && data.checkout;
+            if (!checkout) { showStatus('Session not found.', 'error'); return; }
+            if (checkout.status !== 'created') {
+                showStatus('This checkout session is no longer active (status: ' + checkout.status + ').', 'error');
+                return;
+            }
+            if (checkout.amount_minor) {
+                amtEl.textContent = '$' + (checkout.amount_minor / 100).toFixed(2) + ' USD';
+                amtEl.style.display = '';
+            }
+            initPayPal(checkout);
+        })
+        .catch(() => {
+            // If checkout session endpoint not found, still try to load PayPal
+            // (it may be a server-generated URL with pre-filled params)
+            const amtParam = params.get('amount');
+            if (amtParam) {
+                amtEl.textContent = '$' + parseFloat(amtParam).toFixed(2) + ' USD';
+                amtEl.style.display = '';
+            }
+            initPayPal(null);
+        });
+
+    function initPayPal(checkout) {
+        // Load PayPal JS SDK dynamically. Client ID comes from window.__PAYPAL_CLIENT_ID
+        // injected by the server, or from a meta tag, or from query param (dev only).
+        const clientId = window.__PAYPAL_CLIENT_ID
+            || document.querySelector('meta[name="paypal-client-id"]')?.content
+            || params.get('client_id')
+            || '';
+
+        if (!clientId) {
+            noPaypal.style.display = '';
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(clientId) + '&currency=USD&intent=capture';
+        script.onload = () => {
+            if (!window.paypal) { showStatus('PayPal SDK failed to load.', 'error'); return; }
+            window.paypal.Buttons({
+                style: { layout: 'vertical', color: 'blue', shape: 'pill', label: 'pay' },
+                createOrder: function (data, actions) {
+                    const usdAmount = checkout && checkout.amount_minor
+                        ? (checkout.amount_minor / 100).toFixed(2)
+                        : (parseFloat(params.get('amount') || '10')).toFixed(2);
+                    return actions.order.create({
+                        purchase_units: [{
+                            reference_id: session,
+                            custom_id: session,
+                            amount: { value: usdAmount, currency_code: 'USD' },
+                        }],
+                        application_context: {
+                            brand_name: 'OpenVibe',
+                            shipping_preference: 'NO_SHIPPING',
+                            user_action: 'PAY_NOW',
+                        },
+                    });
+                },
+                onApprove: function (data, actions) {
+                    showStatus('Capturing payment…', 'loading');
+                    return actions.order.capture().then(function (details) {
+                        // Notify billing service
+                        return fetch('/api/billing/credits/checkout/' + encodeURIComponent(session) + '/complete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider: 'paypal',
+                                external_ref: details.id,
+                                payer_name: details.payer && details.payer.name && details.payer.name.given_name,
+                            }),
+                        }).then(r => r.json()).then(d => {
+                            if (d && d.checkout && d.checkout.status === 'completed') {
+                                showStatus('Payment complete! Credits added to your wallet.', 'success');
+                                document.getElementById('paypal-button-container').style.display = 'none';
+                            } else {
+                                showStatus('Payment captured. Credits will be added shortly.', 'success');
+                            }
+                        });
+                    });
+                },
+                onError: function (err) {
+                    showStatus('Payment error: ' + String(err && err.message || err), 'error');
+                },
+                onCancel: function () {
+                    showStatus('Payment cancelled.', 'error');
+                },
+            }).render('#paypal-button-container');
+        };
+        script.onerror = () => {
+            showStatus('Could not load PayPal SDK. Check your network connection.', 'error');
+        };
+        document.head.appendChild(script);
+    }
+}());
+</script>
+</body>
+</html>

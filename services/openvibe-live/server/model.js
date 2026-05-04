@@ -202,9 +202,12 @@ function listStreams({ channel_slug, status, limit }) {
 
 function listLiveNow({ limit }) {
     const cap = clampLimit(limit, 12);
+    // Exclude stale streams started more than 8 hours ago with no recent activity
+    // These are typically migrated/orphaned streams that never received an end event.
     return db.get().prepare(`
         SELECT * FROM live_streams
         WHERE status = 'started'
+        AND COALESCE(started_at, created_at) > datetime('now', '-8 hours')
         ORDER BY COALESCE(started_at, created_at) DESC, rowid DESC
         LIMIT ?
     `).all(cap).map(hydrateStream);

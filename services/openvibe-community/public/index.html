@@ -14,17 +14,15 @@
             <div class="ov-hero-copy">
                 <div class="ov-kicker" id="community-kicker">Threads · pastes · chat · pulse</div>
                 <h1 id="community-title">OpenVibe Community</h1>
-                <p>Threads, pastes, screenshots, notes, and the slower conversations that should stay attached to creators long after a stream ends. This page is meant to feel like a real community home, not a probe console.</p>
+                <p>Threads, pastes, and the slower conversations that stay attached to creators long after a stream ends.</p>
                 <div class="ov-chip-row">
                     <span class="ov-chip primary" id="community-domain-chip">Threads · pastes · pulse</span>
                     <span class="ov-chip soft" id="community-refresh-chip">No refresh yet</span>
-                    <span class="ov-chip" id="community-status-chip">community idle</span>
-                    <span class="ov-chip soft" id="community-phase16-chip" title="Phase 16 community workflow truth (spaces · threads · posts)">Phase 16: checking…</span>
+
                 </div>
                 <div class="ov-cta-row">
                     <a class="ov-btn ov-btn-primary" href="#new-paste" id="new-paste-link">New paste</a>
                     <a class="ov-btn" href="https://openvibe.chat" id="open-chat-link">Open chat</a>
-                    <button class="ov-btn" type="button" id="refresh-community-btn">Refresh feed</button>
                     <a class="ov-btn ov-btn-ghost" href="https://openvibe.live" id="community-live-link">openvibe.live</a>
                 </div>
             </div>
@@ -33,8 +31,9 @@
                 <div class="ov-section-head">
                     <div>
                         <h2 id="community-snapshot-heading">Community pulse</h2>
-                        <p class="ov-section-sub">What is moving across public threads, pastes, and spaces right now.</p>
+                        <p class="ov-section-sub">Live activity across public threads, pastes, and chat.</p>
                     </div>
+                    <button class="ov-btn ov-btn-ghost" type="button" id="refresh-community-btn" style="align-self:flex-start">Refresh</button>
                 </div>
                 <div class="ov-stat-strip">
                     <div class="ov-stat">
@@ -61,7 +60,7 @@
     <div class="ov-tabs" role="tablist" aria-label="Community sections">
         <button class="ov-tab active" type="button" data-tab="threads" role="tab" aria-selected="true" id="tab-btn-threads">Threads</button>
         <button class="ov-tab" type="button" data-tab="pastes" role="tab" aria-selected="false" id="tab-btn-pastes">Pastes</button>
-        <button class="ov-tab" type="button" data-tab="spaces" role="tab" aria-selected="false" id="tab-btn-spaces">Spaces</button>
+        <button class="ov-tab" type="button" data-tab="spaces" role="tab" aria-selected="false" id="tab-btn-spaces">Chat rooms</button>
     </div>
 
     <div class="ov-split-grid ov-section">
@@ -69,7 +68,6 @@
             <div class="ov-section-head">
                 <div>
                     <h2 id="highlights-heading">Pulse</h2>
-                    <p class="ov-section-sub">Quick reads from the public community surface.</p>
                 </div>
             </div>
             <div class="ov-grid" id="community-highlights"></div>
@@ -79,7 +77,6 @@
             <div class="ov-section-head">
                 <div>
                     <h2 id="community-probes-heading">Chat + links</h2>
-                    <p class="ov-section-sub">Jump straight into the nearby OpenVibe surfaces around community activity.</p>
                 </div>
             </div>
             <div class="ov-grid" id="community-links"></div>
@@ -90,7 +87,6 @@
         <div class="ov-section-head">
             <div>
                 <h2 id="threads-heading">Threads</h2>
-                <div class="ov-section-sub">Long-form discussion posts and network-native commentary.</div>
             </div>
         </div>
         <div class="ov-grid" id="threads-grid"></div>
@@ -100,7 +96,6 @@
         <div class="ov-section-head">
             <div>
                 <h2 id="pastes-heading">Pastes</h2>
-                <div class="ov-section-sub">Share snippets, notes, logs, and migration receipts with less chaos and more structure.</div>
             </div>
         </div>
         <div class="ov-grid" id="pastes-grid"></div>
@@ -109,7 +104,7 @@
             <div class="ov-card-top">
                 <div>
                     <h2 id="create-paste-heading">Create a paste</h2>
-                    <div class="desc">Post a short note or snippet into the current community runtime.</div>
+                    <div class="desc">Share a snippet, note, or idea with the community.</div>
                 </div>
                 <span class="ov-tag" id="paste-mode-tag">sign-in required</span>
             </div>
@@ -117,7 +112,7 @@
                 <div class="ov-form-grid">
                     <label class="ov-field">
                         <span>Title</span>
-                        <input class="ov-input" name="title" placeholder="Release notes, migration idea, operator memo…" />
+                        <input class="ov-input" name="title" placeholder="What's this about?" />
                     </label>
                 </div>
                 <label class="ov-field" style="margin-top:0.85rem">
@@ -136,8 +131,7 @@
     <section id="tab-spaces" class="ov-section" hidden>
         <div class="ov-section-head">
             <div>
-                <h2 id="spaces-heading">Spaces</h2>
-                <div class="ov-section-sub">Namespace hubs that group threads, identity, and discovery across the network.</div>
+                <h2 id="spaces-heading">Chat rooms</h2>
             </div>
         </div>
         <div class="ov-grid" id="spaces-grid"></div>
@@ -183,7 +177,6 @@
         document.getElementById('community-title').innerHTML = withIcon('community', 'OpenVibe Community');
         document.getElementById('community-domain-chip').innerHTML = withIcon('success', 'Threads · pastes · pulse');
         document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', 'No refresh yet');
-        document.getElementById('community-status-chip').innerHTML = withIcon('info', 'community idle');
         document.getElementById('new-paste-link').innerHTML = withIcon('launch', 'New paste');
         document.getElementById('open-chat-link').innerHTML = withIcon('chat', 'Open chat');
         document.getElementById('refresh-community-btn').innerHTML = withIcon('runtime', 'Refresh feed');
@@ -321,17 +314,17 @@
             {
                 title: 'Top space',
                 detail: state.spaces[0] ? (state.spaces[0].name || state.spaces[0].slug || state.spaces[0].id) : 'No spaces published yet',
-                chip: state.spaces.length ? 'space lane visible' : 'waiting for data',
+                chip: state.spaces.length ? 'spaces' : 'empty',
             },
             {
                 title: 'Latest thread',
                 detail: state.threads[0] ? (state.threads[0].title || state.threads[0].slug || state.threads[0].id) : 'No threads published yet',
-                chip: state.threads.length ? 'discussion lane active' : 'empty thread feed',
+                chip: state.threads.length ? 'threads' : 'empty',
             },
             {
-                title: 'Paste surface',
-                detail: state.pastes.length ? `${state.pastes.length} paste item${state.pastes.length === 1 ? '' : 's'} visible` : 'No pastes visible yet',
-                chip: 'text + screenshot lane',
+                title: 'Pastes',
+                detail: state.pastes.length ? `${state.pastes.length} paste${state.pastes.length === 1 ? '' : 's'} visible` : 'No pastes visible yet',
+                chip: 'pastes',
             },
         ];
 
@@ -404,35 +397,8 @@
         document.getElementById('featured-space').textContent = state.spaces[0]
             ? String(state.spaces[0].slug || state.spaces[0].name || state.spaces[0].id)
             : '—';
-        document.getElementById('community-status-chip').innerHTML = withIcon(
-            state.threads.length || state.pastes.length || state.spaces.length ? 'success' : 'info',
-            state.threads.length || state.pastes.length || state.spaces.length
-                ? `${state.threads.length + state.pastes.length + state.spaces.length} total visible records`
-                : 'public lists are empty'
-        );
     }
 
-    async function refreshPhase16Chip() {
-        const chip = document.getElementById('community-phase16-chip');
-        if (!chip) return;
-        try {
-            const data = await fetchJson('/api/community/product/status');
-            if (!data || data.ok !== true) {
-                chip.className = 'ov-chip warn';
-                chip.innerHTML = withIcon('warn', 'Phase 16: status unavailable');
-                return;
-            }
-            const spaces = (data.spaces && data.spaces.total) || 0;
-            const threads = (data.threads && data.threads.total) || 0;
-            const posts = (data.posts && data.posts.total) || 0;
-            const pastes = (data.pastes && data.pastes.total) || 0;
-            chip.className = 'ov-chip ok';
-            chip.innerHTML = withIcon('success', `Phase 16: ${spaces} spaces · ${threads} threads · ${posts} posts · ${pastes} pastes`);
-        } catch (error) {
-            chip.className = 'ov-chip warn';
-            chip.innerHTML = withIcon('warn', 'Phase 16: probe failed');
-        }
-    }
 
     async function refreshCommunity() {
         const [threads, pastes, spaces] = await Promise.all([
@@ -450,7 +416,6 @@
         renderSpaces(spaces);
         renderHighlights();
         updateStats();
-        await refreshPhase16Chip();
         document.getElementById('community-refresh-chip').innerHTML = withIcon('clock', `Refreshed ${new Date().toLocaleTimeString()}`);
     }
 

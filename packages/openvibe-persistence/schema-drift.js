@@ -56,6 +56,11 @@ const SCHEMA_SERVICES = Object.freeze([
         modulePath: path.resolve(__dirname, '../../services/openvibe-games/server/db.js'),
         migrationPath: path.resolve(__dirname, '../../services/openvibe-games/server/migrations/postgres/001_init.sql'),
     },
+    {
+        name: 'openvibe-tips',
+        modulePath: path.resolve(__dirname, '../../services/openvibe-tips/server/db.js'),
+        migrationPath: path.resolve(__dirname, '../../services/openvibe-tips/server/migrations/postgres/001_init.sql'),
+    },
 ]);
 
 function stripSqlComments(source) {

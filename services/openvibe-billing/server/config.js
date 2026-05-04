@@ -27,6 +27,7 @@ module.exports = {
     live:      { url: resolvePublicOrigin({ surface: 'live' }) },
     chat:      { url: resolvePublicOrigin({ surface: 'chat' }) },
     community: { url: resolvePublicOrigin({ surface: 'community' }) },
+    tips:      { url: resolvePublicOrigin({ surface: 'tips' }) },
 
     auth: {
         issuer:  resolveAuthIssuer(),
@@ -40,4 +41,23 @@ module.exports = {
 
     // Idempotency-key cache lifetime (ms). 24h default.
     idempotencyTtlMs: parseInt(process.env.IDEMPOTENCY_TTL_MS, 10) || (24 * 60 * 60 * 1000),
+
+    // PayPal Orders API v2
+    // Docs: https://developer.paypal.com/docs/api/orders/v2/
+    paypal: {
+        clientId:     process.env.PAYPAL_CLIENT_ID     || '',
+        clientSecret: process.env.PAYPAL_CLIENT_SECRET || '',
+        webhookId:    process.env.PAYPAL_WEBHOOK_ID    || '',
+        mode:         process.env.PAYPAL_MODE          || 'sandbox', // 'sandbox' | 'live'
+    },
+
+    // Crypto on-chain payments
+    // Set receive addresses for each network you want to accept.
+    crypto: {
+        receiveBtc:    process.env.CRYPTO_RECEIVE_BTC    || '',
+        receiveEth:    process.env.CRYPTO_RECEIVE_ETH    || '',
+        receiveUsdc:   process.env.CRYPTO_RECEIVE_USDC   || '',
+        nodeUrl:       process.env.CRYPTO_NODE_URL       || '',
+        confirmations: parseInt(process.env.CRYPTO_CONFIRMATIONS, 10) || 1,
+    },
 };
