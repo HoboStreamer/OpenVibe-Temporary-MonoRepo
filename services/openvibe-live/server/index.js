@@ -306,7 +306,10 @@ function buildApp() {
             return res.status(404).type('html').send(ssr.renderMissingMediaPage({ kind, mediaId, baseUrl: deriveBaseUrl(req) }));
         }
         const channel = item.channel_slug ? model.getChannelBySlug(item.channel_slug) : null;
-        return res.type('html').send(ssr.renderMediaDetailPage({ item, channel, baseUrl: deriveBaseUrl(req) }));
+        const moreByCreator = item.channel_slug
+            ? (await feedBridge.listCanonicalVods({ channelSlug: item.channel_slug, limit: 20 })).filter((v) => String(v.id) !== String(item.id))
+            : [];
+        return res.type('html').send(ssr.renderMediaDetailPage({ item, channel, moreByCreator, baseUrl: deriveBaseUrl(req) }));
     }
 
     const app = express();
@@ -387,6 +390,11 @@ function buildApp() {
     });
 
     // ── SSR pages ────────────────────────────────────────────
+    app.use((req, res, next) => {
+        if (config.nodeEnv !== 'production') res.set('Cache-Control', 'no-store');
+        next();
+    });
+
     app.get('/', asyncRoute(async (req, res) => {
         res.type('html').send(ssr.renderHomePage({ ...(await feedBridge.buildHomeViewModel()), baseUrl: deriveBaseUrl(req) }));
     }));
@@ -404,9 +412,9 @@ function buildApp() {
         const channelSlug = req.query.channel ? String(req.query.channel) : null;
         res.type('html').send(ssr.renderCollectionPage({
             kind: 'vods',
-            title: 'OpenVibe VOD Library',
-            description: 'Browse migrated and native broadcast replays staged through the canonical OpenVibe media service.',
-            emptyMessage: 'No public VOD media objects are available yet for this creator. When canonical replay items land, they show up here automatically.',
+            title: 'VODs',
+            description: 'Watch past streams and replays from creators on openvibe.live.',
+            emptyMessage: 'No VODs yet. Past streams will show up here once creators go live.',
             items: await feedBridge.listCanonicalVods({ channelSlug, limit: 200 }),
             baseUrl: deriveBaseUrl(req),
         }));
@@ -416,9 +424,9 @@ function buildApp() {
         const channelSlug = req.query.channel ? String(req.query.channel) : null;
         res.type('html').send(ssr.renderCollectionPage({
             kind: 'clips',
-            title: 'OpenVibe Clips',
-            description: 'Fast highlights and standout moments surfaced from canonical OpenVibe clip media objects.',
-            emptyMessage: 'No public clip media objects are available yet for these channels. The page stays honest instead of pretending every stream already has clips.',
+            title: 'Clips',
+            description: 'Short highlights and standout moments from creators on openvibe.live.',
+            emptyMessage: 'No clips yet. Highlights will show up here as creators clip their streams.',
             items: await feedBridge.listCanonicalClips({ channelSlug, limit: 200 }),
             baseUrl: deriveBaseUrl(req),
         }));
