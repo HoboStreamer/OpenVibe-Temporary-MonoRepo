@@ -2,44 +2,23 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-COMPOSE_FILE="$ROOT_DIR/deploy/compose/docker-compose.local.yml"
-LEGACY_PROJECT_NAME="compose"
+PID_FILE="$ROOT_DIR/.stack.pids"
 
-resolve_docker_cmd() {
-  if docker info >/dev/null 2>&1; then
-    echo "docker"
-    return 0
+if [ ! -f "$PID_FILE" ]; then
+  echo "[stack:local:stop] no .stack.pids file found; stack does not appear to be running"
+  exit 0
+fi
+
+echo "[stack:local:stop] stopping services..."
+
+while IFS=' ' read -r name pid; do
+  [ -z "$pid" ] && continue
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null && echo "[stack:local:stop] stopped $name (pid=$pid)" || echo "[stack:local:stop] failed to stop $name (pid=$pid)"
+  else
+    echo "[stack:local:stop] $name (pid=$pid) was not running"
   fi
-  if sudo -n docker info >/dev/null 2>&1; then
-    echo "sudo -n docker"
-    return 0
-  fi
-  return 1
-}
+done < "$PID_FILE"
 
-compose_for_project() {
-  local project_name="$1"
-  shift
-  COMPOSE_PROJECT_NAME="$project_name" $DOCKER_CMD compose -f "$COMPOSE_FILE" "$@"
-}
-
-if ! command -v docker >/dev/null 2>&1; then
-  echo "docker is required to stop the local production-like stack" >&2
-  exit 1
-fi
-
-if ! DOCKER_CMD="$(resolve_docker_cmd)"; then
-  echo "docker is installed but this shell cannot access the daemon; ensure docker group access or passwordless sudo for docker" >&2
-  exit 1
-fi
-
-cd "$ROOT_DIR"
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-openvibe-local}"
-
-echo "[stack:local:stop] stopping compose stack from $COMPOSE_FILE"
-compose_for_project "$COMPOSE_PROJECT_NAME" down --remove-orphans "$@"
-
-if [[ "$COMPOSE_PROJECT_NAME" != "$LEGACY_PROJECT_NAME" ]]; then
-  echo "[stack:local:stop] cleaning legacy compose project '$LEGACY_PROJECT_NAME'"
-  compose_for_project "$LEGACY_PROJECT_NAME" down --remove-orphans "$@" >/dev/null 2>&1 || true
-fi
+rm -f "$PID_FILE"
+echo "[stack:local:stop] done"

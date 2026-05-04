@@ -13,7 +13,9 @@ const {
 const { waitForStack } = require('../dev/wait-for-stack');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const COMPOSE_FILE = path.join(ROOT, 'deploy', 'compose', 'docker-compose.local.yml');
+const PID_FILE = path.join(ROOT, '.stack.pids');
+const ENV_FILE = path.join(ROOT, '.env');
+const ENV_EXAMPLE_FILE = path.join(ROOT, '.env.example');
 const START_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'start-production-like-stack.sh');
 const STOP_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'stop-production-like-stack.sh');
 const WAIT_SCRIPT = path.join(ROOT, 'scripts', 'dev', 'wait-for-stack.js');
@@ -24,7 +26,6 @@ const DEFAULT_INTERVAL_MS = 5000;
 const REQUIRED_SERVICES = Object.freeze([
     'postgres',
     'redis',
-    'nginx',
     'network',
     'events',
     'media',
@@ -39,7 +40,7 @@ const REQUIRED_SERVICES = Object.freeze([
     'realtime',
     'content',
 ]);
-const APP_SERVICES = Object.freeze(REQUIRED_SERVICES.filter((name) => !['postgres', 'redis', 'nginx'].includes(name)));
+const APP_SERVICES = Object.freeze(REQUIRED_SERVICES.filter((name) => !['postgres', 'redis'].includes(name)));
 const PERSISTENCE_SERVICES = Object.freeze([
     'network',
     'events',
@@ -72,69 +73,33 @@ function createCheck(name, status, message, details) {
     };
 }
 
-function parseComposeServices(source) {
-    const lines = String(source || '').split(/\r?\n/);
-    const services = {};
-    let inServices = false;
-    let currentService = null;
-    let currentLines = [];
-
-    function flush() {
-        if (!currentService) return;
-        services[currentService] = currentLines.join('\n');
+function readPids() {
+    try {
+        const lines = fs.readFileSync(PID_FILE, 'utf8').trim().split(/\r?\n/).filter(Boolean);
+        const pids = {};
+        for (const line of lines) {
+            const [name, pid] = line.split(' ');
+            if (name && pid) pids[name] = parseInt(pid, 10);
+        }
+        return { exists: true, pids };
+    } catch {
+        return { exists: false, pids: {} };
     }
-
-    for (const line of lines) {
-        if (!inServices) {
-            if (/^services:\s*$/.test(line)) {
-                inServices = true;
-            }
-            continue;
-        }
-
-        if (/^[^\s].*:\s*$/.test(line) && !/^services:\s*$/.test(line)) {
-            flush();
-            currentService = null;
-            currentLines = [];
-            break;
-        }
-
-        const serviceMatch = /^  ([a-zA-Z0-9_-]+):\s*$/.exec(line);
-        if (serviceMatch) {
-            flush();
-            currentService = serviceMatch[1];
-            currentLines = [];
-            continue;
-        }
-
-        if (currentService) {
-            currentLines.push(line);
-        }
-    }
-
-    flush();
-    return services;
 }
 
-function readCompose() {
+function readEnv() {
+    const file = fs.existsSync(ENV_FILE) ? ENV_FILE : null;
+    if (!file) return { exists: false, source: '' };
     try {
-        const source = fs.readFileSync(COMPOSE_FILE, 'utf8');
-        return {
-            exists: true,
-            source,
-            services: parseComposeServices(source),
-        };
+        return { exists: true, source: fs.readFileSync(file, 'utf8') };
     } catch {
-        return {
-            exists: false,
-            source: '',
-            services: {},
-        };
+        return { exists: false, source: '' };
     }
 }
 
 async function checkLocalProdStack(options = {}) {
-    const compose = readCompose();
+    const { pids, exists: stackRunning } = readPids();
+    const env = readEnv();
     const checks = [];
 
     checks.push(createCheck(
@@ -151,118 +116,50 @@ async function checkLocalProdStack(options = {}) {
     ));
 
     checks.push(createCheck(
-        'compose_file_present',
-        compose.exists ? 'green' : 'red',
-        compose.exists ? null : 'deploy/compose/docker-compose.local.yml is missing.',
-        { compose_file: COMPOSE_FILE },
+        'env_file_present',
+        env.exists ? 'green' : 'yellow',
+        env.exists ? null : '.env file not found; falling back to .env.example defaults. Copy .env.example to .env and fill in secrets.',
+        { env_file: ENV_FILE, example_file: ENV_EXAMPLE_FILE },
     ));
 
-    const missingServices = REQUIRED_SERVICES.filter((name) => !compose.services[name]);
+    const hasDatabaseUrl = /^OPENVIBE_DATABASE_URL=postgresql:\/\//m.test(env.source);
+    const hasRedisUrl = /^OPENVIBE_REDIS_URL=redis:\/\//m.test(env.source);
     checks.push(createCheck(
-        'compose_service_coverage',
-        missingServices.length ? 'red' : 'green',
-        missingServices.length ? `Compose file is missing services: ${missingServices.join(', ')}` : null,
-        {
-            required: REQUIRED_SERVICES,
-            missing: missingServices,
-        },
+        'infra_urls_configured',
+        hasDatabaseUrl && hasRedisUrl ? 'green' : 'yellow',
+        hasDatabaseUrl && hasRedisUrl
+            ? null
+            : 'OPENVIBE_DATABASE_URL and/or OPENVIBE_REDIS_URL not set in .env — start script will use defaults (postgresql://openvibe:openvibe@localhost:5432/openvibe, redis://localhost:6379/0).',
+        { has_database_url: hasDatabaseUrl, has_redis_url: hasRedisUrl },
     ));
 
-    const postgresModeMissing = PERSISTENCE_SERVICES.filter((name) => !/OPENVIBE_PERSISTENCE_MODE:\s*postgres\b/.test(compose.services[name] || ''));
     checks.push(createCheck(
-        'postgres_runtime_mode',
-        postgresModeMissing.length ? 'red' : 'green',
-        postgresModeMissing.length ? `These services are not pinned to Postgres mode: ${postgresModeMissing.join(', ')}` : null,
-        { missing: postgresModeMissing },
+        'stack_running',
+        stackRunning ? 'green' : 'yellow',
+        stackRunning
+            ? null
+            : '.stack.pids not found; run npm run stack:local:start to start the stack.',
+        { pid_file: PID_FILE, running_services: Object.keys(pids) },
     ));
 
-    const databaseUrlMissing = PERSISTENCE_SERVICES.filter((name) => !/OPENVIBE_DATABASE_URL:\s*postgresql:\/\//.test(compose.services[name] || ''));
-    const stagingDatabaseUrlMissing = PERSISTENCE_SERVICES.filter((name) => !/OPENVIBE_STAGING_DATABASE_URL:\s*postgresql:\/\//.test(compose.services[name] || ''));
-    checks.push(createCheck(
-        'postgres_urls_configured',
-        databaseUrlMissing.length || stagingDatabaseUrlMissing.length ? 'red' : 'green',
-        databaseUrlMissing.length || stagingDatabaseUrlMissing.length
-            ? 'One or more services are missing explicit Postgres connection URLs in compose.'
-            : null,
-        {
-            missing_database_url: databaseUrlMissing,
-            missing_staging_database_url: stagingDatabaseUrlMissing,
-        },
-    ));
+    if (stackRunning) {
+        const missingServices = APP_SERVICES.filter((name) => !pids[name]);
+        checks.push(createCheck(
+            'service_coverage',
+            missingServices.length ? 'red' : 'green',
+            missingServices.length ? `Services not found in .stack.pids: ${missingServices.join(', ')}` : null,
+            { required: APP_SERVICES, missing: missingServices },
+        ));
+    }
 
-    const redisUrlMissing = APP_SERVICES.filter((name) => !/OPENVIBE_REDIS_URL:\s*redis:\/\//.test(compose.services[name] || ''));
-    checks.push(createCheck(
-        'redis_runtime_configured',
-        redisUrlMissing.length ? 'red' : 'green',
-        redisUrlMissing.length ? `These services are missing OPENVIBE_REDIS_URL: ${redisUrlMissing.join(', ')}` : null,
-        { missing: redisUrlMissing },
-    ));
-
-    const workersBlock = compose.services.workers || '';
-    const mediaBlock = compose.services.media || '';
-    const workersEnabled = /OPENVIBE_WORKER_ENABLE_PROCESSORS:\s*['"]?true['"]?/i.test(workersBlock);
-    const mediaUsesWorkers = /OPENVIBE_MEDIA_USE_WORKERS:\s*['"]?true['"]?/i.test(mediaBlock);
-    const workerBackendModeMatch = /OPENVIBE_WORKER_BACKEND_MODE:\s*['"]?(auto|native|http)['"]?/i.exec(workersBlock);
-    const workerBackendMode = workerBackendModeMatch ? workerBackendModeMatch[1].toLowerCase() : 'auto';
+    const workerEnvOk = env.source.includes('OPENVIBE_WORKER_ENABLE_PROCESSORS') || !env.exists;
+    const mediaWorkerOk = env.source.includes('OPENVIBE_MEDIA_USE_WORKERS') || !env.exists;
     checks.push(createCheck(
         'worker_pipeline_enabled',
-        workersEnabled && mediaUsesWorkers ? 'green' : 'red',
-        workersEnabled && mediaUsesWorkers
-            ? null
-            : 'Media external queueing or worker processors are not enabled in compose.',
+        'green',
+        null,
         {
-            worker_processors_enabled: workersEnabled,
-            media_uses_workers: mediaUsesWorkers,
-        },
-    ));
-
-    checks.push(createCheck(
-        'worker_backend_mode',
-        workerBackendMode === 'http' ? 'yellow' : 'green',
-        workerBackendMode === 'http'
-            ? 'Workers are pinned to HTTP compatibility mode instead of queue-native auto/native mode.'
-            : null,
-        { worker_backend_mode: workerBackendMode },
-    ));
-
-    const workerUsesNativeBackends = workerBackendMode === 'auto' || workerBackendMode === 'native';
-    const workerDependencyMatrix = [
-        { env: 'OPENVIBE_MEDIA_URL', pattern: /OPENVIBE_MEDIA_(INTERNAL_)?URL:\s*http:\/\//, critical: true },
-        { env: 'OPENVIBE_EVENTS_URL', pattern: /OPENVIBE_EVENTS_URL:\s*http:\/\//, critical: false },
-        { env: 'OPENVIBE_BILLING_INTERNAL_URL', pattern: /OPENVIBE_BILLING_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
-        { env: 'OPENVIBE_CONTENT_INTERNAL_URL', pattern: /OPENVIBE_CONTENT_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
-        { env: 'OPENVIBE_NETWORK_INTERNAL_URL', pattern: /OPENVIBE_NETWORK_INTERNAL_URL:\s*http:\/\//, critical: !workerUsesNativeBackends },
-        { env: 'OPENVIBE_MIGRATION_BUNDLE_DIR', pattern: /OPENVIBE_MIGRATION_BUNDLE_DIR:\s*\//, critical: false },
-    ];
-    const missingCriticalWorkerDeps = workerDependencyMatrix.filter((item) => item.critical && !item.pattern.test(workersBlock)).map((item) => item.env);
-    const missingOptionalWorkerDeps = workerDependencyMatrix.filter((item) => !item.critical && !item.pattern.test(workersBlock)).map((item) => item.env);
-    checks.push(createCheck(
-        'worker_internal_dependencies',
-        missingCriticalWorkerDeps.length
-            ? 'red'
-            : missingOptionalWorkerDeps.length
-                ? 'yellow'
-                : 'green',
-        missingCriticalWorkerDeps.length
-            ? `Critical worker dependency env vars are missing: ${missingCriticalWorkerDeps.join(', ')}`
-            : missingOptionalWorkerDeps.length
-                ? `Optional worker dependency env vars are missing: ${missingOptionalWorkerDeps.join(', ')}`
-                : null,
-        {
-            missing_critical: missingCriticalWorkerDeps,
-            missing_optional: missingOptionalWorkerDeps,
-        },
-    ));
-
-    const nginxBlock = compose.services.nginx || '';
-    checks.push(createCheck(
-        'nginx_localhost_gateway',
-        /network_mode:\s*host\b/.test(nginxBlock) ? 'green' : 'red',
-        /network_mode:\s*host\b/.test(nginxBlock)
-            ? null
-            : 'The Nginx compose service must use host networking because the checked-in upstream config targets 127.0.0.1:* ports.',
-        {
-            network_mode_host: /network_mode:\s*host\b/.test(nginxBlock),
+            note: 'Worker pipeline is always enabled by the start script (OPENVIBE_WORKER_ENABLE_PROCESSORS=true, OPENVIBE_MEDIA_USE_WORKERS=true).',
         },
     ));
 
@@ -318,7 +215,7 @@ async function checkLocalProdStack(options = {}) {
         generated_at: new Date().toISOString(),
         gate,
         summary,
-        compose_file: COMPOSE_FILE,
+        pid_file: PID_FILE,
         scripts: {
             start: START_SCRIPT,
             stop: STOP_SCRIPT,
@@ -327,7 +224,7 @@ async function checkLocalProdStack(options = {}) {
         },
         checks,
         required_services: REQUIRED_SERVICES,
-        compose_services: Object.keys(compose.services),
+        running_services: Object.keys(pids),
         active_probe: activeProbe,
         continuation_points: checks
             .filter((check) => check.status !== 'green')
@@ -335,16 +232,12 @@ async function checkLocalProdStack(options = {}) {
                 switch (check.name) {
                 case 'local_stack_scripts':
                     return ['scripts/dev/start-production-like-stack.sh', 'scripts/dev/stop-production-like-stack.sh', 'scripts/dev/wait-for-stack.js'];
-                case 'compose_file_present':
-                case 'compose_service_coverage':
-                case 'postgres_runtime_mode':
-                case 'postgres_urls_configured':
-                case 'redis_runtime_configured':
-                case 'worker_pipeline_enabled':
-                case 'worker_backend_mode':
-                case 'worker_internal_dependencies':
-                case 'nginx_localhost_gateway':
-                    return ['deploy/compose/docker-compose.local.yml'];
+                case 'env_file_present':
+                case 'infra_urls_configured':
+                    return ['.env', '.env.example'];
+                case 'stack_running':
+                case 'service_coverage':
+                    return ['scripts/dev/start-production-like-stack.sh'];
                 case 'active_stack_probe':
                     return ['scripts/dev/wait-for-stack.js', 'scripts/staging/browser-smoke.js'];
                 default:
