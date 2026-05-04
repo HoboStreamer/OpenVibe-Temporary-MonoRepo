@@ -201,6 +201,13 @@ function createSocketRuntime(expressApp, options) {
                 redis_adapter_connected: !!(redisClient && redisClient.isOpen),
             };
         },
+        publishToRoom(namespace, room, eventName, payload) {
+            const nsp = io.of(namespace || '/');
+            nsp.to(room).emit(eventName || 'message', payload);
+        },
+        totalConnections() {
+            return namespaces.reduce((sum, namespace) => sum + io.of(namespace).sockets.size, 0);
+        },
     };
 }
 

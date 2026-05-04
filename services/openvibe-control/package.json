@@ -1,0 +1,21 @@
+{
+  "name": "@openvibe/control",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenVibe control panel — admin-only SSR dashboard for monitoring events, realtime connections, active streams, and community health.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@openvibe/runtime": "*",
+    "@openvibe/sdk": "*",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0"
+  }
+}

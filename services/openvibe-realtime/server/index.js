@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 
 const { createServiceRuntime } = require('@openvibe/runtime');
+const { requireInternalKey } = require('@openvibe/sdk/middleware');
 
 const config = require('./config');
 const { createEventBridge } = require('./event-bridge');
@@ -92,6 +93,91 @@ function buildApp() {
 
     app.get('/api/v1/realtime/bridge', (_req, res) => {
         res.json(eventBridge.summary());
+    });
+
+    app.get('/api/v1/realtime/stats', (_req, res) => {
+        const summary = socketRuntime.summary();
+        const bridge = eventBridge.summary();
+        res.json({
+            connections: {
+                total: socketRuntime.totalConnections(),
+                by_namespace: summary.namespaces,
+            },
+            bridge: {
+                mode: bridge.mode,
+                started: bridge.started,
+                topics_subscribed: bridge.topics_subscribed || 0,
+            },
+            redis: {
+                configured: summary.redis_adapter_configured,
+                connected: summary.redis_adapter_connected,
+            },
+        });
+    });
+
+    // ── SSE endpoint — lightweight alternative to Socket.IO ──
+    // Clients subscribe by passing ?topics= (comma-separated).
+    // Last-Event-ID header / query param enables reconnect without missed events.
+    const sseClients = new Map(); // id → { res, topics }
+    let sseIdCounter = 0;
+
+    app.get('/events', (req, res) => {
+        res.set({
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        });
+        res.flushHeaders();
+
+        const clientId = ++sseIdCounter;
+        const rawTopics = String(req.query.topics || '').trim();
+        const topics = rawTopics ? rawTopics.split(',').map((t) => t.trim()).filter(Boolean) : [];
+        sseClients.set(clientId, { res, topics });
+
+        // Send connected confirmation
+        res.write(`event: connected\ndata: ${JSON.stringify({ client_id: clientId, topics })}\n\n`);
+
+        // Heartbeat every 30s to prevent proxy timeouts
+        const heartbeat = setInterval(() => {
+            res.write(': heartbeat\n\n');
+        }, 30000);
+
+        req.on('close', () => {
+            clearInterval(heartbeat);
+            sseClients.delete(clientId);
+        });
+    });
+
+    // Internal endpoint: push a message to SSE clients and/or Socket.IO room
+    const internal = requireInternalKey(config.internalKey);
+    app.post('/internal/publish', internal, express.json({ limit: '64kb' }), (req, res) => {
+        const { namespace, room, event: eventName, payload, topics: targetTopics } = req.body || {};
+        if (!eventName) return res.status(400).json({ error: 'event required' });
+
+        let socketCount = 0;
+        if (room && socketRuntime) {
+            socketRuntime.publishToRoom(namespace || '/', room, eventName, payload || {});
+            socketCount = 1;
+        }
+
+        // Fan out to SSE subscribers by topic
+        let sseCount = 0;
+        const topicList = Array.isArray(targetTopics) ? targetTopics : (targetTopics ? [targetTopics] : []);
+        const data = JSON.stringify({ event: eventName, room: room || null, payload: payload || {}, at: new Date().toISOString() });
+        for (const [, client] of sseClients) {
+            const matches = !topicList.length || topicList.some((t) => !client.topics.length || client.topics.includes(t));
+            if (matches) {
+                try {
+                    client.res.write(`event: ${eventName}\ndata: ${data}\n\n`);
+                    sseCount += 1;
+                } catch {
+                    // client disconnected mid-write, will be cleaned up on req.close
+                }
+            }
+        }
+
+        res.json({ ok: true, socket_targets: socketCount, sse_clients: sseCount });
     });
 
     app.use((err, _req, res, _next) => {

@@ -250,6 +250,67 @@ function replayEvent(eventId) {
     return { event: evt, enqueued, fanout: fanoutResult };
 }
 
+// ── topics registry ───────────────────────────────────────────
+function listTopics() {
+    const { TOPIC_LIST } = require('@openvibe/contracts/topics');
+    const sql = db.get();
+    // Canonical topics from contracts
+    const canonical = TOPIC_LIST.map((topic) => ({ topic, canonical: true, event_count: 0 }));
+    // Observed topics from the event log
+    const observed = sql.prepare(
+        `SELECT topic, COUNT(*) as event_count FROM events GROUP BY topic ORDER BY event_count DESC`
+    ).all();
+    const observedMap = Object.fromEntries(observed.map((row) => [row.topic, row.event_count]));
+    // Merge counts into canonical list, then append any extra observed topics
+    const result = canonical.map((entry) => ({
+        ...entry,
+        event_count: observedMap[entry.topic] || 0,
+    }));
+    for (const row of observed) {
+        if (!TOPIC_LIST.includes(row.topic)) {
+            result.push({ topic: row.topic, canonical: false, event_count: row.event_count });
+        }
+    }
+    return result;
+}
+
+// ── delivery status for an event ─────────────────────────────
+function getEventDeliveries(eventId) {
+    const sql = db.get();
+    return sql.prepare(
+        `SELECT dq.event_id, dq.subscription_id, dq.state, dq.attempts,
+                dq.next_attempt_at, dq.last_error, dq.created_at, dq.updated_at,
+                s.consumer, s.topic, s.delivery
+         FROM delivery_queue dq
+         LEFT JOIN subscriptions s ON s.subscription_id = dq.subscription_id
+         WHERE dq.event_id = ?
+         ORDER BY dq.created_at ASC`
+    ).all(eventId);
+}
+
+// ── bulk replay by query ──────────────────────────────────────
+function replayByQuery({ topic, since, eventType, limit = 100 } = {}) {
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+    const sql = db.get();
+    const where = [];
+    const args = [];
+    if (topic)     { where.push('topic = ?');      args.push(String(topic)); }
+    if (eventType) { where.push('event_type = ?'); args.push(String(eventType)); }
+    if (since)     { where.push('timestamp >= ?'); args.push(String(since)); }
+    const rows = sql.prepare(
+        `SELECT * FROM events ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id ASC LIMIT ?`
+    ).all(...args, cap);
+    const events = rows.map(hydrateEventRow);
+    let totalEnqueued = 0;
+    for (const evt of events) {
+        const enqueued = enqueueForTopic(evt.topic, evt.event_id, evt.event_type);
+        fanoutEvent(evt.topic, evt);
+        totalEnqueued += enqueued;
+    }
+    console.log(`[Bus] bulk replay count=${events.length} total_enqueued=${totalEnqueued}`);
+    return { replayed: events.length, enqueued: totalEnqueued };
+}
+
 module.exports = {
     configureFanout,
     getFanoutLag,
@@ -257,6 +318,9 @@ module.exports = {
     persistEvent,
     getEventById,
     listEvents,
+    listTopics,
+    getEventDeliveries,
+    replayByQuery,
     createSubscription,
     listSubscriptions,
     getSubscription,

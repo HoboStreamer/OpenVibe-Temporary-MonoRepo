@@ -23,6 +23,10 @@ function buildRouter(internalKey) {
     });
 
     // ── inspect ──────────────────────────────────────────────
+    r.get('/topics', (_req, res) => {
+        res.json({ items: bus.listTopics() });
+    });
+
     r.get('/events', (req, res) => {
         const items = bus.listEvents({
             topic: req.query.topic,
@@ -39,6 +43,12 @@ function buildRouter(internalKey) {
         res.json(evt);
     });
 
+    r.get('/events/:eventId/deliveries', (req, res) => {
+        const evt = bus.getEventById(req.params.eventId);
+        if (!evt) return res.status(404).json({ error: 'not found' });
+        res.json({ items: bus.getEventDeliveries(req.params.eventId) });
+    });
+
     r.post('/events/:eventId/replay', internal, (req, res) => {
         try {
             const result = bus.replayEvent(req.params.eventId);
@@ -46,6 +56,16 @@ function buildRouter(internalKey) {
         } catch (err) {
             const status = err.code === 'ENOTFOUND' ? 404 : 500;
             res.status(status).json({ error: err.message });
+        }
+    });
+
+    r.post('/replay', internal, (req, res) => {
+        try {
+            const { topic, since, event_type, limit } = req.body || {};
+            const result = bus.replayByQuery({ topic, since, eventType: event_type, limit });
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 
