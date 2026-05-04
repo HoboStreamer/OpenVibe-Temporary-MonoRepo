@@ -62,6 +62,84 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     <style>
+        /* ─── OpenVibe shared nav variables (subset of openvibe.css) ─── */
+        :root {
+            --ov-bg: #060917;
+            --ov-text: #eef4ff;
+            --ov-text-dim: #a7b5d2;
+            --ov-accent: #8b5cf6;
+            --ov-accent-2: #22d3ee;
+            --ov-border: rgba(148, 163, 184, 0.14);
+            --ov-max: 1200px;
+        }
+        /* ─── Navbar (mirrors openvibe.css .ov-nav block) ─── */
+        .ov-nav {
+            position: sticky; top: 0; z-index: 10000;
+            background: rgba(6, 9, 23, 0.82);
+            backdrop-filter: blur(18px) saturate(140%);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 10px 30px rgba(2,8,23,0.2);
+        }
+        .ov-nav-inner {
+            max-width: var(--ov-max); margin: 0 auto;
+            padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem;
+        }
+        .ov-brand {
+            display: inline-flex; align-items: center; gap: 0.8rem;
+            color: var(--ov-text); font-weight: 700; flex-shrink: 0; text-decoration: none;
+        }
+        .ov-brand-mark {
+            width: 2.4rem; height: 2.4rem; border-radius: 12px;
+            display: grid; place-items: center;
+            background: linear-gradient(135deg, var(--ov-accent), #4f46e5 60%, var(--ov-accent-2));
+            box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+            color: white; font-weight: 800; font-size: 0.85rem;
+        }
+        .ov-brand-copy { display: flex; flex-direction: column; min-width: 0; }
+        .ov-brand-copy b { font-size: 1rem; letter-spacing: 0.02em; }
+        .ov-brand-copy span { color: var(--ov-text-dim); font-size: 0.78rem; white-space: nowrap; }
+        .ov-nav-links {
+            display: flex; gap: 0.15rem; flex-wrap: nowrap;
+            margin-left: auto; align-items: center; flex-shrink: 1; min-width: 0; overflow: hidden;
+        }
+        .ov-nav-links a {
+            color: var(--ov-text-dim); padding: 0.4rem 0.6rem; border-radius: 999px;
+            border: 1px solid transparent; font-size: 0.85rem; white-space: nowrap;
+            transition: background .2s ease, color .2s ease, border-color .2s ease; text-decoration: none;
+        }
+        .ov-nav-links a:hover, .ov-nav-links a[data-active="true"] {
+            color: white; background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08);
+        }
+        .ov-nav-session { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
+        .ov-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+            padding: 0.5rem 0.9rem; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05);
+            color: var(--ov-text); font-weight: 700; cursor: pointer; font-size: 0.85rem;
+            text-decoration: none; white-space: nowrap; font-family: inherit;
+            transition: background .2s ease, border-color .2s ease;
+        }
+        .ov-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
+        .ov-btn-primary {
+            color: white; border-color: transparent;
+            background: linear-gradient(135deg, var(--ov-accent), #4f46e5 60%, var(--ov-accent-2));
+            box-shadow: 0 8px 24px rgba(99,102,241,0.3);
+        }
+        .ov-btn-ghost { background: rgba(255,255,255,0.03); color: var(--ov-text-dim); }
+        .ov-chip {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            border-radius: 999px; padding: 0.4rem 0.7rem; font-size: 0.76rem;
+            border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05);
+            color: rgba(230,238,255,0.9);
+        }
+        .ov-chip.ok { color: #bbf7d0; border-color: rgba(52,211,153,0.22); background: rgba(52,211,153,0.12); }
+        .ov-chip.soft { color: #a5f3fc; border-color: rgba(34,211,238,0.24); background: rgba(34,211,238,0.12); }
+        @media (max-width: 860px) {
+            .ov-nav-inner { flex-wrap: wrap; justify-content: space-between; }
+            .ov-nav-links { margin-left: 0; order: 3; width: 100%; justify-content: center; }
+            .ov-nav-session { margin-left: auto; }
+        }
+
         :root {
             --bg-primary: #0b0c12;
             --bg-secondary: #12131c;
@@ -559,6 +637,7 @@
     </style>
 </head>
 <body>
+    <div id="nav-mount"></div>
     <div class="bg-glow"></div>
 
     <div class="page-content">
@@ -887,6 +966,7 @@
         </div>
     </div>
 
+    <script src="/assets/openvibe.js" defer></script>
     <script>
         /* ─── Auth ─── */
         function _getCookieToken() {
@@ -1177,6 +1257,7 @@
         (async () => {
             try {
                 await _bootstrapFromCookie();
+                if (window.OpenVibe) await OpenVibe.renderChrome('tools').catch(() => {});
                 const user = await fetchCurrentUser();
                 setSignedIn(user);
             } catch {
