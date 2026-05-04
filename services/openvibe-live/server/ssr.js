@@ -343,6 +343,70 @@ function _shellStyles() {
             background: linear-gradient(135deg, rgba(139, 92, 246, 0.88), rgba(34, 211, 238, 0.72));
             border-color: transparent;
         }
+        .hero-cta-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .btn-golive {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.85rem 1.5rem;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 1rem;
+            letter-spacing: -0.01em;
+            background: linear-gradient(135deg, #dc2626, #f97316);
+            border: none;
+            color: white;
+            box-shadow: 0 0 24px rgba(220, 38, 38, 0.45);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            position: relative;
+        }
+        .btn-golive:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 36px rgba(220, 38, 38, 0.65);
+        }
+        .btn-golive-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse-dot 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.7); }
+        }
+        .btn-restream {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.85rem 1.5rem;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            font-family: ui-monospace, 'Cascadia Code', monospace;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            color: #67e8f9;
+            transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+        }
+        .btn-restream:hover {
+            transform: translateY(-2px);
+            background: rgba(34, 211, 238, 0.08);
+            border-color: rgba(34, 211, 238, 0.6);
+        }
+        .btn-restream-icon {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        .eye-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
         .nav-account {
             justify-content: flex-end;
             min-width: 0;
@@ -482,7 +546,7 @@ function _shellStyles() {
         .media-thumb {
             position: relative;
             overflow: hidden;
-            min-height: 220px;
+            aspect-ratio: 16 / 9;
             background:
                 radial-gradient(circle at top left, rgba(139, 92, 246, 0.42), transparent 40%),
                 linear-gradient(135deg, rgba(14, 23, 46, 0.96), rgba(8, 13, 28, 0.96));
@@ -490,8 +554,22 @@ function _shellStyles() {
         .media-thumb img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            transition: transform 0.3s ease;
         }
+        .media-thumb:hover img { transform: scale(1.04); }
+        .media-thumb-play {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .media-thumb:hover .media-thumb-play { opacity: 1; }
+        a.media-thumb { display: block; text-decoration: none; }
         .media-fallback-copy {
             position: absolute;
             inset: 0;
@@ -548,6 +626,63 @@ function _shellStyles() {
             .topbar-inner { flex-wrap: wrap; justify-content: center; }
             .nav-links { justify-content: center; }
             .nav-account { justify-content: center; width: 100%; }
+        }
+        .footer-links-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+        .footer-links-heading {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 700;
+            color: var(--muted);
+            margin-bottom: 0.6rem;
+        }
+        .golive-auth-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            max-width: 560px;
+        }
+        .golive-auth-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            padding: 2rem 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            text-decoration: none;
+            color: inherit;
+            text-align: center;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .golive-auth-card:hover {
+            background: rgba(139,92,246,0.12);
+            border-color: rgba(139,92,246,0.4);
+        }
+        .golive-auth-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(139,92,246,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a78bfa;
+        }
+        .golive-auth-label {
+            font-size: 1rem;
+            font-weight: 700;
+            color: white;
+        }
+        .golive-auth-sub {
+            font-size: 0.82rem;
+            color: var(--muted);
         }
     </style>`;
 }
@@ -824,6 +959,19 @@ function _shellScript() {
             gap: 0.75rem;
             flex-wrap: wrap;
             align-items: center;
+        }
+        .footer-links-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+        .footer-links-heading {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 700;
+            color: var(--muted);
+            margin-bottom: 0.6rem;
         }
         .data-points {
             display: grid;
@@ -1358,71 +1506,46 @@ function renderFooter() {
                 <div class="footer-grid">
                     <div>
                         <div class="eyebrow">OpenVibe Live</div>
-                        <h2 class="footer-title" style="margin:0 0 0.55rem">Watch live, rewind fast, clip the good parts, and keep the creator route intact.</h2>
-                        <p class="footer-copy">OpenVibe Live is being built to feel more like old-school creator web: clear channel routes, obvious community links, visible reporting paths, and a platform that does not hide how it works.</p>
-                        <div class="data-points" style="margin-top:1rem;">
-                            <div class="data-point">
-                                <div class="data-point-label">Model</div>
-                                <div class="data-point-value">Open source</div>
-                            </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Direction</div>
-                                <div class="data-point-value">Not-for-profit minded</div>
-                            </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Contact</div>
-                                <div class="data-point-value"><a class="link-inline" href="mailto:hello@openvibe.live">hello@openvibe.live</a></div>
+                        <p class="footer-copy" style="margin-top:0.5rem;">A free, open source streaming platform with no ads, no algorithms, and no bullshit. Just streams, clips, and community.</p>
+                        <p class="footer-copy" style="margin-top:0.75rem;"><a class="link-inline" href="mailto:hello@openvibe.live">hello@openvibe.live</a></p>
+                    </div>
+                    <div class="footer-links-grid">
+                        <div>
+                            <div class="footer-links-heading">Watch</div>
+                            <div class="footer-links is-column">
+                                <a href="/">Home</a>
+                                <a href="/channels">Channels</a>
+                                <a href="/vods">VODs</a>
+                                <a href="/clips">Clips</a>
                             </div>
                         </div>
-                    </div>
-                    <div>
-                        <div class="data-points">
-                            <div class="data-point">
-                                <div class="data-point-label">Explore</div>
-                                <div class="footer-links is-column">
-                                    <a href="/">Home</a>
-                                    <a href="/channels">Channels</a>
-                                    <a href="/vods">VODs</a>
-                                    <a href="/clips">Clips</a>
-                                    <a href="/go-live">Go Live</a>
-                                    <a href="/updates">Updates</a>
-                                </div>
+                        <div>
+                            <div class="footer-links-heading">Create</div>
+                            <div class="footer-links is-column">
+                                <a href="/go-live">Go live</a>
+                                <a href="${LIVE_NETWORK_URLS.restream}">Restream</a>
+                                <a href="${LIVE_NETWORK_URLS.chat}">Chat</a>
+                                <a href="${LIVE_NETWORK_URLS.community}">Community</a>
                             </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Network</div>
-                                <div class="footer-links is-column">
-                                    <a href="${LIVE_NETWORK_URLS.restream}">OpenRe.Stream</a>
-                                    <a href="${LIVE_NETWORK_URLS.chat}">OpenVibe Chat</a>
-                                    <a href="${LIVE_NETWORK_URLS.community}">OpenVibe Community</a>
-                                    <a href="${LIVE_NETWORK_URLS.network}">OpenVibe Network</a>
-                                </div>
-                            </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Project</div>
-                                <div class="footer-links is-column">
-                                    <a href="https://github.com/openvibe">GitHub</a>
-                                    <a href="/tos">Terms</a>
-                                    <a href="/dmca">DMCA</a>
-                                    <a href="mailto:dmca@openvibe.live">dmca@openvibe.live</a>
-                                    <a href="/health">Health</a>
-                                </div>
+                        </div>
+                        <div>
+                            <div class="footer-links-heading">About</div>
+                            <div class="footer-links is-column">
+                                <a href="https://github.com/openvibe">GitHub</a>
+                                <a href="/tos">Terms</a>
+                                <a href="/dmca">DMCA</a>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="footer-legal">
-                    <p class="footer-copy" style="margin:0">OpenVibe Live shows what the network can actually prove right now: live sessions, recent activity, creator routes, replay links, and the nearby chat and community surfaces that already exist.</p>
-                    <div class="footer-legal-links">
-                        <span class="pill soft">Open source & community-run</span>
-                        <span class="pill primary">Canonical @username routes</span>
-                        <span class="pill warn">DMCA-ready reporting path</span>
-                    </div>
+                    <span class="footer-copy" style="margin:0;font-size:0.82rem;">© ${new Date().getFullYear()} OpenVibe · Open source · Free to use</span>
                 </div>
             </section>
         </footer>`;
 }
 
-function renderPage({ title, description, canonical, ogType, ogImage, activeNav, bodyHtml, baseUrl }) {
+function renderPage({ title, description, canonical, ogType, ogImage, activeNav, bodyHtml, baseUrl, extraStyles, extraScripts }) {
     const signInHref = `/auth/login?return_to=${encodeURIComponent(canonical || `${baseUrl || ''}/`)}`;
     return `<!doctype html>
         <html lang="en">
@@ -1451,6 +1574,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
                     </div>
                 </div>
             </header>
+            ${extraStyles ? `<style>${extraStyles}</style>` : ''}
             <main class="page-shell">
                 ${bodyHtml}
             </main>
@@ -1459,6 +1583,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             <script src="/assets/live-dashboard-local.js?v=20260504-1"></script>
             <script src="/js/realtime.js?v=20260507-1"></script>
             ${_shellScript()}
+            ${extraScripts ? `<script>${extraScripts}</script>` : ''}
         </body>
         </html>`;
 }
@@ -1467,17 +1592,22 @@ function renderPill(label, tone) {
     return `<span class="pill ${escapeHtml(tone || '')}">${escapeHtml(label)}</span>`;
 }
 
-function renderMediaThumb({ url, title, eyebrow, subtitle, initials, baseUrl }) {
+function renderMediaThumb({ url, title, eyebrow, subtitle, initials, baseUrl, href }) {
     const imageUrl = canRenderImageUrl(url) ? url : null;
-    return `
-        <div class="media-thumb ${imageUrl ? 'has-image' : ''}">
-            ${imageUrl ? `<img src="${escapeHtml(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeHtml(title || subtitle || 'OpenVibe Live media')}" loading="lazy" onerror="if(this.parentElement){this.parentElement.classList.remove('has-image');} this.remove();">` : ''}
-            <div class="media-fallback-copy">
-                <span class="media-kicker">${escapeHtml(eyebrow || 'OpenVibe Live')}</span>
-                <strong>${escapeHtml(title || 'Untitled broadcast')}</strong>
-                <span>${escapeHtml(subtitle || initials || 'Live discovery')}</span>
-            </div>
+    const inner = `
+        ${imageUrl ? `<img src="${escapeHtml(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeHtml(title || subtitle || 'OpenVibe Live media')}" loading="lazy" onerror="if(this.parentElement){this.parentElement.classList.remove('has-image');} this.remove();">` : ''}
+        <div class="media-fallback-copy">
+            <span class="media-kicker">${escapeHtml(eyebrow || 'OpenVibe Live')}</span>
+            <strong>${escapeHtml(title || 'Untitled broadcast')}</strong>
+            <span>${escapeHtml(subtitle || initials || 'Live discovery')}</span>
+        </div>
+        <div class="media-thumb-play" aria-hidden="true">
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="22" fill="rgba(0,0,0,0.55)"/><polygon points="17,13 35,22 17,31" fill="white"/></svg>
         </div>`;
+    if (href) {
+        return `<a class="media-thumb ${imageUrl ? 'has-image' : ''}" href="${escapeHtml(href)}" tabindex="-1" aria-hidden="true">${inner}</a>`;
+    }
+    return `<div class="media-thumb ${imageUrl ? 'has-image' : ''}">${inner}</div>`;
 }
 
 function renderStreamCard(stream, channel, baseUrl, options) {
@@ -1491,9 +1621,11 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         : (isReplayMedia
             ? renderPill(`${formatCompactNumber(stream.view_count || 0)} views`, 'soft')
             : renderPill(`Peak ${formatCompactNumber(stream.peak_viewers || 0)}`, 'soft'));
+    const viewCount = stream.is_live ? (stream.viewer_count || 0) : (stream.view_count || 0);
+    const eyePill = `<span class="pill soft eye-pill"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${escapeHtml(formatCompactNumber(viewCount))}</span>`;
     const tags = [
-        opts.badge ? `<span class="pill ${escapeHtml(opts.badgeTone || 'primary')}" data-stream-status-badge>${escapeHtml(opts.badge)}</span>` : '',
-        audiencePill,
+        opts.badge && !opts.hideBadge ? `<span class="pill ${escapeHtml(opts.badgeTone || 'primary')}" data-stream-status-badge>${escapeHtml(opts.badge)}</span>` : '',
+        eyePill,
         stream.category ? renderPill(stream.category, 'muted') : '',
     ].filter(Boolean).join('');
     const summary = stream.summary || (stream.is_live
@@ -1522,7 +1654,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         : (stream.started_at ? `<span title="${escapeHtml(formatDateTime(stream.started_at))}">${escapeHtml(formatShortDate(stream.started_at))}</span>` : ''));
     const ctaLabel = stream.cta_label || (isReplayMedia ? `Watch ${stream.kind} →` : 'Watch →');
     return `
-        <article class="glass-card is-inline" data-reveal data-stream-id="${escapeHtml(String(stream.id || ''))}" data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
+        <article class="glass-card is-inline" data-reveal data-stream-id="${escapeHtml(String(stream.id || ''))}" data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}" data-views="${escapeHtml(String(viewCount))}" data-date="${escapeHtml(stream.created_at || stream.updated_at || stream.started_at || '')}">
             ${renderMediaThumb({
                 url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
                 title: stream.title || 'Untitled stream',
@@ -1530,6 +1662,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
                 subtitle: channelName,
                 initials: initialsFrom(channelName),
                 baseUrl,
+                href,
             })}
             <div class="pill-row">${tags}</div>
             <a class="card-link" href="${href}"><h3 class="card-title">${escapeHtml(stream.title || 'Untitled stream')}</h3></a>
@@ -1985,27 +2118,19 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
     });
 }
 
-function renderMediaDetailPage({ item, channel, baseUrl }) {
+function renderMediaDetailPage({ item, channel, moreByCreator, baseUrl }) {
     const kind = item && item.kind === 'clip' ? 'clip' : 'vod';
     const kindLabel = kind === 'clip' ? 'Clip' : 'VOD';
     const slug = normalizeCreatorSlug(item.channel_slug || (channel && channel.slug));
     const channelName = item.channel_name || (channel && (channel.display_name || channel.slug)) || slug || 'Creator';
-    const title = `${item.title || `Untitled ${kindLabel}` } — ${channelName} — openvibe.live`;
-    const description = item.description
-        || `${kindLabel} from ${channelName} on openvibe.live, backed by canonical OpenVibe media storage.`;
+    const title = `${item.title || `Untitled ${kindLabel}`} — ${channelName} — openvibe.live`;
+    const description = item.description || `${kindLabel} by ${channelName} on openvibe.live`;
     const canonicalId = encodeURIComponent(item.legacy_id || item.id);
     const canonical = `${baseUrl}/${kind}/${canonicalId}`;
     const ogImage = absoluteUrl(item.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
-    const playbackHref = item.player_playback_url || item.playback_url || null;
-    const playbackSummary = item.playback_ready
-        ? (item.playback_note || 'This media object is already staged and can be played directly through the canonical OpenVibe media service.')
-        : 'The metadata is present, but the backing bytes or playback state are still being finalized. The page stays honest instead of pretending the file is ready.';
-    const playbackHeroCopy = item.playback_ready
-        ? (item.playback_mode === 'file-direct-oversize'
-            ? 'Playback is ready through direct OpenVibe file delivery.'
-            : 'Playback is ready through openvibe.media.')
-        : `Playback status is currently ${labelizeKey(item.status || 'staged')}.`;
-    const playbackStage = item.playback_ready && item.playback_url
+    const backHref = `/${kind === 'clip' ? 'clips' : 'vods'}`;
+
+    const player = item.playback_ready && item.playback_url
         ? renderCustomMediaPlayer({
             title: item.title || `Untitled ${kindLabel}`,
             playbackUrl: item.playback_url,
@@ -2021,57 +2146,50 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
             initials: initialsFrom(channelName),
             baseUrl,
         });
+
+    const moreCardsHtml = (moreByCreator || []).map((v) => {
+        const vHref = `/${kind}/${encodeURIComponent(v.legacy_id || v.id)}`;
+        const vThumb = canRenderImageUrl(v.thumbnail_url) ? absoluteUrl(v.thumbnail_url, baseUrl) : null;
+        return `
+        <a class="more-card" href="${escapeHtml(vHref)}">
+            <div class="more-card-thumb ${vThumb ? 'has-image' : ''}">
+                ${vThumb ? `<img src="${escapeHtml(vThumb)}" alt="${escapeHtml(v.title || 'VOD')}" loading="lazy">` : `<span>${escapeHtml(initialsFrom(channelName))}</span>`}
+                <div class="media-thumb-play" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="22" fill="rgba(0,0,0,0.55)"/><polygon points="17,13 35,22 17,31" fill="white"/></svg></div>
+            </div>
+            <div class="more-card-title">${escapeHtml(v.title || 'Untitled')}</div>
+            <div class="more-card-meta">${v.duration_seconds ? escapeHtml(formatDurationSeconds(v.duration_seconds)) : ''}</div>
+        </a>`;
+    }).join('');
+
     const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">Canonical ${escapeHtml(kindLabel)}</div>
-                <h1 class="hero-heading" style="max-width:12ch"><span class="hero-gradient">${escapeHtml(item.title || `Untitled ${kindLabel}`)}</span></h1>
-                <p>From ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(playbackHeroCopy)}</p>
-                <div class="hero-actions">
-                    ${slug && slug !== 'unknown' ? `<a class="button" href="${channelPath(slug)}">Open creator channel</a>` : `<a class="button" href="/channels">Browse creators</a>`}
-                    <a class="button-secondary" href="/${kind === 'clip' ? 'clips' : 'vods'}${slug && slug !== 'unknown' ? `?channel=${encodeURIComponent(slug)}` : ''}">Browse more ${escapeHtml(kind === 'clip' ? 'clips' : 'VODs')}</a>
-                    <a class="button-ghost" href="/">Back to live home</a>
+        <div class="vod-back-row">
+            <a class="vod-back-btn" href="${escapeHtml(backHref)}">← Back to ${kind === 'clip' ? 'Clips' : 'VODs'}</a>
+        </div>
+
+        <section class="section-panel vod-player-section">
+            ${player}
+            <div class="vod-meta-row">
+                <div>
+                    <h1 class="vod-title">${escapeHtml(item.title || `Untitled ${kindLabel}`)}</h1>
+                    <div class="vod-meta-sub">
+                        ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">@${escapeHtml(slug)}</a>` : escapeHtml(channelName)}
+                        ${item.category ? ` · ${renderPill(item.category, 'muted')}` : ''}
+                    </div>
+                </div>
+                <div class="vod-stats">
+                    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${escapeHtml(formatNumber(item.view_count || 0))}</span>
+                    ${item.duration_seconds ? `<span>${escapeHtml(formatDurationSeconds(item.duration_seconds))}</span>` : ''}
+                    <span>${escapeHtml(formatShortDate(item.created_at || item.updated_at))}</span>
                 </div>
             </div>
         </section>
 
+        ${moreCardsHtml ? `
         <section class="section-panel">
-            <div class="split-grid">
-                <article class="glass-card media-stage" data-reveal>
-                    ${playbackStage}
-                    <div class="pill-row">
-                        ${renderPill(kindLabel, kind === 'clip' ? 'primary' : 'success')}
-                        ${renderPill(item.playback_ready ? 'Playback ready' : labelizeKey(item.status || 'staged'), item.playback_ready ? 'success' : 'warn')}
-                        ${item.category ? renderPill(item.category, 'muted') : ''}
-                        ${item.playback_mode === 'file-direct-oversize' ? renderPill('Direct file delivery', 'warn') : ''}
-                        ${item.source === 'hobostreamer' ? renderPill('Migrated from HoboStreamer', 'warn') : renderPill('Native OpenVibe media', 'soft')}
-                    </div>
-                    <p class="card-body">${escapeHtml(playbackSummary)}</p>
-                </article>
-                <aside class="list-stack">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Media details</div>
-                        <div class="data-points">
-                            <div class="data-point"><div class="data-point-label">Views</div><div class="data-point-value">${escapeHtml(formatNumber(item.view_count || 0))}</div></div>
-                            <div class="data-point"><div class="data-point-label">Duration</div><div class="data-point-value">${escapeHtml(item.duration_seconds ? formatDurationSeconds(item.duration_seconds) : 'Unknown')}</div></div>
-                            <div class="data-point"><div class="data-point-label">Status</div><div class="data-point-value">${escapeHtml(labelizeKey(item.status || 'staged'))}</div></div>
-                            <div class="data-point"><div class="data-point-label">Created</div><div class="data-point-value">${escapeHtml(formatDateTime(item.created_at || item.updated_at))}</div></div>
-                        </div>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Canonical links</div>
-                        <ul class="flow-list">
-                            <li>Media ID: <code>${escapeHtml(item.id)}</code></li>
-                            <li>Route ID: <code>${escapeHtml(item.legacy_id || item.id)}</code></li>
-                            <li>Creator route: ${slug && slug !== 'unknown' ? `<a class="link-inline" href="${channelPath(slug)}">@${escapeHtml(slug)}</a>` : 'unbound'}</li>
-                            <li>Player source: ${item.playback_ready && playbackHref ? `<a class="link-inline" href="${escapeHtml(playbackHref)}">openvibe.media playback</a>` : 'not ready yet'}</li>
-                            ${item.playback_api_url ? `<li>Playback API: ${item.playback_api_ready ? `<a class="link-inline" href="${escapeHtml(item.playback_api_url)}">redirect-enabled playback</a>` : 'size-limited or not yet ready for redirect playback'}</li>` : ''}
-                            ${item.playback_mime_type ? `<li>Detected type: <code>${escapeHtml(item.playback_mime_type)}</code></li>` : ''}
-                        </ul>
-                    </article>
-                </aside>
-            </div>
-        </section>`;
+            <h2 class="section-title" style="margin-bottom:1rem;">More by ${escapeHtml(channelName)}</h2>
+            <div class="more-slider">${moreCardsHtml}</div>
+        </section>` : ''}`;
+
     return renderPage({
         title,
         description,
@@ -2081,6 +2199,64 @@ function renderMediaDetailPage({ item, channel, baseUrl }) {
         activeNav: kind === 'clip' ? 'clips' : 'vods',
         bodyHtml: pageContent,
         baseUrl,
+        extraStyles: `
+        .vod-back-row { padding: 0.75rem 0; }
+        .vod-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--muted);
+            transition: color 0.15s;
+        }
+        .vod-back-btn:hover { color: white; }
+        .vod-player-section { padding: 0; overflow: hidden; }
+        .vod-player-section .ov-media-player,
+        .vod-player-section .media-thumb { border-radius: var(--radius) var(--radius) 0 0; }
+        .vod-meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem 1.2rem;
+            flex-wrap: wrap;
+        }
+        .vod-title { margin: 0 0 0.4rem; font-size: clamp(1.1rem, 3vw, 1.5rem); letter-spacing: -0.02em; }
+        .vod-meta-sub { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; color: var(--muted); font-size: 0.9rem; }
+        .vod-stats { display: flex; gap: 1rem; align-items: center; color: var(--muted); font-size: 0.88rem; white-space: nowrap; flex-wrap: wrap; }
+        .more-slider {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 0.5rem;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.12) transparent;
+        }
+        .more-card {
+            flex: 0 0 200px;
+            scroll-snap-align: start;
+            text-decoration: none;
+            color: inherit;
+        }
+        .more-card-thumb {
+            aspect-ratio: 16/9;
+            border-radius: 10px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(14,23,46,0.96), rgba(8,13,28,0.96));
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+        .more-card-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
+        .more-card:hover .more-card-thumb img { transform: scale(1.05); }
+        .more-card:hover .media-thumb-play { opacity: 1; }
+        .more-card-thumb span { color: var(--muted); font-size: 1.2rem; font-weight: 700; }
+        .more-card-title { font-size: 0.88rem; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .more-card-meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }`,
     });
 }
 
@@ -2226,81 +2402,50 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                 <div class="eyebrow">OpenVibe Live</div>
                 <h1 class="hero-heading">Watch live, share clips, and <span class="hero-gradient">never lose your route.</span></h1>
                 <p>A live streaming home that keeps your channel, VODs, and community all at the same @handle — no platform churn required.</p>
-                <div class="form-actions" style="margin-top:1.1rem;">
-                    <a class="button" href="/go-live">Go live</a>
-                    <a class="button-secondary" href="/channels">Browse channels</a>
-                    <a class="button-ghost" href="${LIVE_NETWORK_URLS.restream}">Restream control room</a>
-                </div>
             </div>
-        </section>
-
-        ${liveNowHtml ? `
-        <section class="section-panel">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Live now</h2>
-                    <p class="section-subtitle">${liveCount} channel${liveCount === 1 ? '' : 's'} broadcasting right now.</p>
-                </div>
-                <a class="section-link" href="/channels">All channels →</a>
-            </div>
-            <div class="search-bar">
-                <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter streams, VODs, clips" data-filter-input="home-media" aria-label="Filter home media">
-                ${categoryChips}
-            </div>
-            <div class="card-grid" data-live-now-grid>${liveNowHtml}</div>
-        </section>
-        ` : `
-        <section class="section-panel">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Live now</h2>
-                    <p class="section-subtitle">Nobody is broadcasting at the moment.</p>
-                </div>
-                <a class="section-link" href="/go-live">Go live →</a>
-            </div>
-            <div class="search-bar">
-                <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter VODs and clips" data-filter-input="home-media" aria-label="Filter home media">
-                ${categoryChips}
-            </div>
-        </section>
-        `}
-
-        <section class="section-panel">
-            <div class="data-points">
+            <div class="data-points" style="margin-top:1.5rem;">
                 <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value" data-live-count>${escapeHtml(String(liveCount))}</div></div>
                 <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber(channelCount))}</div></div>
-                ${totalViewers ? `<div class="data-point"><div class="data-point-label">Watching</div><div class="data-point-value">${escapeHtml(formatCompactNumber(totalViewers))}</div></div>` : ''}
-                ${peakViewers ? `<div class="data-point"><div class="data-point-label">Peak viewers</div><div class="data-point-value">${escapeHtml(formatCompactNumber(peakViewers))}</div></div>` : ''}
                 <div class="data-point"><div class="data-point-label">VODs</div><div class="data-point-value">${escapeHtml(formatNumber(vodCount))}</div></div>
                 <div class="data-point"><div class="data-point-label">Clips</div><div class="data-point-value">${escapeHtml(formatNumber(clipCount))}</div></div>
                 ${totalStreams ? `<div class="data-point"><div class="data-point-label">Total streams</div><div class="data-point-value">${escapeHtml(formatNumber(totalStreams))}</div></div>` : ''}
                 ${streamTime ? `<div class="data-point"><div class="data-point-label">Stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds(streamTime))}</div></div>` : ''}
             </div>
+            ${liveNowHtml ? `
+            <div style="margin-top:1.5rem;">
+                <div class="hero-cta-row" style="margin-bottom:1.5rem;">
+                    <a class="btn-golive" href="/go-live"><span class="btn-golive-dot"></span>Go live</a>
+                    <a class="btn-restream" href="${LIVE_NETWORK_URLS.restream}"><span class="btn-restream-icon">⌗</span>Restream control room</a>
+                </div>
+                <div class="card-grid" style="margin-top:1.5rem;" data-live-now-grid>${liveNowHtml}</div>
+            </div>
+            ` : `
+            <div class="empty-state" style="margin-top:1.5rem;">
+                <div class="hero-cta-row">
+                    <a class="btn-golive" href="/go-live"><span class="btn-golive-dot"></span>Go live</a>
+                    <a class="btn-restream" href="${LIVE_NETWORK_URLS.restream}"><span class="btn-restream-icon">⌗</span>Restream control room</a>
+                </div>
+                <p>Nobody is live right now.</p>
+            </div>
+            `}
         </section>
 
-        ${renderSection({
-            title: 'Recent VODs',
-            subtitle: 'Replays stay easy to find after the stream ends.',
-            actionHref: '/vods',
-            actionLabel: 'Open VOD library',
-            content: recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : null,
-            emptyTitle: 'No VODs yet',
-            emptyBody: 'When replays are ready they show up here automatically.',
-            emptyHref: '/vods',
-            emptyLabel: 'VOD library',
-        })}
 
-        ${renderSection({
-            title: 'Recent clips',
-            subtitle: 'Short highlights for quick sharing.',
-            actionHref: '/clips',
-            actionLabel: 'Open clips',
-            content: recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : null,
-            emptyTitle: 'No clips yet',
-            emptyBody: 'Clips appear here once they have been saved.',
-            emptyHref: '/clips',
-            emptyLabel: 'Clips library',
-        })}
+        <section class="section-panel">
+            ${recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : `
+            <article class="empty-state" data-reveal>
+                <h3 class="card-title">No VODs yet</h3>
+                <p class="card-body">When replays are ready they show up here automatically.</p>
+            </article>`}
+        </section>
+
+        <section class="section-panel">
+            ${recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : `
+            <article class="empty-state" data-reveal>
+                <h3 class="card-title">No clips yet</h3>
+                <p class="card-body">Clips appear here once they have been saved.</p>
+            </article>`}
+        </section>
 
         ${featuredChannelsHtml ? renderSection({
             title: 'Featured creators',
@@ -2414,30 +2559,22 @@ function renderChannelsPage({ channels, featuredChannels, categories, baseUrl })
 
 function renderCollectionPage({ kind, title, description, emptyMessage, items, baseUrl }) {
     const navKey = kind === 'clips' ? 'clips' : 'vods';
-    const badgeTone = kind === 'clips' ? 'primary' : 'success';
-    const badgeLabel = kind === 'clips' ? 'Clip' : 'VOD';
-    const cardsHtml = (items || []).slice(0, 200).map((item) => renderStreamCard(item, null, baseUrl, { badge: badgeLabel, badgeTone, filterGroup: navKey })).join('');
+    const cardsHtml = (items || []).slice(0, 200).map((item) => renderStreamCard(item, null, baseUrl, { filterGroup: navKey, hideBadge: true })).join('');
     const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">${escapeHtml(navKey)}</div>
-                <h1 class="hero-heading">${escapeHtml(title || (navKey === 'clips' ? 'OpenVibe Clips' : 'OpenVibe VOD Library'))}</h1>
-                <p>${escapeHtml(description || '')}</p>
-            </div>
-        </section>
-        ${renderSection({
-            title: navKey === 'clips' ? 'Recent clips' : 'Recent VODs',
-            subtitle: navKey === 'clips' ? 'Fast highlights surfaced from canonical media objects.' : 'Replay media staged through the canonical OpenVibe media service.',
-            content: `
-                <div class="search-bar">
-                    <input class="filter-input" type="search" placeholder="Filter this library" data-filter-input="${navKey}" aria-label="Filter ${navKey}">
+        <section class="section-panel">
+            <div class="search-bar" style="justify-content:space-between;">
+                <input class="filter-input" type="search" placeholder="Search" data-filter-input="${navKey}" aria-label="Search ${navKey}" style="flex:1;">
+                <div class="sort-group" data-sort-group="${navKey}">
+                    <button class="sort-btn active" data-sort="recent">Recent</button>
+                    <button class="sort-btn" data-sort="popularity">Popularity</button>
                 </div>
-                ${cardsHtml ? `<div class="card-grid">${cardsHtml}</div>` : ''}`,
-            emptyTitle: navKey === 'clips' ? 'No public clip media yet' : 'No public VOD media yet',
-            emptyBody: emptyMessage || 'This route stays honest until canonical media objects exist.',
-            emptyHref: '/channels',
-            emptyLabel: 'Browse creators',
-        })}`;
+            </div>
+            ${cardsHtml ? `<div class="card-grid" style="margin-top:1rem;" data-sort-grid="${navKey}">${cardsHtml}</div>` : `
+            <article class="empty-state" data-reveal>
+                <h3 class="card-title">${navKey === 'clips' ? 'No clips yet' : 'No VODs yet'}</h3>
+                <p class="card-body">${escapeHtml(emptyMessage || 'Nothing here yet.')}</p>
+            </article>`}
+        </section>`;
     return renderPage({
         title: `${escapeHtml(title || (navKey === 'clips' ? 'OpenVibe Clips' : 'OpenVibe VOD Library'))} — openvibe.live`,
         description: description || '',
@@ -2445,6 +2582,50 @@ function renderCollectionPage({ kind, title, description, emptyMessage, items, b
         activeNav: navKey,
         bodyHtml: pageContent,
         baseUrl,
+        extraStyles: `
+        .sort-group { display:flex; gap:0.4rem; }
+        .sort-btn {
+            padding: 0.55rem 1rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .sort-btn.active, .sort-btn:hover {
+            background: rgba(139,92,246,0.18);
+            border-color: rgba(139,92,246,0.5);
+            color: white;
+        }`,
+        extraScripts: `
+        (function() {
+            document.querySelectorAll('[data-sort-group]').forEach(function(group) {
+                const key = group.dataset.sortGroup;
+                const grid = document.querySelector('[data-sort-grid="' + key + '"]');
+                if (!grid) return;
+                group.querySelectorAll('.sort-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        group.querySelectorAll('.sort-btn').forEach(function(b) { b.classList.remove('active'); });
+                        btn.classList.add('active');
+                        const cards = Array.from(grid.querySelectorAll('article[data-stream-id]'));
+                        cards.sort(function(a, b) {
+                            if (btn.dataset.sort === 'popularity') {
+                                const av = parseInt(a.dataset.views || '0', 10);
+                                const bv = parseInt(b.dataset.views || '0', 10);
+                                return bv - av;
+                            }
+                            const ad = a.dataset.date || '';
+                            const bd = b.dataset.date || '';
+                            return bd.localeCompare(ad);
+                        });
+                        cards.forEach(function(c) { grid.appendChild(c); });
+                    });
+                });
+            });
+        })();`,
     });
 }
 
@@ -2671,81 +2852,25 @@ function renderGoLivePage({ baseUrl, session }) {
         </section>`
         : `
         <section class="section-panel" id="stream-manager">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Sign in to unlock your stream manager</h2>
-                    <p class="section-subtitle">This page only shows real creator controls to authenticated OpenVibe accounts. Anonymous visitors should not see fake channel or stream creation panels.</p>
-                </div>
-                <div class="inline-actions">
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                    <a class="section-link" href="/channels">Browse channels</a>
-                </div>
-            </div>
-            <div class="story-grid">
-                <article class="glass-card" data-reveal data-go-live-session>
-                    <div class="eyebrow">Account status</div>
-                    <h3 class="card-title">${escapeHtml(viewerName ? `Finish signing in, ${viewerName}` : 'Use your OpenVibe account')}</h3>
-                    <p class="card-body">Claim your creator route, save real RTMP destinations, and generate ingest details from this same-origin live surface once you are signed in.</p>
-                    <div class="form-actions" style="margin-top:1rem;">
-                        <a class="button" href="${signInHref}">${escapeHtml(viewerName ? 'Create full account' : 'Sign in with OpenVibe')}</a>
-                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                        <a class="button-ghost" href="/">Back to live discovery</a>
+            <h2 class="section-title" style="margin-bottom:1.25rem;">Stream manager</h2>
+            <div class="golive-auth-grid">
+                <a class="golive-auth-card" href="${escapeHtml(signInHref)}">
+                    <div class="golive-auth-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                     </div>
-                </article>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">What unlocks after sign-in</div>
-                    <div class="data-points">
-                        <div class="data-point">
-                            <div class="data-point-label">Creator route</div>
-                            <div class="data-point-value">Claim @handle</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">Destinations</div>
-                            <div class="data-point-value">Save RTMP targets</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">Stream records</div>
-                            <div class="data-point-value">Create + control</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">Identity</div>
-                            <div class="data-point-value">One OpenVibe account</div>
-                        </div>
+                    <div class="golive-auth-label">Log in</div>
+                    <div class="golive-auth-sub">Use your OpenVibe account</div>
+                </a>
+                <a class="golive-auth-card" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">
+                    <div class="golive-auth-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
                     </div>
-                </article>
+                    <div class="golive-auth-label">Stream without account</div>
+                    <div class="golive-auth-sub">Go live on openre.stream</div>
+                </a>
             </div>
         </section>`;
     const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-grid">
-                <div class="hero-copy" data-reveal>
-                    <div class="eyebrow">Creator dashboard</div>
-                    <h1 class="hero-heading">Go live with <span class="hero-gradient">OpenVibe</span></h1>
-                    <p>Use one OpenVibe account to claim your creator route, prep your ingest, start a stream, and keep VODs, clips, chat, and community tied to the same channel.</p>
-                    <div class="hero-actions">
-                        <a class="button" href="#stream-manager">Open stream manager</a>
-                        <a class="button-secondary" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                        <a class="button-ghost" href="/">Back to live discovery</a>
-                    </div>
-                    <div class="utility-links">
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.network}">My account</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
-                        <a class="utility-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
-                        <a class="utility-link" href="/channels">Browse channels</a>
-                    </div>
-                </div>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">How it fits</div>
-                    <h3 class="card-title">Discovery on openvibe.live. Routing on openre.stream.</h3>
-                    <p class="card-body">Use this page when you want your public creator route and your basic stream controls in one place. Jump to <a class="link-inline" href="${LIVE_NETWORK_URLS.restream}">openre.stream</a> when you want the fuller restream cockpit.</p>
-                    <div class="pill-row" style="margin-top:0.85rem;">
-                        ${renderPill('Creator route on openvibe.live', 'soft')}
-                        ${renderPill('Routing on openre.stream', 'warn')}
-                        ${renderPill('One account across both', 'primary')}
-                    </div>
-                </article>
-            </div>
-        </section>
         ${managerSection}
         ${renderSection({
             title: 'Broadcast tracks',
