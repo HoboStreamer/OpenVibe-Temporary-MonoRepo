@@ -214,35 +214,20 @@ function mapEnvelopeToRealtimeTargets(envelope) {
 }
 
 // ── Canonical event name aliases ──────────────────────────────────────────────
-// Maps legacy/non-canonical event_type values to their canonical dot-notation names.
-// Canonical names use dots only (no underscores in multi-part segments).
-const EVENT_ALIASES = Object.freeze({
-    // stream aliases
-    'stream.vod_attached':            'stream.vod.attached',
-    'stream.ingest_connected':        'stream.ingest.connected',
-    'stream.ingest_disconnected':     'stream.ingest.disconnected',
-    'stream.mirrored_to_live':        'stream.mirrored.to.live',
-    // community aliases
-    'community.thread.created':       'thread.created',
-    'community.post.created':         'comment.created',
-    'community.paste.created':        'paste.created',
+// Imported from @openvibe/contracts so there is a single source of truth.
+// Extended here with realtime-specific aliases (colon notation, etc.).
+const { EVENT_ALIASES: _contractAliases } = require('@openvibe/contracts/events');
+const EVENT_ALIASES = Object.freeze(Object.assign({}, _contractAliases, {
+    // additional realtime-variant aliases not in contracts
     'community.paste.updated':        'paste.updated',
     'community.space.created':        'space.created',
-    // chat aliases
-    'chat.message.created':           'chat.message.sent',
-    'chat.message_created':           'chat.message.sent',
-    // media aliases
-    'media.upload_completed':         'media.upload.completed',
     'media.lifecycle_promoted':       'media.lifecycle.promoted',
     'media.lifecycle_demoted':        'media.lifecycle.demoted',
-    'media.processing_completed':     'media.upload.completed',
-    // vod / clip aliases
+    'media.processing_completed':     'media.processing.completed',
     'vod.attached':                   'stream.vod.attached',
     'clip.materialization_completed': 'clip.materialized',
-    // discord aliases
     'discord.message_received':       'discord.message.received',
-    'discord.message.created':        'discord.message.received',
-});
+}));
 
 /**
  * Normalize a raw event_type to its canonical dot-notation form.
@@ -260,9 +245,115 @@ function normalizeEventType(eventType) {
     return lower.replace(/:/g, '.').replace(/([a-z0-9])_([a-z0-9])/g, '$1.$2');
 }
 
+/**
+ * Map an event envelope to the set of PUBLIC SSE topic strings that clients
+ * subscribe to (e.g. 'global:live', 'community:pulse', 'stream:abc123').
+ * This is separate from mapEnvelopeToRealtimeTargets which handles Socket.IO rooms.
+ *
+ * @param {object} envelope
+ * @returns {string[]} Array of public topic strings
+ */
+function mapEnvelopeToPublicTopics(envelope) {
+    const source = envelope || {};
+    const payload = source.payload || {};
+    const eventType = String(source.event_type || '').trim();
+    const topics = new Set();
+
+    if (!eventType) return [];
+
+    // stream events → global:live + per-stream + per-channel topics
+    if (eventType === 'stream.started' || eventType === 'stream.ended' || eventType === 'stream.vod.attached' ||
+        eventType === 'stream.created' || eventType === 'stream.mirrored_to_live') {
+        topics.add('global:live');
+        if (payload.stream_id) topics.add(`stream:${payload.stream_id}`);
+        if (payload.channel_id) topics.add(`channel:${payload.channel_id}`);
+        if (payload.channel_slug) topics.add(`channel:${payload.channel_slug}`);
+    }
+
+    if (eventType === 'stream.ingest.connected' || eventType === 'stream.ingest.disconnected' ||
+        eventType === 'stream.output.started' || eventType === 'stream.output.stopped' || eventType === 'stream.output.failed') {
+        if (payload.stream_id) topics.add(`stream:${payload.stream_id}`);
+        if (payload.channel_id) topics.add(`channel:${payload.channel_id}`);
+        if (payload.channel_slug) topics.add(`channel:${payload.channel_slug}`);
+    }
+
+    // vod/clip events
+    if (eventType === 'vod.created' || eventType === 'vod.finalized') {
+        topics.add('global:live');
+        if (payload.stream_id) topics.add(`stream:${payload.stream_id}`);
+        if (payload.media_id) topics.add(`media:${payload.media_id}`);
+        if (payload.channel_slug) topics.add(`channel:${payload.channel_slug}`);
+    }
+
+    if (eventType === 'clip.created' || eventType === 'clip.materialized') {
+        topics.add('global:live');
+        if (payload.clip_id) topics.add(`clip:${payload.clip_id}`);
+        if (payload.media_id) topics.add(`media:${payload.media_id}`);
+        if (payload.stream_id) topics.add(`stream:${payload.stream_id}`);
+    }
+
+    // media events
+    if (eventType.startsWith('media.')) {
+        if (payload.media_id) topics.add(`media:${payload.media_id}`);
+        if (payload.clip_id) topics.add(`clip:${payload.clip_id}`);
+    }
+
+    // chat events
+    if (eventType === 'chat.message.sent' || eventType.startsWith('chat.')) {
+        if (payload.room_type === 'global' || !payload.room_type) topics.add('chat:global');
+        if (payload.room_type === 'stream' && (payload.stream_id || payload.external_ref_id)) {
+            topics.add(`chat:stream:${payload.stream_id || payload.external_ref_id}`);
+        }
+        if (payload.room_type === 'channel' && (payload.channel_id || payload.external_ref_id)) {
+            topics.add(`chat:channel:${payload.channel_id || payload.external_ref_id}`);
+        }
+    }
+
+    // community events → community:pulse
+    if (eventType === 'thread.created' || eventType === 'thread.updated' || eventType === 'thread.voted' ||
+        eventType === 'comment.created' || eventType === 'paste.created' || eventType === 'paste.updated' ||
+        eventType === 'discord.message.received' || eventType.startsWith('community.')) {
+        topics.add('community:pulse');
+        if (payload.space_id) topics.add(`community:space:${payload.space_id}`);
+        if (payload.thread_id) topics.add(`community:thread:${payload.thread_id}`);
+    }
+
+    // billing/tips → per-user and per-channel
+    if (eventType === 'billing.tip.sent' || eventType.startsWith('tips.') || eventType.startsWith('vip.')) {
+        if (payload.target_context_type === 'stream' && payload.target_context_id) {
+            topics.add(`stream:${payload.target_context_id}`);
+        }
+        if (payload.target_context_type === 'channel' && payload.target_context_id) {
+            topics.add(`channel:${payload.target_context_id}`);
+        }
+        if (payload.recipient_owner_id) topics.add(`user:${payload.recipient_owner_id}`);
+        if (payload.sender_actor_id) topics.add(`user:${payload.sender_actor_id}`);
+    }
+
+    // ai events
+    if (eventType === 'ai.transcription.ready' || eventType === 'ai.summary.ready') {
+        if (payload.stream_id) topics.add(`stream:${payload.stream_id}`);
+        if (payload.media_id) topics.add(`media:${payload.media_id}`);
+    }
+
+    // user events → user:<id>
+    if (eventType === 'user.module.updated' || eventType === 'user.profile.updated') {
+        if (payload.user_id) topics.add(`user:${payload.user_id}`);
+    }
+
+    // notification events → user:<id>
+    if (eventType.startsWith('notification.')) {
+        if (payload.user_id) topics.add(`user:${payload.user_id}`);
+        if (payload.recipient_id) topics.add(`user:${payload.recipient_id}`);
+    }
+
+    return Array.from(topics);
+}
+
 module.exports = {
     buildRealtimeEnvelopePayload,
     mapEnvelopeToRealtimeTargets,
+    mapEnvelopeToPublicTopics,
     REALTIME_EVENT_TYPES,
     REALTIME_EVENT_TYPE_LIST,
     REALTIME_NAMESPACES,

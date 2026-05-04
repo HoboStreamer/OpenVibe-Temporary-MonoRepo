@@ -19,7 +19,7 @@ assert.strictEqual(normalizeEventType('community.thread.created'), 'thread.creat
 assert.strictEqual(normalizeEventType('community.post.created'), 'comment.created', 'community.post.created alias');
 assert.strictEqual(normalizeEventType('chat.message.created'), 'chat.message.sent', 'chat.message.created alias');
 assert.strictEqual(normalizeEventType('chat.message_created'), 'chat.message.sent', 'chat.message_created alias');
-assert.strictEqual(normalizeEventType('media.upload_completed'), 'media.upload.completed', 'media.upload_completed alias');
+assert.strictEqual(normalizeEventType('media.upload_completed'), 'media.processing.completed', 'media.upload_completed alias');
 assert.strictEqual(normalizeEventType('discord.message.created'), 'discord.message.received', 'discord.message.created alias');
 
 // colon separators are normalised

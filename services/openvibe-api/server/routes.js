@@ -4,6 +4,18 @@ const express = require('express');
 const http    = require('http');
 const { proxyRequest } = require('./proxy');
 const db = require('./db');
+const {
+    ECOSYSTEM_SERVICES,
+    WELL_KNOWN_URLS,
+    listServices,
+    listServicesByCategory,
+    getService,
+    getServiceByDomain,
+    listEventTopics,
+    ECOSYSTEM_CATEGORY_LABELS,
+} = require('@openvibe/contracts/ecosystem');
+const { TOPIC_LIST } = require('@openvibe/contracts/topics');
+const { EVENT_TYPE_LIST } = require('@openvibe/contracts/events');
 
 /**
  * Build the routing table for openvibe-api.
@@ -144,6 +156,48 @@ function buildRouter(config) {
             res.json({ capabilities: merged, fetched_at: new Date().toISOString() });
         }).catch((err) => {
             res.status(500).json({ error: err.message });
+        });
+    });
+
+    // Single service by contract ID
+    r.get('/registry/services/:id', (req, res) => {
+        const svcRecord = getService(req.params.id);
+        if (!svcRecord) return res.status(404).json({ error: 'service not found', id: req.params.id });
+        res.json({ service: svcRecord });
+    });
+
+    // Service by domain
+    r.get('/registry/domains/:domain', (req, res) => {
+        const svcRecord = getServiceByDomain(req.params.domain);
+        if (!svcRecord) return res.status(404).json({ error: 'service not found for domain', domain: req.params.domain });
+        res.json({ service: svcRecord });
+    });
+
+    // Canonical event bus topics from contracts
+    r.get('/registry/topics', (req, res) => {
+        res.json({
+            topics: TOPIC_LIST,
+            event_types: EVENT_TYPE_LIST,
+            count: TOPIC_LIST.length,
+            event_type_count: EVENT_TYPE_LIST.length,
+        });
+    });
+
+    // Full ecosystem hierarchy from contracts
+    r.get('/registry/ecosystem', (req, res) => {
+        const categories = {};
+        for (const [cat, label] of Object.entries(ECOSYSTEM_CATEGORY_LABELS)) {
+            categories[cat] = {
+                label,
+                services: listServicesByCategory(cat),
+            };
+        }
+        res.json({
+            version: 1,
+            well_known: WELL_KNOWN_URLS,
+            categories,
+            service_count: ECOSYSTEM_SERVICES.length,
+            topic_count: TOPIC_LIST.length,
         });
     });
 

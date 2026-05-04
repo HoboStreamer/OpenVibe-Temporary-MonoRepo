@@ -10,6 +10,7 @@ const {
     renderRealtimePage,
     renderCommunityPage,
     renderServicesPage,
+    renderEcosystemPage,
 } = require('./ssr');
 
 /**
@@ -96,6 +97,12 @@ function buildRouter(config) {
     r.get('/community', adminOnly, async (req, res) => {
         const stats = await safeFetch(`${svc.community}/api/v1/community/stats`, key);
         const html  = renderCommunityPage({ stats }, req.user && req.user.email);
+        res.status(200).set('content-type', 'text/html').send(html);
+    });
+
+    // ── ecosystem page ────────────────────────────────────────────
+    r.get('/ecosystem', adminOnly, (req, res) => {
+        const html = renderEcosystemPage(req.user && req.user.email);
         res.status(200).set('content-type', 'text/html').send(html);
     });
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const { TOPIC_LIST } = require('@openvibe/contracts/topics');
-const { mapEnvelopeToRealtimeTargets, normalizeEventType } = require('@openvibe/realtime');
+const { mapEnvelopeToRealtimeTargets, mapEnvelopeToPublicTopics, normalizeEventType } = require('@openvibe/realtime');
 const { EventsClient } = require('@openvibe/sdk');
 const {
     ack,
@@ -93,14 +93,21 @@ function createEventBridge(options) {
         if (sseClients && sseClients.size > 0 && envelope && envelope.event_type) {
             const eventId = envelope.event_id || null;
             const eventType = envelope.event_type; // canonical
-            const topic = envelope.topic || null;
-            const data = JSON.stringify(Object.assign({}, envelope, topic ? { topic } : {}));
+            const internalTopic = envelope.topic || null;
+            const data = JSON.stringify(Object.assign({}, envelope, internalTopic ? { topic: internalTopic } : {}));
             const prefix = eventId ? `id: ${eventId}\n` : '';
             const frame = `${prefix}event: ${eventType}\ndata: ${data}\n\n`;
+            // Compute public topics for this envelope (e.g. 'global:live', 'community:pulse', 'stream:abc')
+            const publicTopics = mapEnvelopeToPublicTopics(envelope);
             for (const [, client] of sseClients) {
-                // Deliver if client has no topic filter or its filter includes this event's topic
-                const matches = !client.topics.length || (topic && client.topics.includes(topic));
-                if (matches) {
+                // Deliver if:
+                //   (a) client has no topic filter, OR
+                //   (b) any of the computed public topics match the client's subscribed topics, OR
+                //   (c) the internal bus topic matches (fallback)
+                const noFilter = !client.topics || !client.topics.length;
+                const matchesPublic = publicTopics.some((pt) => client.topics && client.topics.includes(pt));
+                const matchesInternal = internalTopic && client.topics && client.topics.includes(internalTopic);
+                if (noFilter || matchesPublic || matchesInternal) {
                     try {
                         client.res.write(frame);
                         sseEmitted += 1;

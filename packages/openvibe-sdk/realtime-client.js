@@ -24,30 +24,9 @@ const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS  = 30000;
 const DEFAULT_RECONNECT_JITTER  = 0.2;
 
-// Canonical event name alias map — mirrors packages/openvibe-realtime/events.js.
-// These let clients register handlers using canonical names even when the server
-// emits the legacy form (during transition) or vice versa.
-const EVENT_ALIASES = Object.freeze({
-    'stream.vod_attached':            'stream.vod.attached',
-    'stream.ingest_connected':        'stream.ingest.connected',
-    'stream.ingest_disconnected':     'stream.ingest.disconnected',
-    'stream.mirrored_to_live':        'stream.mirrored.to.live',
-    'community.thread.created':       'thread.created',
-    'community.post.created':         'comment.created',
-    'community.paste.created':        'paste.created',
-    'community.paste.updated':        'paste.updated',
-    'chat.message.created':           'chat.message.sent',
-    'chat.message_created':           'chat.message.sent',
-    'media.upload_completed':         'media.upload.completed',
-    'media.lifecycle_promoted':       'media.lifecycle.promoted',
-    'media.lifecycle_demoted':        'media.lifecycle.demoted',
-    'vod.attached':                   'stream.vod.attached',
-    'clip.materialization_completed': 'clip.materialized',
-    'discord.message_received':       'discord.message.received',
-    'discord.message.created':        'discord.message.received',
-});
-
+// Canonical event name aliases — sourced from @openvibe/contracts (single source of truth).
 // Build a reverse alias map so legacy handlers still fire when canonical name arrives.
+const { EVENT_ALIASES } = require('@openvibe/contracts/events');
 const EVENT_ALIASES_REVERSE = {};
 for (const [legacy, canonical] of Object.entries(EVENT_ALIASES)) {
     if (!EVENT_ALIASES_REVERSE[canonical]) EVENT_ALIASES_REVERSE[canonical] = [];

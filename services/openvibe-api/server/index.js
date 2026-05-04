@@ -61,18 +61,24 @@ function buildApp(opts) {
 
     // ── well-known service registry ──────────────────────────
     app.get('/.well-known/openvibe', (_req, res) => {
+        const { WELL_KNOWN_URLS, listServices } = require('@openvibe/contracts/ecosystem');
         res.json({
             spec_version: '1',
             network: 'openvibe',
             generated_at: new Date().toISOString(),
-            services: Object.entries(config.services).map(([id, url]) => ({
-                id,
-                url,
-                api_prefix: `${config.publicBaseUrl || ''}/api/v1/${id}`,
+            urls: WELL_KNOWN_URLS,
+            services: listServices().filter((s) => s.publicOrigin).map((s) => ({
+                id: s.id,
+                domain: s.domain,
+                label: s.label,
+                category: s.category,
+                status: s.status,
+                publicOrigin: s.publicOrigin,
+                authRequired: s.authRequired,
             })),
             gateway: {
                 api_prefix: `${config.publicBaseUrl || ''}/api/v1`,
-                docs: `${config.publicBaseUrl || ''}/api/v1`,
+                registry: `${config.publicBaseUrl || ''}/api/v1/registry/ecosystem`,
             },
         });
     });
