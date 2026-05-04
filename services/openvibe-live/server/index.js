@@ -544,6 +544,44 @@ function buildApp() {
         }
     }));
 
+    localApiRouter.patch('/go-live/channels/:slug', requireUserAuth, json, asyncRoute(async (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const { slug } = req.params;
+        const allowed = ['display_name', 'description', 'visibility', 'nsfw', 'recording_enabled', 'chat_enabled'];
+        const body = {};
+        allowed.forEach((k) => { if (req.body && req.body[k] !== undefined) body[k] = req.body[k]; });
+        try {
+            const updated = await openreClient.updateChannel(slug, body, req.token);
+            const ch = updated && (updated.channel || updated);
+            if (ch && ch.slug) syncLiveChannel(ch, { owner_user_id: ownerUserId });
+            res.json(updated);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to update channel');
+        }
+    }));
+
+    localApiRouter.post('/go-live/channels/:slug/regenerate-key', requireUserAuth, json, asyncRoute(async (req, res) => {
+        const ownerUserId = ownerUserIdOf(req);
+        const { slug } = req.params;
+        try {
+            const result = await openreClient.regenerateStreamKey(slug, req.token);
+            const ch = result && (result.channel || result);
+            if (ch && ch.slug) syncLiveChannel(ch, { owner_user_id: ownerUserId });
+            res.json(result);
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to regenerate stream key');
+        }
+    }));
+
+    localApiRouter.delete('/go-live/destinations/:id', requireUserAuth, asyncRoute(async (req, res) => {
+        try {
+            const result = await openreClient.deleteDestination(req.params.id, req.token);
+            res.json(result || { ok: true });
+        } catch (error) {
+            sendOpenReError(res, error, 'failed to delete destination');
+        }
+    }));
+
     localApiRouter.post('/go-live/streams', requireUserAuth, json, asyncRoute(async (req, res) => {
         const ownerUserId = ownerUserIdOf(req);
         const payload = {

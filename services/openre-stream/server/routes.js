@@ -46,10 +46,30 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         res.status(201).json({ channel: ch });
     });
     r.get('/channels', (req, res) => res.json({ items: model.listChannels({ owner_user_id: req.query.owner_user_id, limit: req.query.limit }) }));
-    r.get('/channels/:slug', (req, res) => {
-        const ch = model.getChannelBySlug(req.params.slug);
+    r.get('/channels/:slug', (req, res) => {        const ch = model.getChannelBySlug(req.params.slug);
         if (!ch) return res.status(404).json({ error: 'not found' });
         res.json({ channel: ch });
+    });
+    r.patch('/channels/:slug', json, (req, res) => {
+        const ch = model.getChannelBySlug(req.params.slug);
+        if (!ch) return res.status(404).json({ error: 'channel not found' });
+        try { policy.assert(policy.decideChannelWrite({ req, ownerUserId: ch.owner_user_id }), { ...actorMeta(req), action: 'channel.update' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const updated = model.updateChannel(req.params.slug, req.body || {});
+        res.json({ channel: updated });
+    });
+    r.post('/channels/:slug/regenerate-key', json, (req, res) => {
+        const ch = model.getChannelBySlug(req.params.slug);
+        if (!ch) return res.status(404).json({ error: 'channel not found' });
+        try { policy.assert(policy.decideChannelWrite({ req, ownerUserId: ch.owner_user_id }), { ...actorMeta(req), action: 'channel.regenerate-key' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const updated = model.regenerateStreamKey(req.params.slug);
+        res.json({ channel: updated });
+    });
+    r.get('/streams/:id/outputs', (req, res) => {
+        const s = model.getStreamById(req.params.id);
+        if (!s) return res.status(404).json({ error: 'stream not found' });
+        res.json({ items: model.listOutputsByStreamId(req.params.id) });
     });
 
     // ── streams ──────────────────────────────────────────────
@@ -213,6 +233,22 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
         const d = model.createDestination(b);
         res.status(201).json({ destination: d });
+    });
+    r.put('/destinations/:id', json, (req, res) => {
+        const d = model.getDestinationById(req.params.id);
+        if (!d) return res.status(404).json({ error: 'destination not found' });
+        try { policy.assert(policy.decideChannelWrite({ req, ownerUserId: d.owner_user_id }), { ...actorMeta(req), action: 'destination.update' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        const updated = model.updateDestination(req.params.id, req.body || {});
+        res.json({ destination: updated });
+    });
+    r.delete('/destinations/:id', (req, res) => {
+        const d = model.getDestinationById(req.params.id);
+        if (!d) return res.status(404).json({ error: 'destination not found' });
+        try { policy.assert(policy.decideChannelWrite({ req, ownerUserId: d.owner_user_id }), { ...actorMeta(req), action: 'destination.delete' }); }
+        catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
+        model.deleteDestination(req.params.id);
+        res.json({ ok: true });
     });
     r.get('/destinations', (req, res) => {
         res.json({ items: model.listDestinations({ owner_user_id: req.query.owner_user_id }) });

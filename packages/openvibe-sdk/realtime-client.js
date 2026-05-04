@@ -24,14 +24,43 @@ const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS  = 30000;
 const DEFAULT_RECONNECT_JITTER  = 0.2;
 
-// Map from namespaced event_type (colon-separated from contracts) to dot-notation
-// event name used on the wire. Handles both old and new style.
+// Canonical event name alias map — mirrors packages/openvibe-realtime/events.js.
+// These let clients register handlers using canonical names even when the server
+// emits the legacy form (during transition) or vice versa.
+const EVENT_ALIASES = Object.freeze({
+    'stream.vod_attached':            'stream.vod.attached',
+    'stream.ingest_connected':        'stream.ingest.connected',
+    'stream.ingest_disconnected':     'stream.ingest.disconnected',
+    'stream.mirrored_to_live':        'stream.mirrored.to.live',
+    'community.thread.created':       'thread.created',
+    'community.post.created':         'comment.created',
+    'community.paste.created':        'paste.created',
+    'community.paste.updated':        'paste.updated',
+    'chat.message.created':           'chat.message.sent',
+    'chat.message_created':           'chat.message.sent',
+    'media.upload_completed':         'media.upload.completed',
+    'media.lifecycle_promoted':       'media.lifecycle.promoted',
+    'media.lifecycle_demoted':        'media.lifecycle.demoted',
+    'vod.attached':                   'stream.vod.attached',
+    'clip.materialization_completed': 'clip.materialized',
+    'discord.message_received':       'discord.message.received',
+    'discord.message.created':        'discord.message.received',
+});
+
+// Build a reverse alias map so legacy handlers still fire when canonical name arrives.
+const EVENT_ALIASES_REVERSE = {};
+for (const [legacy, canonical] of Object.entries(EVENT_ALIASES)) {
+    if (!EVENT_ALIASES_REVERSE[canonical]) EVENT_ALIASES_REVERSE[canonical] = [];
+    EVENT_ALIASES_REVERSE[canonical].push(legacy);
+}
+
 function normalizeEventName(eventType) {
     if (!eventType) return 'unknown';
-    // Convert any remaining underscores-in-last-segment style to dot form:
-    // 'stream.vod_attached' → 'stream.vod_attached' (already ok)
-    // 'STREAM.STARTED' → 'stream.started'
-    return String(eventType).toLowerCase().replace(/[^a-z0-9.]+/g, '.');
+    const lower = String(eventType).toLowerCase().trim();
+    // Apply alias if present
+    if (EVENT_ALIASES[lower]) return EVENT_ALIASES[lower];
+    // Clean colons and underscores to dots
+    return lower.replace(/:/g, '.').replace(/([a-z0-9])_([a-z0-9])/g, '$1.$2');
 }
 
 function exponentialBackoff(attempt, baseMs, maxMs, jitter) {
@@ -291,14 +320,30 @@ class RealtimeClient {
             return unsub;
         };
 
-        // Also listen on common stream/community/chat events for convenience
+        // Also listen on common stream/community/chat events for convenience.
+        // Use canonical names (post-normalization) so both old and new server versions work.
         const AUTO_EVENTS = [
-            'stream.started', 'stream.ended', 'stream.created', 'stream.vod_attached',
-            'stream.ingest.connected', 'stream.ingest.disconnected', 'stream.mirrored_to_live',
-            'chat.message.created', 'chat.message.edited', 'chat.message.deleted',
+            // canonical stream events
+            'stream.started', 'stream.ended', 'stream.created',
+            'stream.vod.attached', 'stream.ingest.connected', 'stream.ingest.disconnected',
+            'stream.mirrored.to.live',
+            // legacy stream aliases (handled server-side now, keep for old servers)
+            'stream.vod_attached', 'stream.mirrored_to_live',
+            'stream.ingest_connected', 'stream.ingest_disconnected',
+            // canonical chat
+            'chat.message.sent', 'chat.message.edited', 'chat.message.deleted',
+            // legacy chat aliases
+            'chat.message.created',
+            // canonical community
+            'thread.created', 'comment.created', 'paste.created', 'paste.updated',
+            // legacy community aliases
             'community.thread.created', 'community.post.created', 'community.paste.created',
-            'community.space.created',
-            'media.upload.completed', 'vod.created', 'vod.finalized', 'clip.created', 'clip.materialized',
+            // media / vod / clip
+            'media.upload.completed', 'media.lifecycle.promoted', 'media.lifecycle.demoted',
+            'vod.created', 'vod.finalized', 'clip.created', 'clip.materialized',
+            // discord
+            'discord.message.received',
+            // user / auth / billing
             'user.updated', 'auth.login',
             'billing.tip.sent', 'billing.sub.created',
         ];
@@ -318,10 +363,22 @@ class RealtimeClient {
         try { return JSON.parse(raw); } catch { return { raw }; }
     }
 
-    _dispatchMessage(eventName, data) {
-        // Dispatch to named event handlers
+    _dispatchMessage(rawEventName, data) {
+        const eventName = normalizeEventName(rawEventName);
+        const envelope = Object.assign({ _event: eventName }, data || {});
+
+        // Dispatch to exact named event handlers (canonical name)
         const namedHandlers = this._eventHandlers.get(eventName);
         if (namedHandlers) namedHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
+
+        // Also fire legacy alias names so old-style handlers still work
+        const legacyNames = EVENT_ALIASES_REVERSE[eventName];
+        if (legacyNames) {
+            for (const legacyName of legacyNames) {
+                const legacyHandlers = this._eventHandlers.get(legacyName);
+                if (legacyHandlers) legacyHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
+            }
+        }
 
         // Dispatch to topic handlers using data.topic
         const topic = data && data.topic;
@@ -330,11 +387,11 @@ class RealtimeClient {
             if (topicHandlers) topicHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
         }
 
-        // Wildcard handler receives all events
+        // Wildcard handlers receive all events
         const wildcardHandlers = this._handlers.get('*');
-        if (wildcardHandlers) wildcardHandlers.forEach((h) => { try { h(Object.assign({ _event: eventName }, data)); } catch { /* ignore */ } });
+        if (wildcardHandlers) wildcardHandlers.forEach((h) => { try { h(envelope); } catch { /* ignore */ } });
         const wildcardEventHandlers = this._eventHandlers.get('*');
-        if (wildcardEventHandlers) wildcardEventHandlers.forEach((h) => { try { h(Object.assign({ _event: eventName }, data)); } catch { /* ignore */ } });
+        if (wildcardEventHandlers) wildcardEventHandlers.forEach((h) => { try { h(envelope); } catch { /* ignore */ } });
     }
 
     _emit(eventName, data) {

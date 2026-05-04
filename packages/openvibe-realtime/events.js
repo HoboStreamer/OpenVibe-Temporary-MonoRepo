@@ -213,11 +213,60 @@ function mapEnvelopeToRealtimeTargets(envelope) {
     });
 }
 
+// ── Canonical event name aliases ──────────────────────────────────────────────
+// Maps legacy/non-canonical event_type values to their canonical dot-notation names.
+// Canonical names use dots only (no underscores in multi-part segments).
+const EVENT_ALIASES = Object.freeze({
+    // stream aliases
+    'stream.vod_attached':            'stream.vod.attached',
+    'stream.ingest_connected':        'stream.ingest.connected',
+    'stream.ingest_disconnected':     'stream.ingest.disconnected',
+    'stream.mirrored_to_live':        'stream.mirrored.to.live',
+    // community aliases
+    'community.thread.created':       'thread.created',
+    'community.post.created':         'comment.created',
+    'community.paste.created':        'paste.created',
+    'community.paste.updated':        'paste.updated',
+    'community.space.created':        'space.created',
+    // chat aliases
+    'chat.message.created':           'chat.message.sent',
+    'chat.message_created':           'chat.message.sent',
+    // media aliases
+    'media.upload_completed':         'media.upload.completed',
+    'media.lifecycle_promoted':       'media.lifecycle.promoted',
+    'media.lifecycle_demoted':        'media.lifecycle.demoted',
+    'media.processing_completed':     'media.upload.completed',
+    // vod / clip aliases
+    'vod.attached':                   'stream.vod.attached',
+    'clip.materialization_completed': 'clip.materialized',
+    // discord aliases
+    'discord.message_received':       'discord.message.received',
+    'discord.message.created':        'discord.message.received',
+});
+
+/**
+ * Normalize a raw event_type to its canonical dot-notation form.
+ * Applies alias mapping first, then lowercases and cleans the name.
+ * @param {string} eventType
+ * @returns {string}
+ */
+function normalizeEventType(eventType) {
+    if (!eventType) return 'unknown';
+    const lower = String(eventType).toLowerCase().trim();
+    // Apply alias if present
+    if (EVENT_ALIASES[lower]) return EVENT_ALIASES[lower];
+    // Clean up non-canonical separators: colons + underscores in last segment only
+    // e.g. 'chat:message:created' → 'chat.message.created'
+    return lower.replace(/:/g, '.').replace(/([a-z0-9])_([a-z0-9])/g, '$1.$2');
+}
+
 module.exports = {
     buildRealtimeEnvelopePayload,
     mapEnvelopeToRealtimeTargets,
     REALTIME_EVENT_TYPES,
     REALTIME_EVENT_TYPE_LIST,
     REALTIME_NAMESPACES,
+    EVENT_ALIASES,
+    normalizeEventType,
     isRealtimeEventType,
 };

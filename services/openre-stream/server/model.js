@@ -81,6 +81,39 @@ function upsertChannel({ slug, owner_user_id, display_name, metadata }) {
         .run(id, String(slug), String(owner_user_id), display_name || null, JSON.stringify(metadata || {}));
     return getChannelById(id);
 }
+
+function updateChannel(slug, fields) {
+    const sql = db.get();
+    const existing = sql.prepare(`SELECT * FROM channels WHERE slug = ?`).get(String(slug));
+    if (!existing) return null;
+    const allowed = ['display_name', 'metadata_json'];
+    // Merge metadata if provided
+    const currentMeta = JSON.parse(existing.metadata_json || '{}');
+    if (fields.metadata) Object.assign(currentMeta, fields.metadata);
+    if (fields.visibility) currentMeta.visibility = fields.visibility;
+    if (fields.nsfw !== undefined) currentMeta.nsfw = !!fields.nsfw;
+    if (fields.recording_enabled !== undefined) currentMeta.recording_enabled = !!fields.recording_enabled;
+    if (fields.chat_enabled !== undefined) currentMeta.chat_enabled = !!fields.chat_enabled;
+    if (fields.description !== undefined) currentMeta.description = fields.description;
+    const displayName = fields.display_name !== undefined ? fields.display_name : existing.display_name;
+    sql.prepare(`UPDATE channels SET display_name = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(displayName || null, JSON.stringify(currentMeta), existing.id);
+    return getChannelById(existing.id);
+}
+
+function regenerateStreamKey(slug) {
+    const sql = db.get();
+    const existing = sql.prepare(`SELECT * FROM channels WHERE slug = ?`).get(String(slug));
+    if (!existing) return null;
+    const newKey = crypto.randomBytes(20).toString('hex');
+    const meta = JSON.parse(existing.metadata_json || '{}');
+    meta.stream_key = newKey;
+    sql.prepare(`UPDATE channels SET metadata_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(JSON.stringify(meta), existing.id);
+    const ch = getChannelById(existing.id);
+    ch.stream_key = newKey;
+    return ch;
+}
 function getChannelById(id) {
     return hydrateChannel(db.get().prepare(`SELECT * FROM channels WHERE id = ?`).get(String(id)));
 }
@@ -157,6 +190,26 @@ function createDestination({ owner_user_id, kind, label, target_url, target_key,
     `).run(id, String(owner_user_id), String(kind), label || null, String(target_url), target_key || null, enabled === false ? 0 : 1, JSON.stringify(metadata || {}));
     return getDestinationById(id);
 }
+function updateDestination(id, fields) {
+    const sql = db.get();
+    const existing = sql.prepare(`SELECT * FROM restream_destinations WHERE id = ?`).get(String(id));
+    if (!existing) return null;
+    const kind       = fields.kind       !== undefined ? String(fields.kind)       : existing.kind;
+    const label      = fields.label      !== undefined ? (fields.label || null)    : existing.label;
+    const target_url = fields.target_url !== undefined ? String(fields.target_url) : existing.target_url;
+    const target_key = fields.target_key !== undefined ? (fields.target_key || null) : existing.target_key;
+    const enabled    = fields.enabled    !== undefined ? (fields.enabled ? 1 : 0)  : existing.enabled;
+    sql.prepare(`UPDATE restream_destinations SET kind=?, label=?, target_url=?, target_key=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(kind, label, target_url, target_key, enabled, String(id));
+    return getDestinationById(String(id));
+}
+function deleteDestination(id) {
+    const sql = db.get();
+    const existing = sql.prepare(`SELECT id FROM restream_destinations WHERE id = ?`).get(String(id));
+    if (!existing) return false;
+    sql.prepare(`DELETE FROM restream_destinations WHERE id = ?`).run(String(id));
+    return true;
+}
 function getDestinationById(id) {
     const r = db.get().prepare(`SELECT * FROM restream_destinations WHERE id = ?`).get(String(id));
     if (!r) return null;
@@ -175,6 +228,10 @@ function listDestinations({ owner_user_id }) {
         try { metadata = JSON.parse(r.metadata_json || '{}'); } catch {}
         return Object.assign({}, r, { enabled: !!r.enabled, metadata });
     });
+}
+function listOutputsByStreamId(streamId) {
+    return db.get().prepare(`SELECT * FROM output_state WHERE stream_id = ? ORDER BY updated_at DESC`)
+        .all(String(streamId));
 }
 function setOutputState({ stream_id, destination_id, state, last_error }) {
     db.get().prepare(`
@@ -351,9 +408,11 @@ function lookupLegacy(source, kind, legacy_id) {
 
 module.exports = {
     upsertChannel, getChannelById, getChannelBySlug, listChannels,
+    updateChannel, regenerateStreamKey,
     createStream, startStream, endStream, attachVod, getStreamById, listStreams,
     recordIngestConnected, recordIngestDisconnected,
-    createDestination, getDestinationById, listDestinations, setOutputState,
+    createDestination, updateDestination, deleteDestination, getDestinationById, listDestinations,
+    setOutputState, listOutputsByStreamId,
     recordMirror, getMirrorState,
     createClipProject, getClipProjectById, getRecordingByStreamId,
     recordLegacy, lookupLegacy,

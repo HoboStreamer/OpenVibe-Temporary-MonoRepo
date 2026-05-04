@@ -60,6 +60,22 @@ function createOpenReClient({ config }) {
                 token,
             });
         },
+        updateChannel(slug, body, token) {
+            return request(`/api/v1/channels/${encodeURIComponent(String(slug))}`, { method: 'PATCH', body, token });
+        },
+        regenerateStreamKey(slug, token) {
+            return request(`/api/v1/channels/${encodeURIComponent(String(slug))}/regenerate-key`, {
+                method: 'POST',
+                body: {},
+                token,
+            });
+        },
+        deleteDestination(id, token) {
+            return request(`/api/v1/destinations/${encodeURIComponent(String(id))}`, { method: 'DELETE', token });
+        },
+        updateDestination(id, body, token) {
+            return request(`/api/v1/destinations/${encodeURIComponent(String(id))}`, { method: 'PUT', body, token });
+        },
     };
 }
 

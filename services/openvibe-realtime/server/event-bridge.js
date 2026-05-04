@@ -1,7 +1,7 @@
 'use strict';
 
 const { TOPIC_LIST } = require('@openvibe/contracts/topics');
-const { mapEnvelopeToRealtimeTargets } = require('@openvibe/realtime');
+const { mapEnvelopeToRealtimeTargets, normalizeEventType } = require('@openvibe/realtime');
 const { EventsClient } = require('@openvibe/sdk');
 const {
     ack,
@@ -66,18 +66,33 @@ function createEventBridge(options) {
         return true;
     }
 
-    async function ingestEnvelope(envelope) {
+    // Normalize the envelope's event_type to canonical dot-notation and attach
+    // a last_event_id field for SSE replay. Returns a new envelope object.
+    function normalizeEnvelope(envelope) {
+        if (!envelope) return envelope;
+        const raw = envelope.event_type;
+        const canonical = normalizeEventType(raw);
+        if (canonical === raw) return envelope;
+        return Object.assign({}, envelope, { event_type: canonical, _original_event_type: raw });
+    }
+
+    async function ingestEnvelope(rawEnvelope) {
+        const envelope = normalizeEnvelope(rawEnvelope);
         const targets = mapEnvelopeToRealtimeTargets(envelope || {});
         let socketEmitted = 0;
         for (const target of targets) {
-            if (emitTarget(target)) socketEmitted += 1;
+            // Use canonical event name for Socket.IO emission too
+            const normalizedTarget = target.event === (rawEnvelope && rawEnvelope.event_type)
+                ? Object.assign({}, target, { event: envelope.event_type })
+                : target;
+            if (emitTarget(normalizedTarget)) socketEmitted += 1;
         }
 
         // Fan out to SSE subscribers
         let sseEmitted = 0;
         if (sseClients && sseClients.size > 0 && envelope && envelope.event_type) {
             const eventId = envelope.event_id || null;
-            const eventType = envelope.event_type;
+            const eventType = envelope.event_type; // canonical
             const topic = envelope.topic || null;
             const data = JSON.stringify(Object.assign({}, envelope, topic ? { topic } : {}));
             const prefix = eventId ? `id: ${eventId}\n` : '';
@@ -99,6 +114,7 @@ function createEventBridge(options) {
         if (envelope && envelope.event_type) {
             state.last_event_at = new Date().toISOString();
             state.last_event_type = envelope.event_type;
+            state.last_event_id = envelope.event_id || state.last_event_id;
             state.last_trace_id = envelope.trace_id || null;
         }
         state.routed_messages += targets.length;
@@ -107,6 +123,10 @@ function createEventBridge(options) {
         clearError();
         return { routed: targets.length, targets, sse_targets: sseEmitted };
     }
+
+    // Alias: same as ingestEnvelope, but callable from outside with the intent
+    // of publishing to both Socket.IO and SSE from the same path.
+    const publishEnvelopeToTransports = ingestEnvelope;
 
     function hydrateEnvelope(message) {
         const values = message && message.values || {};
@@ -240,6 +260,7 @@ function createEventBridge(options) {
     return {
         BRIDGED_TOPICS,
         ingestEnvelope,
+        publishEnvelopeToTransports,
         pollOnce,
         start,
         stop,
@@ -250,4 +271,5 @@ function createEventBridge(options) {
 module.exports = {
     BRIDGED_TOPICS,
     createEventBridge,
+    publishEnvelopeToTransports: null, // set per-instance; use createEventBridge().publishEnvelopeToTransports
 };

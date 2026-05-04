@@ -64,7 +64,7 @@ function createFakeIo() {
     const result = await bridge.pollOnce();
     assert.strictEqual(result.polled, 1);
     assert.strictEqual(bridge.summary().last_poll_id, 9);
-    assert.ok(io.emitted.some((entry) => entry.namespace === '/chat' && entry.room === 'chat:stream:stream-77' && entry.event === 'chat.message.created'));
+    assert.ok(io.emitted.some((entry) => entry.namespace === '/chat' && entry.room === 'chat:stream:stream-77' && entry.event === 'chat.message.sent'));
 })();
 
 (async function emitsAdminEventsOnlyIntoAdminRoom() {

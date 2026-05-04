@@ -183,6 +183,7 @@ function _nav(active) {
         { href: '/pulse',   label: 'Pulse',   id: 'pulse'   },
         { href: '/threads', label: 'Threads', id: 'threads' },
         { href: '/pastes',  label: 'Pastes',  id: 'pastes'  },
+        { href: '/chat',    label: 'Chat',    id: 'chat'    },
     ];
     return items.map((item) => `<a class="nav-link${item.id === active ? ' active' : ''}" href="${item.href}">${item.label}</a>`).join('');
 }
@@ -490,9 +491,107 @@ function renderPulsePage(threads, pastes, opts) {
     return _shell({ title: 'Community Pulse · OpenVibe Community', description: 'Recent threads and pastes from the OpenVibe network.', active: 'pulse', bodyHtml });
 }
 
+// ── renderChatPage ────────────────────────────────────────────────────────────
+function renderChatPage(discordMessages, opts) {
+    opts = opts || {};
+    const messages = (discordMessages || []).slice(0, 100);
+    const messagesHtml = messages.length
+        ? messages.map((m) => {
+            const meta = m.metadata || {};
+            const username = escapeHtml(meta.username || m.discord_channel_id || 'Unknown');
+            const content  = escapeHtml(meta.content  || meta.text || '');
+            const ts       = timeAgo(m.created_at);
+            return `<div class="glass-card" style="padding:1rem 1.25rem;">
+                <div style="display:flex;gap:0.7rem;align-items:baseline;">
+                    <strong style="color:var(--accent);">${username}</strong>
+                    <span style="color:var(--muted);font-size:0.82rem;">${ts}</span>
+                </div>
+                ${content ? `<p style="margin:0.4rem 0 0;">${content}</p>` : ''}
+            </div>`;
+        }).join('')
+        : `<div class="empty-state"><p>No messages yet. Community Discord messages will appear here as they arrive.</p></div>`;
+
+    const bodyHtml = `
+        <section class="hero">
+            <div class="eyebrow">Community</div>
+            <h1 class="page-title">Chat</h1>
+            <p class="hero-sub">Recent messages relayed from the OpenVibe Discord community.</p>
+        </section>
+        <section class="section-panel">
+            <div class="section-head">
+                <h2 class="section-title">Recent messages</h2>
+            </div>
+            <div class="list-stack" style="display:flex;flex-direction:column;gap:0.6rem;" data-chat-messages>
+                ${messagesHtml}
+            </div>
+        </section>`;
+    return _shell({ title: 'Chat · OpenVibe Community', description: 'Recent community chat messages relayed from Discord.', active: 'chat', bodyHtml });
+}
+
+// ── renderThreadDetailPage ────────────────────────────────────────────────────
+function renderThreadDetailPage(thread, posts, opts) {
+    opts = opts || {};
+    if (!thread) {
+        const bodyHtml = `<section class="hero"><h1 class="page-title">Thread not found</h1><p><a class="link-inline" href="/threads">Back to threads →</a></p></section>`;
+        return _shell({ title: 'Thread not found · OpenVibe Community', active: 'threads', bodyHtml });
+    }
+    const title   = escapeHtml(thread.title || 'Untitled thread');
+    const body    = thread.body ? `<p style="white-space:pre-wrap;">${escapeHtml(thread.body)}</p>` : '';
+    const score   = Number(thread.score || 0);
+    const upvotes = Number(thread.upvotes || 0);
+    const postItems = (posts || []).slice(0, 200);
+    const postsHtml = postItems.length
+        ? postItems.map((p) => {
+            const author  = escapeHtml(p.author_id || p.created_by_actor_id || 'User');
+            const content = escapeHtml(String(p.body || p.content_md || p.content || '').slice(0, 5000));
+            const ts      = timeAgo(p.created_at);
+            return `<article class="glass-card">
+                <div class="card-kicker">
+                    <strong>${author}</strong> · ${ts}
+                </div>
+                <div style="margin-top:0.5rem;white-space:pre-wrap;">${content}</div>
+            </article>`;
+        }).join('')
+        : `<div class="empty-state"><p>No replies yet. Be the first to respond.</p></div>`;
+
+    const threadHref = `/threads/${encodeURIComponent(thread.id || thread.slug || '')}`;
+    const bodyHtml = `
+        <section class="hero">
+            <a class="link-inline" href="/threads" style="font-size:0.9rem;">← Threads</a>
+            <h1 class="page-title" style="margin-top:0.5rem;">${title}</h1>
+            <div class="pill-row" style="margin:0.5rem 0;">
+                ${thread.thread_type ? `<span class="pill">${escapeHtml(thread.thread_type)}</span>` : ''}
+                ${thread.status && thread.status !== 'open' ? `<span class="pill warn">${escapeHtml(thread.status)}</span>` : ''}
+                <span class="pill soft">Score: ${score}</span>
+                <span class="pill soft">${upvotes} up</span>
+            </div>
+            ${body}
+            <div style="margin-top:0.75rem;display:flex;gap:0.75rem;align-items:center;">
+                <form method="POST" action="${escapeHtml(threadHref + '/vote')}" style="display:inline;">
+                    <input type="hidden" name="direction" value="1">
+                    <button class="button" type="submit" style="font-size:0.85rem;padding:0.4rem 1rem;">▲ Upvote</button>
+                </form>
+                <form method="POST" action="${escapeHtml(threadHref + '/vote')}" style="display:inline;">
+                    <input type="hidden" name="direction" value="-1">
+                    <button class="button-secondary" type="submit" style="font-size:0.85rem;padding:0.4rem 1rem;">▼ Downvote</button>
+                </form>
+            </div>
+        </section>
+        <section class="section-panel">
+            <div class="section-head">
+                <h2 class="section-title">${postItems.length} ${postItems.length === 1 ? 'reply' : 'replies'}</h2>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem;">${postsHtml}</div>
+        </section>`;
+    return _shell({ title: title + ' · OpenVibe Community', description: thread.body ? String(thread.body).slice(0, 160) : title, active: 'threads', bodyHtml });
+}
+
 module.exports = {
     renderThreadsPage,
     renderPastesPage,
     renderPasteViewPage,
     renderPulsePage,
+    renderChatPage,
+    renderThreadDetailPage,
 };
+

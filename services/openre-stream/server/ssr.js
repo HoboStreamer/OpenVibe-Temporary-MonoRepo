@@ -139,7 +139,7 @@ function _styles() {
     </style>`;
 }
 
-function _shell({ title, bodyHtml, user }) {
+function _shell({ title, bodyHtml, user, extraScripts }) {
     const displayName = user && (user.display_name || user.username) || null;
     return `<!doctype html>
 <html lang="en">
@@ -179,6 +179,7 @@ function _shell({ title, bodyHtml, user }) {
             <a class="link-inline" href="/health">Health</a>
         </div>
     </footer>
+    ${extraScripts || ''}
 </body>
 </html>`;
 }
@@ -197,31 +198,70 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
     // channels section
     const channelCardsHtml = channels.length
         ? channels.map((c) => {
-            const streamKey = c.stream_key || c.default_stream_key || '';
+            const streamKey = c.stream_key || c.default_stream_key || (c.metadata && c.metadata.stream_key) || '';
             const rtmpUrl   = rtmpBase ? `${rtmpBase.replace(/\/$/, '')}/${esc(c.slug || '')}` : '';
             const whipUrl   = whipBase ? `${whipBase.replace(/\/$/, '')}/${esc(c.slug || '')}` : '';
-            return `<article class="glass-card">
+            return `<article class="glass-card" data-channel-slug="${esc(c.slug)}">
                 <div class="pill-row">
                     ${c.is_live ? pill('Live', 'live') : pill('Offline', 'soft')}
                 </div>
                 <h3 class="card-title">${esc(c.display_name || c.slug)}</h3>
                 <p class="muted">@${esc(c.slug)}</p>
                 ${c.description ? `<p class="card-body">${esc(c.description)}</p>` : ''}
-                ${rtmpUrl ? `<div style="margin-top:.7rem"><div class="dp-label">RTMP URL</div><div class="code-block">${esc(rtmpUrl)}</div></div>` : ''}
-                ${streamKey ? `<div style="margin-top:.5rem"><div class="dp-label">Stream key</div><div class="code-block">${esc(streamKey)}</div></div>` : ''}
+                ${rtmpUrl ? `<div style="margin-top:.7rem"><div class="dp-label">RTMP URL</div>
+                    <div style="display:flex;gap:.4rem;align-items:center;">
+                        <div class="code-block" style="flex:1">${esc(rtmpUrl)}</div>
+                        <button class="btn" data-dash-action="copy" data-copy="${esc(rtmpUrl)}" style="padding:.2rem .6rem;font-size:.75rem;">Copy</button>
+                    </div></div>` : ''}
+                ${streamKey ? `<div style="margin-top:.5rem"><div class="dp-label">Stream key</div>
+                    <div style="display:flex;gap:.4rem;align-items:center;">
+                        <div class="code-block" style="flex:1" data-stream-key="${esc(streamKey)}">${esc(streamKey.substring(0, 8))}…</div>
+                        <button class="btn" data-dash-action="copy" data-copy="${esc(streamKey)}" style="padding:.2rem .6rem;font-size:.75rem;">Copy key</button>
+                        <button class="btn" data-dash-action="regenerate-key" data-slug="${esc(c.slug)}" style="padding:.2rem .6rem;font-size:.75rem;">Regenerate</button>
+                    </div></div>` : ''}
                 ${whipUrl ? `<div style="margin-top:.5rem"><div class="dp-label">WHIP URL</div><div class="code-block">${esc(whipUrl)}</div></div>` : ''}
                 <div class="kicker">Created ${timeAgo(c.created_at)}</div>
+                <div class="inline-actions" style="margin-top:.7rem;">
+                    <button class="btn" data-dash-action="edit-channel" data-slug="${esc(c.slug)}"
+                        data-display-name="${esc(c.display_name || '')}"
+                        data-description="${esc((c.metadata && c.metadata.description) || c.description || '')}">Edit</button>
+                </div>
             </article>`;
         }).join('')
         : `<div class="empty-state">No channels yet. Create one from <a class="link-inline" href="${URLS.live}/go-live">openvibe.live/go-live</a>.</div>`;
 
+    // channel edit panel (hidden, populated by JS)
+    const channelEditPanelHtml = `
+        <div id="dash-channel-edit-panel" style="display:none;margin-bottom:1.5rem;">
+            <article class="glass-card">
+                <div class="eyebrow">Edit channel</div>
+                <form class="form-stack" id="dash-channel-edit-form">
+                    <input type="hidden" name="slug">
+                    <label><span class="dp-label">Display name</span>
+                        <input class="filter-input" type="text" name="display_name" autocomplete="off">
+                    </label>
+                    <label><span class="dp-label">Description</span>
+                        <textarea class="filter-input" name="description" rows="2" style="resize:vertical;"></textarea>
+                    </label>
+                    <div class="form-actions" style="margin-top:.7rem;">
+                        <button class="btn primary" type="submit">Save</button>
+                        <button class="btn" type="button" data-dash-action="close-channel-edit">Cancel</button>
+                        <span id="dash-channel-edit-status" style="margin-left:.5rem;font-size:.85rem;"></span>
+                    </div>
+                </form>
+            </article>
+        </div>`;
+
     // destinations section
     const destCardsHtml = destinations.length
-        ? destinations.map((d) => `<article class="glass-card">
-            <div class="pill-row">${pill(d.kind || 'custom', 'soft')}</div>
+        ? destinations.map((d) => `<article class="glass-card" data-dest-id="${esc(d.id)}">
+            <div class="pill-row">${pill(d.kind || 'custom', 'soft')}${d.enabled ? '' : ' ' + pill('Disabled', 'muted')}</div>
             <h3 class="card-title">${esc(d.label || d.kind || 'Destination')}</h3>
             ${d.target_url ? `<div class="code-block" style="margin-top:.5rem;font-size:.78rem">${esc(d.target_url)}</div>` : ''}
             <div class="kicker">Added ${timeAgo(d.created_at)}</div>
+            <div class="inline-actions" style="margin-top:.7rem;">
+                <button class="btn" data-dash-action="delete-destination" data-dest-id="${esc(d.id)}" style="color:var(--color-danger,#e55);">Remove</button>
+            </div>
         </article>`).join('')
         : `<div class="empty-state">No destinations yet.</div>`;
 
@@ -261,6 +301,7 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
             <h2 class="section-title">My channels &amp; ingest details</h2>
             <a class="btn" href="${URLS.live}/go-live">+ New channel</a>
         </div>
+        ${channelEditPanelHtml}
         <div class="grid2">${channelCardsHtml}</div>
 
         <div class="section-head">
@@ -276,7 +317,7 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
         <div style="display:grid;gap:.6rem">${streamRowsHtml}</div>
     `;
 
-    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml });
+    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml, extraScripts: '<script src="/js/dashboard.js"></script>' });
 }
 
 // ── auth gate (anonymous access to /dashboard) ────────────────────────────────

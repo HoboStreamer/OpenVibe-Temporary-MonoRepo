@@ -190,10 +190,49 @@ const SCHEMA_SQL = `
             ON community_relay_audit(relay_direction, recorded_at DESC);
         CREATE INDEX IF NOT EXISTS idx_community_relay_audit_outcome
             ON community_relay_audit(outcome, recorded_at DESC);
+
+        CREATE TABLE IF NOT EXISTS community_votes (
+            id          TEXT PRIMARY KEY,
+            thread_id   TEXT NOT NULL,
+            user_id     TEXT NOT NULL,
+            direction   INTEGER NOT NULL DEFAULT 1,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(thread_id, user_id),
+            FOREIGN KEY (thread_id) REFERENCES community_threads(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_votes_thread ON community_votes(thread_id);
     `;
+
+// Idempotent ALTER TABLE migrations for score/vote columns added after initial schema
+const LEGACY_BOOTSTRAP_SQL = [
+    `ALTER TABLE community_threads ADD COLUMN IF NOT EXISTS score       INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE community_threads ADD COLUMN IF NOT EXISTS upvotes     INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE community_threads ADD COLUMN IF NOT EXISTS downvotes   INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE community_threads ADD COLUMN IF NOT EXISTS view_count  INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE community_threads ADD COLUMN IF NOT EXISTS post_count  INTEGER NOT NULL DEFAULT 0`,
+];
 
 function defaultSqlitePath() {
     return path.resolve(__dirname, '..', 'data', 'openvibe-community.db');
+}
+
+function applyLegacyBootstrap(database) {
+    // SQLite ALTER TABLE does not support IF NOT EXISTS, so we check first.
+    const existingCols = new Set(
+        database.prepare('PRAGMA table_info(community_threads)').all().map(r => r.name)
+    );
+    const alters = [
+        { col: 'score',      sql: 'ALTER TABLE community_threads ADD COLUMN score      INTEGER NOT NULL DEFAULT 0' },
+        { col: 'upvotes',    sql: 'ALTER TABLE community_threads ADD COLUMN upvotes    INTEGER NOT NULL DEFAULT 0' },
+        { col: 'downvotes',  sql: 'ALTER TABLE community_threads ADD COLUMN downvotes  INTEGER NOT NULL DEFAULT 0' },
+        { col: 'view_count', sql: 'ALTER TABLE community_threads ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0' },
+        { col: 'post_count', sql: 'ALTER TABLE community_threads ADD COLUMN post_count INTEGER NOT NULL DEFAULT 0' },
+    ];
+    for (const { col, sql } of alters) {
+        if (!existingCols.has(col)) {
+            database.exec(sql);
+        }
+    }
 }
 
 function createSqliteStore(options) {
@@ -202,6 +241,7 @@ function createSqliteStore(options) {
         serviceName: SERVICE_NAME,
         sqlitePath: opts.sqlitePath || defaultSqlitePath(),
         schemaSql: SCHEMA_SQL,
+        afterInit: applyLegacyBootstrap,
     });
 }
 
@@ -212,6 +252,7 @@ function createPostgresStore(options) {
         databaseUrl: opts.databaseUrl,
         migrationsDir: opts.migrationsDir || POSTGRES_MIGRATIONS_DIR,
         schemaSql: SCHEMA_SQL,
+        afterInit: applyLegacyBootstrap,
     });
 }
 
@@ -230,6 +271,7 @@ module.exports = Object.assign({}, runtime, {
     SERVICE_NAME,
     POSTGRES_MIGRATIONS_DIR,
     SCHEMA_SQL,
+    LEGACY_BOOTSTRAP_SQL,
     defaultSqlitePath,
     createSqliteStore,
     createPostgresStore,

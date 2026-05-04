@@ -94,6 +94,20 @@ function buildRouter({ eventBus, config }) {
         catch (err) { return denied(res, err); }
         res.json({ thread });
     });
+
+    r.post('/threads/:idOrSlug/vote', json, (req, res) => {
+        const thread = model.getThread(req.params.idOrSlug);
+        if (!thread) return res.status(404).json({ error: 'thread not found' });
+        const a = actorMeta(req);
+        if (!a.actor_id) return res.status(401).json({ error: 'authentication required' });
+        const b = req.body || {};
+        const dir = Number(b.direction);
+        if (dir !== 1 && dir !== -1 && dir !== 0) {
+            return res.status(400).json({ error: 'direction must be 1, -1, or 0' });
+        }
+        const result = model.voteThread(thread.id, a.actor_id, dir);
+        res.json({ ok: true, thread_id: thread.id, ...result });
+    });
     r.post('/threads/:idOrSlug/lock', (req, res) => {
         const thread = model.getThread(req.params.idOrSlug);
         if (!thread) return res.status(404).json({ error: 'thread not found' });
@@ -358,6 +372,14 @@ function buildRouter({ eventBus, config }) {
             audit_summary: audit,
             relays,
         });
+    });
+
+    r.get('/discord/messages', (req, res) => {
+        const limit  = Math.min(parseInt(req.query.limit, 10)  || 50, 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const relay_id = req.query.relay_id || null;
+        const messages = model.listDiscordMessages({ relay_id, limit, offset });
+        res.json({ items: messages, limit, offset });
     });
 
     // ── Phase 16: paste versions ─────────────────────────

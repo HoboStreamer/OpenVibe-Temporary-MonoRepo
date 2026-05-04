@@ -2468,130 +2468,204 @@ function renderGoLivePage({ baseUrl, session }) {
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Your stream manager</h2>
-                    <p class="section-subtitle">Signed-in creators can load their channels, destinations, and recent streams right here, then jump to openre.stream for the heavier restream control plane.</p>
+                    <p class="section-subtitle">Manage your channels, streams, destinations, and ingest from one place.</p>
                 </div>
                 <div class="inline-actions">
                     <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.network}">Open account</a>
+                    <a class="section-link" href="${LIVE_NETWORK_URLS.network}">Account settings</a>
                 </div>
             </div>
-            <div class="story-grid">
-                <article class="glass-card" data-reveal data-go-live-session>
-                    <div class="eyebrow">Account status</div>
-                    <h3 class="card-title">Loading ${escapeHtml(viewerName || 'your account')}…</h3>
-                    <p class="card-body">This same-origin manager talks to the real OpenRe control plane through local live routes, so the sign-in state actually belongs to this surface.</p>
-                </article>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">What this page can do</div>
-                    <div class="data-points">
-                        <div class="data-point">
-                            <div class="data-point-label">Channel</div>
-                            <div class="data-point-value">Claim a handle</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">Destinations</div>
-                            <div class="data-point-value">Save RTMP targets</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">Streams</div>
-                            <div class="data-point-value">Create and mark live</div>
-                        </div>
-                        <div class="data-point">
-                            <div class="data-point-label">After the stream</div>
-                            <div class="data-point-value">Keep VODs + clips tied in</div>
-                        </div>
-                    </div>
-                </article>
+
+            <div class="tab-bar" role="tablist" aria-label="Stream manager" data-sm-tab-bar style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">
+                <button class="tab-btn active" role="tab" data-sm-tab="channels"     aria-selected="true">Channels</button>
+                <button class="tab-btn"        role="tab" data-sm-tab="destinations"                     >Destinations</button>
+                <button class="tab-btn"        role="tab" data-sm-tab="stream"                           >New stream</button>
+                <button class="tab-btn"        role="tab" data-sm-tab="ingest"                           >Ingest details</button>
+                <button class="tab-btn"        role="tab" data-sm-tab="history"                          >Recent streams</button>
             </div>
-            <div class="story-grid" style="margin-top:1rem;">
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Channels</div>
-                    <div data-go-live-channels class="list-stack"><p class="manager-note">Checking your channels…</p></div>
-                    <form class="form-stack" id="go-live-channel-form" style="margin-top:1rem;">
-                        <label>
-                            <span class="data-point-label">Handle</span>
-                            <input class="filter-input" type="text" name="slug" placeholder="your-handle" autocomplete="off">
-                        </label>
-                        <label>
-                            <span class="data-point-label">Display name</span>
-                            <input class="filter-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
-                        </label>
-                        <div class="form-actions">
-                            <button class="button" type="submit">Create channel</button>
-                            <span class="input-help">Claim your public @route before the next stream.</span>
-                        </div>
-                    </form>
-                </article>
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Destinations</div>
-                    <div data-go-live-destinations class="list-stack"><p class="manager-note">Checking your destinations…</p></div>
-                    <form class="form-stack" id="go-live-destination-form" style="margin-top:1rem;">
-                        <label>
-                            <span class="data-point-label">Kind</span>
-                            <select class="filter-input" name="kind">
-                                <option value="custom">Custom RTMP</option>
-                                <option value="youtube">YouTube</option>
-                                <option value="twitch">Twitch</option>
-                                <option value="kick">Kick</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span class="data-point-label">Label</span>
-                            <input class="filter-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off">
-                        </label>
-                        <label>
-                            <span class="data-point-label">Target URL</span>
-                            <input class="filter-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off">
-                        </label>
-                        <label>
-                            <span class="data-point-label">Stream key</span>
-                            <input class="filter-input" type="text" name="target_key" placeholder="Paste the destination key" autocomplete="off">
-                        </label>
-                        <div class="form-actions">
-                            <button class="button-secondary" type="submit">Save destination</button>
-                            <span class="input-help">These routes belong to your signed-in OpenVibe account.</span>
-                        </div>
-                    </form>
-                </article>
+
+            <!-- Channels tab -->
+            <div data-sm-panel="channels" class="sm-panel">
+                <div class="story-grid">
+                    <article class="glass-card" data-reveal data-go-live-session>
+                        <div class="eyebrow">Your channels</div>
+                        <div data-go-live-channels class="list-stack"><p class="manager-note">Loading channels…</p></div>
+                    </article>
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Create channel</div>
+                        <form class="form-stack" id="go-live-channel-form">
+                            <label><span class="data-point-label">Handle</span>
+                                <input class="filter-input" type="text" name="slug" placeholder="your-handle" autocomplete="off" required>
+                            </label>
+                            <label><span class="data-point-label">Display name</span>
+                                <input class="filter-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
+                            </label>
+                            <label><span class="data-point-label">Description</span>
+                                <textarea class="filter-input" name="description" rows="2" placeholder="Short channel bio…" style="resize:vertical;"></textarea>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                                <input type="checkbox" name="nsfw" value="1">
+                                <span class="data-point-label">NSFW channel</span>
+                            </label>
+                            <div class="form-actions">
+                                <button class="button" type="submit">Create channel</button>
+                                <span class="input-help" data-sm-status="channel-form"></span>
+                            </div>
+                        </form>
+                    </article>
+                </div>
+                <div id="go-live-channel-edit-panel" style="display:none;margin-top:1rem;">
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Edit channel</div>
+                        <form class="form-stack" id="go-live-channel-edit-form">
+                            <input type="hidden" name="slug">
+                            <label><span class="data-point-label">Display name</span>
+                                <input class="filter-input" type="text" name="display_name" autocomplete="off">
+                            </label>
+                            <label><span class="data-point-label">Description</span>
+                                <textarea class="filter-input" name="description" rows="2" style="resize:vertical;"></textarea>
+                            </label>
+                            <label><span class="data-point-label">Stream key</span>
+                                <div style="display:flex;gap:0.5rem;align-items:center;">
+                                    <input class="filter-input" type="text" name="stream_key_display" readonly style="flex:1;font-family:monospace;">
+                                    <button class="button-secondary" type="button" data-sm-action="copy-stream-key">Copy</button>
+                                    <button class="button-secondary" type="button" data-sm-action="regenerate-key">Regenerate</button>
+                                </div>
+                            </label>
+                            <label><span class="data-point-label">RTMP ingest URL</span>
+                                <div style="display:flex;gap:0.5rem;align-items:center;">
+                                    <input class="filter-input" type="text" name="rtmp_url_display" readonly style="flex:1;font-family:monospace;">
+                                    <button class="button-secondary" type="button" data-sm-action="copy-rtmp-url">Copy</button>
+                                </div>
+                            </label>
+                            <label><span class="data-point-label">Visibility</span>
+                                <select class="filter-input" name="visibility">
+                                    <option value="public">Public</option>
+                                    <option value="unlisted">Unlisted</option>
+                                    <option value="private">Private</option>
+                                </select>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                                <input type="checkbox" name="nsfw" value="1">
+                                <span class="data-point-label">NSFW</span>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                                <input type="checkbox" name="recording_enabled" value="1">
+                                <span class="data-point-label">Enable VOD recording</span>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                                <input type="checkbox" name="chat_enabled" value="1">
+                                <span class="data-point-label">Enable chat</span>
+                            </label>
+                            <div class="form-actions">
+                                <button class="button" type="submit">Save changes</button>
+                                <span class="input-help" data-sm-status="channel-edit-form"></span>
+                            </div>
+                        </form>
+                    </article>
+                </div>
             </div>
-            <div class="story-grid" style="margin-top:1rem;">
+
+            <!-- Destinations tab -->
+            <div data-sm-panel="destinations" class="sm-panel" style="display:none;">
+                <div class="story-grid">
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Your destinations</div>
+                        <div data-go-live-destinations class="list-stack"><p class="manager-note">Loading destinations…</p></div>
+                    </article>
+                    <article class="glass-card" data-reveal>
+                        <div class="eyebrow">Add destination</div>
+                        <form class="form-stack" id="go-live-destination-form">
+                            <label><span class="data-point-label">Kind</span>
+                                <select class="filter-input" name="kind">
+                                    <option value="custom">Custom RTMP</option>
+                                    <option value="youtube">YouTube</option>
+                                    <option value="twitch">Twitch</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="facebook">Facebook</option>
+                                </select>
+                            </label>
+                            <label><span class="data-point-label">Label</span>
+                                <input class="filter-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off" required>
+                            </label>
+                            <label><span class="data-point-label">Target URL</span>
+                                <input class="filter-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off" required>
+                            </label>
+                            <label><span class="data-point-label">Stream key</span>
+                                <input class="filter-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
+                            </label>
+                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                                <input type="checkbox" name="enabled" value="1" checked>
+                                <span class="data-point-label">Enabled</span>
+                            </label>
+                            <div class="form-actions">
+                                <button class="button-secondary" type="submit">Save destination</button>
+                                <span class="input-help" data-sm-status="destination-form"></span>
+                            </div>
+                        </form>
+                    </article>
+                </div>
+            </div>
+
+            <!-- New stream tab -->
+            <div data-sm-panel="stream" class="sm-panel" style="display:none;">
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">Create a stream</div>
                     <form class="form-stack" id="go-live-stream-form">
-                        <label>
-                            <span class="data-point-label">Channel</span>
-                            <select class="filter-input" name="channel_slug">
+                        <label><span class="data-point-label">Channel</span>
+                            <select class="filter-input" name="channel_slug" required>
                                 <option value="">Select a channel</option>
                             </select>
                         </label>
-                        <label>
-                            <span class="data-point-label">Title</span>
-                            <input class="filter-input" type="text" name="title" placeholder="Tonight’s stream title" autocomplete="off">
+                        <label><span class="data-point-label">Title</span>
+                            <input class="filter-input" type="text" name="title" placeholder="Tonight's stream title" autocomplete="off">
                         </label>
-                        <label>
-                            <span class="data-point-label">Category</span>
+                        <label><span class="data-point-label">Description</span>
+                            <textarea class="filter-input" name="description" rows="2" placeholder="Brief stream description…" style="resize:vertical;"></textarea>
+                        </label>
+                        <label><span class="data-point-label">Category</span>
                             <input class="filter-input" type="text" name="category" placeholder="Art, coding, games, music…" autocomplete="off">
                         </label>
-                        <label>
-                            <span class="data-point-label">Protocol</span>
+                        <label><span class="data-point-label">Protocol</span>
                             <select class="filter-input" name="protocol">
                                 <option value="rtmp">RTMP / OBS</option>
                                 <option value="whip">WHIP</option>
                                 <option value="browser">Browser quick-start</option>
                             </select>
                         </label>
+                        <label style="display:flex;align-items:center;gap:0.5rem;">
+                            <input type="checkbox" name="nsfw" value="1">
+                            <span class="data-point-label">NSFW stream</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:0.5rem;">
+                            <input type="checkbox" name="recording_enabled" value="1" checked>
+                            <span class="data-point-label">Record to VOD</span>
+                        </label>
                         <div class="form-actions">
                             <button class="button" type="submit">Create stream</button>
-                            <span class="input-help">This creates the stream record and returns fresh ingest details.</span>
+                            <button class="button" type="button" id="go-live-start-btn" style="display:none;">Mark live</button>
+                            <button class="button-secondary" type="button" id="go-live-end-btn" style="display:none;">End stream</button>
+                            <span class="input-help" data-sm-status="stream-form"></span>
                         </div>
                     </form>
-                    <div data-go-live-ingest class="list-stack" style="margin-top:1rem;">
-                        <p class="manager-note">Create a stream to reveal ingest details and hand-off info for OBS or your restream workflow.</p>
+                </article>
+            </div>
+
+            <!-- Ingest details tab -->
+            <div data-sm-panel="ingest" class="sm-panel" style="display:none;">
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Ingest details</div>
+                    <div data-go-live-ingest class="list-stack">
+                        <p class="manager-note">Create or select a stream to reveal ingest URLs and hand-off info for OBS, WHIP, or your restream workflow.</p>
                     </div>
                 </article>
+            </div>
+
+            <!-- Recent streams tab -->
+            <div data-sm-panel="history" class="sm-panel" style="display:none;">
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">Recent streams</div>
-                    <div data-go-live-streams class="list-stack"><p class="manager-note">Checking your recent streams…</p></div>
+                    <div data-go-live-streams class="list-stack"><p class="manager-note">Loading your recent streams…</p></div>
                 </article>
             </div>
         </section>`

@@ -440,6 +440,67 @@ function findDiscordMessage(discord_message_id) {
     return Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) });
 }
 
+// ── voting ────────────────────────────────────────────────
+function voteThread(threadId, userId, direction) {
+    // direction: 1 = upvote, -1 = downvote, 0 = remove vote
+    const conn = db.get();
+    const tid = String(threadId);
+    const uid = String(userId);
+    const dir = Number(direction);
+
+    if (dir === 0) {
+        // Remove vote
+        conn.prepare(`DELETE FROM community_votes WHERE thread_id = ? AND user_id = ?`).run(tid, uid);
+    } else {
+        const id = newId('vote');
+        conn.prepare(`
+            INSERT INTO community_votes (id, thread_id, user_id, direction)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(thread_id, user_id) DO UPDATE SET direction = excluded.direction
+        `).run(id, tid, uid, dir > 0 ? 1 : -1);
+    }
+
+    // Recompute score from votes
+    const upvotes   = conn.prepare(`SELECT COUNT(*) AS c FROM community_votes WHERE thread_id = ? AND direction = 1`).get(tid);
+    const downvotes = conn.prepare(`SELECT COUNT(*) AS c FROM community_votes WHERE thread_id = ? AND direction = -1`).get(tid);
+    const up   = (upvotes   && upvotes.c)   ? Number(upvotes.c)   : 0;
+    const down = (downvotes && downvotes.c) ? Number(downvotes.c) : 0;
+    conn.prepare(`
+        UPDATE community_threads SET score = ?, upvotes = ?, downvotes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(up - down, up, down, tid);
+
+    return { score: up - down, upvotes: up, downvotes: down };
+}
+
+function getThreadVote(threadId, userId) {
+    const r = db.get().prepare(
+        `SELECT direction FROM community_votes WHERE thread_id = ? AND user_id = ?`
+    ).get(String(threadId), String(userId));
+    return r ? r.direction : 0;
+}
+
+// ── discord messages listing ──────────────────────────────
+function listDiscordMessages({ relay_id, limit, offset } = {}) {
+    const lim = Math.min(Number(limit) || 50, 200);
+    const off = Number(offset) || 0;
+    let query;
+    if (relay_id) {
+        query = db.get().prepare(`
+            SELECT dm.*, dr.discord_channel_id as relay_channel
+            FROM community_discord_messages dm
+            LEFT JOIN community_discord_relays dr ON dm.discord_channel_id = dr.discord_channel_id
+            WHERE dr.id = ?
+            ORDER BY dm.created_at DESC LIMIT ? OFFSET ?
+        `).all(String(relay_id), lim, off);
+    } else {
+        query = db.get().prepare(`
+            SELECT * FROM community_discord_messages ORDER BY created_at DESC LIMIT ? OFFSET ?
+        `).all(lim, off);
+    }
+    return query.map((r) => Object.assign({}, r, { metadata: safeJson(r.metadata_json, {}) }));
+}
+
 // ── legacy ───────────────────────────────────────────────
 function recordLegacyMap({ source, kind, legacy_id, new_id }) {
     db.get().prepare(
@@ -626,7 +687,9 @@ module.exports = {
     // attachments
     attachMedia, listAttachments,
     // discord
-    createRelay, getRelay, findRelayByChannel, listRelays, updateRelay, recordDiscordMessage, findDiscordMessage,
+    createRelay, getRelay, findRelayByChannel, listRelays, updateRelay, recordDiscordMessage, findDiscordMessage, listDiscordMessages,
+    // voting
+    voteThread, getThreadVote,
     // legacy
     recordLegacyMap, lookupLegacy,
 };

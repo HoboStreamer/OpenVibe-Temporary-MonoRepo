@@ -2,31 +2,33 @@
  * openvibe.live — realtime client integration
  *
  * Subscribes to openvibe-realtime via SSE (EventSource) and updates the page
- * with live stream events, community pulse, and ingest status changes without
- * a full page reload.
+ * with live stream events, community pulse, VOD/clip cards, and chat messages.
  *
- * Topics subscribed:
- *   global:live       — stream.started, stream.ended, stream.ingest.*
- *   community:pulse   — community.thread.created, community.paste.created
+ * Topics subscribed (homepage): global:live, community:pulse
+ * Topics subscribed (stream page): channel:<slug>, stream:<id>, chat:stream:<id>
  *
- * The SSR page renders the initial state; this file only mutates DOM after
- * real events arrive. It does not replace or reinitialise the SSR content.
+ * The SSR page renders the initial state; this file mutates DOM after real
+ * events arrive. Graceful fallback when EventSource is unavailable.
  *
- * Loaded via <script src="/js/realtime.js?v=..."> at the bottom of the page shell.
  * No module system — plain IIFE, no bundler.
+ * Loaded via <script src="/js/realtime.js?v=20260504-3"> in the page shell.
  */
 (function () {
     'use strict';
 
     // ── configuration ─────────────────────────────────────────
-    // Prefer an explicit window.OPENVIBE_REALTIME_URL env injection from SSR,
-    // fall back to same-origin /events which the nginx proxy forwards to
-    // openvibe-realtime.
     var REALTIME_URL = (window.OPENVIBE_CONFIG && window.OPENVIBE_CONFIG.realtimeUrl) || '';
     var SSE_ENDPOINT = REALTIME_URL
         ? REALTIME_URL.replace(/\/$/, '') + '/events'
         : '/events';
+
+    // Determine topics from page-level data attributes
+    var pageStreamId   = document.body && document.body.getAttribute('data-stream-id');
+    var pageStreamSlug = document.body && document.body.getAttribute('data-channel-slug');
     var TOPICS = 'global:live,community:pulse';
+    if (pageStreamId)   TOPICS += ',stream:' + encodeURIComponent(pageStreamId) + ',chat:stream:' + encodeURIComponent(pageStreamId);
+    if (pageStreamSlug) TOPICS += ',channel:' + encodeURIComponent(pageStreamSlug);
+
     var RECONNECT_BASE_MS = 2000;
     var RECONNECT_MAX_MS  = 60000;
 
@@ -39,6 +41,27 @@
 
     function escHtml(str) {
         return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Canonical alias normalization — mirrors packages/openvibe-realtime/events.js.
+    var ALIASES = {
+        'stream.vod_attached':        'stream.vod.attached',
+        'stream.ingest_connected':    'stream.ingest.connected',
+        'stream.ingest_disconnected': 'stream.ingest.disconnected',
+        'stream.mirrored_to_live':    'stream.mirrored.to.live',
+        'community.thread.created':   'thread.created',
+        'community.post.created':     'comment.created',
+        'community.paste.created':    'paste.created',
+        'community.paste.updated':    'paste.updated',
+        'chat.message.created':       'chat.message.sent',
+        'chat.message_created':       'chat.message.sent',
+        'vod.attached':               'stream.vod.attached',
+        'clip.materialization_completed': 'clip.materialized',
+        'discord.message.created':    'discord.message.received',
+    };
+    function normalizeName(name) {
+        var lower = String(name || '').toLowerCase().trim();
+        return ALIASES[lower] || lower.replace(/[^a-z0-9.]/g, '.');
     }
 
     function formatCount(n) {
@@ -67,8 +90,9 @@
     var stopped = false;
     var source = null;
 
-    // Tracks live-now stream cards by stream id
-    var liveCards = {}; // streamId → article element
+    var liveCards = {};  // streamId → article element
+    var vodSeen   = {};  // mediaId  → bool (prevents duplicate VOD insertions)
+    var clipSeen  = {};  // clipId   → bool
 
     // ── DOM helpers ───────────────────────────────────────────
     function findLiveNowGrid() {
@@ -80,6 +104,24 @@
     function findCommunityPulseGrid() {
         return document.querySelector('[data-community-pulse-grid]')
             || document.querySelector('[data-community-pulse]')
+            || null;
+    }
+
+    function findVodGrid() {
+        return document.querySelector('[data-vod-grid]')
+            || document.querySelector('[data-recent-vods]')
+            || null;
+    }
+
+    function findClipGrid() {
+        return document.querySelector('[data-clip-grid]')
+            || document.querySelector('[data-recent-clips]')
+            || null;
+    }
+
+    function findChatMessages() {
+        return document.querySelector('[data-chat-messages]')
+            || document.querySelector('[data-stream-chat]')
             || null;
     }
 
@@ -155,20 +197,76 @@
         return article;
     }
 
+    function buildVodCard(payload) {
+        var p = payload || {};
+        var mediaId     = p.media_id || p.vod_id || p.id || '';
+        var slug        = p.channel_slug || '';
+        var channelName = p.channel_name || slug || 'Creator';
+        var title       = p.title || 'VOD';
+        var duration    = p.duration_seconds ? Math.floor(p.duration_seconds / 60) + 'm' : '';
+        var href        = slug ? '/@' + encodeURIComponent(slug) + '/vods' : '/vods';
+
+        var article = document.createElement('article');
+        article.className = 'glass-card';
+        article.setAttribute('data-media-id', mediaId);
+        article.setAttribute('data-rt-vod', '1');
+        article.innerHTML =
+            '<div class="pill-row"><span class="pill">VOD</span>' +
+            (duration ? '<span class="pill soft">' + escHtml(duration) + '</span>' : '') +
+            '</div>' +
+            '<a class="card-link" href="' + escHtml(href) + '">' +
+                '<h3 class="card-title">' + escHtml(title) + '</h3>' +
+            '</a>' +
+            '<div class="card-kicker">' +
+                '<a class="link-inline" href="' + escHtml('/@' + encodeURIComponent(slug || 'unknown')) + '">' + escHtml(channelName) + '</a>' +
+                ' · just finished' +
+            '</div>';
+        return article;
+    }
+
+    function buildClipCard(payload) {
+        var p = payload || {};
+        var clipId      = p.clip_id || p.id || '';
+        var slug        = p.channel_slug || '';
+        var channelName = p.channel_name || slug || 'Creator';
+        var title       = p.title || 'Clip';
+        var href        = slug ? '/@' + encodeURIComponent(slug) + '/clips' : '/clips';
+
+        var article = document.createElement('article');
+        article.className = 'glass-card';
+        article.setAttribute('data-clip-id', clipId);
+        article.setAttribute('data-rt-clip', '1');
+        article.innerHTML =
+            '<div class="pill-row"><span class="pill">Clip</span></div>' +
+            '<a class="card-link" href="' + escHtml(href) + '">' +
+                '<h3 class="card-title">' + escHtml(title) + '</h3>' +
+            '</a>' +
+            '<div class="card-kicker">' +
+                '<a class="link-inline" href="' + escHtml('/@' + encodeURIComponent(slug || 'unknown')) + '">' + escHtml(channelName) + '</a>' +
+                ' · just clipped' +
+            '</div>';
+        return article;
+    }
+
     function buildCommunitySignal(type, payload) {
-        var title = payload && payload.title || (type === 'paste' ? 'New paste' : 'New thread');
-        var slug = payload && payload.slug || '';
-        var route = payload && payload.route_url;
-        if (!route && slug) route = 'https://openvibe.community/p/' + encodeURIComponent(slug);
+        var p = payload || {};
+        var eyebrow = type === 'paste' ? 'Paste' : type === 'comment' ? 'Comment' : 'Thread';
+        var title = p.title || (type === 'paste' ? 'New paste' : type === 'comment' ? 'New comment' : 'New thread');
+        var slug = p.slug || '';
+        var route = p.route_url;
+        if (!route && slug && type === 'paste')  route = 'https://openvibe.community/p/' + encodeURIComponent(slug);
+        if (!route && p.thread_id) route = 'https://openvibe.community/threads/' + encodeURIComponent(p.thread_id);
         if (!route) route = 'https://openvibe.community/';
 
         var card = document.createElement('article');
         card.className = 'glass-card';
         card.setAttribute('data-rt-community', '1');
         card.innerHTML =
-            '<div class="eyebrow">' + escHtml(type === 'paste' ? 'Paste' : 'Thread') + '</div>' +
+            '<div class="eyebrow">' + escHtml(eyebrow) + '</div>' +
             '<h3 class="card-title">' + escHtml(title) + '</h3>' +
-            '<p class="card-body">' + escHtml(payload && payload.preview_text || payload && payload.body || '') + '</p>' +
+            (p.preview_text || p.body
+                ? '<p class="card-body">' + escHtml(String(p.preview_text || p.body || '').slice(0, 200)) + '</p>'
+                : '') +
             '<div class="card-kicker">just now · <a class="link-inline" href="' + escHtml(route) + '">Open →</a></div>';
         return card;
     }
@@ -178,10 +276,10 @@
         if (!grid) return;
         var card = buildCommunitySignal(type, payload);
         grid.insertBefore(card, grid.firstChild);
-        // Keep at most 6 realtime signals in the pulse grid
+        // Keep at most 8 realtime signals in the pulse grid
         var signals = grid.querySelectorAll('[data-rt-community]');
-        for (var i = 6; i < signals.length; i++) {
-            signals[i].parentNode.removeChild(signals[i]);
+        for (var i = 8; i < signals.length; i++) {
+            if (signals[i].parentNode) signals[i].parentNode.removeChild(signals[i]);
         }
     }
 
@@ -240,57 +338,150 @@
             if (card) setStreamBadge(card, 'ended');
         },
 
-        'stream.mirrored_to_live': function (data) {
-            // Same as stream.started for display purposes
+        'stream.mirrored.to.live': function (data) {
             HANDLERS['stream.started'](data);
+        },
+
+        'stream.vod.attached': function (data) {
+            var p = data.payload || data;
+            var mediaId = p.media_id || p.vod_media_id || p.vod_id;
+            if (!mediaId || vodSeen[mediaId]) return;
+            vodSeen[mediaId] = true;
+            var grid = findVodGrid();
+            if (grid) grid.insertBefore(buildVodCard(p), grid.firstChild);
         },
 
         'vod.created': function (data) {
             var p = data.payload || data;
-            log('vod.created', p.media_id || p.id);
+            var mediaId = p.media_id || p.id;
+            if (!mediaId || vodSeen[mediaId]) return;
+            vodSeen[mediaId] = true;
+            var grid = findVodGrid();
+            if (grid) grid.insertBefore(buildVodCard(p), grid.firstChild);
         },
 
         'vod.finalized': function (data) {
             var p = data.payload || data;
-            log('vod.finalized', p.media_id || p.id);
+            var mediaId = p.media_id || p.id;
+            if (!mediaId) return;
+            // Update existing card badge if already visible
+            var existing = document.querySelector('[data-media-id="' + mediaId + '"]');
+            if (existing) {
+                var badge = existing.querySelector('.pill');
+                if (badge) { badge.className = 'pill success'; badge.textContent = 'Ready'; }
+                return;
+            }
+            if (!vodSeen[mediaId]) {
+                vodSeen[mediaId] = true;
+                var grid = findVodGrid();
+                if (grid) grid.insertBefore(buildVodCard(p), grid.firstChild);
+            }
         },
 
         'clip.created': function (data) {
             var p = data.payload || data;
-            log('clip.created', p.clip_id || p.id);
+            var clipId = p.clip_id || p.id;
+            if (!clipId || clipSeen[clipId]) return;
+            clipSeen[clipId] = true;
+            var grid = findClipGrid();
+            if (grid) grid.insertBefore(buildClipCard(p), grid.firstChild);
         },
 
-        'community.thread.created': function (data) {
+        'clip.materialized': function (data) {
+            var p = data.payload || data;
+            var clipId = p.clip_id || p.id;
+            if (!clipId) return;
+            var existing = document.querySelector('[data-clip-id="' + clipId + '"]');
+            if (existing) {
+                var badge = existing.querySelector('.pill');
+                if (badge) { badge.className = 'pill success'; badge.textContent = 'Ready'; }
+                return;
+            }
+            if (!clipSeen[clipId]) {
+                clipSeen[clipId] = true;
+                var grid = findClipGrid();
+                if (grid) grid.insertBefore(buildClipCard(p), grid.firstChild);
+            }
+        },
+
+        // Canonical community event names (post-normalization)
+        'thread.created': function (data) {
             prependCommunitySignal('thread', data.payload || data);
         },
 
-        'community.paste.created': function (data) {
+        'paste.created': function (data) {
             prependCommunitySignal('paste', data.payload || data);
         },
 
-        'community.post.created': function (data) {
-            log('community.post.created', data.payload && data.payload.thread_id);
+        'paste.updated': function (data) {
+            var p = data.payload || data;
+            log('paste.updated', p.slug || p.id);
         },
 
-        'chat.message.created': function (data) {
-            // The chat widget on the page handles its own rendering.
-            // Emit a custom DOM event so other scripts can pick it up.
-            var evt = new CustomEvent('openvibe-rt-chat', { detail: data, bubbles: true });
-            document.dispatchEvent(evt);
+        'comment.created': function (data) {
+            prependCommunitySignal('comment', data.payload || data);
+        },
+
+        'discord.message.received': function (data) {
+            var p = data.payload || data;
+            prependCommunitySignal('thread', Object.assign({
+                title: 'Discord: ' + (p.username || 'Community'),
+                body:  p.content || '',
+            }, p));
+        },
+
+        // Canonical chat event name (post-normalization)
+        'chat.message.sent': function (data) {
+            var p = data.payload || data;
+            var container = findChatMessages();
+            if (container) {
+                var el = document.createElement('div');
+                el.className = 'chat-message';
+                el.innerHTML =
+                    '<strong class="chat-author">' + escHtml(p.username || p.author || 'User') + '</strong>' +
+                    '<span class="chat-body"> ' + escHtml(p.text || p.body || p.message || '') + '</span>';
+                container.appendChild(el);
+                container.scrollTop = container.scrollHeight;
+                // Cap at 200 messages in the DOM
+                var msgs = container.querySelectorAll('.chat-message');
+                for (var i = 0; i < msgs.length - 200; i++) {
+                    if (msgs[i].parentNode) msgs[i].parentNode.removeChild(msgs[i]);
+                }
+            }
+            try {
+                document.dispatchEvent(new CustomEvent('openvibe-rt-chat', { detail: data, bubbles: true }));
+            } catch { /* ignore */ }
         },
     };
+
+    // Backward-compat aliases — fired when legacy event names arrive from old servers
+    HANDLERS['stream.vod_attached']        = HANDLERS['stream.vod.attached'];
+    HANDLERS['stream.ingest_connected']    = HANDLERS['stream.ingest.connected'];
+    HANDLERS['stream.ingest_disconnected'] = HANDLERS['stream.ingest.disconnected'];
+    HANDLERS['stream.mirrored_to_live']    = HANDLERS['stream.mirrored.to.live'];
+    HANDLERS['community.thread.created']   = HANDLERS['thread.created'];
+    HANDLERS['community.paste.created']    = HANDLERS['paste.created'];
+    HANDLERS['community.post.created']     = HANDLERS['comment.created'];
+    HANDLERS['chat.message.created']       = HANDLERS['chat.message.sent'];
 
     // ── SSE connection ────────────────────────────────────────
     function dispatch(eventName, rawData) {
         var data;
         try { data = JSON.parse(rawData); } catch { data = { raw: rawData }; }
-        // Normalize event name: dots only, lowercase
-        var name = String(eventName || '').toLowerCase().replace(/[^a-z0-9.]/g, '.');
+        // Normalize to canonical name then look up handler
+        var name = normalizeName(String(eventName || '').toLowerCase());
         var handler = HANDLERS[name];
         if (handler) {
             try { handler(data); } catch (e) { log('handler error', name, e); }
         }
-        // Emit a generic DOM event for external listeners
+        // Also try raw name if it differs (belt-and-suspenders)
+        var rawName = String(eventName || '').toLowerCase();
+        if (rawName !== name) {
+            var rawHandler = HANDLERS[rawName];
+            if (rawHandler) {
+                try { rawHandler(data); } catch { /* ignore */ }
+            }
+        }
         try {
             document.dispatchEvent(new CustomEvent('openvibe-rt-event', {
                 detail: { event: name, data: data },
@@ -323,9 +514,10 @@
             }
         });
 
-        // Attach handlers for all tracked event names
+        // Attach handlers for all tracked event names (canonical + aliases)
         var TRACKED_EVENTS = Object.keys(HANDLERS).concat([
-            'stream.vod_attached', 'stream.created', 'billing.tip.sent',
+            'stream.vod.attached', 'stream.created', 'billing.tip.sent',
+            'vod.finalized', 'clip.materialized', 'discord.message.received',
         ]);
         TRACKED_EVENTS.forEach(function (evtName) {
             source.addEventListener(evtName, function (e) {

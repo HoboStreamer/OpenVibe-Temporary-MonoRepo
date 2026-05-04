@@ -115,6 +115,22 @@ function buildApp() {
         res.send(communitySSR.renderPastesPage(pastes));
     });
 
+    app.get('/chat', (_req, res) => {
+        const m = require('./model');
+        const messages = m.listDiscordMessages({ limit: 50 });
+        res.send(communitySSR.renderChatPage(messages));
+    });
+
+    // /threads/:idOrSlug — HTML thread detail page (before API mounts so it only
+    // fires for browser Accept: text/html requests; API clients hit /api/community/threads/:id)
+    app.get('/threads/:idOrSlug', (req, res) => {
+        const m = require('./model');
+        const thread = m.getThread(req.params.idOrSlug);
+        if (!thread) return res.status(404).send(communitySSR.renderThreadDetailPage(null, []));
+        const posts = m.listPosts({ thread_id: thread.id, limit: 200 });
+        res.send(communitySSR.renderThreadDetailPage(thread, posts));
+    });
+
     app.use((err, _req, res, _next) => {
         console.error('[community] unhandled:', err.message);
         res.status(500).json({ error: 'internal error' });
