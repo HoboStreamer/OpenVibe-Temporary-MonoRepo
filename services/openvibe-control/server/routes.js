@@ -116,6 +116,82 @@ function buildRouter(config) {
         res.json({ items: results, total: results.length });
     });
 
+    // ── action: event replay ──────────────────────────────────────
+    r.post('/api/events/:id/replay', express.json({ limit: '64kb' }), adminOnly, async (req, res) => {
+        const result = await safeFetch(
+            `${svc.events}/api/v1/events/${encodeURIComponent(req.params.id)}/replay`,
+            key,
+            { method: 'POST', body: JSON.stringify(req.body || {}) }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 500).json({ error: result.error });
+        }
+        res.json({ ok: true, result });
+    });
+
+    // ── action: API key management (proxied to openvibe-api) ──────
+    r.post('/api/api-keys', express.json({ limit: '64kb' }), adminOnly, async (req, res) => {
+        const result = await safeFetch(
+            `${svc.api}/api/v1/me/api-keys`,
+            key,
+            { method: 'POST', body: JSON.stringify(req.body || {}), userId: req.user && (req.user.id || req.user.sub) }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 500).json({ error: result.error });
+        }
+        res.status(201).json(result);
+    });
+
+    r.delete('/api/api-keys/:id', adminOnly, async (req, res) => {
+        const result = await safeFetch(
+            `${svc.api}/api/v1/me/api-keys/${encodeURIComponent(req.params.id)}`,
+            key,
+            { method: 'DELETE', userId: req.user && (req.user.id || req.user.sub) }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 404).json({ error: result.error });
+        }
+        res.json({ ok: true });
+    });
+
+    // ── action: trigger paste migration ──────────────────────────
+    r.post('/api/migrations/hobostreamer-pastes/import', express.json({ limit: '16kb' }), adminOnly, async (req, res) => {
+        const result = await safeFetch(
+            `${svc.community}/api/v1/community/admin/migrations/hobostreamer-pastes/import`,
+            key,
+            { method: 'POST', body: JSON.stringify(req.body || {}), userId: req.user && (req.user.id || req.user.sub), role: 'admin' }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 500).json({ error: result.error });
+        }
+        res.json(result);
+    });
+
+    r.get('/api/migrations/hobostreamer-pastes/status', adminOnly, async (req, res) => {
+        const result = await safeFetch(
+            `${svc.community}/api/v1/community/admin/migrations/hobostreamer-pastes/status`,
+            key,
+            { userId: req.user && (req.user.id || req.user.sub), role: 'admin' }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 500).json({ error: result.error });
+        }
+        res.json(result);
+    });
+
+    r.get('/api/migrations/hobostreamer-pastes/dry-run', adminOnly, async (req, res) => {
+        const qs = req.query.limit ? `?limit=${encodeURIComponent(req.query.limit)}` : '';
+        const result = await safeFetch(
+            `${svc.community}/api/v1/community/admin/migrations/hobostreamer-pastes/dry-run${qs}`,
+            key,
+            { userId: req.user && (req.user.id || req.user.sub), role: 'admin' }
+        );
+        if (result && result.error) {
+            return res.status(result._status || 500).json({ error: result.error });
+        }
+        res.json(result);
+    });
+
     return r;
 }
 

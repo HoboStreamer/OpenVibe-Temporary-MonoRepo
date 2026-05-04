@@ -493,6 +493,85 @@ function buildRouter({ eventBus, config }) {
         }
     });
 
+    // ── admin: paste migration ──────────────────────────────────────────────
+    // These routes trigger or inspect the HoboStreamer paste migration. They are
+    // admin-only (checked via role) and run the migration as a child process so
+    // it gets a clean SQLite connection separate from the service process.
+    const { spawn } = require('child_process');
+    const path = require('path');
+
+    const MIGRATION_SCRIPT = path.resolve(__dirname, 'migrations', 'hobostreamer-pastes.js');
+    let _migrationState = { running: false, lastRun: null, lastResult: null };
+
+    function requireAdmin(req, res) {
+        if (!req.user || req.user.role !== 'admin') {
+            res.status(403).json({ error: 'admin required' });
+            return false;
+        }
+        return true;
+    }
+
+    function spawnMigration(args) {
+        return new Promise((resolve) => {
+            const env = Object.assign({}, process.env);
+            const child = spawn(process.execPath, [MIGRATION_SCRIPT].concat(args), { env, stdio: 'pipe' });
+            const lines = [];
+            child.stdout.on('data', (d) => lines.push(...String(d).split('\n').filter(Boolean)));
+            child.stderr.on('data', (d) => lines.push(...String(d).split('\n').filter(Boolean)));
+            child.on('close', (code) => {
+                resolve({ ok: code === 0, exit_code: code, output: lines });
+            });
+        });
+    }
+
+    r.get('/admin/migrations/hobostreamer-pastes/status', json, (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        res.json({
+            ok: true,
+            running: _migrationState.running,
+            last_run: _migrationState.lastRun,
+            last_result: _migrationState.lastResult,
+            script: MIGRATION_SCRIPT,
+        });
+    });
+
+    r.get('/admin/migrations/hobostreamer-pastes/dry-run', json, (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        if (_migrationState.running) return res.status(409).json({ error: 'migration already running' });
+
+        const limit = req.query.limit ? ['--limit', String(parseInt(req.query.limit, 10) || 100)] : ['--limit', '20'];
+        spawnMigration(['--dry-run'].concat(limit)).then((result) => {
+            res.json({ ok: result.ok, exit_code: result.exit_code, output: result.output });
+        }).catch((err) => {
+            res.status(500).json({ error: err.message });
+        });
+    });
+
+    r.post('/admin/migrations/hobostreamer-pastes/import', json, (req, res) => {
+        if (!requireAdmin(req, res)) return;
+        if (_migrationState.running) return res.status(409).json({ error: 'migration already running' });
+
+        _migrationState.running = true;
+        _migrationState.lastRun = new Date().toISOString();
+
+        const limit = req.body && req.body.limit ? ['--limit', String(parseInt(req.body.limit, 10) || 0)] : [];
+        res.json({ ok: true, message: 'migration started', started_at: _migrationState.lastRun });
+
+        spawnMigration(limit).then((result) => {
+            _migrationState.running = false;
+            _migrationState.lastResult = {
+                ok: result.ok,
+                exit_code: result.exit_code,
+                output: result.output,
+                finished_at: new Date().toISOString(),
+            };
+            console.log(`[community] paste migration finished: exit=${result.exit_code}`);
+        }).catch((err) => {
+            _migrationState.running = false;
+            _migrationState.lastResult = { ok: false, error: err.message, finished_at: new Date().toISOString() };
+        });
+    });
+
     return r;
 }
 

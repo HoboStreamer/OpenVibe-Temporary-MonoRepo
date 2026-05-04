@@ -7,11 +7,16 @@ const cookieParser = require('cookie-parser');
 
 const { createServiceRuntime } = require('@openvibe/runtime');
 const { buildAuthClient, optionalOpenVibeAuth } = require('./middleware');
+const { apiKeyAuth } = require('./api-key-middleware');
 
 const config  = require('./config');
+const db      = require('./db');
 const { buildRouter } = require('./routes');
 
-function buildApp() {
+function buildApp(opts) {
+    const dbPath = opts && opts.dbPath;
+    db.init(dbPath || config.dbPath || undefined);
+
     const app = express();
     app.set('trust proxy', 2);
 
@@ -52,6 +57,25 @@ function buildApp() {
 
     runtime.attach(app);
     app.use(optionalOpenVibeAuth(authClient));
+    app.use(apiKeyAuth);
+
+    // ── well-known service registry ──────────────────────────
+    app.get('/.well-known/openvibe', (_req, res) => {
+        res.json({
+            spec_version: '1',
+            network: 'openvibe',
+            generated_at: new Date().toISOString(),
+            services: Object.entries(config.services).map(([id, url]) => ({
+                id,
+                url,
+                api_prefix: `${config.publicBaseUrl || ''}/api/v1/${id}`,
+            })),
+            gateway: {
+                api_prefix: `${config.publicBaseUrl || ''}/api/v1`,
+                docs: `${config.publicBaseUrl || ''}/api/v1`,
+            },
+        });
+    });
 
     // ── gateway introspection ───────────────────────────────────
     app.get('/api/v1', (_req, res) => {
@@ -85,7 +109,7 @@ function buildApp() {
 }
 
 function start() {
-    const { app } = buildApp();
+    const { app } = buildApp({});
     app.listen(config.port, config.host, () => {
         console.log(`[openvibe-api] listening on http://${config.host}:${config.port}`);
     });

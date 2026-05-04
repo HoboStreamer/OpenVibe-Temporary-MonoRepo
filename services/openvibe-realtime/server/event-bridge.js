@@ -28,6 +28,8 @@ function createEventBridge(options) {
         prefix: config.queuePrefix,
     }) : null);
 
+    const sseClients = opts.sseClients || null; // Map<id, { res, topics }>
+
     const state = {
         started: false,
         mode: 'disabled',
@@ -38,6 +40,8 @@ function createEventBridge(options) {
         last_event_type: null,
         last_trace_id: null,
         routed_messages: 0,
+        socket_targets: 0,
+        sse_targets: 0,
         backlog_warning: null,
         last_error: null,
     };
@@ -64,15 +68,44 @@ function createEventBridge(options) {
 
     async function ingestEnvelope(envelope) {
         const targets = mapEnvelopeToRealtimeTargets(envelope || {});
-        for (const target of targets) emitTarget(target);
+        let socketEmitted = 0;
+        for (const target of targets) {
+            if (emitTarget(target)) socketEmitted += 1;
+        }
+
+        // Fan out to SSE subscribers
+        let sseEmitted = 0;
+        if (sseClients && sseClients.size > 0 && envelope && envelope.event_type) {
+            const eventId = envelope.event_id || null;
+            const eventType = envelope.event_type;
+            const topic = envelope.topic || null;
+            const data = JSON.stringify(Object.assign({}, envelope, topic ? { topic } : {}));
+            const prefix = eventId ? `id: ${eventId}\n` : '';
+            const frame = `${prefix}event: ${eventType}\ndata: ${data}\n\n`;
+            for (const [, client] of sseClients) {
+                // Deliver if client has no topic filter or its filter includes this event's topic
+                const matches = !client.topics.length || (topic && client.topics.includes(topic));
+                if (matches) {
+                    try {
+                        client.res.write(frame);
+                        sseEmitted += 1;
+                    } catch {
+                        // client disconnected mid-write; cleaned up on req.close
+                    }
+                }
+            }
+        }
+
         if (envelope && envelope.event_type) {
             state.last_event_at = new Date().toISOString();
             state.last_event_type = envelope.event_type;
             state.last_trace_id = envelope.trace_id || null;
         }
         state.routed_messages += targets.length;
+        state.socket_targets += socketEmitted;
+        state.sse_targets += sseEmitted;
         clearError();
-        return { routed: targets.length, targets };
+        return { routed: targets.length, targets, sse_targets: sseEmitted };
     }
 
     function hydrateEnvelope(message) {
@@ -197,6 +230,8 @@ function createEventBridge(options) {
             last_event_type: state.last_event_type,
             last_trace_id: state.last_trace_id,
             routed_messages: state.routed_messages,
+            socket_targets: state.socket_targets,
+            sse_targets: state.sse_targets,
             backlog_warning: state.backlog_warning,
             last_error: state.last_error,
         };

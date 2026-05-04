@@ -22,6 +22,7 @@ module.exports = {
     // Downstream internal URLs
     services: {
         network:   trim(process.env.OPENVIBE_NETWORK_URL)   || 'http://127.0.0.1:4100',
+        api:       trim(process.env.OPENVIBE_API_URL)        || 'http://127.0.0.1:4200',
         events:    trim(process.env.OPENVIBE_EVENTS_URL)    || 'http://127.0.0.1:4400',
         media:     trim(process.env.OPENVIBE_MEDIA_URL)     || 'http://127.0.0.1:4500',
         live:      trim(process.env.OPENVIBE_LIVE_URL)      || 'http://127.0.0.1:4600',

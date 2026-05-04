@@ -1,20 +1,38 @@
 'use strict';
 
 // OpenVibe — RealtimeClient. Provides:
-//   - SSE subscription (Server-Sent Events from /events on openvibe-realtime)
-//   - Optional Socket.IO connection via the socket.io-client package if available
+//   - Socket.IO connection (preferred) via socket.io-client when available
+//   - SSE fallback (Server-Sent Events from /events on openvibe-realtime)
 //   - Exponential backoff reconnect
-//   - subscribe(topic, handler) / unsubscribe(topic, handler) API
+//   - subscribe(topic, handler) / unsubscribe(topic, handler) API using topic:subscribe protocol
+//   - on(eventName, handler) for dot-notation event names (stream.started, vod.created, etc.)
 //
-// This client runs both in Node.js and in the browser (the SSE path uses the
-// native EventSource/fetch API in browsers and the eventsource npm package in
-// Node). Socket.IO path uses socket.io-client when present.
+// Topic names: 'global:live', 'channel:<slug>', 'stream:<id>', 'chat:global',
+//   'chat:stream:<id>', 'community:pulse', 'community:space:<id>', 'user:<id>',
+//   'media:<id>', 'clip:<id>', 'game:<id>'
+//
+// Event names (dot notation): stream.started, stream.ended, stream.created,
+//   stream.ingest.connected, stream.ingest.disconnected, stream.mirrored_to_live,
+//   stream.vod_attached, chat.message.created, chat.message.edited,
+//   community.thread.created, community.post.created, community.paste.created,
+//   media.upload.completed, vod.created, vod.finalized, clip.created,
+//   user.updated, auth.login, and any other dot-notation event_type from the event bus.
 
 const { jsonRequest } = require('./http');
 
 const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS  = 30000;
 const DEFAULT_RECONNECT_JITTER  = 0.2;
+
+// Map from namespaced event_type (colon-separated from contracts) to dot-notation
+// event name used on the wire. Handles both old and new style.
+function normalizeEventName(eventType) {
+    if (!eventType) return 'unknown';
+    // Convert any remaining underscores-in-last-segment style to dot form:
+    // 'stream.vod_attached' → 'stream.vod_attached' (already ok)
+    // 'STREAM.STARTED' → 'stream.started'
+    return String(eventType).toLowerCase().replace(/[^a-z0-9.]+/g, '.');
+}
 
 function exponentialBackoff(attempt, baseMs, maxMs, jitter) {
     const base = baseMs || DEFAULT_RECONNECT_BASE_MS;
@@ -24,50 +42,64 @@ function exponentialBackoff(attempt, baseMs, maxMs, jitter) {
     return raw + (Math.random() * variance * 2 - variance);
 }
 
+// Try to load socket.io-client. Optional — falls back to SSE if unavailable.
+let SocketIO = null;
+try { SocketIO = require('socket.io-client'); } catch { /* not available */ }
+
 class RealtimeClient {
     /**
      * @param {object} opts
      * @param {string} opts.realtimeUrl — base URL of openvibe-realtime service
      * @param {string} [opts.internalKey] — X-Internal-Key for internal publish
-     * @param {string[]} [opts.topics] — topic names to subscribe to over SSE
+     * @param {string[]} [opts.topics] — initial topic names to subscribe to
      * @param {boolean} [opts.autoConnect=false] — connect immediately on construction
+     * @param {boolean} [opts.preferSSE=false] — force SSE even when Socket.IO is available
+     * @param {string} [opts.transport='auto'] — 'socketio', 'sse', or 'auto'
      * @param {number}  [opts.reconnectBaseMs=1000]
      * @param {number}  [opts.reconnectMaxMs=30000]
      */
     constructor(opts) {
         if (!opts || !opts.realtimeUrl) throw new Error('RealtimeClient: realtimeUrl required');
-        this.realtimeUrl  = String(opts.realtimeUrl).replace(/\/$/, '');
-        this.internalKey  = opts.internalKey || null;
-        this.topics       = Array.isArray(opts.topics) ? opts.topics.slice() : [];
+        this.realtimeUrl    = String(opts.realtimeUrl).replace(/\/$/, '');
+        this.internalKey    = opts.internalKey || null;
+        this.topics         = Array.isArray(opts.topics) ? opts.topics.slice() : [];
         this._reconnectBase = opts.reconnectBaseMs || DEFAULT_RECONNECT_BASE_MS;
         this._reconnectMax  = opts.reconnectMaxMs  || DEFAULT_RECONNECT_MAX_MS;
-        this._handlers    = new Map(); // topic → Set<fn>
-        this._eventHandlers = new Map(); // eventName → Set<fn> (raw SSE events)
-        this._sseSource   = null;
-        this._reconnecting = false;
+        this._transport     = opts.transport || (opts.preferSSE ? 'sse' : 'auto');
+        this._handlers      = new Map(); // topic → Set<fn>
+        this._eventHandlers = new Map(); // eventName → Set<fn>
+        this._socket        = null; // socket.io-client socket
+        this._sseSource     = null; // EventSource
+        this._pollingTimer  = null;
+        this._reconnecting  = false;
         this._reconnectAttempt = 0;
-        this._stopped     = false;
-        this._lastEventId = null;
+        this._stopped       = false;
+        this._lastEventId   = null;
+        this._connected     = false;
+        this._mode          = 'disconnected'; // 'socketio', 'sse', 'polling', 'disconnected'
 
         if (opts.autoConnect) this.connect();
     }
+
+    get mode() { return this._mode; }
+    get connected() { return this._connected; }
 
     _u(path) { return `${this.realtimeUrl}${path}`; }
 
     // ── subscription management ────────────────────────────────
     /**
      * Register a handler for a topic. Returns an unsubscribe function.
+     * Sends topic:subscribe to the server if already connected.
      */
     subscribe(topic, handler) {
         if (typeof topic !== 'string' || !topic) throw new Error('subscribe: topic required');
         if (typeof handler !== 'function') throw new Error('subscribe: handler must be a function');
         if (!this._handlers.has(topic)) this._handlers.set(topic, new Set());
         this._handlers.get(topic).add(handler);
-        // Add to SSE topic filter list
         if (!this.topics.includes(topic)) {
             this.topics.push(topic);
-            // If already connected, reconnect with updated topic list
-            if (this._sseSource) this._reconnectSSE();
+            if (this._connected) this._sendTopicSubscribe(topic);
+            else if (this._sseSource) this._reconnectSSE();
         }
         return () => this.unsubscribe(topic, handler);
     }
@@ -76,11 +108,17 @@ class RealtimeClient {
         const handlers = this._handlers.get(topic);
         if (!handlers) return;
         handlers.delete(handler);
-        if (!handlers.size) this._handlers.delete(topic);
+        if (!handlers.size) {
+            this._handlers.delete(topic);
+            const idx = this.topics.indexOf(topic);
+            if (idx !== -1) this.topics.splice(idx, 1);
+            if (this._socket) this._socket.emit('topic:unsubscribe', { topic });
+        }
     }
 
     /**
-     * Register a handler for a raw SSE event name (e.g. 'stream.started').
+     * Register a handler for a dot-notation event name (e.g. 'stream.started').
+     * Use '*' to receive all events.
      */
     on(eventName, handler) {
         if (!this._eventHandlers.has(eventName)) this._eventHandlers.set(eventName, new Set());
@@ -97,13 +135,74 @@ class RealtimeClient {
     // ── connection ─────────────────────────────────────────────
     connect() {
         this._stopped = false;
-        this._connectSSE();
+        const useSocketIO = this._transport === 'socketio' || (this._transport === 'auto' && !!SocketIO);
+        if (useSocketIO && SocketIO) {
+            this._connectSocketIO();
+        } else {
+            this._connectSSE();
+        }
         return this;
     }
 
     disconnect() {
         this._stopped = true;
+        this._connected = false;
+        this._mode = 'disconnected';
+        this._closeSocket();
         this._closeSSE();
+    }
+
+    // ── Socket.IO transport ───────────────────────────────────
+    _connectSocketIO() {
+        if (this._socket) this._closeSocket();
+        const socket = SocketIO(this._u('/realtime'), {
+            transports: ['websocket'],
+            reconnection: false, // we handle reconnect ourselves
+            auth: this.internalKey ? { key: this.internalKey } : undefined,
+        });
+        this._socket = socket;
+        this._mode = 'socketio';
+
+        socket.on('connect', () => {
+            this._reconnectAttempt = 0;
+            this._connected = true;
+            this._emit('connected', { transport: 'socketio', socket_id: socket.id });
+            // Subscribe to all requested topics
+            for (const topic of this.topics) {
+                this._sendTopicSubscribe(topic);
+            }
+        });
+
+        socket.on('disconnect', (reason) => {
+            this._connected = false;
+            this._emit('disconnected', { reason });
+            if (!this._stopped) this._scheduleReconnect(() => this._connectSocketIO());
+        });
+
+        socket.on('connect_error', (err) => {
+            this._emit('error', { message: err && err.message });
+            if (!this._stopped) this._scheduleReconnect(() => this._connectSocketIO());
+        });
+
+        // Receive events from Socket.IO namespaces.
+        // The server emits events with the dot-notation event_type as the event name.
+        socket.onAny((eventName, data) => {
+            if (!eventName || eventName.startsWith('system:') || eventName.startsWith('topic:') || eventName.startsWith('room:')) return;
+            const normalized = normalizeEventName(eventName);
+            this._dispatchMessage(normalized, data || {});
+        });
+    }
+
+    _sendTopicSubscribe(topic) {
+        if (!this._socket || !this._socket.connected) return;
+        this._socket.emit('topic:subscribe', { topic });
+    }
+
+    _closeSocket() {
+        if (this._socket) {
+            this._socket.disconnect();
+            this._socket = null;
+        }
     }
 
     // ── SSE transport ─────────────────────────────────────────
@@ -115,8 +214,8 @@ class RealtimeClient {
 
     _connectSSE() {
         if (this._sseSource) this._closeSSE();
+        this._mode = 'sse';
 
-        // Browser (native EventSource) or Node (EventSource polyfill if available)
         let EventSourceImpl = null;
         if (typeof EventSource !== 'undefined') {
             // eslint-disable-next-line no-undef
@@ -126,7 +225,6 @@ class RealtimeClient {
         }
 
         if (!EventSourceImpl) {
-            // Fall back to HTTP polling every 5s when no SSE available
             this._startPollingFallback();
             return;
         }
@@ -136,32 +234,82 @@ class RealtimeClient {
 
         source.addEventListener('connected', (e) => {
             this._reconnectAttempt = 0;
-            this._emit('connected', this._parseData(e.data));
+            this._connected = true;
+            this._emit('connected', Object.assign({ transport: 'sse' }, this._parseData(e.data)));
         });
 
         source.addEventListener('error', () => {
+            this._connected = false;
             if (!this._stopped) this._scheduleSSEReconnect();
         });
 
-        // Generic message handler (for named events)
+        // Default message handler for any event not otherwise handled
         source.onmessage = (e) => {
             if (e.lastEventId) this._lastEventId = e.lastEventId;
-            this._dispatchMessage(e.type || 'message', this._parseData(e.data));
+            this._dispatchMessage(normalizeEventName(e.type || 'message'), this._parseData(e.data));
         };
 
-        // Proxy any event the bridge sends as a named event
-        const knownBridgeEvents = [
+        // Attach handlers for all dot-notation event names via a proxy that
+        // intercepts every named SSE event. EventSource does not support wildcard
+        // listeners natively, so we attach a generic handler via the readyState
+        // change path and rely on the onmessage + named event listener strategy.
+        // We handle named events by redefining addEventListener to track all listeners:
+        const origAdd = source.addEventListener.bind(source);
+        const trackedEvents = new Set(['connected', 'error', 'open', 'message']);
+        const proxyAdd = (type, fn, opts) => {
+            trackedEvents.add(type);
+            origAdd(type, fn, opts);
+        };
+        source.addEventListener = proxyAdd;
+
+        // The bridge fans out with event_type as the SSE event name.
+        // We intercept everything by also listening on 'message' (catches unnamed events)
+        // plus attaching a listener for every event name in our _eventHandlers map.
+        const attachKnownHandlers = () => {
+            for (const [evtName] of this._eventHandlers) {
+                if (!trackedEvents.has(evtName)) {
+                    source.addEventListener(evtName, (e) => {
+                        if (e.lastEventId) this._lastEventId = e.lastEventId;
+                        this._dispatchMessage(normalizeEventName(evtName), this._parseData(e.data));
+                    });
+                }
+            }
+        };
+        attachKnownHandlers();
+
+        // Wrap on() to also add the SSE event listener on-the-fly
+        const origOn = this.on.bind(this);
+        this.on = (eventName, handler) => {
+            const unsub = origOn(eventName, handler);
+            if (this._sseSource && !trackedEvents.has(eventName) && eventName !== '*') {
+                this._sseSource.addEventListener(eventName, (e) => {
+                    if (e.lastEventId) this._lastEventId = e.lastEventId;
+                    this._dispatchMessage(normalizeEventName(eventName), this._parseData(e.data));
+                });
+                trackedEvents.add(eventName);
+            }
+            return unsub;
+        };
+
+        // Also listen on common stream/community/chat events for convenience
+        const AUTO_EVENTS = [
             'stream.started', 'stream.ended', 'stream.created', 'stream.vod_attached',
-            'stream.ingest_connected', 'stream.ingest_disconnected', 'stream.mirrored_to_live',
-            'chat.message', 'chat.join', 'chat.leave',
-            'community.thread_created', 'community.post_created', 'community.paste_created',
-            'media.ready', 'media.uploaded', 'user.updated', 'auth.login',
+            'stream.ingest.connected', 'stream.ingest.disconnected', 'stream.mirrored_to_live',
+            'chat.message.created', 'chat.message.edited', 'chat.message.deleted',
+            'community.thread.created', 'community.post.created', 'community.paste.created',
+            'community.space.created',
+            'media.upload.completed', 'vod.created', 'vod.finalized', 'clip.created', 'clip.materialized',
+            'user.updated', 'auth.login',
+            'billing.tip.sent', 'billing.sub.created',
         ];
-        for (const eventName of knownBridgeEvents) {
-            source.addEventListener(eventName, (e) => {
-                if (e.lastEventId) this._lastEventId = e.lastEventId;
-                this._dispatchMessage(eventName, this._parseData(e.data));
-            });
+        for (const evtName of AUTO_EVENTS) {
+            if (!trackedEvents.has(evtName)) {
+                source.addEventListener(evtName, (e) => {
+                    if (e.lastEventId) this._lastEventId = e.lastEventId;
+                    this._dispatchMessage(normalizeEventName(evtName), this._parseData(e.data));
+                });
+                trackedEvents.add(evtName);
+            }
         }
     }
 
@@ -171,20 +319,22 @@ class RealtimeClient {
     }
 
     _dispatchMessage(eventName, data) {
-        // Dispatch to raw event handlers
-        const rawHandlers = this._eventHandlers.get(eventName);
-        if (rawHandlers) rawHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
+        // Dispatch to named event handlers
+        const namedHandlers = this._eventHandlers.get(eventName);
+        if (namedHandlers) namedHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
 
-        // Dispatch to topic handlers using data.topic if present
+        // Dispatch to topic handlers using data.topic
         const topic = data && data.topic;
         if (topic) {
             const topicHandlers = this._handlers.get(topic);
             if (topicHandlers) topicHandlers.forEach((h) => { try { h(data); } catch { /* ignore */ } });
         }
 
-        // Always dispatch to wildcard '*' handlers
+        // Wildcard handler receives all events
         const wildcardHandlers = this._handlers.get('*');
-        if (wildcardHandlers) wildcardHandlers.forEach((h) => { try { h({ event: eventName, ...data }); } catch { /* ignore */ } });
+        if (wildcardHandlers) wildcardHandlers.forEach((h) => { try { h(Object.assign({ _event: eventName }, data)); } catch { /* ignore */ } });
+        const wildcardEventHandlers = this._eventHandlers.get('*');
+        if (wildcardEventHandlers) wildcardEventHandlers.forEach((h) => { try { h(Object.assign({ _event: eventName }, data)); } catch { /* ignore */ } });
     }
 
     _emit(eventName, data) {
@@ -201,6 +351,7 @@ class RealtimeClient {
             clearTimeout(this._pollingTimer);
             this._pollingTimer = null;
         }
+        this._connected = false;
     }
 
     _reconnectSSE() {
@@ -209,17 +360,22 @@ class RealtimeClient {
     }
 
     _scheduleSSEReconnect() {
+        this._scheduleReconnect(() => this._connectSSE());
+    }
+
+    _scheduleReconnect(connectFn) {
         if (this._reconnecting || this._stopped) return;
         this._reconnecting = true;
         const delay = exponentialBackoff(this._reconnectAttempt, this._reconnectBase, this._reconnectMax);
         this._reconnectAttempt += 1;
         setTimeout(() => {
             this._reconnecting = false;
-            if (!this._stopped) this._connectSSE();
+            if (!this._stopped) connectFn();
         }, delay);
     }
 
     _startPollingFallback() {
+        this._mode = 'polling';
         const poll = async () => {
             if (this._stopped) return;
             try {
@@ -233,10 +389,6 @@ class RealtimeClient {
     }
 
     // ── internal publish (server-side use) ────────────────────
-    /**
-     * Publish a message to a Socket.IO room + SSE clients via the internal API.
-     * Only valid when internalKey is configured.
-     */
     async publish({ namespace, room, event: eventName, payload, topics }) {
         if (!this.internalKey) throw new Error('RealtimeClient.publish: internalKey required');
         return jsonRequest(this._u('/internal/publish'), {

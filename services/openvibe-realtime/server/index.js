@@ -81,7 +81,12 @@ function buildApp() {
     runtime.attach(app);
 
     socketRuntime = createSocketRuntime(app, { config, metrics: runtime.metrics });
-    eventBridge = createEventBridge({ config, socketRuntime });
+
+    // Create sseClients before eventBridge so the bridge can fan out to SSE subscribers.
+    const sseClients = new Map(); // id → { res, topics }
+    let sseIdCounter = 0;
+
+    eventBridge = createEventBridge({ config, socketRuntime, sseClients });
 
     app.get('/api/v1/realtime/namespaces', (_req, res) => {
         res.json({ items: socketRuntime.summary().namespaces });
@@ -118,8 +123,6 @@ function buildApp() {
     // ── SSE endpoint — lightweight alternative to Socket.IO ──
     // Clients subscribe by passing ?topics= (comma-separated).
     // Last-Event-ID header / query param enables reconnect without missed events.
-    const sseClients = new Map(); // id → { res, topics }
-    let sseIdCounter = 0;
 
     app.get('/events', (req, res) => {
         res.set({

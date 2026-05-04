@@ -9,11 +9,13 @@ const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
+const model = require('./model');
 const { buildAuthRouter } = require('./auth-routes');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const { buildSessionResponse } = require('./session');
+const { renderDashboard, renderDashboardAuthGate } = require('./ssr');
 
 function deriveBaseUrl(req) {
     const forwardedProto = req.headers['x-forwarded-proto'];
@@ -75,6 +77,34 @@ function buildApp() {
         serviceName: 'openre.stream',
     }));
     app.use(express.static(path.join(__dirname, '..', 'public')));
+
+    // ── dashboard: authenticated SSR page ─────────────────────────────────
+    app.get('/dashboard', (req, res) => {
+        if (!req.user) {
+            const returnUrl = req.originalUrl || '/dashboard';
+            return res.status(401).send(renderDashboardAuthGate({ returnUrl }));
+        }
+        const userId = String(req.user.id || req.user.sub || '');
+        const channels     = model.listChannels({ owner_user_id: userId, limit: 50 });
+        const destinations = model.listDestinations({ owner_user_id: userId });
+        const streams      = channels.length
+            ? model.listStreams({ channel_id: null, status: null, limit: 20 }).filter((s) => {
+                const ch = channels.find((c) => c.id === s.channel_id);
+                return !!ch;
+            })
+            : [];
+
+        const html = renderDashboard({
+            user:         req.user,
+            channels,
+            destinations,
+            streams,
+            outputs:      [],
+            ingestConfig: config.ingest || {},
+        });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
+    });
 
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config, buildSessionResponse }));
 

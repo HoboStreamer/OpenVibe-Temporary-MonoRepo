@@ -1457,6 +1457,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
             <script src="/assets/live-dashboard-local.js?v=20260504-1"></script>
+            <script src="/js/realtime.js?v=20260507-1"></script>
             ${_shellScript()}
         </body>
         </html>`;
@@ -1491,7 +1492,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
             ? renderPill(`${formatCompactNumber(stream.view_count || 0)} views`, 'soft')
             : renderPill(`Peak ${formatCompactNumber(stream.peak_viewers || 0)}`, 'soft'));
     const tags = [
-        opts.badge ? renderPill(opts.badge, opts.badgeTone || 'primary') : '',
+        opts.badge ? `<span class="pill ${escapeHtml(opts.badgeTone || 'primary')}" data-stream-status-badge>${escapeHtml(opts.badge)}</span>` : '',
         audiencePill,
         stream.category ? renderPill(stream.category, 'muted') : '',
     ].filter(Boolean).join('');
@@ -1521,7 +1522,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         : (stream.started_at ? `<span title="${escapeHtml(formatDateTime(stream.started_at))}">${escapeHtml(formatShortDate(stream.started_at))}</span>` : ''));
     const ctaLabel = stream.cta_label || (isReplayMedia ? `Watch ${stream.kind} →` : 'Watch →');
     return `
-        <article class="glass-card is-inline" data-reveal data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
+        <article class="glass-card is-inline" data-reveal data-stream-id="${escapeHtml(String(stream.id || ''))}" data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
             ${renderMediaThumb({
                 url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
                 title: stream.title || 'Untitled stream',
@@ -2246,7 +2247,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                 <input id="live-home-filter" class="filter-input" type="search" placeholder="Filter streams, VODs, clips" data-filter-input="home-media" aria-label="Filter home media">
                 ${categoryChips}
             </div>
-            <div class="card-grid">${liveNowHtml}</div>
+            <div class="card-grid" data-live-now-grid>${liveNowHtml}</div>
         </section>
         ` : `
         <section class="section-panel">
@@ -2266,7 +2267,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         <section class="section-panel">
             <div class="data-points">
-                <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value">${escapeHtml(String(liveCount))}</div></div>
+                <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value" data-live-count>${escapeHtml(String(liveCount))}</div></div>
                 <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber(channelCount))}</div></div>
                 ${totalViewers ? `<div class="data-point"><div class="data-point-label">Watching</div><div class="data-point-value">${escapeHtml(formatCompactNumber(totalViewers))}</div></div>` : ''}
                 ${peakViewers ? `<div class="data-point"><div class="data-point-label">Peak viewers</div><div class="data-point-value">${escapeHtml(formatCompactNumber(peakViewers))}</div></div>` : ''}
@@ -2321,11 +2322,11 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                 </div>
             </div>
             ${(recentThreadsHtml || recentPastesHtml || roomSignalsHtml) ? `
-            <div class="story-grid">
+            <div class="story-grid" data-community-pulse-grid>
                 ${(recentThreadsHtml || recentPastesHtml) ? `<div class="list-stack">${recentThreadsHtml}${recentPastesHtml}</div>` : ''}
                 ${roomSignalsHtml ? `<div class="list-stack">${roomSignalsHtml}</div>` : ''}
             </div>` : `
-            <div class="empty-state">
+            <div class="empty-state" data-community-pulse-grid>
                 <p>Community content will surface here once public threads and pastes exist on <a class="link-inline" href="${LIVE_NETWORK_URLS.community}">openvibe.community</a>.</p>
             </div>`}
         </section>
@@ -2736,7 +2737,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent,
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260507-1"></script>' : ''),
         baseUrl,
     });
 }

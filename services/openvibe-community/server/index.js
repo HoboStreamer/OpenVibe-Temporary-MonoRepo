@@ -13,6 +13,7 @@ const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
+const communitySSR = require('./ssr');
 
 function buildApp() {
     db.init(config.db.path);
@@ -75,13 +76,43 @@ function buildApp() {
         return apiRouter(req, _res, next);
     });
 
-    // /p/:slug — friendly paste viewer URL (returns JSON; HTML view lives in client).
+    // /p/:slug — paste viewer (HTML for browser requests, JSON for API clients).
     app.get('/p/:slug', (req, res) => {
         const m = require('./model');
         const paste = m.getPasteBySlug(req.params.slug);
-        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        if (!paste) {
+            const acceptsHtml = req.accepts(['html', 'json']) === 'html';
+            if (acceptsHtml) {
+                return res.status(404).send(communitySSR.renderPasteViewPage(null));
+            }
+            return res.status(404).json({ error: 'paste not found' });
+        }
         m.bumpPasteView(paste.slug);
-        res.json({ paste });
+        const acceptsHtml = req.accepts(['html', 'json']) === 'html';
+        if (acceptsHtml) {
+            return res.send(communitySSR.renderPasteViewPage(paste));
+        }
+        return res.json({ paste });
+    });
+
+    // /pulse, /threads, /pastes — SSR product pages.
+    app.get('/pulse', (req, res) => {
+        const m = require('./model');
+        const threads = m.listThreads({ limit: 12, status: 'open' });
+        const pastes  = m.listPastes({ visibility: 'public', limit: 12 });
+        res.send(communitySSR.renderPulsePage(threads, pastes));
+    });
+
+    app.get('/threads', (req, res) => {
+        const m = require('./model');
+        const threads = m.listThreads({ limit: 60, status: 'open' });
+        res.send(communitySSR.renderThreadsPage(threads));
+    });
+
+    app.get('/pastes', (req, res) => {
+        const m = require('./model');
+        const pastes = m.listPastes({ visibility: 'public', limit: 80 });
+        res.send(communitySSR.renderPastesPage(pastes));
     });
 
     app.use((err, _req, res, _next) => {

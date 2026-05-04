@@ -1,7 +1,9 @@
 'use strict';
 
 const express = require('express');
+const http    = require('http');
 const { proxyRequest } = require('./proxy');
+const db = require('./db');
 
 /**
  * Build the routing table for openvibe-api.
@@ -20,9 +22,14 @@ const { proxyRequest } = require('./proxy');
  *   GET  /api/v1/realtime/**  → openvibe-realtime
  *   GET  /api/v1/content/**   → openvibe-content
  *
- * Each route strips the `/api/v1/<segment>` prefix and rewrites to the
- * upstream's own `/api/v1/*` path. Authenticated routes forward the
- * `authorization` header unchanged.
+ *   GET  /api/v1/me/api-keys        → list caller's keys
+ *   POST /api/v1/me/api-keys        → create API key (returns raw key once)
+ *   DELETE /api/v1/me/api-keys/:id  → revoke key
+ *
+ *   GET  /api/v1/registry/services      → list known services + health
+ *   GET  /api/v1/registry/capabilities  → forward capability queries to each service
+ *
+ *   GET  /.well-known/openvibe  → JSON service registry document
  */
 function buildRouter(config) {
     const r = express.Router();
@@ -36,6 +43,109 @@ function buildRouter(config) {
             });
         };
     }
+
+    // ── API key management ────────────────────────────────────
+    r.get('/me/api-keys', (req, res) => {
+        if (!req.user) return res.status(401).json({ error: 'authentication required' });
+        const userId = String(req.user.id || req.user.sub || '');
+        if (!userId) return res.status(401).json({ error: 'user identity missing' });
+        res.json({ items: db.listApiKeys(userId) });
+    });
+
+    r.post('/me/api-keys', express.json({ limit: '16kb' }), (req, res) => {
+        if (!req.user) return res.status(401).json({ error: 'authentication required' });
+        const userId = String(req.user.id || req.user.sub || '');
+        if (!userId) return res.status(401).json({ error: 'user identity missing' });
+        const b = req.body || {};
+        const name = String(b.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'name required' });
+        if (name.length > 120) return res.status(400).json({ error: 'name too long (max 120)' });
+        const scopes = Array.isArray(b.scopes) ? b.scopes.filter((s) => typeof s === 'string') : [];
+        const record = db.createApiKey({ userId, name, scopes });
+        // Return the raw key ONCE — it is never readable again
+        res.status(201).json({
+            id:         record.id,
+            name:       record.name,
+            scopes:     record.scopes,
+            created_at: record.created_at,
+            key:        record.key,
+            warning:    'Store this key securely — it will not be shown again.',
+        });
+    });
+
+    r.delete('/me/api-keys/:id', (req, res) => {
+        if (!req.user) return res.status(401).json({ error: 'authentication required' });
+        const userId = String(req.user.id || req.user.sub || '');
+        const result = db.revokeApiKey(req.params.id, userId);
+        if (!result) return res.status(404).json({ error: 'key not found or already revoked' });
+        res.json({ ok: true, id: result.id, revoked: true });
+    });
+
+    // ── registry ──────────────────────────────────────────────
+    function probeHealth(serviceUrl) {
+        return new Promise((resolve) => {
+            const url = new URL('/health', serviceUrl);
+            const mod = url.protocol === 'https:' ? require('https') : http;
+            const timer = setTimeout(() => resolve({ status: 'timeout' }), 1500);
+            mod.get(url.toString(), (httpRes) => {
+                clearTimeout(timer);
+                let body = '';
+                httpRes.on('data', (d) => { body += d; });
+                httpRes.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(body);
+                        resolve({ status: httpRes.statusCode === 200 ? 'ok' : 'degraded', ...parsed });
+                    } catch {
+                        resolve({ status: httpRes.statusCode === 200 ? 'ok' : 'degraded' });
+                    }
+                });
+            }).on('error', () => { clearTimeout(timer); resolve({ status: 'unreachable' }); });
+        });
+    }
+
+    r.get('/registry/services', (req, res) => {
+        const probes = Object.entries(svc).map(([name, url]) =>
+            probeHealth(url).then((health) => ({ name, url, health }))
+        );
+        Promise.all(probes).then((results) => {
+            res.json({ services: results, probed_at: new Date().toISOString() });
+        }).catch((err) => {
+            res.status(500).json({ error: err.message });
+        });
+    });
+
+    r.get('/registry/capabilities', (req, res) => {
+        // Collect capabilities from each service's /api/v1/capabilities endpoint
+        const fetches = Object.entries(svc).map(([name, url]) =>
+            new Promise((resolve) => {
+                const fullUrl = `${url}/api/v1/capabilities`;
+                const mod = fullUrl.startsWith('https') ? require('https') : http;
+                const timer = setTimeout(() => resolve({ service: name, capabilities: [] }), 2000);
+                mod.get(fullUrl, (httpRes) => {
+                    clearTimeout(timer);
+                    let body = '';
+                    httpRes.on('data', (d) => { body += d; });
+                    httpRes.on('end', () => {
+                        try {
+                            const parsed = JSON.parse(body);
+                            resolve({ service: name, capabilities: parsed.capabilities || [] });
+                        } catch {
+                            resolve({ service: name, capabilities: [] });
+                        }
+                    });
+                }).on('error', () => { clearTimeout(timer); resolve({ service: name, capabilities: [] }); });
+            })
+        );
+        Promise.all(fetches).then((results) => {
+            const merged = {};
+            for (const { service, capabilities } of results) {
+                if (capabilities.length) merged[service] = capabilities;
+            }
+            res.json({ capabilities: merged, fetched_at: new Date().toISOString() });
+        }).catch((err) => {
+            res.status(500).json({ error: err.message });
+        });
+    });
 
     // ── service routes ───────────────────────────────────────
     r.all('/network*',   proxy(svc.network,   '/network'));
@@ -55,3 +165,4 @@ function buildRouter(config) {
 }
 
 module.exports = { buildRouter };
+

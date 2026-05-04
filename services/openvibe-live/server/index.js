@@ -21,6 +21,7 @@ const { buildAuthRouter } = require('./auth-routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const { createOpenReClient } = require('./openre-client');
 const { buildSessionResponse } = require('./session');
+const { cacheStats: resolverCacheStats } = require('./channel-resolver');
 const communityDb = require('../../openvibe-community/server/db');
 const communityModel = require('../../openvibe-community/server/model');
 const chatDb = require('../../openvibe-chat/server/db');
@@ -589,6 +590,26 @@ function buildApp() {
         } catch (error) {
             sendOpenReError(res, error, 'failed to end stream');
         }
+    }));
+
+    localApiRouter.get('/admin/live/channel-resolver/cache', guarded, (req, res) => {
+        res.json(resolverCacheStats());
+    });
+
+    localApiRouter.get('/admin/live/missing-channel-links', guarded, asyncRoute(async (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+        const streams = model.listStreams({ limit: 500 });
+        const missing = streams
+            .filter((s) => !s.channel_slug || s.channel_slug === 'unknown')
+            .slice(0, limit)
+            .map((s) => ({
+                id: s.id,
+                title: s.title,
+                owner_user_id: s.owner_user_id || null,
+                channel_slug: s.channel_slug || null,
+                created_at: s.created_at,
+            }));
+        res.json({ total: missing.length, items: missing });
     }));
 
     app.use('/api/v1', localApiRouter);

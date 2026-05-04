@@ -30,6 +30,9 @@ function fetchJson(url, opts) {
         });
         req.on('timeout', () => { req.destroy(); reject(new Error(`timeout: ${url}`)); });
         req.on('error', reject);
+        if (opts && opts.body) {
+            req.write(opts.body);
+        }
         req.end();
     });
 }
@@ -38,11 +41,24 @@ function fetchJson(url, opts) {
  * Fetch a JSON endpoint from a service.
  * Returns `{ ok: false, error: string }` on failure so the dashboard can
  * show partial data rather than crashing.
+ *
+ * opts.method   — HTTP method (default 'GET')
+ * opts.body     — JSON string body (sets Content-Type automatically)
+ * opts.userId   — forwarded as x-forwarded-user header (for admin impersonation)
+ * opts.role     — forwarded as x-forwarded-role header
  */
-async function safeFetch(url, internalKey) {
+async function safeFetch(url, internalKey, opts) {
     try {
+        const headers = { accept: 'application/json' };
+        if (internalKey) headers['x-internal-key'] = internalKey;
+        if (opts && opts.body) headers['content-type'] = 'application/json';
+        if (opts && opts.userId) headers['x-forwarded-user'] = String(opts.userId);
+        if (opts && opts.role)   headers['x-forwarded-role']  = String(opts.role);
+
         return await fetchJson(url, {
-            headers: internalKey ? { 'x-internal-key': internalKey } : {},
+            method:  opts && opts.method || 'GET',
+            headers,
+            body:    opts && opts.body || undefined,
         });
     } catch (err) {
         return { ok: false, error: err.message };
