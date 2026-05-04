@@ -64,9 +64,9 @@ const GO_LIVE_TRACKS = [
 ];
 
 const MISSION_PILLARS = [
-    'Keep canonical @username routes stable across live, VODs, and clips.',
-    'Make stream management obvious without hiding the rest of the OpenVibe network.',
-    'Tell the truth about migration and playback readiness instead of pretending every surface is finished.',
+    'Your channel is yours. Stream to Twitch, YouTube, and Kick at the same time without giving up your home base.',
+    'One stream key, one VOD library, one clip reel — discoverable at your own @username.',
+    'No subscription required to start. Bring your audience with you.',
 ];
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('en-US');
@@ -1717,31 +1717,30 @@ function renderChannelCard(channel, baseUrl, options) {
             <div class="story-grid">
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">Origin story</div>
-                    <p class="body-copy">OpenVibe is being built for creators and communities who miss when the web felt more human: clear pages, real creator homes, portable identity, and a platform that does not turn every decision into a growth trap. The goal is practical: give creators canonical identities, better control of their routing stack, and services they can actually understand.</p>
+                    <p class="body-copy">OpenVibe is built for streamers and communities who want more than a black-box platform. Stream to multiple sites at once, keep your own @username everywhere, and own your VOD archive. Simple tools, no locked-in subscriptions.</p>
                     <div class="data-points">
                         <div class="data-point">
-                            <div class="data-point-label">Creator routes</div>
+                            <div class="data-point-label">Channels</div>
                             <div class="data-point-value">${escapeHtml(formatNumber((stats && stats.channels) || 0))}</div>
                         </div>
                         <div class="data-point">
-                            <div class="data-point-label">Mirrored stream time</div>
+                            <div class="data-point-label">Stream hours</div>
                             <div class="data-point-value">${escapeHtml(formatDurationSeconds((stats && stats.stream_time_seconds) || 0))}</div>
                         </div>
                         <div class="data-point">
-                            <div class="data-point-label">Direction</div>
+                            <div class="data-point-label">Platform</div>
                             <div class="data-point-value">Creator-first</div>
                         </div>
                     </div>
                 </article>
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Promises we want to keep</div>
+                    <div class="eyebrow">Why OpenVibe</div>
                     <ul class="flow-list">
                         ${MISSION_PILLARS.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
                     </ul>
                     <div class="button-row" style="margin-top:1rem;">
-                        <a class="button-secondary" href="https://github.com/openvibe">GitHub</a>
-                        <a class="button-ghost" href="/tos">Terms</a>
-                        <a class="button-ghost" href="/dmca">DMCA</a>
+                        <a class="button-secondary" href="/go-live">Start streaming</a>
+                        <a class="button-ghost" href="/channels">Browse channels</a>
                     </div>
                 </article>
             </div>
@@ -2353,9 +2352,8 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                         <li>Small tools for real people: restreaming, pastes, chat, community threads — without needing five accounts to use all of them.</li>
                     </ul>
                     <div class="form-actions" style="margin-top:1rem;">
-                        <a class="button-secondary" href="https://github.com/openvibe">GitHub</a>
-                        <a class="button-ghost" href="/tos">Terms</a>
-                        <a class="button-ghost" href="/dmca">DMCA</a>
+                        <a class="button-secondary" href="/go-live">Start streaming</a>
+                        <a class="button-ghost" href="/channels">Browse channels</a>
                     </div>
                 </article>
             </div>

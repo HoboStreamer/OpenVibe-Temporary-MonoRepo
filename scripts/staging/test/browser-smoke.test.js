@@ -62,7 +62,7 @@ const LIVE_JSON_ROUTES = {
         },
     },
 };
-function liveFixture() { return makeHtmlServer('openvibe.live — native fallback shell', { jsonRoutes: LIVE_JSON_ROUTES }); }
+function liveFixture() { return makeHtmlServer('OpenVibe Live — watch live streams', { jsonRoutes: LIVE_JSON_ROUTES }); }
 
 function buildReadinessPayload(service, checks) {
     const summary = { green: 0, yellow: 0, red: 0 };

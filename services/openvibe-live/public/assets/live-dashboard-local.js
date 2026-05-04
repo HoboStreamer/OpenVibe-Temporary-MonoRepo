@@ -266,6 +266,32 @@
         }).join('');
     }
 
+    function copyToClipboard(text, btn) {
+        if (!navigator.clipboard) {
+            try { document.execCommand('copy'); } catch {}
+            return;
+        }
+        navigator.clipboard.writeText(text).then(function() {
+            const original = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = original; }, 1500);
+        }).catch(function() {});
+    }
+
+    function renderIngestRow(label, url) {
+        const id = 'ingest-' + label.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        return '<div class="data-point" style="flex-direction:column;align-items:flex-start;gap:0.3rem;">' +
+            '<div class="data-point-label">' + escapeInlineHtml(label) + '</div>' +
+            '<div style="display:flex;align-items:center;gap:0.5rem;width:100%;">' +
+            '<code id="' + id + '" style="font-size:0.78rem;word-break:break-all;flex:1;">' + escapeInlineHtml(url) + '</code>' +
+            '<button type="button" class="button-ghost" style="white-space:nowrap;padding:0.2rem 0.6rem;font-size:0.75rem;" ' +
+            'onclick="(function(btn){var url=document.getElementById(\'' + id + '\').textContent;' +
+            'if(navigator.clipboard){navigator.clipboard.writeText(url).then(function(){var o=btn.textContent;btn.textContent=\'Copied!\';setTimeout(function(){btn.textContent=o;},1500);})}' +
+            '})(this)">Copy</button>' +
+            '</div>' +
+            '</div>';
+    }
+
     function renderIngestPanel(payload) {
         const target = document.querySelector('[data-go-live-ingest]');
         if (!target) return;
@@ -273,7 +299,28 @@
             target.innerHTML = '<p class="manager-note">Create a stream to reveal ingest details and hand-off info for OBS or your restream workflow.</p>';
             return;
         }
-        target.innerHTML = '\n            <div class="stack-item">\n                <div class="pill-row">\n                    <span class="pill primary">@' + escapeInlineHtml(payload.channel.slug) + '</span>\n                    <span class="pill soft">' + escapeInlineHtml(payload.stream.protocol || 'rtmp') + '</span>\n                </div>\n                <h4 style="margin-top:0.75rem;">' + escapeInlineHtml(payload.stream.title || 'Untitled stream') + '</h4>\n                <p class="manager-note">Use the matching ingest URL below in OBS, WHIP-compatible tools, or your restream setup.</p>\n                <ul class="flow-list" style="margin-top:0.75rem;">\n                    <li><strong>RTMP</strong> — <code>' + escapeInlineHtml(payload.ingest.rtmp || '') + '</code></li>\n                    <li><strong>WHIP</strong> — <code>' + escapeInlineHtml(payload.ingest.whip || '') + '</code></li>\n                    <li><strong>JSMPEG</strong> — <code>' + escapeInlineHtml(payload.ingest.jsmpeg || '') + '</code></li>\n                </ul>\n            </div>';
+        var ingest = payload.ingest;
+        var protocol = payload.stream.protocol || 'rtmp';
+        // Extract stream key from URL (everything after ?key=)
+        var keyMatch = (ingest.rtmp || ingest.whip || '').match(/[?&]key=([^&]+)/);
+        var streamKey = keyMatch ? decodeURIComponent(keyMatch[1]) : (payload.stream.id || '');
+        // Extract server URL (everything before the ?key= part)
+        var rtmpServer = (ingest.rtmp || '').replace(/\?.*$/, '');
+        target.innerHTML = '<div class="stack-item">' +
+            '<div class="pill-row">' +
+            '<span class="pill primary">@' + escapeInlineHtml(payload.channel.slug) + '</span>' +
+            '<span class="pill soft">' + escapeInlineHtml(protocol) + '</span>' +
+            '</div>' +
+            '<h4 style="margin-top:0.75rem;">' + escapeInlineHtml(payload.stream.title || 'Untitled stream') + '</h4>' +
+            '<p class="manager-note">Copy these into OBS (Server + Stream Key) or your WHIP/restream client. Keep your stream key private.</p>' +
+            '<div class="data-points" style="margin-top:0.75rem;flex-direction:column;">' +
+            (rtmpServer ? renderIngestRow('RTMP Server', rtmpServer) : '') +
+            renderIngestRow('Stream Key', streamKey) +
+            (ingest.rtmp ? renderIngestRow('Full RTMP URL', ingest.rtmp) : '') +
+            (ingest.whip ? renderIngestRow('WHIP URL', ingest.whip) : '') +
+            (ingest.jsmpeg ? renderIngestRow('JSMPEG URL', ingest.jsmpeg) : '') +
+            '</div>' +
+            '</div>';
     }
 
     function populateChannelSelect(channels) {

@@ -3,7 +3,7 @@
 const { parentPort, workerData } = require('worker_threads');
 
 const { createPostgresPool, runMigrations } = require('./postgres');
-const { splitSqlStatements, translateSqliteToPostgres } = require('./sql-compat');
+const { splitSqlStatements, translateSqliteToPostgres, translateNamedParameters } = require('./sql-compat');
 
 if (!parentPort) {
     throw new Error('pg-sync-worker must run in a worker thread');
@@ -100,9 +100,17 @@ async function execStatements(sql) {
 }
 
 async function runPrepared(sql, values, mode) {
-    const text = translateSqliteToPostgres(sql, { mode });
+    let text = translateSqliteToPostgres(sql, { mode });
     if (!text) return mode === 'run' ? { changes: 0, lastInsertRowid: null } : (mode === 'get' ? undefined : []);
-    const result = await currentQueryable().query(text, Array.isArray(values) ? values : []);
+    // Handle SQLite named params: run({@key: val}) or run(@obj) style
+    let positionalValues = Array.isArray(values) ? values : [];
+    const namedObj = positionalValues.length === 1 && positionalValues[0] !== null && typeof positionalValues[0] === 'object' && !Array.isArray(positionalValues[0])
+        ? positionalValues[0] : null;
+    if (namedObj) {
+        const named = translateNamedParameters(text, namedObj);
+        if (named) { text = named.sql; positionalValues = named.values; }
+    }
+    const result = await currentQueryable().query(text, positionalValues);
 
     if (mode === 'get') {
         return normalizeRow(result.rows && result.rows[0]);

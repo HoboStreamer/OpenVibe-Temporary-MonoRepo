@@ -279,9 +279,69 @@ function translateSqliteToPostgres(sql, options) {
     return text;
 }
 
+// Translate SQLite-style named parameters (@name) to Postgres positional parameters ($1, $2, ...).
+// Returns { sql, values } where values is the positional array built from the input namedValues object.
+// If the SQL has no @name params, returns null so callers can skip this step.
+function translateNamedParameters(sql, namedValues) {
+    const text = String(sql || '');
+    // Quick check: does the SQL contain any @identifier patterns?
+    if (!/@[a-zA-Z_]/.test(text)) return null;
+
+    const paramOrder = [];
+    let output = '';
+    let inSingle = false;
+    let inDouble = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (char === '\\' && (inSingle || inDouble) && next) {
+            output += char + next;
+            i += 1;
+            continue;
+        }
+        if (!inDouble && char === '\'') {
+            output += char;
+            if (inSingle && next === '\'') { output += next; i += 1; continue; }
+            inSingle = !inSingle;
+            continue;
+        }
+        if (!inSingle && char === '"') {
+            output += char;
+            inDouble = !inDouble;
+            continue;
+        }
+
+        if (!inSingle && !inDouble && char === '@' && next && /[a-zA-Z_]/.test(next)) {
+            // Read the full identifier
+            let name = '';
+            let j = i + 1;
+            while (j < text.length && /[a-zA-Z0-9_]/.test(text[j])) {
+                name += text[j++];
+            }
+            paramOrder.push(name);
+            output += `$${paramOrder.length}`;
+            i = j - 1;
+            continue;
+        }
+
+        output += char;
+    }
+
+    if (paramOrder.length === 0) return null;
+
+    const values = namedValues && typeof namedValues === 'object' && !Array.isArray(namedValues)
+        ? paramOrder.map((name) => (namedValues[name] !== undefined ? namedValues[name] : null))
+        : paramOrder.map(() => null);
+
+    return { sql: output, values };
+}
+
 module.exports = {
     normalizeSchemaSql,
     replacePositionalParameters,
     splitSqlStatements,
     translateSqliteToPostgres,
+    translateNamedParameters,
 };
