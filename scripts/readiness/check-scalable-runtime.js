@@ -57,7 +57,7 @@ async function checkScalableRuntime(options = {}) {
         'deploy/cloudflare/waf-rules.md',
         'deploy/cloudflare/dns.md',
         'deploy/env/openvibe.production.example.env',
-        'deploy/compose/docker-compose.local.yml',
+        'scripts/dev/start-production-like-stack.sh',
         '.github/workflows/ci.yml',
         'context/PHASE_10_SCALING.md',
         'scripts/readiness/check-storage-providers.js',
