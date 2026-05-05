@@ -662,11 +662,11 @@
                     <span aria-hidden="true">•</span>
                     <a href="https://openre.stream" target="_blank" rel="noopener">openre.stream</a>
                 </div>
-                <div class="stats-ribbon">
-                    <div class="stat"><span class="stat-number">8</span><span class="stat-label">Services</span></div>
-                    <div class="stat"><span class="stat-number">100%</span><span class="stat-label">Free</span></div>
-                    <div class="stat"><span class="stat-number">1</span><span class="stat-label">Account</span></div>
-                    <div class="stat"><span class="stat-number">Open</span><span class="stat-label">Source</span></div>
+                <div class="showcase-marquee" id="hero-marquee-1" style="margin-top:32px">
+                    <div class="marquee-track" id="hero-track-1"></div>
+                </div>
+                <div class="showcase-marquee showcase-marquee-reverse" id="hero-marquee-2">
+                    <div class="marquee-track" id="hero-track-2"></div>
                 </div>
             </div>
 
@@ -1072,10 +1072,16 @@
                     `<a class="marquee-pill" href="https://${t.domain}" target="_blank" rel="noopener"><i class="fa-solid ${t.icon}"></i>${t.domain}</a>`
                 ).join('');
             }
-            const track1 = document.getElementById('marquee-track-1');
-            const track2 = document.getElementById('marquee-track-2');
-            if (track1) track1.innerHTML = renderPills(row1) + renderPills(row1);
-            if (track2) track2.innerHTML = renderPills(row2) + renderPills(row2);
+            [
+                ['marquee-track-1', 'hero-track-1'],
+                ['marquee-track-2', 'hero-track-2'],
+            ].forEach(([id1, id2], i) => {
+                const pills = renderPills(i === 0 ? row1 : row2);
+                [id1, id2].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = pills + pills;
+                });
+            });
         }
         buildMarquee();
 
