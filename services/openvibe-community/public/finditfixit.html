@@ -241,6 +241,132 @@
             border-color: #00ffff;
         }
     }
+
+    /* ── Kia Soul Lease Calculator ── */
+    .kia-calc-card {
+        background: #111827;
+        border: 1.5px solid #1e2d45;
+        border-radius: 18px;
+        padding: 1.75rem 2rem;
+        max-width: 860px;
+        margin: 0 auto;
+    }
+    .kia-calc-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+    .kia-calc-icon { font-size: 1.5rem; }
+    .kia-calc-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #f1f5f9;
+    }
+    .kia-calc-sub {
+        margin-left: auto;
+        font-size: 0.78rem;
+        color: #64748b;
+    }
+    .kia-calc-body {
+        display: flex;
+        gap: 2rem;
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .kia-calc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1rem 1.25rem;
+        flex: 1;
+        min-width: 260px;
+    }
+    .kia-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    .kia-field label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+    .kia-hint {
+        font-weight: 400;
+        color: #475569;
+    }
+    .kia-input-wrap {
+        display: flex;
+        align-items: center;
+        background: #0f172a;
+        border: 1px solid #1e2d45;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .kia-prefix, .kia-suffix {
+        padding: 0 0.5rem;
+        color: #64748b;
+        font-size: 0.85rem;
+        background: #0f172a;
+        pointer-events: none;
+        user-select: none;
+    }
+    .kia-field input, .kia-field select {
+        background: #0f172a;
+        border: 1px solid #1e2d45;
+        border-radius: 8px;
+        color: #f1f5f9;
+        font-size: 0.9rem;
+        padding: 0.45rem 0.65rem;
+        width: 100%;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .kia-input-wrap input {
+        border: none;
+        border-radius: 0;
+        flex: 1;
+    }
+    .kia-field input:focus, .kia-field select:focus,
+    .kia-input-wrap:focus-within { border-color: #3b82f6; }
+    .kia-field select option { background: #0f172a; }
+    .kia-result-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0f172a 0%, #1e2d45 100%);
+        border: 1.5px solid #3b82f6;
+        border-radius: 16px;
+        padding: 1.5rem 2rem;
+        min-width: 180px;
+        text-align: center;
+        gap: 0.4rem;
+    }
+    .kia-result-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .kia-result-amount {
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: #3b82f6;
+        line-height: 1;
+    }
+    .kia-result-breakdown {
+        font-size: 0.72rem;
+        color: #475569;
+        line-height: 1.7;
+        margin-top: 0.4rem;
+    }
+    body.disco .kia-calc-card {
+        animation: widget-glow 0.35s ease-in-out infinite alternate;
+    }
 </style>
 </head>
 <body>
@@ -317,6 +443,54 @@
                 allowfullscreen
                 style="border:none; border-radius:14px; width:315px; height:560px; flex-shrink:0;">
             </iframe>
+        </div>
+    </section>
+
+    <!-- Kia Soul Lease Calculator -->
+    <section class="fixit-section">
+        <div class="kia-calc-card">
+            <div class="kia-calc-header">
+                <span class="kia-calc-icon">🚗</span>
+                <span class="kia-calc-title">Kia Soul Lease Calculator</span>
+                <span class="kia-calc-sub">Killeen, TX · Texas tax included</span>
+            </div>
+            <div class="kia-calc-body">
+                <div class="kia-calc-grid">
+                    <div class="kia-field">
+                        <label>MSRP</label>
+                        <div class="kia-input-wrap"><span class="kia-prefix">$</span><input type="number" id="kia-msrp" value="22000" min="0" step="100"></div>
+                    </div>
+                    <div class="kia-field">
+                        <label>Down Payment / Cap Reduction</label>
+                        <div class="kia-input-wrap"><span class="kia-prefix">$</span><input type="number" id="kia-down" value="2000" min="0" step="100"></div>
+                    </div>
+                    <div class="kia-field">
+                        <label>Lease Term</label>
+                        <select id="kia-term">
+                            <option value="24">24 months</option>
+                            <option value="36" selected>36 months</option>
+                            <option value="48">48 months</option>
+                        </select>
+                    </div>
+                    <div class="kia-field">
+                        <label>Residual Value %</label>
+                        <div class="kia-input-wrap"><input type="number" id="kia-residual" value="55" min="0" max="100" step="0.5"><span class="kia-suffix">%</span></div>
+                    </div>
+                    <div class="kia-field">
+                        <label>Money Factor <span class="kia-hint">(APR ÷ 2400)</span></label>
+                        <input type="number" id="kia-mf" value="0.00125" min="0" step="0.00001">
+                    </div>
+                    <div class="kia-field">
+                        <label>Sales Tax</label>
+                        <div class="kia-input-wrap"><input type="number" id="kia-tax" value="6.25" min="0" step="0.01"><span class="kia-suffix">%</span></div>
+                    </div>
+                </div>
+                <div class="kia-result-wrap">
+                    <div class="kia-result-label">Est. Monthly Payment</div>
+                    <div class="kia-result-amount" id="kia-result">$—</div>
+                    <div class="kia-result-breakdown" id="kia-breakdown"></div>
+                </div>
+            </div>
         </div>
     </section>
 </main>
@@ -519,6 +693,44 @@
 
     renderMeter();
     loadDeals();
+})();
+
+/* ── Kia Soul Lease Calculator ── */
+(function() {
+    const residualDefaults = { '24': 58, '36': 55, '48': 52 };
+
+    function calcLease() {
+        const msrp     = parseFloat(document.getElementById('kia-msrp').value)     || 0;
+        const down     = parseFloat(document.getElementById('kia-down').value)      || 0;
+        const term     = parseInt(document.getElementById('kia-term').value)        || 36;
+        const residPct = parseFloat(document.getElementById('kia-residual').value)  || 55;
+        const mf       = parseFloat(document.getElementById('kia-mf').value)        || 0.00125;
+        const taxRate  = parseFloat(document.getElementById('kia-tax').value) / 100 || 0.0625;
+
+        const adjCap   = msrp - down;
+        const residual = msrp * (residPct / 100);
+        const deprPart = (adjCap - residual) / term;
+        const finPart  = (adjCap + residual) * mf;
+        const base     = deprPart + finPart;
+        const monthly  = base * (1 + taxRate);
+
+        document.getElementById('kia-result').textContent =
+            isFinite(monthly) && monthly > 0 ? '$' + monthly.toFixed(2) : '$—';
+        document.getElementById('kia-breakdown').innerHTML =
+            `Adj. Cap: $${adjCap.toFixed(0)} &nbsp;·&nbsp; Residual: $${residual.toFixed(0)}<br>` +
+            `Depr/mo: $${deprPart.toFixed(2)} &nbsp;·&nbsp; Finance/mo: $${finPart.toFixed(2)}`;
+    }
+
+    document.getElementById('kia-term').addEventListener('change', function() {
+        document.getElementById('kia-residual').value = residualDefaults[this.value] ?? 55;
+        calcLease();
+    });
+
+    ['kia-msrp','kia-down','kia-residual','kia-mf','kia-tax'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', calcLease);
+    });
+
+    calcLease();
 })();
 </script>
 </body>
