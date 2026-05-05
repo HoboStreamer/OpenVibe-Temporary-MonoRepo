@@ -279,29 +279,14 @@
     async function loadDeals() {
         const list = document.getElementById('deal-list');
         try {
-            const q = encodeURIComponent('fast food deals sales Killeen TX');
-            const ddgUrl = `https://html.duckduckgo.com/html/?q=${q}&kl=us-en`;
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(ddgUrl)}`;
-            const res = await fetch(proxyUrl);
-            const data = await res.json();
-            const doc = new DOMParser().parseFromString(data.contents, 'text/html');
-            const items = [...doc.querySelectorAll('.result')].slice(0, 12);
-            if (!items.length) { list.innerHTML = '<div class="deal-empty">No results found.</div>'; return; }
-            list.innerHTML = items.map(el => {
-                const anchor = el.querySelector('.result__a');
-                const snippet = el.querySelector('.result__snippet');
-                if (!anchor) return '';
-                const title = anchor.textContent.trim();
-                const href = anchor.getAttribute('href') || '#';
-                const realUrl = href.startsWith('//duckduckgo.com/l/?uddg=')
-                    ? decodeURIComponent(href.split('uddg=')[1].split('&')[0])
-                    : href;
-                const desc = snippet ? snippet.textContent.trim() : '';
-                return `<a class="deal-item" href="${realUrl}" target="_blank" rel="noopener">
-                    <div class="deal-item-title">${title}</div>
-                    ${desc ? `<div class="deal-item-meta">${desc}</div>` : ''}
-                </a>`;
-            }).filter(Boolean).join('');
+            const res = await fetch('http://localhost:7779');
+            const deals = await res.json();
+            if (!deals.length) { list.innerHTML = '<div class="deal-empty">No deals found.</div>'; return; }
+            list.innerHTML = deals.map(d => `
+                <a class="deal-item" href="${d.url}" target="_blank" rel="noopener">
+                    <div class="deal-item-title">${d.title}</div>
+                    ${d.snippet ? `<div class="deal-item-meta">${d.snippet}</div>` : ''}
+                </a>`).join('');
         } catch {
             list.innerHTML = '<div class="deal-empty">Couldn\'t load right now. Try again later.</div>';
         }
