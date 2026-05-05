@@ -5,6 +5,64 @@
 <title>FindItFixIt's Corner — OpenVibe Community</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
+<style>
+    .fixit-section { margin: 2rem 0; }
+
+    /* ─── Allergy Meter ─── */
+    .allergy-meter {
+        background: rgba(22, 24, 36, 0.85);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 18px;
+        padding: 1.5rem 1.75rem;
+        max-width: 460px;
+    }
+    .allergy-meter-header {
+        display: flex; align-items: center; gap: 0.65rem;
+        margin-bottom: 1.1rem;
+    }
+    .allergy-meter-icon {
+        font-size: 1.4rem;
+    }
+    .allergy-meter-title {
+        font-size: 0.78rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--ov-text-dim, #a7b5d2);
+    }
+    .allergy-meter-location {
+        font-size: 0.72rem; color: var(--ov-text-dim, #a7b5d2);
+        margin-left: auto; opacity: 0.7;
+    }
+    .allergy-bar-track {
+        height: 10px; border-radius: 999px;
+        background: rgba(255,255,255,0.06);
+        overflow: hidden; margin-bottom: 0.85rem;
+    }
+    .allergy-bar-fill {
+        height: 100%; border-radius: 999px;
+        transition: width 1s cubic-bezier(.4,0,.2,1);
+        background: linear-gradient(90deg, #22d3ee, #8b5cf6, #f59e0b);
+        width: 0%;
+    }
+    .allergy-level-label {
+        font-size: 1.05rem; font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    .allergy-culprit {
+        font-size: 0.8rem; color: var(--ov-text-dim, #a7b5d2);
+    }
+    .allergy-levels {
+        display: flex; gap: 0; margin-top: 1.1rem;
+        border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; overflow: hidden;
+    }
+    .allergy-level-tick {
+        flex: 1; padding: 0.45rem 0.5rem; text-align: center;
+        font-size: 0.68rem; font-weight: 600; color: var(--ov-text-dim, #a7b5d2);
+        border-right: 1px solid rgba(255,255,255,0.07);
+        transition: background .3s, color .3s;
+    }
+    .allergy-level-tick:last-child { border-right: none; }
+    .allergy-level-tick.active { background: rgba(139,92,246,0.15); color: #fff; }
+</style>
 </head>
 <body>
 <div id="nav-mount"></div>
@@ -15,6 +73,26 @@
                 <div class="ov-kicker">FindItFixIt's Corner</div>
                 <h1>FindItFixIt's Corner</h1>
                 <p>Coming soon.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="fixit-section">
+        <div class="allergy-meter">
+            <div class="allergy-meter-header">
+                <span class="allergy-meter-icon">🤧</span>
+                <span class="allergy-meter-title">Allergy Meter</span>
+                <span class="allergy-meter-location">📍 Killeen, TX</span>
+            </div>
+            <div class="allergy-bar-track">
+                <div class="allergy-bar-fill" id="allergy-bar"></div>
+            </div>
+            <div class="allergy-level-label" id="allergy-label">Checking outside…</div>
+            <div class="allergy-culprit" id="allergy-culprit"></div>
+            <div class="allergy-levels">
+                <div class="allergy-level-tick" id="tick-0">🌿 Fresh air</div>
+                <div class="allergy-level-tick" id="tick-1">😮‍💨 Clearing throat</div>
+                <div class="allergy-level-tick" id="tick-2">😤 High grunting</div>
             </div>
         </div>
     </section>
@@ -29,6 +107,48 @@
         document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
         document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
     }
+
+    /* ─── Allergy Meter ─── */
+    const LEVELS = [
+        { label: 'Fresh air',                    tick: 'tick-0', pct: 12  },
+        { label: 'Chance of clearing throat',    tick: 'tick-1', pct: 55  },
+        { label: 'High chance of grunting',      tick: 'tick-2', pct: 92  },
+    ];
+
+    /* Killeen TX seasonal pollen profile — month index 0–11 */
+    const KILLEEN_SEASONS = [
+        { level: 2, culprit: 'Mountain cedar is absolutely furious right now.' },   // Jan
+        { level: 2, culprit: 'Cedar winding down, oak just waking up.' },           // Feb
+        { level: 2, culprit: 'Oak and ash going full send.' },                      // Mar
+        { level: 2, culprit: 'Oak, grass, and elm all at once. Good luck.' },       // Apr
+        { level: 1, culprit: 'Grass pollen season. Windows closed.' },              // May
+        { level: 1, culprit: 'Grass still going, mold spores joining the party.' }, // Jun
+        { level: 0, culprit: 'Mostly clear — heat bakes everything into nothing.' },// Jul
+        { level: 0, culprit: 'Hot and dry. Air is actually fine.' },                // Aug
+        { level: 1, culprit: 'Ragweed season starting up.' },                      // Sep
+        { level: 2, culprit: 'Ragweed peak. Cedar starting early. Classic Texas.' },// Oct
+        { level: 1, culprit: 'Cedar season just getting warmed up.' },              // Nov
+        { level: 2, culprit: 'Mountain cedar. It is always cedar.' },               // Dec
+    ];
+
+    function renderMeter() {
+        const month = new Date().getMonth();
+        const { level, culprit } = KILLEEN_SEASONS[month];
+        const { label, tick, pct } = LEVELS[level];
+
+        document.getElementById('allergy-label').textContent = label;
+        document.getElementById('allergy-culprit').textContent = culprit;
+
+        requestAnimationFrame(() => {
+            document.getElementById('allergy-bar').style.width = pct + '%';
+        });
+
+        ['tick-0', 'tick-1', 'tick-2'].forEach((id, i) => {
+            document.getElementById(id).classList.toggle('active', i === level);
+        });
+    }
+
+    renderMeter();
 })();
 </script>
 </body>
