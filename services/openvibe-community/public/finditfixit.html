@@ -244,6 +244,31 @@
 </style>
 </head>
 <body>
+<div id="seizure-warning" style="
+    position:fixed; inset:0; z-index:999999;
+    background:#0a0a0f;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1.5rem; padding:2rem; text-align:center;
+">
+    <div style="font-size:3rem">⚠️</div>
+    <div style="font-size:1.5rem; font-weight:900; color:#fff; letter-spacing:0.02em">Seizure Warning</div>
+    <div style="max-width:420px; color:#a7b5d2; font-size:0.95rem; line-height:1.7">
+        This page contains <strong style="color:#fff">rapidly flashing lights, colors, and strobing effects</strong> that may affect people with photosensitive epilepsy or similar conditions.<br><br>
+        If you or anyone around you is sensitive to flashing lights, please do not proceed.
+    </div>
+    <button id="warning-enter" style="
+        margin-top:0.5rem;
+        padding:0.75rem 2rem; border-radius:999px; border:none; cursor:pointer;
+        background:linear-gradient(135deg,#8b5cf6,#4f46e5 60%,#22d3ee);
+        color:#fff; font-size:1rem; font-weight:700; font-family:inherit;
+        box-shadow:0 8px 24px rgba(99,102,241,0.4);
+        transition: transform .15s, box-shadow .15s;
+    " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+        I understand, let me in
+    </button>
+    <div style="font-size:0.72rem; color:#5e6580">You can stop the flashing at any time using the music controls.</div>
+</div>
+
 <div id="nav-mount"></div>
 <main class="ov-shell">
     <section class="fixit-section">
@@ -478,12 +503,19 @@
         localStorage.setItem(AUTOPLAY_KEY, cbAutoplay.checked ? '1' : '0');
     });
 
-    if (!autoplayDisabled) {
-        audio.play().catch(() => {});
-        startDisco();
-    } else {
-        setActive(btnStop);
-    }
+    /* ─── Seizure warning gate ─── */
+    const warning = document.getElementById('seizure-warning');
+    document.getElementById('warning-enter').addEventListener('click', () => {
+        warning.style.transition = 'opacity 0.4s';
+        warning.style.opacity = '0';
+        setTimeout(() => { warning.remove(); }, 400);
+        if (!autoplayDisabled) {
+            audio.play().catch(() => {});
+            startDisco();
+        } else {
+            setActive(btnStop);
+        }
+    });
 
     renderMeter();
     loadDeals();
