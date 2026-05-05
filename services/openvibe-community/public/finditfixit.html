@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FindItFixIt's Corner — OpenVibe Community</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+<main class="ov-shell">
+    <section class="ov-hero">
+        <div class="ov-hero-grid">
+            <div class="ov-hero-copy">
+                <div class="ov-kicker">FindItFixIt's Corner</div>
+                <h1>FindItFixIt's Corner</h1>
+                <p>Coming soon.</p>
+            </div>
+        </div>
+    </section>
+</main>
+<div id="footer-mount"></div>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    if (OpenVibe.renderChrome) {
+        await OpenVibe.renderChrome('community');
+    } else {
+        document.getElementById('nav-mount').innerHTML = OpenVibe.navbar();
+        document.getElementById('footer-mount').innerHTML = OpenVibe.footer();
+    }
+})();
+</script>
+</body>
+</html>
