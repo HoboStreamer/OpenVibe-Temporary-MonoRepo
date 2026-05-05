@@ -190,7 +190,7 @@
                     <div class="deal-finder-header">
                         <span>🍔</span>
                         <span class="deal-finder-title">Fast Food Deals</span>
-                        <span class="deal-finder-source">Reddit · this week</span>
+                        <span class="deal-finder-source">via DuckDuckGo</span>
                     </div>
                     <div class="deal-list" id="deal-list">
                         <div class="deal-empty">Loading deals…</div>
@@ -279,24 +279,31 @@
     async function loadDeals() {
         const list = document.getElementById('deal-list');
         try {
-            const res = await fetch(
-                'https://www.reddit.com/search.json?q=fast+food+deal&sort=new&t=week&limit=20',
-                { headers: { 'Accept': 'application/json' } }
-            );
+            const q = encodeURIComponent('fast food deals sales Killeen TX');
+            const ddgUrl = `https://html.duckduckgo.com/html/?q=${q}&kl=us-en`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(ddgUrl)}`;
+            const res = await fetch(proxyUrl);
             const data = await res.json();
-            const posts = data.data.children.map(c => c.data);
-            if (!posts.length) { list.innerHTML = '<div class="deal-empty">No deals this week.</div>'; return; }
-            list.innerHTML = posts.map(p => {
-                const age = Math.round((Date.now() / 1000 - p.created_utc) / 3600);
-                const ageLabel = age < 1 ? 'just now' : age < 24 ? `${age}h ago` : `${Math.round(age / 24)}d ago`;
-                const url = p.url.startsWith('http') ? p.url : `https://reddit.com${p.permalink}`;
-                return `<a class="deal-item" href="${url}" target="_blank" rel="noopener">
-                    <div class="deal-item-title">${p.title}</div>
-                    <div class="deal-item-meta">${ageLabel} · r/${p.subreddit}</div>
+            const doc = new DOMParser().parseFromString(data.contents, 'text/html');
+            const items = [...doc.querySelectorAll('.result')].slice(0, 12);
+            if (!items.length) { list.innerHTML = '<div class="deal-empty">No results found.</div>'; return; }
+            list.innerHTML = items.map(el => {
+                const anchor = el.querySelector('.result__a');
+                const snippet = el.querySelector('.result__snippet');
+                if (!anchor) return '';
+                const title = anchor.textContent.trim();
+                const href = anchor.getAttribute('href') || '#';
+                const realUrl = href.startsWith('//duckduckgo.com/l/?uddg=')
+                    ? decodeURIComponent(href.split('uddg=')[1].split('&')[0])
+                    : href;
+                const desc = snippet ? snippet.textContent.trim() : '';
+                return `<a class="deal-item" href="${realUrl}" target="_blank" rel="noopener">
+                    <div class="deal-item-title">${title}</div>
+                    ${desc ? `<div class="deal-item-meta">${desc}</div>` : ''}
                 </a>`;
-            }).join('');
+            }).filter(Boolean).join('');
         } catch {
-            list.innerHTML = '<div class="deal-empty">Couldn\'t load deals right now.</div>';
+            list.innerHTML = '<div class="deal-empty">Couldn\'t load right now. Try again later.</div>';
         }
     }
 
