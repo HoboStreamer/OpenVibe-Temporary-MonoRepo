@@ -157,13 +157,13 @@
     }
 
     /* ─── Disco Mode ─── */
-    body.disco { animation: disco-hue 0.6s linear infinite; }
+    body.disco { animation: disco-hue 0.18s linear infinite; }
     @keyframes disco-hue {
-        0%   { filter: hue-rotate(0deg)   brightness(1.05); }
-        25%  { filter: hue-rotate(90deg)  brightness(1.15); }
-        50%  { filter: hue-rotate(200deg) brightness(1.05); }
-        75%  { filter: hue-rotate(300deg) brightness(1.15); }
-        100% { filter: hue-rotate(360deg) brightness(1.05); }
+        0%   { filter: hue-rotate(0deg)   brightness(1.1) saturate(1.8); }
+        25%  { filter: hue-rotate(90deg)  brightness(1.3) saturate(2.2); }
+        50%  { filter: hue-rotate(200deg) brightness(1.1) saturate(1.8); }
+        75%  { filter: hue-rotate(300deg) brightness(1.3) saturate(2.2); }
+        100% { filter: hue-rotate(360deg) brightness(1.1) saturate(1.8); }
     }
     #disco-overlay {
         position: fixed; inset: 0; z-index: 99990;
@@ -171,49 +171,75 @@
     }
     .disco-beam {
         position: absolute; bottom: 0;
-        width: 3px; border-radius: 999px;
-        opacity: 0; animation: beam-sweep 1.2s ease-in-out infinite;
+        width: 5px; border-radius: 999px;
+        opacity: 0; animation: beam-sweep 0.45s ease-in-out infinite;
         transform-origin: bottom center;
     }
     @keyframes beam-sweep {
-        0%   { opacity: 0; transform: rotate(-40deg) scaleY(0.3); }
-        20%  { opacity: 0.35; }
-        50%  { opacity: 0.5; transform: rotate(40deg) scaleY(1); }
-        80%  { opacity: 0.35; }
-        100% { opacity: 0; transform: rotate(-40deg) scaleY(0.3); }
+        0%   { opacity: 0;    transform: rotate(-55deg) scaleY(0.2); }
+        20%  { opacity: 0.7; }
+        50%  { opacity: 0.9;  transform: rotate(55deg)  scaleY(1); }
+        80%  { opacity: 0.7; }
+        100% { opacity: 0;    transform: rotate(-55deg) scaleY(0.2); }
     }
     .disco-particle {
         position: fixed; pointer-events: none; z-index: 99991;
         font-weight: 900; white-space: nowrap; user-select: none;
-        animation: particle-float 2.8s ease-out forwards;
+        animation: particle-float 1.6s ease-out forwards;
     }
     @keyframes particle-float {
-        0%   { opacity: 0;   transform: translateY(0)    rotate(0deg)   scale(0.6); }
-        15%  { opacity: 1; }
-        80%  { opacity: 0.9; transform: translateY(-260px) rotate(20deg) scale(1.1); }
-        100% { opacity: 0;   transform: translateY(-340px) rotate(30deg) scale(0.8); }
+        0%   { opacity: 0;   transform: translateY(0)    rotate(-8deg)  scale(0.5); }
+        12%  { opacity: 1; }
+        70%  { opacity: 1;   transform: translateY(-220px) rotate(18deg) scale(1.3); }
+        100% { opacity: 0;   transform: translateY(-300px) rotate(30deg) scale(0.9); }
     }
-    .disco-ball {
-        position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-        z-index: 99992; pointer-events: none;
-        animation: ball-spin 1s linear infinite;
-        display: none;
-    }
-    body.disco .disco-ball { display: block; }
-    @keyframes ball-spin { to { transform: translateX(-50%) rotate(360deg); } }
     .disco-flash {
         position: fixed; inset: 0; z-index: 99989;
         pointer-events: none; opacity: 0;
-        animation: flash-strobe 0.8s linear infinite;
+        animation: flash-strobe 0.22s linear infinite;
         mix-blend-mode: overlay;
     }
     @keyframes flash-strobe {
-        0%,100% { opacity: 0; background: transparent; }
-        10%     { opacity: 0.12; background: #ff00ff; }
-        30%     { opacity: 0;   }
-        55%     { opacity: 0.1; background: #00ffff; }
-        75%     { opacity: 0;   }
-        90%     { opacity: 0.08; background: #ffff00; }
+        0%,100% { opacity: 0;    background: transparent; }
+        15%     { opacity: 0.18; background: #ff00ff; }
+        40%     { opacity: 0;    }
+        60%     { opacity: 0.15; background: #00ffff; }
+        80%     { opacity: 0;    }
+        92%     { opacity: 0.13; background: #ffff00; }
+    }
+
+    /* ─── Widget glow in disco ─── */
+    body.disco .allergy-meter,
+    body.disco .deal-finder {
+        animation: widget-glow 0.35s ease-in-out infinite alternate;
+    }
+    body.disco iframe {
+        animation: iframe-glow 0.35s ease-in-out infinite alternate;
+    }
+    @keyframes widget-glow {
+        from { box-shadow: 0 0 18px 4px #ff00ff88, 0 0 40px 8px #00ffff44; border-color: #ff00ff88; }
+        to   { box-shadow: 0 0 28px 8px #00ffff88, 0 0 60px 14px #ff00ff44; border-color: #00ffff88; }
+    }
+    @keyframes iframe-glow {
+        from { box-shadow: 0 0 24px 6px #ff006688, 0 0 50px 12px #ffff0044; outline: 2px solid #ff006688; }
+        to   { box-shadow: 0 0 36px 12px #ffff0088, 0 0 70px 20px #ff006644; outline: 2px solid #ffff0088; }
+    }
+
+    /* ─── Bass pulse on player ─── */
+    body.disco .music-player {
+        animation: bass-pump 0.22s ease-in-out infinite alternate;
+    }
+    @keyframes bass-pump {
+        from {
+            transform: scale(1);
+            box-shadow: 0 0 20px 4px #ff00ff, 0 8px 32px rgba(0,0,0,0.4);
+            border-color: #ff00ff;
+        }
+        to {
+            transform: scale(1.08);
+            box-shadow: 0 0 50px 16px #00ffff, 0 0 100px 30px #ff00ff66;
+            border-color: #00ffff;
+        }
     }
 </style>
 </head>
@@ -274,32 +300,6 @@
 <!-- Disco overlays -->
 <div id="disco-overlay"></div>
 <div class="disco-flash" id="disco-flash" style="display:none"></div>
-
-<!-- Disco ball SVG -->
-<div class="disco-ball">
-    <svg width="52" height="52" viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <radialGradient id="ball-grad" cx="35%" cy="30%">
-                <stop offset="0%" stop-color="#fff" stop-opacity="0.9"/>
-                <stop offset="100%" stop-color="#666" stop-opacity="0.6"/>
-            </radialGradient>
-        </defs>
-        <circle cx="26" cy="26" r="24" fill="url(#ball-grad)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-        <!-- mirror tiles -->
-        <g fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.8">
-            <line x1="2" y1="18" x2="50" y2="18"/><line x1="2" y1="26" x2="50" y2="26"/>
-            <line x1="2" y1="34" x2="50" y2="34"/>
-            <line x1="18" y1="2" x2="18" y2="50"/><line x1="26" y1="2" x2="26" y2="50"/>
-            <line x1="34" y1="2" x2="34" y2="50"/>
-        </g>
-        <circle cx="20" cy="18" r="2.5" fill="rgba(255,100,255,0.9)"/>
-        <circle cx="30" cy="14" r="1.8" fill="rgba(100,255,255,0.9)"/>
-        <circle cx="36" cy="22" r="2"   fill="rgba(255,255,100,0.9)"/>
-        <circle cx="16" cy="28" r="1.5" fill="rgba(100,255,100,0.9)"/>
-        <circle cx="32" cy="30" r="2.2" fill="rgba(255,150,50,0.9)"/>
-        <circle cx="22" cy="34" r="1.8" fill="rgba(200,100,255,0.9)"/>
-    </svg>
-</div>
 
 <!-- Floating Music Player -->
 <div class="music-player">
@@ -418,15 +418,16 @@
     /* light beams */
     function buildBeams() {
         overlay.innerHTML = '';
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 16; i++) {
             const b = document.createElement('div');
             b.className = 'disco-beam';
             b.style.cssText = `
-                left:${10 + i * 11}%;
-                height:${55 + Math.random()*35}vh;
+                left:${4 + i * 6}%;
+                height:${50 + Math.random()*45}vh;
+                width:${3 + Math.random()*5}px;
                 background:linear-gradient(to top, ${COLORS[i % COLORS.length]}, transparent);
-                animation-delay:${i * 0.18}s;
-                animation-duration:${0.9 + Math.random()*0.7}s;
+                animation-delay:${i * 0.07}s;
+                animation-duration:${0.28 + Math.random()*0.3}s;
             `;
             overlay.appendChild(b);
         }
@@ -457,7 +458,7 @@
         document.body.classList.add('disco');
         flashEl.style.display = 'block';
         buildBeams();
-        discoInterval = setInterval(spawnParticle, 420);
+        discoInterval = setInterval(spawnParticle, 140);
     }
 
     function stopDisco() {
