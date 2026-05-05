@@ -4,21 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>OpenVibe Network - One Account for Every Surface</title>
-    <meta name="description" content="The OpenVibe Network: live streaming, multistream control, chat, community, media, games, and more. One account, seamless integration across every surface.">
+    <title>OpenVibe Network - One Account for Every Tool</title>
+    <meta name="description" content="The OpenVibe Network: live streaming, multistream control, chat, community, media, games, and more. One account, seamless integration across every tool.">
     <meta name="keywords" content="openvibe, live streaming, chat, community, open source, free streaming, openvibe.live, openre.stream">
     <meta name="author" content="OpenVibe">
     <meta name="theme-color" content="#8b5cf6">
 
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://openvibe.tools/">
-    <meta property="og:title" content="OpenVibe Network - One Account for Every Surface">
+    <meta property="og:title" content="OpenVibe Network - One Account for Every Tool">
     <meta property="og:description" content="Live streaming, restream control, chat, community, media, and games — all tied together under one account.">
     <meta property="og:site_name" content="OpenVibe Network">
     <meta property="og:locale" content="en_US">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="OpenVibe Network - One Account for Every Surface">
+    <meta name="twitter:title" content="OpenVibe Network - One Account for Every Tool">
     <meta name="twitter:description" content="All-in-one platform: live streaming, restream, chat, community, media, and games.">
 
     <link rel="canonical" href="https://openvibe.tools/">
@@ -385,7 +385,7 @@
         .showcase-header h2 { font-size: clamp(1.3rem, 3vw, 2rem); font-weight: 800; letter-spacing: -0.03em; margin-bottom: 10px; }
         .showcase-header p { max-width: 560px; margin: 0 auto; color: var(--text-secondary); font-size: 1rem; line-height: 1.65; }
 
-        .showcase-cats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 32px; }
+        .showcase-cats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 32px; }
         .showcase-cat {
             display: flex; flex-direction: column; align-items: center; gap: 10px;
             padding: 20px 12px; border-radius: var(--radius-sm);
@@ -610,7 +610,7 @@
         @media (max-width: 920px) {
             .bento-featured, .bento-side, .bento-third, .bento-half { grid-column: span 6; }
             .stats-ribbon { gap: 32px; }
-            .showcase-cats { grid-template-columns: repeat(3, 1fr); }
+            .showcase-cats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
         }
         @media (max-width: 640px) {
             .shell { width: min(100% - 24px, 1200px); }
@@ -647,13 +647,13 @@
             <!-- Hero -->
             <div class="shell hero">
                 <div class="hero-badge"><i class="fa-solid fa-wave-square"></i> The OpenVibe Network &mdash; Open Source, Community Driven</div>
-                <h1>One account.<br><span class="gradient-text">Every OpenVibe surface.</span></h1>
+                <h1>One account.<br><span class="gradient-text">Every OpenVibe tool.</span></h1>
                 <p class="hero-sub">Live streaming, multistream control, chat, community, media, games, and more — all tied together under one account instead of scattered across a million different sites.</p>
                 <p class="hero-sub" style="max-width:700px;font-size:1rem;margin-top:-12px;margin-bottom:24px">Built as an open source, community-first project. No investors, no paywalls, no tracking. Just tools that work.</p>
                 <div class="hero-cta">
                     <a href="/auth/register" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Create Free Account</a>
                     <a href="/auth/login" class="btn btn-ghost"><i class="fa-solid fa-right-to-bracket"></i> Sign In</a>
-                    <button type="button" class="btn btn-ghost" onclick="openDirectory()" style="border-color:rgba(139,92,246,0.35);background:rgba(139,92,246,0.08)"><i class="fa-solid fa-grip"></i> Browse All Surfaces</button>
+                    <button type="button" class="btn btn-ghost" onclick="openDirectory()" style="border-color:rgba(139,92,246,0.35);background:rgba(139,92,246,0.08)"><i class="fa-solid fa-grip"></i> Browse All Tools</button>
                 </div>
                 <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0 0;color:var(--text-secondary);font-size:0.85rem">
                     <a href="https://github.com/HoboStreamer/OpenVibe-Temporary-MonoRepo" target="_blank" rel="noopener">GitHub</a>
@@ -662,11 +662,11 @@
                     <span aria-hidden="true">•</span>
                     <a href="https://openre.stream" target="_blank" rel="noopener">openre.stream</a>
                 </div>
-                <div class="stats-ribbon">
-                    <div class="stat"><span class="stat-number">8</span><span class="stat-label">Services</span></div>
-                    <div class="stat"><span class="stat-number">100%</span><span class="stat-label">Free</span></div>
-                    <div class="stat"><span class="stat-number">1</span><span class="stat-label">Account</span></div>
-                    <div class="stat"><span class="stat-number">Open</span><span class="stat-label">Source</span></div>
+                <div class="showcase-marquee" id="hero-marquee-1" style="margin-top:32px">
+                    <div class="marquee-track" id="hero-track-1"></div>
+                </div>
+                <div class="showcase-marquee showcase-marquee-reverse" id="hero-marquee-2">
+                    <div class="marquee-track" id="hero-track-2"></div>
                 </div>
             </div>
 
@@ -678,8 +678,8 @@
                             <span class="showcase-num" id="showcase-num">0</span>
                             <span class="showcase-plus">+</span>
                         </div>
-                        <h2>surfaces across the OpenVibe Network</h2>
-                        <p>Every surface has its own URL. No ads, no sign-up required for most tools. Just open and go.</p>
+                        <h2>tools across the OpenVibe Network</h2>
+                        <p>Every tool has its own URL. No ads, no sign-up required for most tools. Just open and go.</p>
                     </div>
 
                     <div class="showcase-cats reveal" id="showcase-cats"></div>
@@ -687,185 +687,13 @@
                     <div class="showcase-search-wrap reveal">
                         <div class="showcase-search-inner">
                             <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" placeholder="Search surfaces — try 'live', 'chat', 'stream'…" onclick="openDirectory()" readonly>
+                            <input type="text" placeholder="Search tools — try 'live', 'chat', 'stream'…" onclick="openDirectory()" readonly>
                             <kbd>Ctrl K</kbd>
                         </div>
                     </div>
 
-                    <div class="showcase-marquee" id="marquee-1">
-                        <div class="marquee-track" id="marquee-track-1"></div>
-                    </div>
-                    <div class="showcase-marquee showcase-marquee-reverse" id="marquee-2">
-                        <div class="marquee-track" id="marquee-track-2"></div>
-                    </div>
-
-                    <div class="showcase-cta reveal">
-                        <button type="button" class="btn btn-primary btn-lg btn-glow" onclick="openDirectory()">
-                            <i class="fa-solid fa-grip"></i> Explore All Surfaces
-                        </button>
-                    </div>
                 </div>
             </section>
-
-            <!-- Services — Bento Grid -->
-            <section class="services">
-                <div class="shell">
-                    <div class="section-title reveal">
-                        <h2>Everything in the network</h2>
-                        <p>8 surfaces, each with its own purpose — but they all share your account, identity, and settings.</p>
-                    </div>
-                    <div class="bento">
-                        <!-- openvibe.live — featured -->
-                        <a class="bento-card bento-featured reveal" href="https://openvibe.live" target="_blank" rel="noopener" style="--card-accent: #8b5cf6;">
-                            <div class="card-icon"><i class="fa-solid fa-tower-broadcast"></i></div>
-                            <div class="card-title">openvibe.live</div>
-                            <div class="card-desc">Go live from your browser or OBS. Stream to your channel, save VODs, create clips, and build an audience. Discovery, channel pages, and live video — all in one place. Zero cost, no gatekeeping.</div>
-                            <span class="card-tag"><i class="fa-solid fa-circle" style="font-size:6px"></i> Live Streaming</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openre.stream -->
-                        <a class="bento-card bento-side reveal reveal-delay-1" href="https://openre.stream" target="_blank" rel="noopener" style="--card-accent: #f59e0b;">
-                            <div class="card-icon"><i class="fa-solid fa-sliders"></i></div>
-                            <div class="card-title">openre.stream</div>
-                            <div class="card-desc">Multistream and restream control room. Route your stream to Twitch, YouTube, Kick, and more simultaneously. Ingest management, destinations, and stream orchestration.</div>
-                            <span class="card-tag"><i class="fa-solid fa-shuffle"></i> Restream Control</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.chat -->
-                        <a class="bento-card bento-third reveal" href="https://openvibe.chat" target="_blank" rel="noopener" style="--card-accent: #22d3ee;">
-                            <div class="card-icon"><i class="fa-solid fa-comments"></i></div>
-                            <div class="card-title">openvibe.chat</div>
-                            <div class="card-desc">Real-time community chat. Rooms, direct messages, emotes, and moderation tools built for streamers and their audiences.</div>
-                            <span class="card-tag"><i class="fa-solid fa-message"></i> Chat</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.community -->
-                        <a class="bento-card bento-third reveal reveal-delay-1" href="https://openvibe.community" target="_blank" rel="noopener" style="--card-accent: #10b981;">
-                            <div class="card-icon"><i class="fa-solid fa-users"></i></div>
-                            <div class="card-title">openvibe.community</div>
-                            <div class="card-desc">Community forums, threads, posts, and pastes. The long-form home for discussions, announcements, and creator content outside of a live stream.</div>
-                            <span class="card-tag"><i class="fa-solid fa-globe"></i> Community</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.network -->
-                        <a class="bento-card bento-third reveal reveal-delay-2" href="https://openvibe.network" target="_blank" rel="noopener" style="--card-accent: #a78bfa;">
-                            <div class="card-icon"><i class="fa-solid fa-network-wired"></i></div>
-                            <div class="card-title">openvibe.network</div>
-                            <div class="card-desc">Your OpenVibe command center. Manage your profile, linked services, account settings, and identity across the entire network.</div>
-                            <span class="card-tag"><i class="fa-solid fa-sliders"></i> Account Hub</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.games -->
-                        <a class="bento-card bento-third reveal" href="https://openvibe.games" target="_blank" rel="noopener" style="--card-accent: #f472b6;">
-                            <div class="card-icon"><i class="fa-solid fa-gamepad"></i></div>
-                            <div class="card-title">openvibe.games</div>
-                            <div class="card-desc">Browser games platform integrated into the OpenVibe network. Play, compete, and share scores — all tied to your OpenVibe account.</div>
-                            <span class="card-tag"><i class="fa-solid fa-dice"></i> Games</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.media -->
-                        <a class="bento-card bento-third reveal reveal-delay-1" href="https://openvibe.media" target="_blank" rel="noopener" style="--card-accent: #06b6d4;">
-                            <div class="card-icon"><i class="fa-solid fa-photo-film"></i></div>
-                            <div class="card-title">openvibe.media</div>
-                            <div class="card-desc">Media storage, processing, and delivery for the OpenVibe network. Thumbnails, VODs, clips, and assets — hosted and served from one place.</div>
-                            <span class="card-tag"><i class="fa-solid fa-cloud-arrow-up"></i> Media</span>
-                            <div class="card-glow"></div>
-                        </a>
-
-                        <!-- openvibe.tools -->
-                        <a class="bento-card bento-third reveal reveal-delay-2" href="https://openvibe.tools" style="--card-accent: #8b5cf6;">
-                            <div class="card-icon"><i class="fa-solid fa-screwdriver-wrench"></i></div>
-                            <div class="card-title">openvibe.tools</div>
-                            <div class="card-desc">The OpenVibe network hub — browse every surface, manage your launcher, and jump between services without losing your place. You are here.</div>
-                            <span class="card-tag"><i class="fa-solid fa-location-dot"></i> You Are Here</span>
-                            <div class="card-glow"></div>
-                        </a>
-                    </div>
-                </div>
-            </section>
-
-            <!-- How it works -->
-            <section class="how-it-works">
-                <div class="shell">
-                    <div class="section-title reveal">
-                        <h2>How it works</h2>
-                        <p>One sign-in takes you everywhere.</p>
-                    </div>
-                    <div class="steps">
-                        <div class="step reveal">
-                            <div class="step-num">1</div>
-                            <h3>Create your account</h3>
-                            <p>Sign up once on openvibe.tools. Pick a username and you're in.</p>
-                        </div>
-                        <div class="step reveal reveal-delay-1">
-                            <div class="step-num">2</div>
-                            <h3>Jump into any surface</h3>
-                            <p>Open openvibe.live, chat, community, or games — you're already signed in.</p>
-                        </div>
-                        <div class="step reveal reveal-delay-2">
-                            <div class="step-num">3</div>
-                            <h3>Everything stays in sync</h3>
-                            <p>Your identity, settings, and data follow you across the entire network.</p>
-                        </div>
-                        <div class="step reveal reveal-delay-3">
-                            <div class="step-num">4</div>
-                            <h3>Go live anytime</h3>
-                            <p>Stream from your browser or OBS. Your VODs and clips stay tied to your channel.</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Features -->
-            <section class="features">
-                <div class="shell">
-                    <div class="section-title reveal">
-                        <h2>Built different</h2>
-                        <p>No subscriptions, no data harvesting, no corporate nonsense.</p>
-                    </div>
-                    <div class="feature-grid">
-                        <div class="feature reveal">
-                            <div class="feature-icon"><i class="fa-solid fa-user"></i></div>
-                            <div><h3>Unified identity</h3><p>One OpenVibe account works everywhere. No separate logins, no re-registration.</p></div>
-                        </div>
-                        <div class="feature reveal reveal-delay-1">
-                            <div class="feature-icon"><i class="fa-solid fa-code-branch"></i></div>
-                            <div><h3>Open source</h3><p>Every service is open source on GitHub. Inspect it, fork it, contribute to it.</p></div>
-                        </div>
-                        <div class="feature reveal reveal-delay-2">
-                            <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
-                            <div><h3>No tracking</h3><p>No analytics scripts, no ad networks, no fingerprinting. Your data stays yours.</p></div>
-                        </div>
-                        <div class="feature reveal">
-                            <div class="feature-icon"><i class="fa-solid fa-tower-broadcast"></i></div>
-                            <div><h3>Creator-first</h3><p>Built for streamers, creators, and communities — not for advertisers or investors.</p></div>
-                        </div>
-                        <div class="feature reveal reveal-delay-1">
-                            <div class="feature-icon"><i class="fa-solid fa-infinity"></i></div>
-                            <div><h3>Free forever</h3><p>No paywalls, no tiers, no credit card required. Everything is free to use.</p></div>
-                        </div>
-                        <div class="feature reveal reveal-delay-2">
-                            <div class="feature-icon"><i class="fa-solid fa-bolt"></i></div>
-                            <div><h3>Fast &amp; lightweight</h3><p>Server-side rendering, minimal JS, no bloated frameworks. Pages load instantly.</p></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- CTA -->
-            <div class="shell">
-                <div class="cta-banner reveal">
-                    <h2>Ready to join OpenVibe?</h2>
-                    <p>Create a free account and access every surface instantly. No credit card, no spam, no strings attached.</p>
-                    <a href="/auth/register" class="btn btn-primary"><i class="fa-solid fa-wave-square"></i> Get Started Free</a>
-                </div>
-            </div>
         </section>
 
         <!-- ════════ SIGNED-IN HOME ════════ -->
@@ -874,18 +702,18 @@
                 <div class="signed-hero">
                     <div class="hero-badge"><i class="fa-solid fa-wave-square"></i> Signed In</div>
                     <h1 id="welcome-heading">Welcome back.</h1>
-                    <p id="welcome-copy">Your account is active across the OpenVibe Network. Jump into any surface below.</p>
+                    <p id="welcome-copy">Your account is active across the OpenVibe Network. Jump into any tool below.</p>
                     <div class="signed-actions">
                         <a href="/my" class="btn btn-primary"><i class="fa-solid fa-user-circle"></i> My Account</a>
                         <a href="https://openvibe.live" class="btn btn-ghost" target="_blank" rel="noopener"><i class="fa-solid fa-tower-broadcast"></i> Go to Live</a>
-                        <button type="button" class="btn btn-ghost" onclick="openDirectory()"><i class="fa-solid fa-grip"></i> Browse All Surfaces</button>
+                        <button type="button" class="btn btn-ghost" onclick="openDirectory()"><i class="fa-solid fa-grip"></i> Browse All Tools</button>
                         <button type="button" class="btn btn-ghost" onclick="signOut()"><i class="fa-solid fa-right-from-bracket"></i> Sign Out</button>
                     </div>
                 </div>
 
                 <div class="signed-showcase-section" id="signed-showcase">
                     <div class="showcase-hero">
-                        <h2>Your Surfaces</h2>
+                        <h2>Your Tools</h2>
                         <p>Quick access to every service in the OpenVibe Network</p>
                     </div>
                     <div class="showcase-grid" id="signed-showcase-grid"></div>
@@ -924,7 +752,7 @@
                     </a>
                     <button class="quick-card" onclick="openDirectory()" style="text-align:left;cursor:pointer;color:inherit;font:inherit">
                         <div class="quick-icon"><i class="fa-solid fa-grip"></i></div>
-                        <div><h3>Browse all surfaces</h3><p>Every OpenVibe surface in one place</p></div>
+                        <div><h3>Browse all tools</h3><p>Every OpenVibe tool in one place</p></div>
                     </button>
                 </div>
             </div>
@@ -948,17 +776,17 @@
         </footer>
     </div>
 
-    <!-- ════════ ALL SURFACES DIRECTORY MODAL ════════ -->
+    <!-- ════════ ALL TOOLS DIRECTORY MODAL ════════ -->
     <div class="dir-overlay" id="dir-overlay" onclick="if(event.target===this)closeDirectory()">
         <div class="dir-panel">
             <div class="dir-header">
-                <h2><i class="fa-solid fa-grip" style="color:var(--accent-light)"></i> All Surfaces <span class="dir-count" id="dir-count"></span></h2>
+                <h2><i class="fa-solid fa-grip" style="color:var(--accent-light)"></i> All Tools <span class="dir-count" id="dir-count"></span></h2>
                 <button class="dir-close" onclick="closeDirectory()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="dir-search-bar">
                 <div class="dir-search-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input class="dir-search" id="dir-search" type="text" placeholder="Search surfaces and services…" autocomplete="off" spellcheck="false">
+                    <input class="dir-search" id="dir-search" type="text" placeholder="Search tools and services…" autocomplete="off" spellcheck="false">
                 </div>
             </div>
             <div class="dir-filters" id="dir-filters"></div>
@@ -1030,7 +858,7 @@
         function setSignedIn(user) {
             setVisibility(true);
             document.getElementById('welcome-heading').textContent = `Welcome back, ${user.display_name || user.username}.`;
-            document.getElementById('welcome-copy').textContent = `You're signed in to the OpenVibe Network. Jump into any surface — everything is in sync.`;
+            document.getElementById('welcome-copy').textContent = `You're signed in to the OpenVibe Network. Jump into any tool — everything is in sync.`;
         }
 
         function setSignedOut() { setVisibility(false); }
@@ -1042,7 +870,7 @@
             window.location.href = '/';
         }
 
-        /* ─── All Surfaces Directory ─── */
+        /* ─── All Tools Directory ─── */
         const DIR_DATA = [
             { cat: 'Core', icon: 'fa-wave-square', color: '#8b5cf6', tools: [
                 { name: 'OpenVibe Tools Hub', domain: 'openvibe.tools', icon: 'fa-screwdriver-wrench' },
@@ -1071,6 +899,8 @@
                 { name: 'OpenVibe Community', domain: 'openvibe.community', icon: 'fa-users' },
                 { name: 'Community Threads', domain: 'openvibe.community/threads', icon: 'fa-list-ul' },
                 { name: 'Community Pastes', domain: 'openvibe.community/pastes', icon: 'fa-paste' },
+                { name: "FindItFixIt's Corner", domain: 'openvibe.community/finditfixit', icon: 'fa-screwdriver-wrench' },
+                { name: 'Kia Soul Lease Calc', domain: 'openvibe.community/finditfixit#kia', icon: 'fa-car' },
             ]},
             { cat: 'Media', icon: 'fa-photo-film', color: '#06b6d4', tools: [
                 { name: 'OpenVibe Media', domain: 'openvibe.media', icon: 'fa-photo-film' },
@@ -1155,10 +985,10 @@
                 </div>`;
             }
             if (!totalShown) {
-                html = `<div class="dir-empty"><i class="fa-solid fa-magnifying-glass"></i>No surfaces match "${escHtml(q)}"</div>`;
+                html = `<div class="dir-empty"><i class="fa-solid fa-magnifying-glass"></i>No tools match "${escHtml(q)}"</div>`;
             }
             bodyEl.innerHTML = html;
-            document.getElementById('dir-count').textContent = totalShown + ' surfaces';
+            document.getElementById('dir-count').textContent = totalShown + ' tools';
         }
         function setDirFilter(f) { dirFilter = f; renderDirectory(document.getElementById('dir-search').value); }
         function highlightMatch(text, q) {
@@ -1185,13 +1015,20 @@
             const el = document.getElementById('showcase-cats');
             if (!el) return;
             const sorted = Object.entries(catMap).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
-            el.innerHTML = sorted.map(([name, d]) =>
+            const catCards = sorted.map(([name, d]) =>
                 `<div class="showcase-cat" style="--cat-color:${d.color}" onclick="dirFilter='${name}';openDirectory()">
                     <div class="showcase-cat-icon"><i class="fa-solid ${d.icon}"></i></div>
                     <div class="showcase-cat-count">${d.count}</div>
                     <div class="showcase-cat-label">${name}</div>
                 </div>`
-            ).join('');
+            );
+            catCards.push(
+                `<div class="showcase-cat" style="--cat-color:#8b5cf6;background:linear-gradient(135deg,rgba(139,92,246,0.18),rgba(79,70,229,0.18));border-color:rgba(139,92,246,0.35)" onclick="openDirectory()">
+                    <div class="showcase-cat-icon" style="background:linear-gradient(135deg,#8b5cf6,#4f46e5 60%,#22d3ee);box-shadow:0 8px 24px rgba(99,102,241,0.35)"><i class="fa-solid fa-grip"></i></div>
+                    <div class="showcase-cat-label" style="color:var(--accent-light);font-size:0.9rem;margin-top:4px">Explore All</div>
+                </div>`
+            );
+            el.innerHTML = catCards.join('');
         }
         buildShowcaseCats();
 
@@ -1208,7 +1045,7 @@
         }
         const counterEl = document.getElementById('showcase-num');
         if (counterEl) {
-            const totalSurfaces = DIR_DATA.reduce((sum, cat) => sum + cat.tools.length, 0);
+            const totalSurfaces = DIR_DATA.reduce((sum, cat) => sum + cat.tools.length, 0); /* totalTools */
             const counterObserver = new IntersectionObserver((entries) => {
                 entries.forEach(e => {
                     if (e.isIntersecting) { animateCounter(counterEl, totalSurfaces, 1400); counterObserver.unobserve(e.target); }
@@ -1232,10 +1069,16 @@
                     `<a class="marquee-pill" href="https://${t.domain}" target="_blank" rel="noopener"><i class="fa-solid ${t.icon}"></i>${t.domain}</a>`
                 ).join('');
             }
-            const track1 = document.getElementById('marquee-track-1');
-            const track2 = document.getElementById('marquee-track-2');
-            if (track1) track1.innerHTML = renderPills(row1) + renderPills(row1);
-            if (track2) track2.innerHTML = renderPills(row2) + renderPills(row2);
+            [
+                ['marquee-track-1', 'hero-track-1'],
+                ['marquee-track-2', 'hero-track-2'],
+            ].forEach(([id1, id2], i) => {
+                const pills = renderPills(i === 0 ? row1 : row2);
+                [id1, id2].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = pills + pills;
+                });
+            });
         }
         buildMarquee();
 
