@@ -8,21 +8,31 @@
 <style>
     .fixit-section { margin: 2rem 0; }
 
+    .fixit-col-left {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        width: 315px;
+        height: 560px;
+        flex-shrink: 0;
+    }
+
     /* ─── Allergy Meter ─── */
     .allergy-meter {
         background: rgba(22, 24, 36, 0.85);
         border: 1px solid rgba(255,255,255,0.07);
         border-radius: 18px;
-        padding: 1.5rem 1.75rem;
-        max-width: 460px;
+        padding: 1.25rem 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .allergy-meter-header {
         display: flex; align-items: center; gap: 0.65rem;
-        margin-bottom: 1.1rem;
+        margin-bottom: 0.75rem;
     }
-    .allergy-meter-icon {
-        font-size: 1.4rem;
-    }
+    .allergy-meter-icon { font-size: 1.2rem; }
     .allergy-meter-title {
         font-size: 0.78rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.08em;
@@ -33,9 +43,9 @@
         margin-left: auto; opacity: 0.7;
     }
     .allergy-bar-track {
-        height: 10px; border-radius: 999px;
+        height: 8px; border-radius: 999px;
         background: rgba(255,255,255,0.06);
-        overflow: hidden; margin-bottom: 0.85rem;
+        overflow: hidden; margin-bottom: 0.65rem;
     }
     .allergy-bar-fill {
         height: 100%; border-radius: 999px;
@@ -44,24 +54,72 @@
         width: 0%;
     }
     .allergy-level-label {
-        font-size: 1.05rem; font-weight: 700;
-        margin-bottom: 0.25rem;
+        font-size: 1rem; font-weight: 700;
+        margin-bottom: 0.2rem;
     }
     .allergy-culprit {
-        font-size: 0.8rem; color: var(--ov-text-dim, #a7b5d2);
+        font-size: 0.78rem; color: var(--ov-text-dim, #a7b5d2);
     }
     .allergy-levels {
-        display: flex; gap: 0; margin-top: 1.1rem;
+        display: flex; margin-top: 0.85rem;
         border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; overflow: hidden;
     }
     .allergy-level-tick {
-        flex: 1; padding: 0.45rem 0.5rem; text-align: center;
-        font-size: 0.68rem; font-weight: 600; color: var(--ov-text-dim, #a7b5d2);
+        flex: 1; padding: 0.4rem 0.3rem; text-align: center;
+        font-size: 0.65rem; font-weight: 600; color: var(--ov-text-dim, #a7b5d2);
         border-right: 1px solid rgba(255,255,255,0.07);
         transition: background .3s, color .3s;
     }
     .allergy-level-tick:last-child { border-right: none; }
     .allergy-level-tick.active { background: rgba(139,92,246,0.15); color: #fff; }
+
+    /* ─── Deal Finder ─── */
+    .deal-finder {
+        background: rgba(22, 24, 36, 0.85);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 18px;
+        padding: 1.25rem 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .deal-finder-header {
+        display: flex; align-items: center; gap: 0.65rem;
+        margin-bottom: 0.85rem; flex-shrink: 0;
+    }
+    .deal-finder-title {
+        font-size: 0.78rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--ov-text-dim, #a7b5d2);
+    }
+    .deal-finder-source {
+        font-size: 0.68rem; color: var(--ov-text-dim, #a7b5d2);
+        margin-left: auto; opacity: 0.6;
+    }
+    .deal-list {
+        overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.5rem;
+        scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.3) transparent;
+    }
+    .deal-item {
+        display: block; padding: 0.55rem 0.7rem;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px; text-decoration: none;
+        transition: background .2s, border-color .2s;
+        flex-shrink: 0;
+    }
+    .deal-item:hover { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.25); }
+    .deal-item-title {
+        font-size: 0.78rem; font-weight: 600; color: #eef4ff;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .deal-item-meta {
+        font-size: 0.68rem; color: var(--ov-text-dim, #a7b5d2); margin-top: 0.15rem;
+    }
+    .deal-empty {
+        font-size: 0.8rem; color: var(--ov-text-dim, #a7b5d2);
+        text-align: center; padding: 1rem 0;
+    }
 </style>
 </head>
 <body>
@@ -69,27 +127,43 @@
 <main class="ov-shell">
     <section class="fixit-section">
         <div style="display:flex; gap:1.5rem; align-items:flex-start; justify-content:center;">
-            <div style="display:flex; flex-direction:column; gap:1.5rem; width:315px;">
+
+            <div class="fixit-col-left">
+                <!-- Allergy Meter -->
                 <div class="allergy-meter">
-                    <div class="allergy-meter-header">
-                        <span class="allergy-meter-icon">🤧</span>
-                        <span class="allergy-meter-title">Allergy Meter</span>
-                        <span class="allergy-meter-location">📍 Killeen, TX</span>
+                    <div>
+                        <div class="allergy-meter-header">
+                            <span class="allergy-meter-icon">🤧</span>
+                            <span class="allergy-meter-title">Allergy Meter</span>
+                            <span class="allergy-meter-location">📍 Killeen, TX</span>
+                        </div>
+                        <div class="allergy-bar-track">
+                            <div class="allergy-bar-fill" id="allergy-bar"></div>
+                        </div>
+                        <div class="allergy-level-label" id="allergy-label">Checking outside…</div>
+                        <div class="allergy-culprit" id="allergy-culprit"></div>
                     </div>
-                    <div class="allergy-bar-track">
-                        <div class="allergy-bar-fill" id="allergy-bar"></div>
-                    </div>
-                    <div class="allergy-level-label" id="allergy-label">Checking outside…</div>
-                    <div class="allergy-culprit" id="allergy-culprit"></div>
                     <div class="allergy-levels">
                         <div class="allergy-level-tick" id="tick-0">🌿 Fresh air</div>
                         <div class="allergy-level-tick" id="tick-1">😮‍💨 Clearing throat</div>
                         <div class="allergy-level-tick" id="tick-2">😤 High grunting</div>
                     </div>
                 </div>
-                <!-- space for a second widget below allergy meter -->
-                <div id="fixit-widget-2"></div>
+
+                <!-- Deal Finder -->
+                <div class="deal-finder">
+                    <div class="deal-finder-header">
+                        <span>🍔</span>
+                        <span class="deal-finder-title">Fast Food Deals</span>
+                        <span class="deal-finder-source">r/fastfooddeals</span>
+                    </div>
+                    <div class="deal-list" id="deal-list">
+                        <div class="deal-empty">Loading deals…</div>
+                    </div>
+                </div>
             </div>
+
+            <!-- Short -->
             <iframe
                 src="https://www.youtube.com/embed/cZJP-tUMqNg"
                 title="FindItFixIt Short"
@@ -113,45 +187,66 @@
 
     /* ─── Allergy Meter ─── */
     const LEVELS = [
-        { label: 'Fresh air',                    tick: 'tick-0', pct: 12  },
-        { label: 'Chance of clearing throat',    tick: 'tick-1', pct: 55  },
-        { label: 'High chance of grunting',      tick: 'tick-2', pct: 92  },
+        { label: 'Fresh air',                 tick: 'tick-0', pct: 12 },
+        { label: 'Chance of clearing throat', tick: 'tick-1', pct: 55 },
+        { label: 'High chance of grunting',   tick: 'tick-2', pct: 92 },
     ];
 
-    /* Killeen TX seasonal pollen profile — month index 0–11 */
     const KILLEEN_SEASONS = [
-        { level: 2, culprit: 'Mountain cedar is absolutely furious right now.' },   // Jan
-        { level: 2, culprit: 'Cedar winding down, oak just waking up.' },           // Feb
-        { level: 2, culprit: 'Oak and ash going full send.' },                      // Mar
-        { level: 2, culprit: 'Oak, grass, and elm all at once. Good luck.' },       // Apr
-        { level: 1, culprit: 'Grass pollen season. Windows closed.' },              // May
-        { level: 1, culprit: 'Grass still going, mold spores joining the party.' }, // Jun
-        { level: 0, culprit: 'Mostly clear — heat bakes everything into nothing.' },// Jul
-        { level: 0, culprit: 'Hot and dry. Air is actually fine.' },                // Aug
-        { level: 1, culprit: 'Ragweed season starting up.' },                      // Sep
-        { level: 2, culprit: 'Ragweed peak. Cedar starting early. Classic Texas.' },// Oct
-        { level: 1, culprit: 'Cedar season just getting warmed up.' },              // Nov
-        { level: 2, culprit: 'Mountain cedar. It is always cedar.' },               // Dec
+        { level: 2, culprit: 'Mountain cedar is absolutely furious right now.' },
+        { level: 2, culprit: 'Cedar winding down, oak just waking up.' },
+        { level: 2, culprit: 'Oak and ash going full send.' },
+        { level: 2, culprit: 'Oak, grass, and elm all at once. Good luck.' },
+        { level: 1, culprit: 'Grass pollen season. Windows closed.' },
+        { level: 1, culprit: 'Grass still going, mold spores joining the party.' },
+        { level: 0, culprit: 'Mostly clear — heat bakes everything into nothing.' },
+        { level: 0, culprit: 'Hot and dry. Air is actually fine.' },
+        { level: 1, culprit: 'Ragweed season starting up.' },
+        { level: 2, culprit: 'Ragweed peak. Cedar starting early. Classic Texas.' },
+        { level: 1, culprit: 'Cedar season just getting warmed up.' },
+        { level: 2, culprit: 'Mountain cedar. It is always cedar.' },
     ];
 
     function renderMeter() {
-        const month = new Date().getMonth();
-        const { level, culprit } = KILLEEN_SEASONS[month];
-        const { label, tick, pct } = LEVELS[level];
-
+        const { level, culprit } = KILLEEN_SEASONS[new Date().getMonth()];
+        const { label, pct } = LEVELS[level];
         document.getElementById('allergy-label').textContent = label;
         document.getElementById('allergy-culprit').textContent = culprit;
-
         requestAnimationFrame(() => {
             document.getElementById('allergy-bar').style.width = pct + '%';
         });
-
         ['tick-0', 'tick-1', 'tick-2'].forEach((id, i) => {
             document.getElementById(id).classList.toggle('active', i === level);
         });
     }
 
+    /* ─── Deal Finder ─── */
+    async function loadDeals() {
+        const list = document.getElementById('deal-list');
+        try {
+            const res = await fetch(
+                'https://www.reddit.com/r/fastfooddeals/new.json?limit=15',
+                { headers: { 'Accept': 'application/json' } }
+            );
+            const data = await res.json();
+            const posts = data.data.children.map(c => c.data);
+            if (!posts.length) { list.innerHTML = '<div class="deal-empty">No deals found.</div>'; return; }
+            list.innerHTML = posts.map(p => {
+                const age = Math.round((Date.now() / 1000 - p.created_utc) / 3600);
+                const ageLabel = age < 1 ? 'just now' : age < 24 ? `${age}h ago` : `${Math.round(age/24)}d ago`;
+                const url = p.url.startsWith('http') ? p.url : `https://reddit.com${p.permalink}`;
+                return `<a class="deal-item" href="${url}" target="_blank" rel="noopener">
+                    <div class="deal-item-title">${p.title}</div>
+                    <div class="deal-item-meta">${ageLabel} · ${p.score} pts</div>
+                </a>`;
+            }).join('');
+        } catch {
+            list.innerHTML = '<div class="deal-empty">Couldn\'t load deals right now.</div>';
+        }
+    }
+
     renderMeter();
+    loadDeals();
 })();
 </script>
 </body>
