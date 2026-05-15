@@ -79,13 +79,69 @@
         </div>
     </section>
 
-    <section class="ov-stat-strip">
-        <div class="ov-stat"><div class="n" id="stat-services">—</div><div class="l">registered services</div></div>
-        <div class="ov-stat"><div class="n" id="stat-capabilities">—</div><div class="l">declared capabilities</div></div>
-        <div class="ov-stat"><div class="n" id="stat-contracts">—</div><div class="l">contracts</div></div>
-        <div class="ov-stat"><div class="n" id="stat-namespaces">—</div><div class="l">user-module namespaces</div></div>
-        <div class="ov-stat"><div class="n" id="stat-themes">—</div><div class="l">built-in themes</div></div>
+    <!-- Live on OpenVibe -->
+    <section class="ov-section" id="live-now-section">
+        <div class="ov-panel" id="live-now-panel">
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+                <span id="live-now-dot" style="width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px 2px #22c55e99;animation:ov-live-pulse 1.2s ease-in-out infinite;flex-shrink:0;"></span>
+                <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Live on OpenVibe</span>
+                <span class="ov-chip ok" id="live-now-count" style="margin-left:auto;"></span>
+            </div>
+            <div id="live-now-grid"></div>
+        </div>
     </section>
+    <style>
+        @keyframes ov-live-pulse {
+            0%,100% { box-shadow:0 0 4px 1px #22c55e88; }
+            50%      { box-shadow:0 0 10px 4px #22c55ecc; }
+        }
+        .ov-live-card {
+            display:flex; gap:.85rem; align-items:flex-start;
+            padding:.85rem 1rem; border-radius:10px;
+            border:1px solid var(--ov-border,rgba(255,255,255,0.07));
+            background:var(--ov-surface,rgba(255,255,255,0.03));
+            text-decoration:none; color:inherit;
+            transition:border-color .15s, background .15s;
+        }
+        .ov-live-card:hover { border-color:rgba(99,102,241,.45); background:rgba(99,102,241,.06); }
+        .ov-live-card-thumb {
+            width:80px; height:45px; border-radius:6px; object-fit:cover;
+            background:var(--ov-surface2,rgba(255,255,255,0.06)); flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.4rem;
+        }
+        .ov-live-card-body { flex:1; min-width:0; }
+        .ov-live-card-title {
+            font-size:.88rem; font-weight:600;
+            color:var(--ov-text,#f1f5f9); margin-bottom:.2rem;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }
+        .ov-live-card-meta { font-size:.75rem; color:var(--ov-text-dim,#94a3b8); }
+        .ov-live-grid { display:flex; flex-direction:column; gap:.6rem; }
+        .ov-live-empty { color:var(--ov-text-dim,#94a3b8); font-size:.88rem; margin:.25rem 0 1rem; }
+        .ov-live-cta-row { display:flex; gap:.65rem; flex-wrap:wrap; margin-top:1rem; }
+        .ov-btn-golive {
+            display:inline-flex; align-items:center; gap:.45rem;
+            background:#ef4444; color:#fff; font-weight:700; font-size:.85rem;
+            padding:.45rem 1rem; border-radius:8px; text-decoration:none;
+            transition:background .15s;
+        }
+        .ov-btn-golive:hover { background:#dc2626; }
+        .ov-btn-golive-dot {
+            width:7px; height:7px; border-radius:50%; background:#fff;
+            animation:ov-live-pulse 1s ease-in-out infinite;
+        }
+        .ov-btn-restream {
+            display:inline-flex; align-items:center; gap:.45rem;
+            background:var(--ov-surface2,rgba(255,255,255,0.07));
+            border:1px solid var(--ov-border,rgba(255,255,255,0.1));
+            color:var(--ov-text,#f1f5f9); font-size:.85rem; font-weight:600;
+            padding:.45rem 1rem; border-radius:8px; text-decoration:none;
+            transition:border-color .15s;
+        }
+        .ov-btn-restream:hover { border-color:rgba(99,102,241,.5); }
+    </style>
+
 
     <section class="ov-section">
         <div class="ov-panel">
@@ -542,6 +598,85 @@
     observer.observe(document.body, { attributes: true, attributeFilter: ['data-ov-signed-in'] });
 
     init();
+})();
+
+/* ── Live on OpenVibe widget ── */
+(function() {
+    var LIVE_API    = 'http://localhost:4600/api/v1/streams?status=live&limit=6';
+    var GOLIVE_URL  = 'http://localhost:4600/go-live';
+    var RESTREAM_URL = 'https://openre.stream';
+
+    var section  = document.getElementById('live-now-section');
+    var grid     = document.getElementById('live-now-grid');
+    var countEl  = document.getElementById('live-now-count');
+
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function timeAgo(iso) {
+        if (!iso) return '';
+        var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+        if (diff < 60)   return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        return Math.floor(diff / 3600) + 'h ago';
+    }
+
+    function renderCard(stream) {
+        var slug  = stream.channel_slug || '';
+        var title = stream.title || 'Untitled stream';
+        var name  = stream.channel_name || slug || 'Creator';
+        var viewers = stream.viewer_count || 0;
+        var href  = stream.route_url || ('http://localhost:4600/' + slug);
+        var thumb = stream.thumbnail_url
+            ? '<img class="ov-live-card-thumb" src="' + esc(stream.thumbnail_url) + '" alt="" loading="lazy">'
+            : '<div class="ov-live-card-thumb">📺</div>';
+        return '<a class="ov-live-card" href="' + esc(href) + '" target="_blank" rel="noopener">' +
+            thumb +
+            '<div class="ov-live-card-body">' +
+                '<div class="ov-live-card-title">' + esc(title) + '</div>' +
+                '<div class="ov-live-card-meta">@' + esc(name) + ' · ' + esc(viewers) + ' watching · started ' + esc(timeAgo(stream.started_at)) + '</div>' +
+            '</div>' +
+            '<span class="ov-chip ok" style="flex-shrink:0;align-self:center;">Live</span>' +
+        '</a>';
+    }
+
+    function render(items) {
+        section.style.display = '';
+        countEl.textContent = items.length + ' live';
+
+        if (!items.length) {
+            grid.innerHTML =
+                '<p class="ov-live-empty">Nobody is live right now.</p>' +
+                '<div class="ov-live-cta-row">' +
+                    '<a class="ov-btn-golive" href="' + esc(GOLIVE_URL) + '" target="_blank" rel="noopener">' +
+                        '<span class="ov-btn-golive-dot"></span>Go live' +
+                    '</a>' +
+                    '<a class="ov-btn-restream" href="' + esc(RESTREAM_URL) + '" target="_blank" rel="noopener">' +
+                        '⌗ Restream control room' +
+                    '</a>' +
+                '</div>';
+            // hide live dot when nobody live
+            document.getElementById('live-now-dot').style.display = 'none';
+            countEl.className = 'ov-chip soft';
+            countEl.textContent = 'Offline';
+            return;
+        }
+
+        grid.innerHTML = '<div class="ov-live-grid">' + items.map(renderCard).join('') + '</div>';
+    }
+
+    function poll() {
+        fetch(LIVE_API)
+            .then(function(r) { return r.json(); })
+            .then(function(d) { render(d.items || []); })
+            .catch(function() {
+                render([]);
+            });
+    }
+
+    poll();
+    setInterval(poll, 60000);
 })();
 </script>
 </body>

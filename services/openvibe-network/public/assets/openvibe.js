@@ -552,6 +552,7 @@
         root.style.setProperty('--ov-accent-2', theme.accent2);
         root.style.setProperty('--ov-bg', theme.bg);
         root.style.setProperty('--ov-bg-soft', theme.bgSoft);
+        root.style.setProperty('--ov-nav-bg', theme.bg);
         root.style.setProperty('--ov-text', theme.text);
         root.style.setProperty('--ov-text-dim', theme.textDim);
         if (!options || options.persistLocal !== false) {
@@ -750,11 +751,11 @@
         const links = [
             { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
             { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
-            { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
             { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
             { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
+        const paintSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`;
         return `<header class="ov-nav"><div class="ov-nav-inner">
             <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">
                 <span class="ov-brand-mark">${icon('network') || 'OV'}</span>
@@ -763,7 +764,16 @@
             <nav class="ov-nav-links">
                 ${links.map((link) => `<a href="${escapeHtml(link.href)}" ${link.key === activeKey ? 'data-active="true"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
             </nav>
-            <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+            <div class="ov-nav-end">
+                <div class="ov-theme-btn-wrap" id="ov-theme-btn-wrap">
+                    <button class="ov-theme-btn" id="ov-theme-btn" type="button" aria-label="Change theme" aria-expanded="false">${icon('themes') || paintSvg}</button>
+                    <div class="ov-theme-popup" id="ov-theme-popup" hidden>
+                        <div class="ov-theme-swatches" id="ov-theme-swatches"></div>
+                        <a class="ov-theme-explore" href="${escapeHtml(resolveSurfaceUrl('themes'))}">Explore more themes!</a>
+                    </div>
+                </div>
+                <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+            </div>
         </div></header>`;
     }
 
@@ -782,27 +792,33 @@
         if (!target) return;
         const session = await loadSession();
         if (session && session.anonymous && session.user) {
+            const displayName = escapeHtml(session.user.display_name || session.user.username || 'Anonymous');
             target.innerHTML = `
-                <span class="ov-chip warn">${escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span>
-                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
-                <button class="ov-btn" type="button" data-openvibe-new-anon="true">New anon</button>
-                <a class="ov-btn" href="${signInUrl(global.location.href)}">Create account</a>
-                <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Leave anonymous</a>`;
-            const newAnonButton = target.querySelector('[data-openvibe-new-anon]');
-            if (newAnonButton) {
-                newAnonButton.addEventListener('click', async function () {
-                    newAnonButton.disabled = true;
-                    newAnonButton.textContent = 'Creating anon…';
-                    try {
-                        await createAnonymousIdentity();
-                        global.location.reload();
-                    } catch (error) {
-                        console.warn('[openvibe] failed to create anonymous identity:', error.message);
-                        newAnonButton.disabled = false;
-                        newAnonButton.textContent = 'New anon';
-                    }
-                });
-            }
+                <div class="ov-anon-menu" id="ov-anon-menu">
+                    <button class="ov-anon-trigger" id="ov-anon-trigger" type="button" aria-label="Account menu" aria-expanded="false">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                        </svg>
+                    </button>
+                    <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
+                        <div class="ov-anon-dropdown-name">${displayName}</div>
+                        <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
+                        <a class="ov-anon-dropdown-item" href="${signInUrl(global.location.href)}">Create account</a>
+                        <a class="ov-anon-dropdown-item ov-anon-dropdown-item--danger" href="${signOutUrl(global.location.href)}">Leave anonymous</a>
+                    </div>
+                </div>`;
+            const trigger  = target.querySelector('#ov-anon-trigger');
+            const dropdown = target.querySelector('#ov-anon-dropdown');
+            trigger.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const open = !dropdown.hidden;
+                dropdown.hidden = open;
+                trigger.setAttribute('aria-expanded', String(!open));
+            });
+            global.document.addEventListener('click', function () {
+                dropdown.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+            });
             return;
         }
         if (!session || !session.authenticated || !session.user) {
@@ -833,6 +849,53 @@
             <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Sign out</a>`;
     }
 
+    function initThemePicker() {
+        const wrap = global.document && global.document.getElementById('ov-theme-btn-wrap');
+        if (!wrap) return;
+        const triggerBtn = wrap.querySelector('#ov-theme-btn');
+        const popup = wrap.querySelector('#ov-theme-popup');
+        const swatchContainer = wrap.querySelector('#ov-theme-swatches');
+        if (!triggerBtn || !popup || !swatchContainer) return;
+
+        swatchContainer.innerHTML = BUILTIN_THEMES.slice(0, 6).map((t) =>
+            `<button class="ov-theme-swatch" data-theme-id="${escapeHtml(t.id)}" type="button" title="${escapeHtml(t.name)}">
+                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}"></span>
+                <span class="ov-theme-swatch-name">${escapeHtml(t.name)}</span>
+            </button>`
+        ).join('');
+
+        try {
+            const saved = localStorage.getItem(LOCAL_THEME_KEY);
+            if (saved) {
+                const activeEl = swatchContainer.querySelector(`[data-theme-id="${CSS.escape(saved)}"]`);
+                if (activeEl) activeEl.classList.add('ov-theme-swatch--active');
+            }
+        } catch { /* ignore */ }
+
+        swatchContainer.querySelectorAll('[data-theme-id]').forEach((swatchBtn) => {
+            swatchBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                applyTheme(swatchBtn.dataset.themeId);
+                swatchContainer.querySelectorAll('[data-theme-id]').forEach((s) => s.classList.remove('ov-theme-swatch--active'));
+                swatchBtn.classList.add('ov-theme-swatch--active');
+                popup.hidden = true;
+                triggerBtn.setAttribute('aria-expanded', 'false');
+            });
+        });
+
+        triggerBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = !popup.hidden;
+            popup.hidden = open;
+            triggerBtn.setAttribute('aria-expanded', String(!open));
+        });
+
+        global.document.addEventListener('click', function () {
+            popup.hidden = true;
+            triggerBtn.setAttribute('aria-expanded', 'false');
+        });
+    }
+
     async function renderChrome(activeKey) {
         await loadUrlRegistry();
         const navMount = global.document.getElementById('nav-mount');
@@ -840,6 +903,7 @@
         if (navMount) navMount.innerHTML = navbar(activeKey);
         if (footerMount) footerMount.innerHTML = footer();
         hydrateNavSession().catch(() => {});
+        initThemePicker();
     }
 
     function attachLauncher(getItems) {

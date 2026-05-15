@@ -2,207 +2,107 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>themes.openvibe.network — themes catalog</title>
+<title>themes.openvibe.network</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
 <style>
-.ov-theme-preview {
-    height: 118px;
-    border-radius: 18px;
-    border: 1px solid rgba(255,255,255,.08);
-    position: relative;
-    overflow: hidden;
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem 1.25rem 4rem;
+    max-width: var(--ov-max);
+    margin: 0 auto;
 }
-.ov-theme-preview::after {
-    content: '';
+.theme-tile {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.08);
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.theme-tile:hover {
+    border-color: rgba(255,255,255,0.22);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.theme-tile--active {
+    border-color: var(--ov-accent);
+    box-shadow: 0 0 0 1px var(--ov-accent), 0 8px 24px rgba(0,0,0,0.35);
+}
+.theme-tile-preview {
+    height: 130px;
+    position: relative;
+}
+.theme-tile-accents {
     position: absolute;
-    inset: auto 12px 12px;
-    height: 18px;
-    border-radius: 999px;
-    background: rgba(255,255,255,.14);
-    box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset;
+    bottom: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+}
+.theme-tile-dot {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.theme-tile-name {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+    color: var(--ov-text-dim);
+    background: color-mix(in srgb, var(--ov-bg) 90%, white);
+    transition: color 0.15s;
+}
+.theme-tile--active .theme-tile-name {
+    color: var(--ov-text);
 }
 </style>
 </head>
 <body>
 <div id="nav-mount"></div>
-<main class="ov-shell">
-    <section class="ov-hero">
-        <div class="ov-hero-grid">
-            <div class="ov-hero-copy">
-                <span class="ov-kicker">Network-wide themes</span>
-                <h1>Make every surface feel<br><span class="ov-gradient">more like yours.</span></h1>
-                <p>Theme choices sync through <code>openvibe.theme</code> so your account, launcher, and future OpenVibe surfaces can stay visually consistent without relying on legacy theme plumbing.</p>
-                <div class="ov-chip-row">
-                    <span class="ov-chip ok" id="theme-session-chip">Checking session…</span>
-                    <span class="ov-chip soft" id="theme-current-chip">Loading current theme…</span>
-                </div>
-                <div class="ov-cta-row" id="theme-actions"></div>
-            </div>
-            <aside class="ov-panel">
-                <div class="ov-section-head" style="margin-bottom:.8rem;">
-                    <div>
-                        <span class="ov-kicker">Theme sync state</span>
-                        <h2 id="current-theme-title">OpenVibe Dark</h2>
-                    </div>
-                </div>
-                <div class="ov-card" id="current-theme-card"></div>
-            </aside>
-        </div>
-    </section>
-
-    <section class="ov-section">
-        <div class="ov-section-head">
-            <div>
-                <h2>Theme catalog</h2>
-                <p class="ov-section-sub">Preview instantly, then sync the choice to your account when you are signed in.</p>
-            </div>
-        </div>
-        <div class="ov-grid" id="theme-grid"></div>
-    </section>
-
-    <section class="ov-section ov-split-grid">
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>How sync works</h2>
-                    <p class="ov-section-sub">The network stores per-user theme preference in a real namespace, not an improvised cookie maze.</p>
-                </div>
-            </div>
-            <div class="ov-grid">
-                <article class="ov-card">
-                    <div class="ov-kicker">1. Preview</div>
-                    <h3 class="ov-service-title" style="margin-top:.8rem;">Test the palette locally</h3>
-                    <p class="ov-muted">Preview updates your current browser immediately so you can see how the accent and mood feel before committing.</p>
-                </article>
-                <article class="ov-card">
-                    <div class="ov-kicker">2. Sync</div>
-                    <h3 class="ov-service-title" style="margin-top:.8rem;">Save to <code>openvibe.theme</code></h3>
-                    <p class="ov-muted">Authenticated users store the theme in the control plane so future surfaces can respect it as they come online.</p>
-                </article>
-            </div>
-        </div>
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Why this matters</h2>
-                    <p class="ov-section-sub">Polish should travel with the account, not reset every time you cross a subdomain border.</p>
-                </div>
-            </div>
-            <div class="ov-grid">
-                <article class="ov-card">
-                    <div class="ov-kicker">Consistency</div>
-                    <p class="ov-muted">The same creator should not have to re-theme live, chat, community, and tools one tab at a time.</p>
-                </article>
-                <article class="ov-card">
-                    <div class="ov-kicker">Clarity</div>
-                    <p class="ov-muted">The new flow makes the source of truth explicit: local preview in the browser, synced preference in the control plane.</p>
-                </article>
-            </div>
-        </div>
-    </section>
-</main>
+<div class="theme-grid" id="theme-grid"></div>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
-    function setStatus(message, tone) {
-        const chip = document.getElementById('theme-current-chip');
-        chip.className = `ov-chip ${tone || 'soft'}`;
-        chip.textContent = message;
-    }
-
-    function cardMarkup(theme, currentThemeId) {
-        const current = theme.id === currentThemeId;
-        return `<article class="ov-theme-card" data-theme-card="${OpenVibe.escapeHtml(theme.id)}">
-            <div class="ov-theme-preview" style="background:${OpenVibe.escapeHtml(theme.preview)}"></div>
-            <div class="ov-chip-row">
-                <span class="ov-chip ${current ? 'ok' : 'soft'}">${current ? 'current' : 'catalog'}</span>
-                <span class="ov-chip primary">${OpenVibe.escapeHtml(theme.id)}</span>
-            </div>
-            <h3 class="ov-service-title">${OpenVibe.escapeHtml(theme.name)}</h3>
-            <p class="ov-muted">${OpenVibe.escapeHtml(theme.description)}</p>
-            <div class="ov-chip-row">
-                <span class="ov-tag" style="color:${OpenVibe.escapeHtml(theme.accent)}; border-color:${OpenVibe.escapeHtml(theme.accent)}">accent</span>
-                <span class="ov-tag" style="color:${OpenVibe.escapeHtml(theme.accent2)}; border-color:${OpenVibe.escapeHtml(theme.accent2)}">accent 2</span>
-            </div>
-            <div class="ov-card-actions">
-                <button class="ov-btn" type="button" data-preview-theme="${OpenVibe.escapeHtml(theme.id)}">Preview</button>
-                <button class="ov-btn ov-btn-primary" type="button" data-apply-theme="${OpenVibe.escapeHtml(theme.id)}">Apply network-wide</button>
-            </div>
-        </article>`;
-    }
-
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('themes');
 
-    const session = await OpenVibe.loadSession();
-    const accountProfile = session.authenticated
-        ? await OpenVibe.loadAccountProfile().catch(() => null)
-        : null;
-
-    let currentThemeId = (accountProfile && accountProfile.theme && accountProfile.theme.data && accountProfile.theme.data.theme_id)
-        || (localStorage.getItem('openvibe.theme'))
-        || OpenVibe.BUILTIN_THEMES[0].id;
+    let currentThemeId = localStorage.getItem('openvibe.theme') || OpenVibe.BUILTIN_THEMES[0].id;
     OpenVibe.applyTheme(currentThemeId);
 
-    function refreshCurrentThemeCard() {
-        const theme = OpenVibe.themeById(currentThemeId);
-        document.getElementById('current-theme-title').textContent = theme.name;
-        document.getElementById('current-theme-card').innerHTML = `
-            <div class="ov-theme-preview" style="background:${OpenVibe.escapeHtml(theme.preview)}"></div>
-            <div class="ov-chip-row" style="margin-top:1rem;">
-                <span class="ov-chip ok">${session.authenticated ? 'synced account theme' : 'local preview theme'}</span>
-                <span class="ov-chip primary">${OpenVibe.escapeHtml(theme.id)}</span>
-            </div>
-            <p class="ov-muted" style="margin-top:.8rem;">${OpenVibe.escapeHtml(theme.description)}</p>`;
-        setStatus(`${theme.name} active`, 'ok');
+    const grid = document.getElementById('theme-grid');
+
+    function render() {
+        grid.innerHTML = OpenVibe.BUILTIN_THEMES.map((t) => `
+            <button class="theme-tile${t.id === currentThemeId ? ' theme-tile--active' : ''}" data-theme-id="${OpenVibe.escapeHtml(t.id)}" type="button" title="${OpenVibe.escapeHtml(t.name)}">
+                <div class="theme-tile-preview" style="background:${OpenVibe.escapeHtml(t.preview)}">
+                    <div class="theme-tile-accents">
+                        <span class="theme-tile-dot" style="background:${OpenVibe.escapeHtml(t.accent)}"></span>
+                        <span class="theme-tile-dot" style="background:${OpenVibe.escapeHtml(t.accent2)}"></span>
+                    </div>
+                </div>
+                <span class="theme-tile-name">${OpenVibe.escapeHtml(t.name)}</span>
+            </button>`
+        ).join('');
     }
 
-    document.getElementById('theme-session-chip').textContent = session.authenticated && session.user
-        ? `Signed in as @${session.user.username || session.user.id}`
-        : 'Local preview only';
-    document.getElementById('theme-session-chip').className = `ov-chip ${session.authenticated ? 'ok' : 'warn'}`;
-    document.getElementById('theme-actions').innerHTML = session.authenticated
-        ? `<a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('my')}">Back to my account</a>
-           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Visit network hub</a>`
-        : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('themes'))}">Sign in to sync themes</a>
-           <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('network')}">Browse the network</a>`;
+    render();
 
-    const grid = document.getElementById('theme-grid');
-    grid.innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => cardMarkup(theme, currentThemeId)).join('');
-    refreshCurrentThemeCard();
-
-    grid.addEventListener('click', async function (event) {
-        const previewButton = event.target.closest('[data-preview-theme]');
-        if (previewButton) {
-            currentThemeId = previewButton.dataset.previewTheme;
-            OpenVibe.applyTheme(currentThemeId);
-            refreshCurrentThemeCard();
-            grid.innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => cardMarkup(theme, currentThemeId)).join('');
-            return;
-        }
-
-        const applyButton = event.target.closest('[data-apply-theme]');
-        if (!applyButton) return;
-        const themeId = applyButton.dataset.applyTheme;
-        currentThemeId = themeId;
-        OpenVibe.applyTheme(themeId);
-        setStatus('Saving theme…', 'soft');
-        try {
-            if (session.authenticated) {
-                await OpenVibe.syncThemePreference(themeId);
-                setStatus('Theme synced across the network', 'ok');
-            } else {
-                setStatus('Preview saved locally — sign in to sync it network-wide', 'warn');
-            }
-            refreshCurrentThemeCard();
-            grid.innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => cardMarkup(theme, currentThemeId)).join('');
-        } catch (error) {
-            setStatus(`Could not save theme (${error.status || 'error'})`, 'danger');
-        }
+    grid.addEventListener('click', function (e) {
+        const tile = e.target.closest('[data-theme-id]');
+        if (!tile) return;
+        currentThemeId = tile.dataset.themeId;
+        OpenVibe.applyTheme(currentThemeId);
+        render();
     });
 })();
 </script>
