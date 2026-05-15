@@ -143,41 +143,14 @@
     </style>
 
 
-    <section class="ov-section">
-        <div class="ov-panel">
-            <div class="ov-grid" id="featured-grid"></div>
-        </div>
-    </section>
-
-
-
-    <section class="ov-section ov-split-grid">
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Service directory</h2>
-                    <p class="ov-section-sub">Press <code>Ctrl/⌘ K</code> any time for the global launcher, or filter the registry inline.</p>
-                </div>
+    <!-- Recent Pastes -->
+    <section class="ov-section" id="recent-pastes-section">
+        <div class="ov-panel" id="recent-pastes-panel">
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
+                <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
             </div>
-            <input class="ov-input" id="filter" placeholder="Filter services by name, category, or tag" style="margin-bottom:1rem" />
-            <div class="ov-grid" id="services-grid"></div>
-        </div>
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Registry pulse</h2>
-                    <p class="ov-section-sub">A quick read on what the network currently knows about itself.</p>
-                </div>
-            </div>
-            <div class="ov-grid" id="pulse-grid"></div>
-            <div class="ov-table-wrap" style="margin-top:1rem;">
-                <table class="ov-table">
-                    <thead>
-                        <tr><th>resolved key</th><th>value</th><th>source</th></tr>
-                    </thead>
-                    <tbody id="registry-rows"></tbody>
-                </table>
-            </div>
+            <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
         </div>
     </section>
 
@@ -188,7 +161,7 @@
                 <p class="ov-section-sub">No investors, no ad surveillance, no premium-tier theatre. The plan is to be useful and to formalize as a not-for-profit once the network can stand on its own.</p>
             </div>
         </div>
-        <div class="ov-grid">
+        <div class="ov-grid" style="grid-template-columns:repeat(5,1fr)">
             <article class="ov-card">
                 <div class="ov-kicker">Open source</div>
                 <h3 class="ov-service-title" style="margin-top:.8rem;">Every surface can be inspected, forked, or self-hosted</h3>
@@ -234,22 +207,15 @@
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('home');
 
-    const [session, remoteServices, launcherState, caps, contracts, namespaces, topics, registry, health] = await Promise.all([
+    const [session, remoteServices, launcherState, topics, health] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.loadServices(),
         OpenVibe.loadLauncherState(),
-        OpenVibe.api('/capabilities').catch(() => ({ items: [] })),
-        OpenVibe.api('/contracts').catch(() => ({ items: [] })),
-        OpenVibe.api('/namespaces').catch(() => ({ items: [] })),
         OpenVibe.api('/topics').catch(() => ({ items: [] })),
-        OpenVibe.loadUrlRegistry(),
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, trusted_issuers: [] })),
     ]);
 
     const items = OpenVibe.mergedServices(remoteServices);
-    const featuredIds = ['openvibe-tools', 'openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community', 'openvibe-my'];
-    const featuredItems = pickByIds(items, featuredIds);
-    const servicesGrid = document.getElementById('services-grid');
 
     OpenVibe.attachLauncher(() => items);
 
@@ -259,54 +225,13 @@
     let lastFavoriteItems = [];
     let lastRecentItems = [];
 
-    function getServiceHref(item) {
-        return item.public_url || '#';
-    }
-
-    function getInitials(name) {
-        return (name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    }
-
-    function renderIconEl(item) {
-        const svgOrEmpty = OpenVibe.icon ? OpenVibe.icon(item.service_id) : '';
-        return svgOrEmpty || `<span style="font-size:.7rem;font-weight:800;">${getInitials(item.display_name || item.service_id)}</span>`;
-    }
-
-    function renderFavGrid(target, items, emptyLabel, emptyMsg) {
-        if (!items.length) {
+    function renderFavGrid(target, favItems, emptyLabel, emptyMsg) {
+        if (!favItems.length) {
             renderEmpty(target, emptyLabel, emptyMsg);
             return;
         }
-        if (currentFavView === 'row') {
-            target.innerHTML = '';
-            target.className = 'ov-fav-row-list';
-            items.forEach(item => {
-                const href = getServiceHref(item);
-                const a = document.createElement('a');
-                a.className = 'ov-fav-row-item';
-                a.href = href;
-                a.dataset.launchService = item.service_id;
-                a.innerHTML = `<span class="ov-fav-row-icon">${renderIconEl(item)}</span><span class="ov-fav-row-name">${OpenVibe.escapeHtml(item.display_name || item.service_id)}</span>`;
-                target.appendChild(a);
-            });
-        } else if (currentFavView === 'icon') {
-            target.innerHTML = '';
-            target.className = 'ov-fav-icon-grid';
-            items.forEach(item => {
-                const href = getServiceHref(item);
-                const a = document.createElement('a');
-                a.className = 'ov-fav-icon-item';
-                a.href = href;
-                a.title = item.display_name || item.service_id;
-                a.dataset.launchService = item.service_id;
-                a.innerHTML = `<span class="ov-fav-icon-el">${renderIconEl(item)}</span>`;
-                target.appendChild(a);
-            });
-        } else {
-            // card view — use existing renderer
-            target.className = 'ov-grid';
-            OpenVibe.renderServiceCards(target, items, { onFavoriteChange: renderLauncherSections });
-        }
+        target.className = 'ov-grid';
+        OpenVibe.renderServiceCards(target, favItems, { onFavoriteChange: renderLauncherSections });
     }
 
     function applyFavView(view) {
@@ -324,7 +249,6 @@
     document.querySelectorAll('.ov-view-btn').forEach(btn => {
         btn.addEventListener('click', () => applyFavView(btn.dataset.view));
     });
-    // set initial active state from storage
     document.querySelectorAll('.ov-view-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === currentFavView);
     });
@@ -334,31 +258,14 @@
         lastFavoriteItems = pickByIds(items, currentState.favorites);
         lastRecentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
 
-        await OpenVibe.renderServiceCards(document.getElementById('featured-grid'), featuredItems, { onFavoriteChange: renderLauncherSections });
-
         renderFavGrid(document.getElementById('favorites-grid'), lastFavoriteItems,
             'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
         renderFavGrid(document.getElementById('recents-grid'), lastRecentItems,
             'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
     }
 
-    async function applyFilter() {
-        const q = document.getElementById('filter').value.toLowerCase();
-        const filtered = items.filter((item) => `${item.display_name || ''} ${item.description || ''} ${item.category || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(q));
-        await OpenVibe.renderServiceCards(servicesGrid, filtered, { onFavoriteChange: renderLauncherSections });
-    }
-
-    document.getElementById('filter').addEventListener('input', function () {
-        applyFilter().catch(() => {});
-    });
     await renderLauncherSections(launcherState);
-    await applyFilter();
 
-    document.getElementById('stat-services').textContent = items.length;
-    document.getElementById('stat-capabilities').textContent = (caps.items || []).length;
-    document.getElementById('stat-contracts').textContent = (contracts.items || []).length;
-    document.getElementById('stat-namespaces').textContent = Object.keys(namespaces.items || {}).length;
-    document.getElementById('stat-themes').textContent = OpenVibe.BUILTIN_THEMES.length;
     document.getElementById('issuer-chip').textContent = `${(health.trusted_issuers || []).length} trusted issuer${(health.trusted_issuers || []).length === 1 ? '' : 's'}`;
     const isAnonymous = !!(session && session.anonymous && session.user);
     document.body.dataset.ovSignedIn = (session.authenticated && session.user) ? '1' : '0';
@@ -503,19 +410,6 @@
         },
     ]);
 
-    const pulseGrid = document.getElementById('pulse-grid');
-    pulseGrid.innerHTML = [
-        { title: 'Health', value: health.ok ? 'OK' : 'Offline', tone: health.ok ? 'ok' : 'danger' },
-        { title: 'Topics', value: String((topics.items || []).length), tone: 'soft' },
-        { title: 'Compat', value: health.federation && health.federation.hobo_tools ? 'On' : 'Native', tone: health.federation && health.federation.hobo_tools ? 'warn' : 'ok' },
-    ].map((card) => `<article class="ov-card"><span class="ov-chip ${card.tone}">${OpenVibe.escapeHtml(card.title)}</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(card.value)}</h3></article>`).join('');
-
-    const registryRows = Object.entries((registry && registry.registry) || {}).slice(0, 8).map(([key, entry]) => `<tr>
-        <td><code>${OpenVibe.escapeHtml(key)}</code></td>
-        <td>${OpenVibe.escapeHtml(String(entry && entry.value || '—'))}</td>
-        <td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td>
-    </tr>`).join('');
-    document.getElementById('registry-rows').innerHTML = registryRows || '<tr><td colspan="3">No resolved URLs returned yet.</td></tr>';
 })();
 
 // Hero star toggle — auto-favorites when signed in, persists manual overrides
@@ -678,6 +572,43 @@
 
     poll();
     setInterval(poll, 60000);
+})();
+
+/* ── Recent Pastes ── */
+(function() {
+    var communityBase = OpenVibe.resolveSurfaceUrl('community');
+    document.getElementById('pastes-view-all').href = communityBase;
+
+    fetch(communityBase + '/api/community/pastes?limit=6', { mode: 'cors', credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var items = data.items || [];
+            var grid = document.getElementById('recent-pastes-grid');
+            if (!items.length) {
+                grid.innerHTML = '<div class="ov-empty">No pastes yet.</div>';
+                return;
+            }
+            grid.innerHTML = items.map(function(paste) {
+                var slug = paste.slug || paste.id || '';
+                var title = paste.title || slug || 'untitled';
+                var body = String(paste.body || '');
+                var expt = body.length > 140 ? body.slice(0, 139) + '…' : body;
+                var lang = paste.language || 'text';
+                var href = communityBase + '/p/' + OpenVibe.escapeHtml(slug);
+                return '<a class="ov-card" href="' + href + '">' +
+                    '<div class="ov-card-top">' +
+                        '<div>' +
+                            '<div class="ov-service-title">' + OpenVibe.escapeHtml(title) + '</div>' +
+                            '<div class="desc">' + OpenVibe.escapeHtml(expt) + '</div>' +
+                        '</div>' +
+                        '<span class="ov-tag">' + OpenVibe.escapeHtml(lang) + '</span>' +
+                    '</div>' +
+                '</a>';
+            }).join('');
+        })
+        .catch(function() {
+            document.getElementById('recent-pastes-section').style.display = 'none';
+        });
 })();
 </script>
 
