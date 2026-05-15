@@ -55,12 +55,26 @@ function getStreamDurationSeconds(stream, nowMs) {
     return Math.max(0, Math.round((finishedAt - startedAt) / 1000));
 }
 
+const MODEL_CACHE_TTL_MS = 5000;
+let _channelsCache = null;
+let _channelsCacheAt = 0;
+let _streamsCache = null;
+let _streamsCacheAt = 0;
+
 function allChannels() {
-    return db.get().prepare(`SELECT * FROM live_channels ORDER BY rowid DESC`).all().map(hydrateChannel);
+    const now = Date.now();
+    if (_channelsCache && (now - _channelsCacheAt) < MODEL_CACHE_TTL_MS) return _channelsCache;
+    _channelsCache = db.get().prepare(`SELECT * FROM live_channels ORDER BY rowid DESC`).all().map(hydrateChannel);
+    _channelsCacheAt = now;
+    return _channelsCache;
 }
 
 function allStreams() {
-    return db.get().prepare(`SELECT * FROM live_streams ORDER BY rowid DESC`).all().map(hydrateStream);
+    const now = Date.now();
+    if (_streamsCache && (now - _streamsCacheAt) < MODEL_CACHE_TTL_MS) return _streamsCache;
+    _streamsCache = db.get().prepare(`SELECT * FROM live_streams ORDER BY rowid DESC`).all().map(hydrateStream);
+    _streamsCacheAt = now;
+    return _streamsCache;
 }
 
 function hydrateChannel(row) {
@@ -108,6 +122,7 @@ function hydrateStream(row) {
 }
 
 function upsertChannel({ slug, display_name, owner_user_id, description, avatar_url, metadata }) {
+    _channelsCache = null;
     const sql = db.get();
     const existing = sql.prepare(`SELECT * FROM live_channels WHERE slug = ?`).get(String(slug));
     if (existing) {
@@ -133,7 +148,12 @@ function upsertChannel({ slug, display_name, owner_user_id, description, avatar_
     return getChannelBySlug(slug);
 }
 function getChannelBySlug(slug) {
-    return hydrateChannel(db.get().prepare(`SELECT * FROM live_channels WHERE slug = ?`).get(String(slug)));
+    const key = String(slug);
+    const cached = _channelsCache;
+    if (cached) {
+        return cached.find((c) => c.slug === key) || null;
+    }
+    return hydrateChannel(db.get().prepare(`SELECT * FROM live_channels WHERE slug = ?`).get(key));
 }
 
 function getChannelByOwnerUserId(ownerUserId) {
@@ -152,6 +172,7 @@ function listChannels({ limit }) {
 }
 
 function upsertStream({ id, channel_slug, channel_id, status, title, category, thumbnail_url, embed_url, vod_media_id, started_at, ended_at, metadata }) {
+    _streamsCache = null;
     const sql = db.get();
     const existing = sql.prepare(`SELECT * FROM live_streams WHERE id = ?`).get(String(id));
     if (existing) {
@@ -391,9 +412,15 @@ function getHomeStats() {
 }
 
 function getCurrentLiveStream(channel_slug) {
+    const slug = String(channel_slug);
+    // Use the in-process streams cache when available to avoid per-channel queries
+    const cached = _streamsCache;
+    if (cached) {
+        return cached.find((s) => s.channel_slug === slug && s.status === 'started') || null;
+    }
     return hydrateStream(db.get().prepare(`
         SELECT * FROM live_streams WHERE channel_slug = ? AND status = 'started' ORDER BY rowid DESC LIMIT 1
-    `).get(String(channel_slug)));
+    `).get(slug));
 }
 
 function getStreamTimeline(streamId) {
