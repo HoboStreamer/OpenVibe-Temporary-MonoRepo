@@ -602,9 +602,10 @@
 
 /* ── Live on OpenVibe widget ── */
 (function() {
-    var LIVE_API    = 'http://localhost:4600/api/v1/streams?status=live&limit=6';
-    var GOLIVE_URL  = 'http://localhost:4600/go-live';
-    var RESTREAM_URL = 'https://openre.stream';
+    var liveBase    = OpenVibe.resolveSurfaceUrl('live');
+    var LIVE_API    = liveBase + '/api/v1/streams?status=live&limit=6';
+    var GOLIVE_URL  = liveBase + '/go-live';
+    var RESTREAM_URL = OpenVibe.resolveSurfaceUrl('restream');
 
     var section  = document.getElementById('live-now-section');
     var grid     = document.getElementById('live-now-grid');
@@ -627,7 +628,7 @@
         var title = stream.title || 'Untitled stream';
         var name  = stream.channel_name || slug || 'Creator';
         var viewers = stream.viewer_count || 0;
-        var href  = stream.route_url || ('http://localhost:4600/' + slug);
+        var href  = stream.route_url || (liveBase + '/' + slug);
         var thumb = stream.thumbnail_url
             ? '<img class="ov-live-card-thumb" src="' + esc(stream.thumbnail_url) + '" alt="" loading="lazy">'
             : '<div class="ov-live-card-thumb">📺</div>';

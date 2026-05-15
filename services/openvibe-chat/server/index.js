@@ -10,12 +10,32 @@ const { createServiceRuntime } = require('@openvibe/runtime');
 
 const config = require('./config');
 const db = require('./db');
+const model = require('./model');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 
+function seedGlobalRoom() {
+    try {
+        if (!model.getRoom('global')) {
+            model.createRoom({
+                id: 'global',
+                room_type: 'global',
+                title: 'OpenVibe Global',
+                visibility: 'public',
+                owner_type: 'service',
+                owner_id: 'openvibe-chat',
+            });
+            console.log('[openvibe-chat] seeded global room');
+        }
+    } catch (err) {
+        console.warn('[openvibe-chat] could not seed global room:', err.message);
+    }
+}
+
 function buildApp() {
     db.init(config.db.path);
+    seedGlobalRoom();
 
     const eventBus = buildEventBus(config);
     const authClient = buildAuthClient(config);
@@ -58,6 +78,24 @@ function buildApp() {
     // Service-actor middleware MUST run before policy decisions.
     app.use(serviceActorMiddleware(config.internalKey));
     app.use(optionalOpenVibeAuth(authClient));
+
+    // Shim so openvibe.js loadSession() works on this domain.
+    app.get('/account/session', (req, res) => {
+        if (req.user) {
+            return res.json({
+                authenticated: true,
+                anonymous: !!(req.user.anonymous || req.user.anon),
+                user: {
+                    id: String(req.user.sub || req.user.id || ''),
+                    username: req.user.username || req.user.preferred_username || null,
+                    display_name: req.user.display_name || req.user.name || req.user.username || null,
+                    role: req.user.role || 'user',
+                },
+            });
+        }
+        return res.json({ authenticated: false, anonymous: false, user: null });
+    });
+
     app.use('/api/chat', buildRouter({ eventBus }));
 
     app.use((err, _req, res, _next) => {
