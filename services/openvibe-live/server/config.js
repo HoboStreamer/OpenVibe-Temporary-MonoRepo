@@ -5,8 +5,8 @@ const path = require('path');
 const { resolveAuthIssuer, resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
 
 const port = parseInt(process.env.PORT, 10) || 4600;
-const LIVE_HOME_FEED_CACHE_TTL_MS = parseInt(process.env.OPENVIBE_LIVE_HOME_FEED_CACHE_TTL_MS, 10) || 15000;
-const LIVE_REMOTE_TIMEOUT_MS = parseInt(process.env.OPENVIBE_LIVE_REMOTE_TIMEOUT_MS, 10) || 4000;
+const LIVE_HOME_FEED_CACHE_TTL_MS = parseInt(process.env.OPENVIBE_LIVE_HOME_FEED_CACHE_TTL_MS, 10) || 30000;
+const LIVE_REMOTE_TIMEOUT_MS = parseInt(process.env.OPENVIBE_LIVE_REMOTE_TIMEOUT_MS, 10) || 3000;
 const MEDIA_PUBLIC_PLAYBACK_MAX_BYTES = parseInt(process.env.OPENVIBE_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES, 10) || (500 * 1024 * 1024);
 
 module.exports = {
@@ -26,8 +26,8 @@ module.exports = {
     events:    { url: process.env.OPENVIBE_EVENTS_URL || 'http://127.0.0.1:4400' },
     network:   { url: resolvePublicOrigin({ surface: 'network' }) },
     stream:    { url: resolvePublicOrigin({ surface: 'restream' }) },
-    media:     { url: process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
-    community: { url: process.env.OPENVIBE_COMMUNITY_URL || resolvePublicOrigin({ surface: 'community' }) },
+    media:     { url: process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
+    community: { url: process.env.OPENVIBE_COMMUNITY_INTERNAL_URL || process.env.OPENVIBE_COMMUNITY_URL || resolvePublicOrigin({ surface: 'community' }) },
     legacy: {
         hobostreamerRoot: process.env.OPENVIBE_HOBOSTREAMER_ROOT || '/opt/hobostreamer',
     },
