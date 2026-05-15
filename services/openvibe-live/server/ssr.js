@@ -473,6 +473,15 @@ function _shellStyles() {
         .surface-grid,
         .story-grid,
         .stat-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .paste-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+        .paste-card { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+        .paste-card .paste-thumb-link { display: block; overflow: hidden; }
+        .paste-card .paste-thumb { width: 100%; height: 180px; object-fit: cover; display: block; transition: transform 0.2s; }
+        .paste-card:hover .paste-thumb { transform: scale(1.03); }
+        .paste-card .paste-card-body { padding: 1rem; flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+        .paste-card .card-title { font-size: 0.98rem; }
+        .paste-card .card-kicker { font-size: 0.78rem; color: var(--muted); }
+        .paste-card.no-thumb .paste-card-body { padding: 1.2rem; }
         .data-points { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
         .eyebrow {
             color: var(--accent);
@@ -2362,9 +2371,10 @@ function renderChannelCard(channel, baseUrl, options) {
 
 function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, recentlyEnded, recentlyOnlineChannels, recentVods, recentClips, categories, stats, community, chat, baseUrl }) {
     const liveNowHtml = (liveNow || []).slice(0, 6).map((stream) => renderStreamCard(stream, null, baseUrl, { badge: 'Live now', badgeTone: 'live' })).join('');
-    const recentVodsHtml = (recentVods || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
-    const recentClipsHtml = (recentClips || []).slice(0, 6).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
-    const featuredChannelsHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentlyOnlineHtml = (recentlyOnlineChannels || []).slice(0, 12).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentVodsHtml = (recentVods || []).slice(0, 12).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
+    const recentClipsHtml = (recentClips || []).slice(0, 12).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
+    const featuredChannelsHtml = (featuredChannels || []).slice(0, 8).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
     const recentThreadsHtml = (((community && community.recentThreads) || []).slice(0, 4)).map((thread) => renderSignalCard({
         eyebrow: 'Thread',
         title: thread.title || 'Untitled thread',
@@ -2372,13 +2382,19 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         meta: thread.created_at ? timeAgo(thread.created_at) : '',
         href: thread.route_url || LIVE_NETWORK_URLS.community,
     })).join('');
-    const recentPastesHtml = (((community && community.recentPastes) || []).slice(0, 4)).map((paste) => renderSignalCard({
-        eyebrow: paste.kind || 'Paste',
-        title: paste.title || paste.slug || 'Untitled paste',
-        body: paste.preview_text || paste.body || 'Open on openvibe.community.',
-        meta: `${timeAgo(paste.created_at)}${paste.view_count ? ` · ${formatNumber(paste.view_count)} views` : ''}`,
-        href: paste.route_url || LIVE_NETWORK_URLS.community,
-    })).join('');
+    const recentPasteCardsHtml = (((community && community.recentPastes) || []).slice(0, 8)).map((paste) => {
+        const imgHtml = paste.image_url
+            ? `<a href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}" class="paste-thumb-link"><img class="paste-thumb" src="${escapeHtml(paste.image_url)}" alt="${escapeHtml(paste.title || 'Paste screenshot')}" loading="lazy" onerror="this.closest('.paste-card').classList.add('no-thumb')"></a>`
+            : '';
+        return `<article class="paste-card glass-card${paste.image_url ? '' : ' no-thumb'}" data-reveal>
+            ${imgHtml}
+            <div class="paste-card-body">
+                <div class="pill-row"><span class="pill soft">${escapeHtml(paste.kind || 'paste')}</span></div>
+                <a class="card-link" href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}"><h3 class="card-title">${escapeHtml(paste.title || paste.slug || 'Untitled paste')}</h3></a>
+                <div class="card-kicker">${escapeHtml(paste.created_by_actor_id ? paste.created_by_actor_id.replace(/^user:[^:]+:/, '@') : '')} · ${escapeHtml(timeAgo(paste.created_at))}</div>
+            </div>
+        </article>`;
+    }).join('');
     const roomSignalsHtml = (((chat && chat.publicRooms) || []).slice(0, 3)).map((room) => renderSignalCard({
         eyebrow: 'Chat room',
         title: room.display_name || room.slug || 'Open room',
@@ -2431,21 +2447,41 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         </section>
 
 
-        <section class="section-panel">
-            ${recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : `
-            <article class="empty-state" data-reveal>
-                <h3 class="card-title">No VODs yet</h3>
-                <p class="card-body">When replays are ready they show up here automatically.</p>
-            </article>`}
-        </section>
+        ${recentlyOnlineHtml ? renderSection({
+            title: '🕐 Recently Online',
+            subtitle: `${(recentlyOnlineChannels || []).length} creators have streamed recently.`,
+            actionHref: '/channels',
+            actionLabel: 'All channels',
+            content: `<div class="channel-grid">${recentlyOnlineHtml}</div>`,
+            emptyTitle: 'No recent stream activity',
+            emptyBody: 'Channels with recent broadcasts appear here.',
+            emptyHref: '/channels',
+            emptyLabel: 'Browse channels',
+        }) : ''}
 
-        <section class="section-panel">
-            ${recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : `
-            <article class="empty-state" data-reveal>
-                <h3 class="card-title">No clips yet</h3>
-                <p class="card-body">Clips appear here once they have been saved.</p>
-            </article>`}
-        </section>
+        ${renderSection({
+            title: '📼 Recent VODs',
+            subtitle: `${vodCount} replays in the archive.`,
+            actionHref: '/vods',
+            actionLabel: 'View all VODs',
+            content: recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : null,
+            emptyTitle: 'No VODs yet',
+            emptyBody: 'When replays are ready they show up here automatically.',
+            emptyHref: '/vods',
+            emptyLabel: 'VOD library',
+        })}
+
+        ${renderSection({
+            title: '✂️ Recent Clips',
+            subtitle: `${clipCount} clips clipped so far.`,
+            actionHref: '/clips',
+            actionLabel: 'View all clips',
+            content: recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : null,
+            emptyTitle: 'No clips yet',
+            emptyBody: 'Clips appear here once they have been saved.',
+            emptyHref: '/clips',
+            emptyLabel: 'Clips',
+        })}
 
         ${featuredChannelsHtml ? renderSection({
             title: 'Featured creators',
@@ -2466,15 +2502,24 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                     <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
                 </div>
             </div>
-            ${(recentThreadsHtml || recentPastesHtml || roomSignalsHtml) ? `
+            ${(recentThreadsHtml || roomSignalsHtml) ? `
             <div class="story-grid" data-community-pulse-grid>
-                ${(recentThreadsHtml || recentPastesHtml) ? `<div class="list-stack">${recentThreadsHtml}${recentPastesHtml}</div>` : ''}
+                ${recentThreadsHtml ? `<div class="list-stack">${recentThreadsHtml}</div>` : ''}
                 ${roomSignalsHtml ? `<div class="list-stack">${roomSignalsHtml}</div>` : ''}
-            </div>` : `
-            <div class="empty-state" data-community-pulse-grid>
-                <p>Community content will surface here once public threads and pastes exist on <a class="link-inline" href="${LIVE_NETWORK_URLS.community}">openvibe.community</a>.</p>
-            </div>`}
+            </div>` : ''}
         </section>
+
+        ${recentPasteCardsHtml ? `
+        <section class="section-panel">
+            <div class="section-head">
+                <div>
+                    <h2 class="section-title">📋 Recent Pastes</h2>
+                    <p class="section-subtitle">Screenshots, notes, and shared content from the community.</p>
+                </div>
+                <a class="section-link" href="${LIVE_NETWORK_URLS.community}">View all pastes</a>
+            </div>
+            <div class="card-grid paste-grid">${recentPasteCardsHtml}</div>
+        </section>` : ''}
 
         <section class="section-panel">
             <div class="section-head">
@@ -2646,208 +2691,328 @@ function renderGoLivePage({ baseUrl, session }) {
     const managerSection = signedIn
         ? `
         <section class="section-panel" id="stream-manager">
-            <div class="section-head">
+            <div class="sm-top-bar">
                 <div>
-                    <h2 class="section-title">Your stream manager</h2>
-                    <p class="section-subtitle">Manage your channels, streams, destinations, and ingest from one place.</p>
+                    <div class="eyebrow">Stream control</div>
+                    <h1 class="section-title" style="font-size:1.5rem">Go Live</h1>
+                    <p class="section-subtitle">Select a stream slot to configure your profile and go live.</p>
                 </div>
-                <div class="inline-actions">
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.restream}">Open openre.stream</a>
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.network}">Account settings</a>
+                <div class="sm-top-actions">
+                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">openre.stream</a>
+                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.network)}">Account</a>
                 </div>
             </div>
 
-            <div class="tab-bar" role="tablist" aria-label="Stream manager" data-sm-tab-bar style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">
-                <button class="tab-btn active" role="tab" data-sm-tab="channels"     aria-selected="true">Channels</button>
-                <button class="tab-btn"        role="tab" data-sm-tab="destinations"                     >Destinations</button>
-                <button class="tab-btn"        role="tab" data-sm-tab="stream"                           >New stream</button>
-                <button class="tab-btn"        role="tab" data-sm-tab="ingest"                           >Ingest details</button>
-                <button class="tab-btn"        role="tab" data-sm-tab="history"                          >Recent streams</button>
-            </div>
+            <div class="sm-layout" data-go-live-session>
+                <!-- LEFT SIDEBAR: stream slot list -->
+                <aside class="sm-sidebar">
+                    <div class="sm-sidebar-head">
+                        <span class="sm-sidebar-label">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+                            My Streams
+                        </span>
+                        <button class="sm-add-btn" data-sm-action="new-channel" title="Create new stream slot">+</button>
+                    </div>
+                    <div class="sm-slots" data-sm-slots>
+                        <div class="sm-slot-skeleton">Loading…</div>
+                    </div>
+                    <div class="sm-sidebar-dest-head">Destinations</div>
+                    <div class="sm-dest-list" data-sm-dest-list>
+                        <div class="sm-slot-skeleton">Loading…</div>
+                    </div>
+                </aside>
 
-            <!-- Channels tab -->
-            <div data-sm-panel="channels" class="sm-panel">
-                <div class="story-grid">
-                    <article class="glass-card" data-reveal data-go-live-session>
-                        <div class="eyebrow">Your channels</div>
-                        <div data-go-live-channels class="list-stack"><p class="manager-note">Loading channels…</p></div>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Create channel</div>
-                        <form class="form-stack" id="go-live-channel-form">
-                            <label><span class="data-point-label">Handle</span>
-                                <input class="filter-input" type="text" name="slug" placeholder="your-handle" autocomplete="off" required>
+                <!-- RIGHT PANEL -->
+                <div class="sm-main">
+                    <!-- No slot selected prompt -->
+                    <div class="sm-empty-prompt" data-sm-no-slot>
+                        <div class="sm-empty-icon">
+                            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
+                        </div>
+                        <h3 class="sm-empty-heading">Go Live</h3>
+                        <p class="sm-empty-sub">Select a stream slot to configure your profile and go live.</p>
+                    </div>
+
+                    <!-- New channel form -->
+                    <div class="sm-new-channel-panel" data-sm-new-channel style="display:none;">
+                        <div class="sm-panel-header">
+                            <div>
+                                <div class="sm-panel-eyebrow">New Stream Slot</div>
+                                <h3 class="sm-panel-title">Create channel</h3>
+                            </div>
+                            <button class="sm-close-btn" data-sm-action="cancel-new-channel" aria-label="Close">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+                        <form class="sm-form" id="sm-new-channel-form">
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">HANDLE</span>
+                                <input class="sm-input" type="text" name="slug" placeholder="your-handle" autocomplete="off" required>
                             </label>
-                            <label><span class="data-point-label">Display name</span>
-                                <input class="filter-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">DISPLAY NAME</span>
+                                <input class="sm-input" type="text" name="display_name" placeholder="Your channel name" autocomplete="off">
                             </label>
-                            <label><span class="data-point-label">Description</span>
-                                <textarea class="filter-input" name="description" rows="2" placeholder="Short channel bio…" style="resize:vertical;"></textarea>
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">DESCRIPTION</span>
+                                <textarea class="sm-input" name="description" rows="2" placeholder="Short channel bio…"></textarea>
                             </label>
-                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                            <label class="sm-checkbox-row">
                                 <input type="checkbox" name="nsfw" value="1">
-                                <span class="data-point-label">NSFW channel</span>
+                                <span>NSFW channel</span>
                             </label>
-                            <div class="form-actions">
-                                <button class="button" type="submit">Create channel</button>
-                                <span class="input-help" data-sm-status="channel-form"></span>
+                            <div class="sm-form-actions">
+                                <button class="sm-btn-primary" type="submit">Create channel</button>
+                                <button class="sm-btn-ghost" type="button" data-sm-action="cancel-new-channel">Cancel</button>
+                                <span class="sm-status-text" data-sm-status="new-channel"></span>
                             </div>
                         </form>
-                    </article>
-                </div>
-                <div id="go-live-channel-edit-panel" style="display:none;margin-top:1rem;">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Edit channel</div>
-                        <form class="form-stack" id="go-live-channel-edit-form">
-                            <input type="hidden" name="slug">
-                            <label><span class="data-point-label">Display name</span>
-                                <input class="filter-input" type="text" name="display_name" autocomplete="off">
-                            </label>
-                            <label><span class="data-point-label">Description</span>
-                                <textarea class="filter-input" name="description" rows="2" style="resize:vertical;"></textarea>
-                            </label>
-                            <label><span class="data-point-label">Stream key</span>
-                                <div style="display:flex;gap:0.5rem;align-items:center;">
-                                    <input class="filter-input" type="text" name="stream_key_display" readonly style="flex:1;font-family:monospace;">
-                                    <button class="button-secondary" type="button" data-sm-action="copy-stream-key">Copy</button>
-                                    <button class="button-secondary" type="button" data-sm-action="regenerate-key">Regenerate</button>
-                                </div>
-                            </label>
-                            <label><span class="data-point-label">RTMP ingest URL</span>
-                                <div style="display:flex;gap:0.5rem;align-items:center;">
-                                    <input class="filter-input" type="text" name="rtmp_url_display" readonly style="flex:1;font-family:monospace;">
-                                    <button class="button-secondary" type="button" data-sm-action="copy-rtmp-url">Copy</button>
-                                </div>
-                            </label>
-                            <label><span class="data-point-label">Visibility</span>
-                                <select class="filter-input" name="visibility">
-                                    <option value="public">Public</option>
-                                    <option value="unlisted">Unlisted</option>
-                                    <option value="private">Private</option>
-                                </select>
-                            </label>
-                            <label style="display:flex;align-items:center;gap:0.5rem;">
-                                <input type="checkbox" name="nsfw" value="1">
-                                <span class="data-point-label">NSFW</span>
-                            </label>
-                            <label style="display:flex;align-items:center;gap:0.5rem;">
-                                <input type="checkbox" name="recording_enabled" value="1">
-                                <span class="data-point-label">Enable VOD recording</span>
-                            </label>
-                            <label style="display:flex;align-items:center;gap:0.5rem;">
-                                <input type="checkbox" name="chat_enabled" value="1">
-                                <span class="data-point-label">Enable chat</span>
-                            </label>
-                            <div class="form-actions">
-                                <button class="button" type="submit">Save changes</button>
-                                <span class="input-help" data-sm-status="channel-edit-form"></span>
-                            </div>
-                        </form>
-                    </article>
-                </div>
-            </div>
+                    </div>
 
-            <!-- Destinations tab -->
-            <div data-sm-panel="destinations" class="sm-panel" style="display:none;">
-                <div class="story-grid">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Your destinations</div>
-                        <div data-go-live-destinations class="list-stack"><p class="manager-note">Loading destinations…</p></div>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Add destination</div>
-                        <form class="form-stack" id="go-live-destination-form">
-                            <label><span class="data-point-label">Kind</span>
-                                <select class="filter-input" name="kind">
+                    <!-- Slot editor panel -->
+                    <div class="sm-slot-editor" data-sm-slot-editor style="display:none;">
+                        <!-- Slot header -->
+                        <div class="sm-slot-header">
+                            <div class="sm-slot-header-info">
+                                <div class="sm-slot-channel-name" data-sm-slot-name>Channel</div>
+                                <a class="sm-slot-channel-link" data-sm-slot-link href="#" target="_blank"></a>
+                            </div>
+                            <a class="sm-chat-btn" data-sm-slot-chat href="#" target="_blank">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                Chat
+                            </a>
+                        </div>
+
+                        <!-- Sub-tab bar -->
+                        <div class="sm-tabs" data-sm-stab-bar role="tablist">
+                            <button class="sm-tab active" role="tab" data-sm-stab="stream"   aria-selected="true">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                Stream
+                            </button>
+                            <button class="sm-tab" role="tab" data-sm-stab="settings">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                Settings
+                            </button>
+                            <button class="sm-tab" role="tab" data-sm-stab="endpoint">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                                Endpoint
+                            </button>
+                            <button class="sm-tab" role="tab" data-sm-stab="history">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
+                                History
+                            </button>
+                        </div>
+
+                        <!-- Stream tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="stream">
+                            <form class="sm-form" id="sm-stream-form">
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">TITLE</span>
+                                    <input class="sm-input" type="text" name="title" placeholder="Tonight's stream title" autocomplete="off">
+                                </label>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">DESCRIPTION</span>
+                                    <textarea class="sm-input" name="description" rows="3" placeholder="What's the stream about?"></textarea>
+                                </label>
+                                <div class="sm-field-group">
+                                    <span class="sm-field-label">CATEGORY</span>
+                                    <div class="sm-category-row">
+                                        <select class="sm-input sm-select" name="category">
+                                            <option value="Desktop">Desktop</option>
+                                            <option value="Gaming">Gaming</option>
+                                            <option value="Art">Art</option>
+                                            <option value="Music">Music</option>
+                                            <option value="Talk">Talk</option>
+                                            <option value="Science &amp; Tech">Science &amp; Tech</option>
+                                            <option value="IRL">IRL</option>
+                                            <option value="Coding">Coding</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                        <label class="sm-nsfw-toggle">
+                                            <input type="checkbox" name="nsfw" value="1" class="sm-nsfw-cb">
+                                            <span class="sm-nsfw-dot"></span>
+                                            <span class="sm-nsfw-label">NSFW</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="sm-field-group">
+                                    <span class="sm-field-label">URL SLUG <span class="sm-field-optional">(optional)</span></span>
+                                    <div class="sm-slug-row">
+                                        <span class="sm-slug-prefix" data-sm-slug-prefix>openvibe.live/@…/</span>
+                                        <input class="sm-input sm-slug-input" type="text" name="url_slug" placeholder="stream-title">
+                                    </div>
+                                </div>
+                                <div class="sm-field-group">
+                                    <span class="sm-field-label">STREAMING METHOD</span>
+                                    <div class="sm-method-grid">
+                                        <button type="button" class="sm-method-card" data-method="browser">
+                                            <div class="sm-method-icon">
+                                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                            </div>
+                                            <div class="sm-method-name">Browser</div>
+                                            <div class="sm-method-sub">Camera, mic, or screen from your browser</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card active" data-method="whip">
+                                            <div class="sm-method-icon">
+                                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
+                                            </div>
+                                            <div class="sm-method-name">WHIP</div>
+                                            <div class="sm-method-sub">OBS WHIP encoder / external WebRTC</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card" data-method="rtmp">
+                                            <div class="sm-method-icon">
+                                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+                                            </div>
+                                            <div class="sm-method-name">RTMP</div>
+                                            <div class="sm-method-sub">OBS / Streamlabs / IRL Pro</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card" data-method="cli">
+                                            <div class="sm-method-icon">
+                                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                                            </div>
+                                            <div class="sm-method-name">CLI / FFmpeg</div>
+                                            <div class="sm-method-sub">FFmpeg, Pi, RTSP cameras</div>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="protocol" value="whip">
+                                </div>
+                                <div class="sm-autodetect-box" data-sm-autodetect>
+                                    <span class="sm-autodetect-dot"></span>
+                                    <div>
+                                        <div class="sm-autodetect-title">Auto-detect enabled</div>
+                                        <div class="sm-autodetect-sub">Your stream will go live automatically when your encoder connects. Configure your software using the Endpoint tab, then just start streaming.</div>
+                                    </div>
+                                </div>
+                                <div class="sm-form-actions">
+                                    <button class="sm-btn-primary" type="submit" id="sm-create-stream-btn">Create stream</button>
+                                    <button class="sm-btn-live" type="button" id="sm-go-live-btn" style="display:none;">
+                                        <span class="sm-live-dot"></span> Go Live
+                                    </button>
+                                    <button class="sm-btn-ghost" type="button" id="sm-end-stream-btn" style="display:none;">End stream</button>
+                                    <span class="sm-status-text" data-sm-status="stream-form"></span>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Settings tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="settings" style="display:none;">
+                            <form class="sm-form" id="sm-settings-form">
+                                <input type="hidden" name="slug">
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">DISPLAY NAME</span>
+                                    <input class="sm-input" type="text" name="display_name" autocomplete="off">
+                                </label>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">DESCRIPTION</span>
+                                    <textarea class="sm-input" name="description" rows="2"></textarea>
+                                </label>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">VISIBILITY</span>
+                                    <select class="sm-input sm-select" name="visibility">
+                                        <option value="public">Public</option>
+                                        <option value="unlisted">Unlisted</option>
+                                        <option value="private">Private</option>
+                                    </select>
+                                </label>
+                                <label class="sm-checkbox-row">
+                                    <input type="checkbox" name="recording_enabled" value="1" checked>
+                                    <span>Enable VOD recording</span>
+                                </label>
+                                <label class="sm-checkbox-row">
+                                    <input type="checkbox" name="chat_enabled" value="1" checked>
+                                    <span>Enable chat</span>
+                                </label>
+                                <label class="sm-checkbox-row">
+                                    <input type="checkbox" name="nsfw" value="1">
+                                    <span>NSFW channel</span>
+                                </label>
+                                <div class="sm-settings-key-section">
+                                    <div class="sm-field-label" style="margin-bottom:0.4rem;">STREAM KEY</div>
+                                    <div class="sm-key-row">
+                                        <input class="sm-input sm-key-input" type="password" name="stream_key_display" readonly placeholder="••••••••••••">
+                                        <button type="button" class="sm-icon-btn" data-sm-action="toggle-key-visibility" title="Show/hide key">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        </button>
+                                        <button type="button" class="sm-icon-btn" data-sm-action="copy-stream-key" title="Copy key">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        </button>
+                                        <button type="button" class="sm-icon-btn sm-icon-btn-danger" data-sm-action="regenerate-key" title="Regenerate">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="sm-form-actions">
+                                    <button class="sm-btn-primary" type="submit">Save changes</button>
+                                    <span class="sm-status-text" data-sm-status="settings-form"></span>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Endpoint tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="endpoint" style="display:none;">
+                            <div class="sm-endpoint-panel" data-sm-endpoint-panel>
+                                <div class="sm-endpoint-empty">
+                                    <p class="sm-note">Create a stream to reveal ingest details, or check your channel settings for the persistent RTMP URL.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="history" style="display:none;">
+                            <div data-sm-history-panel>
+                                <p class="sm-note">Loading recent streams…</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Destinations sub-panel (shown from dest sidebar click) -->
+                    <div class="sm-dest-panel" data-sm-dest-panel style="display:none;">
+                        <div class="sm-panel-header">
+                            <div>
+                                <div class="sm-panel-eyebrow">Restream</div>
+                                <h3 class="sm-panel-title">Destinations</h3>
+                            </div>
+                        </div>
+                        <div class="sm-dest-list-full" data-sm-dest-list-full>
+                            <p class="sm-note">Loading destinations…</p>
+                        </div>
+                        <div class="sm-panel-header" style="margin-top:1.5rem;">
+                            <h4 class="sm-panel-title" style="font-size:0.95rem;">Add destination</h4>
+                        </div>
+                        <form class="sm-form" id="sm-dest-form">
+                            <div class="sm-field-group">
+                                <span class="sm-field-label">KIND</span>
+                                <select class="sm-input sm-select" name="kind">
                                     <option value="custom">Custom RTMP</option>
                                     <option value="youtube">YouTube</option>
                                     <option value="twitch">Twitch</option>
                                     <option value="kick">Kick</option>
                                     <option value="facebook">Facebook</option>
                                 </select>
+                            </div>
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">LABEL</span>
+                                <input class="sm-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off" required>
                             </label>
-                            <label><span class="data-point-label">Label</span>
-                                <input class="filter-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off" required>
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">TARGET URL</span>
+                                <input class="sm-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off" required>
                             </label>
-                            <label><span class="data-point-label">Target URL</span>
-                                <input class="filter-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off" required>
+                            <label class="sm-field-group">
+                                <span class="sm-field-label">STREAM KEY</span>
+                                <input class="sm-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
                             </label>
-                            <label><span class="data-point-label">Stream key</span>
-                                <input class="filter-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
-                            </label>
-                            <label style="display:flex;align-items:center;gap:0.5rem;">
+                            <label class="sm-checkbox-row">
                                 <input type="checkbox" name="enabled" value="1" checked>
-                                <span class="data-point-label">Enabled</span>
+                                <span>Enabled</span>
                             </label>
-                            <div class="form-actions">
-                                <button class="button-secondary" type="submit">Save destination</button>
-                                <span class="input-help" data-sm-status="destination-form"></span>
+                            <div class="sm-form-actions">
+                                <button class="sm-btn-primary" type="submit">Save destination</button>
+                                <span class="sm-status-text" data-sm-status="dest-form"></span>
                             </div>
                         </form>
-                    </article>
-                </div>
-            </div>
-
-            <!-- New stream tab -->
-            <div data-sm-panel="stream" class="sm-panel" style="display:none;">
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Create a stream</div>
-                    <form class="form-stack" id="go-live-stream-form">
-                        <label><span class="data-point-label">Channel</span>
-                            <select class="filter-input" name="channel_slug" required>
-                                <option value="">Select a channel</option>
-                            </select>
-                        </label>
-                        <label><span class="data-point-label">Title</span>
-                            <input class="filter-input" type="text" name="title" placeholder="Tonight's stream title" autocomplete="off">
-                        </label>
-                        <label><span class="data-point-label">Description</span>
-                            <textarea class="filter-input" name="description" rows="2" placeholder="Brief stream description…" style="resize:vertical;"></textarea>
-                        </label>
-                        <label><span class="data-point-label">Category</span>
-                            <input class="filter-input" type="text" name="category" placeholder="Art, coding, games, music…" autocomplete="off">
-                        </label>
-                        <label><span class="data-point-label">Protocol</span>
-                            <select class="filter-input" name="protocol">
-                                <option value="rtmp">RTMP / OBS</option>
-                                <option value="whip">WHIP</option>
-                                <option value="browser">Browser quick-start</option>
-                            </select>
-                        </label>
-                        <label style="display:flex;align-items:center;gap:0.5rem;">
-                            <input type="checkbox" name="nsfw" value="1">
-                            <span class="data-point-label">NSFW stream</span>
-                        </label>
-                        <label style="display:flex;align-items:center;gap:0.5rem;">
-                            <input type="checkbox" name="recording_enabled" value="1" checked>
-                            <span class="data-point-label">Record to VOD</span>
-                        </label>
-                        <div class="form-actions">
-                            <button class="button" type="submit">Create stream</button>
-                            <button class="button" type="button" id="go-live-start-btn" style="display:none;">Mark live</button>
-                            <button class="button-secondary" type="button" id="go-live-end-btn" style="display:none;">End stream</button>
-                            <span class="input-help" data-sm-status="stream-form"></span>
-                        </div>
-                    </form>
-                </article>
-            </div>
-
-            <!-- Ingest details tab -->
-            <div data-sm-panel="ingest" class="sm-panel" style="display:none;">
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Ingest details</div>
-                    <div data-go-live-ingest class="list-stack">
-                        <p class="manager-note">Create or select a stream to reveal ingest URLs and hand-off info for OBS, WHIP, or your restream workflow.</p>
                     </div>
-                </article>
-            </div>
-
-            <!-- Recent streams tab -->
-            <div data-sm-panel="history" class="sm-panel" style="display:none;">
-                <article class="glass-card" data-reveal>
-                    <div class="eyebrow">Recent streams</div>
-                    <div data-go-live-streams class="list-stack"><p class="manager-note">Loading your recent streams…</p></div>
-                </article>
+                </div>
             </div>
         </section>`
         : `
@@ -2872,12 +3037,11 @@ function renderGoLivePage({ baseUrl, session }) {
         </section>`;
     const pageContent = `
         ${managerSection}
-        ${renderSection({
+        ${!signedIn ? renderSection({
             title: 'Broadcast tracks',
             subtitle: 'Choose the publishing style that matches your setup today.',
             content: `<div class="feature-grid">${tracksHtml}</div>`,
-        })}
-        ${renderSection({
+        }) + renderSection({
             title: 'A simple creator loop',
             subtitle: 'Keep the public route, the live session, and the after-stream surface tied together.',
             content: `
@@ -2896,8 +3060,7 @@ function renderGoLivePage({ baseUrl, session }) {
                         <p class="card-body">The live surface stays honest. It shows live sessions, recent broadcasts, viewer counts, VOD linkage, and clip state when those facts exist — and clean empty states when they do not.</p>
                     </article>
                 </div>`,
-        })}
-        ${renderSection({
+        }) + renderSection({
             title: 'Where openre.stream fits',
             subtitle: 'Separate the stream-routing control plane from the discovery layer without fragmenting creator identity.',
             content: `
@@ -2906,7 +3069,7 @@ function renderGoLivePage({ baseUrl, session }) {
                         <div class="eyebrow">Control plane</div>
                         <p class="card-body">Use openre.stream when you need ingest orchestration, multi-destination restreaming, or a dedicated operator workflow. Let openvibe.live stay focused on discovery, channel identity, and replay/highlight visibility.</p>
                         <ul class="flow-list">
-                            <li>Keep the creator’s canonical public route on <code>openvibe.live</code>.</li>
+                            <li>Keep the creator's canonical public route on <code>openvibe.live</code>.</li>
                             <li>Use <code>openre.stream</code> for the routing and publishing complexity.</li>
                             <li>Mirror the resulting session back into the live graph so clips, VODs, and discovery continue from one source of truth.</li>
                         </ul>
@@ -2929,15 +3092,311 @@ function renderGoLivePage({ baseUrl, session }) {
                         </div>
                     </article>
                 </div>`,
-        })}
+        }) : ''}
     `;
     return renderPage({
         title: 'Go live — openvibe.live',
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260507-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260515-2"></script>' : ''),
         baseUrl,
+        extraStyles: `
+            /* ── Stream Manager v2 ──────────────────────────────── */
+            .sm-top-bar {
+                display: flex; justify-content: space-between; align-items: flex-start;
+                gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+            }
+            .sm-top-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.4rem; }
+            .sm-layout {
+                display: grid;
+                grid-template-columns: 260px 1fr;
+                gap: 0;
+                min-height: 580px;
+                border-radius: 20px;
+                border: 1px solid rgba(255,255,255,0.09);
+                background: rgba(7,13,28,0.72);
+                overflow: hidden;
+            }
+            /* sidebar */
+            .sm-sidebar {
+                border-right: 1px solid rgba(255,255,255,0.08);
+                display: flex; flex-direction: column;
+                background: rgba(5,9,22,0.6);
+            }
+            .sm-sidebar-head {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 0.85rem 1rem 0.65rem;
+                border-bottom: 1px solid rgba(255,255,255,0.07);
+                font-size: 0.78rem; font-weight: 800; text-transform: uppercase;
+                letter-spacing: 0.1em; color: var(--muted);
+            }
+            .sm-sidebar-label { display: flex; align-items: center; gap: 0.4rem; }
+            .sm-add-btn {
+                width: 24px; height: 24px; border-radius: 7px;
+                border: 1px solid rgba(255,255,255,0.14);
+                background: rgba(255,255,255,0.06);
+                color: white; font-size: 1rem; line-height: 1;
+                cursor: pointer; display: grid; place-items: center;
+                transition: background 0.15s, border-color 0.15s;
+            }
+            .sm-add-btn:hover { background: rgba(34,211,238,0.15); border-color: rgba(34,211,238,0.4); }
+            .sm-slots { flex: 1; overflow-y: auto; padding: 0.5rem 0; }
+            .sm-slot-skeleton { padding: 0.9rem 1rem; color: var(--muted); font-size: 0.82rem; }
+            .sm-slot-item {
+                display: flex; align-items: center; gap: 0.6rem;
+                padding: 0.65rem 1rem; cursor: pointer;
+                border-left: 2px solid transparent;
+                transition: background 0.12s, border-color 0.12s;
+                position: relative;
+            }
+            .sm-slot-item:hover { background: rgba(255,255,255,0.04); }
+            .sm-slot-item.active {
+                background: rgba(34,211,238,0.07);
+                border-left-color: var(--accent);
+            }
+            .sm-slot-dot {
+                width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+                background: rgba(255,255,255,0.2);
+                transition: background 0.2s;
+            }
+            .sm-slot-dot.live { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+            .sm-slot-info { flex: 1; min-width: 0; }
+            .sm-slot-title { font-size: 0.88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .sm-slot-meta { font-size: 0.73rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; margin-top: 0.1rem; }
+            .sm-slot-proto {
+                display: inline-flex; align-items: center;
+                padding: 0.1rem 0.4rem; border-radius: 4px;
+                background: rgba(255,255,255,0.07); font-size: 0.67rem; font-weight: 800;
+                text-transform: uppercase; letter-spacing: 0.06em;
+            }
+            .sm-slot-proto.whip  { color: #22d3ee; }
+            .sm-slot-proto.rtmp  { color: #f97316; }
+            .sm-slot-proto.browser { color: #a78bfa; }
+            .sm-slot-proto.cli   { color: #94a3b8; }
+            .sm-sidebar-dest-head {
+                padding: 0.6rem 1rem 0.4rem;
+                border-top: 1px solid rgba(255,255,255,0.07);
+                font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+                letter-spacing: 0.1em; color: var(--muted);
+            }
+            .sm-dest-list { overflow-y: auto; max-height: 120px; padding-bottom: 0.5rem; }
+            .sm-dest-item {
+                display: flex; align-items: center; gap: 0.5rem;
+                padding: 0.5rem 1rem; cursor: pointer; font-size: 0.82rem;
+                transition: background 0.12s;
+            }
+            .sm-dest-item:hover { background: rgba(255,255,255,0.04); }
+            .sm-dest-item.active { background: rgba(139,92,246,0.1); }
+            .sm-dest-kind-badge {
+                font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+                padding: 0.1rem 0.35rem; border-radius: 4px;
+                background: rgba(139,92,246,0.18); color: #a78bfa;
+            }
+            /* right main panel */
+            .sm-main {
+                display: flex; flex-direction: column;
+                min-width: 0; position: relative;
+            }
+            .sm-empty-prompt {
+                flex: 1; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                gap: 0.8rem; padding: 3rem 2rem; text-align: center; color: var(--muted);
+            }
+            .sm-empty-icon { color: rgba(34,211,238,0.4); }
+            .sm-empty-heading { margin: 0; font-size: 1.3rem; color: var(--text); }
+            .sm-empty-sub { margin: 0; font-size: 0.9rem; }
+            /* slot editor */
+            .sm-slot-editor,
+            .sm-new-channel-panel,
+            .sm-dest-panel { padding: 1.2rem 1.4rem; flex: 1; display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
+            .sm-panel-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+            .sm-panel-eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; color: var(--accent); margin-bottom: 0.25rem; }
+            .sm-panel-title { margin: 0; font-size: 1.1rem; font-weight: 800; }
+            .sm-close-btn {
+                width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(255,255,255,0.05); color: var(--muted);
+                cursor: pointer; display: grid; place-items: center;
+                transition: background 0.15s, color 0.15s;
+            }
+            .sm-close-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+            .sm-slot-header {
+                display: flex; justify-content: space-between; align-items: flex-start;
+                margin-bottom: 1rem; gap: 0.8rem;
+            }
+            .sm-slot-channel-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.2rem; }
+            .sm-slot-channel-link { font-size: 0.8rem; color: var(--muted); font-family: ui-monospace, Consolas, monospace; transition: color 0.15s; }
+            .sm-slot-channel-link:hover { color: var(--accent); }
+            .sm-chat-btn {
+                display: inline-flex; align-items: center; gap: 0.35rem;
+                padding: 0.45rem 0.85rem; border-radius: 999px;
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(255,255,255,0.05);
+                font-size: 0.82rem; font-weight: 700; color: var(--muted-strong);
+                white-space: nowrap; transition: border-color 0.15s, background 0.15s, color 0.15s;
+            }
+            .sm-chat-btn:hover { border-color: rgba(34,211,238,0.4); background: rgba(34,211,238,0.08); color: white; }
+            /* tabs */
+            .sm-tabs {
+                display: flex; gap: 0; margin-bottom: 1.2rem;
+                border-bottom: 1px solid rgba(255,255,255,0.08);
+            }
+            .sm-tab {
+                display: inline-flex; align-items: center; gap: 0.35rem;
+                padding: 0.65rem 1rem; font-size: 0.84rem; font-weight: 700;
+                color: var(--muted); border: none; background: none; cursor: pointer;
+                border-bottom: 2px solid transparent; margin-bottom: -1px;
+                transition: color 0.15s, border-color 0.15s;
+            }
+            .sm-tab:hover { color: var(--muted-strong); }
+            .sm-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+            .sm-tab svg { opacity: 0.7; }
+            .sm-tab.active svg { opacity: 1; }
+            /* form elements */
+            .sm-form { display: flex; flex-direction: column; gap: 0.9rem; }
+            .sm-field-group { display: flex; flex-direction: column; gap: 0.35rem; }
+            .sm-field-label {
+                font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+                letter-spacing: 0.1em; color: var(--muted);
+            }
+            .sm-field-optional { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 0.72rem; }
+            .sm-input {
+                width: 100%; padding: 0.7rem 0.85rem;
+                border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);
+                background: rgba(255,255,255,0.05); color: white;
+                font-size: 0.9rem; font-family: inherit;
+                transition: border-color 0.15s, background 0.15s;
+            }
+            .sm-input:focus { outline: none; border-color: rgba(34,211,238,0.5); background: rgba(34,211,238,0.04); }
+            .sm-input::placeholder { color: rgba(148,163,184,0.5); }
+            .sm-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.2rem; }
+            .sm-checkbox-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer; }
+            .sm-checkbox-row input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+            .sm-category-row { display: flex; gap: 0.6rem; align-items: center; }
+            .sm-category-row .sm-input { flex: 1; }
+            .sm-nsfw-toggle { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; white-space: nowrap; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+            .sm-nsfw-cb { accent-color: #f97316; width: 14px; height: 14px; }
+            .sm-nsfw-dot { width: 8px; height: 8px; border-radius: 50%; background: #f97316; opacity: 0.5; transition: opacity 0.15s; }
+            .sm-nsfw-cb:checked ~ .sm-nsfw-dot { opacity: 1; }
+            .sm-slug-row { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.05); }
+            .sm-slug-prefix { padding: 0.7rem 0.5rem 0.7rem 0.85rem; font-size: 0.82rem; color: var(--muted); white-space: nowrap; font-family: ui-monospace, Consolas, monospace; }
+            .sm-slug-input { border: none; border-radius: 0; background: transparent; flex: 1; padding-left: 0; min-width: 0; }
+            .sm-slug-input:focus { border: none; background: transparent; }
+            /* streaming method cards */
+            .sm-method-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.25rem; }
+            .sm-method-card {
+                display: flex; flex-direction: column; align-items: flex-start;
+                padding: 0.75rem 0.8rem; border-radius: 12px; cursor: pointer;
+                border: 1.5px solid rgba(255,255,255,0.1);
+                background: rgba(255,255,255,0.03);
+                text-align: left; transition: border-color 0.15s, background 0.15s;
+            }
+            .sm-method-card:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
+            .sm-method-card.active { border-color: rgba(251,191,36,0.7); background: rgba(251,191,36,0.08); }
+            .sm-method-icon { color: var(--muted-strong); margin-bottom: 0.4rem; }
+            .sm-method-card.active .sm-method-icon { color: #fbbf24; }
+            .sm-method-name { font-size: 0.88rem; font-weight: 800; color: var(--text); }
+            .sm-method-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; line-height: 1.35; }
+            /* autodetect */
+            .sm-autodetect-box {
+                display: flex; align-items: flex-start; gap: 0.65rem;
+                padding: 0.8rem 0.95rem; border-radius: 10px;
+                border: 1px solid rgba(34,211,238,0.2);
+                background: rgba(34,211,238,0.05);
+            }
+            .sm-autodetect-dot {
+                width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 0.45rem;
+                background: var(--accent);
+                animation: sm-pulse 2s ease-in-out infinite;
+            }
+            @keyframes sm-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.45; transform:scale(0.7); } }
+            .sm-autodetect-title { font-size: 0.85rem; font-weight: 700; color: var(--accent); }
+            .sm-autodetect-sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; line-height: 1.4; }
+            /* action buttons */
+            .sm-form-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.4rem; }
+            .sm-btn-primary {
+                display: inline-flex; align-items: center; gap: 0.4rem;
+                padding: 0.6rem 1.2rem; border-radius: 999px; font-weight: 700; font-size: 0.88rem;
+                background: linear-gradient(135deg, rgba(139,92,246,0.9), rgba(34,211,238,0.75));
+                border: none; color: white; cursor: pointer; transition: opacity 0.15s, transform 0.15s;
+            }
+            .sm-btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+            .sm-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+            .sm-btn-live {
+                display: inline-flex; align-items: center; gap: 0.5rem;
+                padding: 0.6rem 1.2rem; border-radius: 999px; font-weight: 800; font-size: 0.88rem;
+                background: linear-gradient(135deg, #dc2626, #f97316);
+                border: none; color: white; cursor: pointer;
+                box-shadow: 0 0 18px rgba(220,38,38,0.4);
+                transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+            }
+            .sm-btn-live:hover { opacity: 0.88; transform: translateY(-1px); box-shadow: 0 0 28px rgba(220,38,38,0.6); }
+            .sm-live-dot { width: 8px; height: 8px; border-radius: 50%; background: white; animation: sm-pulse 1.2s ease-in-out infinite; }
+            .sm-btn-ghost {
+                display: inline-flex; align-items: center; gap: 0.4rem;
+                padding: 0.58rem 1rem; border-radius: 999px; font-weight: 700; font-size: 0.88rem;
+                border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+                color: var(--muted-strong); cursor: pointer; transition: border-color 0.15s, color 0.15s;
+            }
+            .sm-btn-ghost:hover { border-color: rgba(255,255,255,0.28); color: white; }
+            .sm-status-text { font-size: 0.82rem; color: var(--muted); }
+            .sm-status-text.ok { color: #4ade80; }
+            .sm-status-text.err { color: #f87171; }
+            .sm-note { color: var(--muted); font-size: 0.88rem; margin: 0; }
+            /* key row */
+            .sm-settings-key-section { margin-top: 0.25rem; }
+            .sm-key-row { display: flex; align-items: center; gap: 0.4rem; }
+            .sm-key-input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; }
+            .sm-icon-btn {
+                width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+                color: var(--muted); cursor: pointer; display: grid; place-items: center;
+                transition: border-color 0.15s, color 0.15s, background 0.15s;
+            }
+            .sm-icon-btn:hover { border-color: rgba(255,255,255,0.25); color: white; background: rgba(255,255,255,0.08); }
+            .sm-icon-btn-danger:hover { border-color: rgba(248,113,113,0.5); color: #f87171; background: rgba(248,113,113,0.08); }
+            /* endpoint panel */
+            .sm-endpoint-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+            .sm-endpoint-row {
+                display: flex; flex-direction: column; gap: 0.3rem;
+            }
+            .sm-endpoint-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; color: var(--muted); }
+            .sm-endpoint-value-row {
+                display: flex; align-items: center; gap: 0.4rem;
+            }
+            .sm-endpoint-code {
+                flex: 1; padding: 0.65rem 0.85rem; border-radius: 10px;
+                border: 1px solid rgba(255,255,255,0.09);
+                background: rgba(0,0,0,0.3); font-size: 0.8rem;
+                font-family: ui-monospace, Consolas, monospace; color: #e2e8f0;
+                word-break: break-all; min-width: 0;
+            }
+            /* history items */
+            .sm-history-item {
+                display: flex; justify-content: space-between; align-items: center;
+                gap: 0.5rem; padding: 0.7rem 0;
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+            }
+            .sm-history-item:last-child { border-bottom: none; }
+            .sm-history-title { font-size: 0.9rem; font-weight: 600; }
+            .sm-history-meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+            /* dest list */
+            .sm-dest-full-item {
+                display: flex; justify-content: space-between; align-items: center;
+                gap: 0.5rem; padding: 0.65rem 0;
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+            }
+            .sm-dest-full-item:last-child { border-bottom: none; }
+            /* stab content spacing */
+            .sm-stab-content { flex: 1; }
+            /* responsive */
+            @media (max-width: 740px) {
+                .sm-layout { grid-template-columns: 1fr; }
+                .sm-sidebar { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); max-height: 220px; }
+                .sm-method-grid { grid-template-columns: repeat(2, 1fr); }
+            }
+        `,
     });
 }
 

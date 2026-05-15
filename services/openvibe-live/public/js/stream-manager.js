@@ -1,34 +1,35 @@
 /**
- * stream-manager.js — go-live page client logic  v=20260505
+ * stream-manager.js — go-live page client v=20260515-1
  *
- * Full tabbed stream manager for /go-live.
+ * Two-panel stream manager: sidebar channel slots + right editor panel.
  * Plain JS IIFE — no module system, no bundler.
- * Runs only when [data-go-live-session] is found in the DOM.
  */
 (function () {
     'use strict';
 
     if (!document.querySelector('[data-go-live-session]')) return;
 
+    // ── helpers ──────────────────────────────────────────────────────────────
     function esc(str) {
         return String(str == null ? '' : str)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
-    function el(s)  { return document.querySelector(s); }
+    function el(s) { return document.querySelector(s); }
     function els(s) { return Array.prototype.slice.call(document.querySelectorAll(s)); }
-    function setContent(sOrEl, html) {
-        var t = typeof sOrEl === 'string' ? el(sOrEl) : sOrEl;
+    function setContent(selector, html) {
+        var t = typeof selector === 'string' ? el(selector) : selector;
         if (t) t.innerHTML = html;
     }
+    function show(elem) { if (elem) elem.style.display = ''; }
+    function hide(elem) { if (elem) elem.style.display = 'none'; }
     function setStatus(key, text, isError) {
         var span = el('[data-sm-status="' + key + '"]');
         if (!span) return;
         span.textContent = text;
-        span.style.color = isError ? 'var(--color-danger,#e55)' : 'var(--color-ok,#5c5)';
+        span.className = 'sm-status-text ' + (isError ? 'err' : text ? 'ok' : '');
     }
-    function clearStatus(key) { var s = el('[data-sm-status="' + key + '"]'); if (s) s.textContent = ''; }
-    function note(t) { return '<p class="manager-note">' + esc(t) + '</p>'; }
+    function clearStatus(key) { setStatus(key, ''); }
     function pill(label, tone) { return '<span class="pill ' + esc(tone || 'soft') + '">' + esc(label) + '</span>'; }
     function timeAgo(ts) {
         if (!ts) return 'just now';
@@ -38,10 +39,10 @@
         if (d < 86400) return Math.floor(d / 3600) + 'h ago';
         return Math.floor(d / 86400) + 'd ago';
     }
-    function copyToClipboard(text) {
+    function copyText(text) {
         if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
         var ta = document.createElement('textarea');
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
         document.body.appendChild(ta); ta.focus(); ta.select();
         try { document.execCommand('copy'); } catch (_) {}
         document.body.removeChild(ta);
@@ -49,7 +50,10 @@
     }
     function api(method, path, body) {
         var opts = { method: method, credentials: 'same-origin', headers: {} };
-        if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+        if (body !== undefined) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
         return fetch(path, opts).then(function (res) {
             if (!res.ok) return res.json().catch(function () { return {}; }).then(function (e) {
                 throw new Error(e.error || e.message || 'Request failed (' + res.status + ')');
@@ -58,116 +62,252 @@
         });
     }
 
-    // ── tab switching ─────────────────────────────────────────────────────────
-    var tabBar = el('[data-sm-tab-bar]');
-    if (tabBar) {
-        tabBar.addEventListener('click', function (e) {
-            var btn = e.target.closest('[data-sm-tab]');
-            if (!btn) return;
-            var tab = btn.getAttribute('data-sm-tab');
-            els('[data-sm-tab-bar] [data-sm-tab]').forEach(function (b) {
-                b.classList.remove('active'); b.setAttribute('aria-selected', 'false');
-            });
-            btn.classList.add('active'); btn.setAttribute('aria-selected', 'true');
-            els('[data-sm-panel]').forEach(function (p) {
-                p.style.display = p.getAttribute('data-sm-panel') === tab ? '' : 'none';
-            });
-        });
+    // ── state ────────────────────────────────────────────────────────────────
+    var state = {
+        channels: [],
+        destinations: [],
+        streams: [],
+        restreamUrl: '',
+        accountUrl: '',
+        activeChannelSlug: null,
+        activeStreamId: null,
+        activeView: 'none',
+    };
+
+    // ── views ────────────────────────────────────────────────────────────────
+    function showView(view) {
+        state.activeView = view;
+        hide(el('[data-sm-no-slot]'));
+        hide(el('[data-sm-slot-editor]'));
+        hide(el('[data-sm-new-channel]'));
+        hide(el('[data-sm-dest-panel]'));
+        if (view === 'none')              show(el('[data-sm-no-slot]'));
+        else if (view === 'slot')         show(el('[data-sm-slot-editor]'));
+        else if (view === 'new-channel')  show(el('[data-sm-new-channel]'));
+        else if (view === 'destinations') show(el('[data-sm-dest-panel]'));
     }
 
-    var state = { channels: [], destinations: [], streams: [], restreamUrl: '', activeStreamId: null };
-
-    // ── renderers ─────────────────────────────────────────────────────────────
-    function renderChannelList(chs) {
-        if (!chs || !chs.length) return note('No channels yet. Create one using the form.');
-        return chs.map(function (c) {
-            return '<div class="stack-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.4rem 0;">' +
-                '<span>' + (c.is_live ? pill('Live', 'live') + ' ' : '') +
-                '<strong>' + esc(c.display_name || c.slug) + '</strong> <code style="font-size:.8rem;opacity:.7">@' + esc(c.slug) + '</code></span>' +
-                '<button class="button-secondary" style="padding:.2rem .6rem;font-size:.8rem;" data-sm-action="edit-channel" data-slug="' + esc(c.slug) + '">Edit</button>' +
-            '</div>';
-        }).join('');
+    // ── sidebar slot list ─────────────────────────────────────────────────────
+    function protoLabel(ch) {
+        var meta = ch.metadata || ch.metadata_json || {};
+        var p = meta.default_protocol || meta.protocol || ch.default_protocol || 'rtmp';
+        return p.toLowerCase();
     }
 
-    function renderDestinationList(ds) {
-        if (!ds || !ds.length) return note('No destinations yet. Add one using the form.');
-        return ds.map(function (d) {
-            return '<div class="stack-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.4rem 0;">' +
-                '<span>' + pill(d.kind || 'custom') + ' <strong>' + esc(d.label || d.kind || 'Destination') + '</strong>' +
-                (d.enabled === false ? ' ' + pill('Disabled', 'muted') : '') + '</span>' +
-                '<button class="button-secondary" style="padding:.2rem .6rem;font-size:.8rem;" data-sm-action="delete-destination" data-dest-id="' + esc(d.id) + '">Remove</button>' +
-            '</div>';
-        }).join('');
-    }
-
-    function renderStreamList(ss) {
-        if (!ss || !ss.length) return note('No recent streams found.');
-        return ss.map(function (s) {
-            var sp = s.is_live ? pill('Live', 'live') : (s.status ? pill(s.status, 'soft') : '');
-            var act = '';
-            if (s.is_live) {
-                act = '<button class="button-secondary" style="padding:.2rem .6rem;font-size:.8rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">End</button>';
-            } else if (s.status !== 'ended' && s.status !== 'archived') {
-                act = '<button class="button-secondary" style="padding:.2rem .6rem;font-size:.8rem;" data-sm-action="start-stream" data-stream-id="' + esc(s.id) + '">Go live</button>';
-            }
-            return '<div class="stack-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.4rem 0;">' +
-                '<span>' + sp + ' <strong>' + esc(s.title || 'Untitled') + '</strong> <small style="opacity:.6">' + esc(timeAgo(s.started_at || s.created_at)) + '</small></span>' +
-                act + '</div>';
-        }).join('');
-    }
-
-    function renderIngestDetails(stream) {
-        if (!stream) return note('Create a stream to reveal ingest details.');
-        var rtmpUrl   = stream.rtmp_url || (state.restreamUrl ? state.restreamUrl + '/live' : '');
-        var streamKey = stream.stream_key || stream.key || '';
-        var whipUrl   = stream.whip_url || '';
-        function copyRow(label, value) {
-            if (!value) return '';
-            return '<div class="data-point" style="align-items:center;">' +
-                '<div class="data-point-label">' + esc(label) + '</div>' +
-                '<div class="data-point-value" style="display:flex;gap:.4rem;align-items:center;">' +
-                    '<code style="font-size:.78rem;font-family:monospace;word-break:break-all;">' + esc(value) + '</code>' +
-                    '<button class="button-secondary" style="padding:.15rem .5rem;font-size:.75rem;white-space:nowrap;" data-sm-action="copy-value" data-copy="' + esc(value) + '">Copy</button>' +
-                '</div></div>';
+    function renderSlots() {
+        var slotsEl = el('[data-sm-slots]');
+        if (!slotsEl) return;
+        if (!state.channels.length) {
+            slotsEl.innerHTML = '<div class="sm-slot-skeleton">No channels — hit + to create one.</div>';
+            return;
         }
-        var rows = [copyRow('RTMP URL', rtmpUrl), copyRow('Stream key', streamKey), copyRow('WHIP URL', whipUrl)].filter(Boolean).join('');
-        if (!rows) rows = '<div class="data-point"><div class="data-point-label">Status</div><div class="data-point-value">Stream created — ingest details pending from openre.stream</div></div>';
-        return '<div class="data-points">' + rows + '</div>' +
-            '<p class="manager-note" style="margin-top:.75rem;">Copy RTMP URL + stream key into OBS Server settings.</p>';
+        slotsEl.innerHTML = state.channels.map(function (ch) {
+            var proto = protoLabel(ch);
+            var isLive = !!(ch.is_live);
+            var active = state.activeChannelSlug === ch.slug ? ' active' : '';
+            return '<div class="sm-slot-item' + active + '" data-slot-slug="' + esc(ch.slug) + '">' +
+                '<div class="sm-slot-dot' + (isLive ? ' live' : '') + '"></div>' +
+                '<div class="sm-slot-info">' +
+                    '<div class="sm-slot-title">' + esc(ch.display_name || ch.slug) + '</div>' +
+                    '<div class="sm-slot-meta">' +
+                        '<span class="sm-slot-proto ' + esc(proto) + '">' + esc(proto.toUpperCase()) + '</span>' +
+                        ' <span>/' + esc(ch.slug) + '</span>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
     }
 
-    function populateChannelSelects() {
-        els('select[name="channel_slug"]').forEach(function (sel) {
-            var cur = sel.value;
-            sel.innerHTML = '<option value="">Select a channel</option>';
-            state.channels.forEach(function (c) {
-                var o = document.createElement('option');
-                o.value = c.slug; o.textContent = (c.display_name || c.slug) + ' (@' + c.slug + ')';
-                sel.appendChild(o);
-            });
-            if (cur) sel.value = cur;
-        });
+    function renderDestSidebar() {
+        var listEl = el('[data-sm-dest-list]');
+        if (!listEl) return;
+        if (!state.destinations.length) {
+            listEl.innerHTML = '<div class="sm-slot-skeleton" style="font-size:0.78rem">None yet</div>';
+            return;
+        }
+        listEl.innerHTML = state.destinations.map(function (d) {
+            var active = state.activeView === 'destinations' ? ' active' : '';
+            return '<div class="sm-dest-item' + active + '" data-dest-item>' +
+                '<span class="sm-dest-kind-badge">' + esc(d.kind || 'rtmp') + '</span>' +
+                '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.82rem;">' + esc(d.label || d.kind || 'Destination') + '</span>' +
+            '</div>';
+        }).join('');
     }
 
-    function openChannelEdit(slug) {
+    // ── open channel in editor ────────────────────────────────────────────────
+    function openChannel(slug) {
         var ch = state.channels.filter(function (c) { return c.slug === slug; })[0];
         if (!ch) return;
-        var panel = el('#go-live-channel-edit-panel');
+        state.activeChannelSlug = slug;
+        renderSlots();
+
+        var nameEl = el('[data-sm-slot-name]');
+        var linkEl = el('[data-sm-slot-link]');
+        var chatEl = el('[data-sm-slot-chat]');
+        var slugPrefixEl = el('[data-sm-slug-prefix]');
+
+        if (nameEl) nameEl.textContent = ch.display_name || ('@' + ch.slug);
+        if (linkEl) { linkEl.textContent = 'openvibe.live/@' + ch.slug; linkEl.href = '/channels/' + slug; }
+        if (chatEl) chatEl.href = '/channels/' + slug + '#chat';
+        if (slugPrefixEl) slugPrefixEl.textContent = 'openvibe.live/@' + ch.slug + '/';
+
+        var settingsForm = el('#sm-settings-form');
+        if (settingsForm) {
+            settingsForm.querySelector('[name="slug"]').value = ch.slug;
+            settingsForm.querySelector('[name="display_name"]').value = ch.display_name || '';
+            settingsForm.querySelector('[name="description"]').value = ch.description || '';
+            var vis = settingsForm.querySelector('[name="visibility"]');
+            if (vis) vis.value = ch.visibility || 'public';
+            var rec = settingsForm.querySelector('[name="recording_enabled"]');
+            if (rec) rec.checked = ch.recording_enabled !== false;
+            var chat = settingsForm.querySelector('[name="chat_enabled"]');
+            if (chat) chat.checked = ch.chat_enabled !== false;
+            var nsfw = settingsForm.querySelector('[name="nsfw"]');
+            if (nsfw) nsfw.checked = !!(ch.nsfw || ch.is_nsfw);
+            var keyInput = settingsForm.querySelector('[name="stream_key_display"]');
+            if (keyInput) keyInput.value = ch.stream_key || '';
+        }
+
+        renderHistory(slug);
+
+        var chStreams = state.streams.filter(function (s) { return s.channel_slug === slug; });
+        var liveStream = chStreams.filter(function (s) { return s.is_live; })[0] || null;
+        renderEndpoint(liveStream || chStreams[0] || null, ch);
+        updateStreamButtons(liveStream);
+
+        showView('slot');
+        activateStab('stream');
+    }
+
+    // ── sub-tabs ──────────────────────────────────────────────────────────────
+    function activateStab(tabName) {
+        els('[data-sm-stab-bar] [data-sm-stab]').forEach(function (b) {
+            var isActive = b.getAttribute('data-sm-stab') === tabName;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-selected', String(isActive));
+        });
+        els('[data-sm-stab-panel]').forEach(function (p) {
+            p.style.display = p.getAttribute('data-sm-stab-panel') === tabName ? '' : 'none';
+        });
+    }
+
+    var stabBar = el('[data-sm-stab-bar]');
+    if (stabBar) {
+        stabBar.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-sm-stab]');
+            if (!btn) return;
+            activateStab(btn.getAttribute('data-sm-stab'));
+        });
+    }
+
+    // ── streaming method cards ────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var card = e.target.closest('[data-method]');
+        if (!card) return;
+        var form = el('#sm-stream-form');
+        if (!form || !form.contains(card)) return;
+        els('[data-method]').forEach(function (c) { c.classList.remove('active'); });
+        card.classList.add('active');
+        var methodInput = form.querySelector('[name="protocol"]');
+        if (methodInput) methodInput.value = card.getAttribute('data-method');
+        var autoBox = el('[data-sm-autodetect]');
+        if (autoBox) {
+            var m = card.getAttribute('data-method');
+            autoBox.style.display = (m === 'whip' || m === 'rtmp') ? '' : 'none';
+        }
+    });
+
+    // ── history panel ─────────────────────────────────────────────────────────
+    function renderHistory(channelSlug) {
+        var historyEl = el('[data-sm-history-panel]');
+        if (!historyEl) return;
+        var chStreams = channelSlug
+            ? state.streams.filter(function (s) { return s.channel_slug === channelSlug; })
+            : state.streams;
+        if (!chStreams.length) {
+            historyEl.innerHTML = '<p class="sm-note">No recent streams for this channel.</p>';
+            return;
+        }
+        historyEl.innerHTML = chStreams.slice(0, 15).map(function (s) {
+            var sp = s.is_live ? pill('Live', 'live') : pill(s.status || 'ended', 'soft');
+            var endBtn = s.is_live
+                ? '<button class="sm-btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">End</button>'
+                : '';
+            return '<div class="sm-history-item">' +
+                '<div>' +
+                    '<div class="sm-history-title">' + sp + ' ' + esc(s.title || 'Untitled stream') + '</div>' +
+                    '<div class="sm-history-meta">' + esc(timeAgo(s.started_at || s.created_at)) + '</div>' +
+                '</div>' + endBtn + '</div>';
+        }).join('');
+    }
+
+    // ── endpoint panel ────────────────────────────────────────────────────────
+    function renderEndpoint(stream, channel) {
+        var panel = el('[data-sm-endpoint-panel]');
         if (!panel) return;
-        panel.style.display = '';
-        var form = el('#go-live-channel-edit-form');
-        if (!form) return;
-        form.querySelector('[name="slug"]').value          = ch.slug;
-        form.querySelector('[name="display_name"]').value  = ch.display_name || '';
-        form.querySelector('[name="description"]').value   = ch.description || '';
-        form.querySelector('[name="stream_key_display"]').value = ch.stream_key || '(hidden)';
-        var rtmpBase = ch.rtmp_ingest_base || state.restreamUrl || '';
-        form.querySelector('[name="rtmp_url_display"]').value = rtmpBase ? rtmpBase + '/live' : '(not configured)';
-        var vis = form.querySelector('[name="visibility"]'); if (vis) vis.value = ch.visibility || 'public';
-        var nsfw = form.querySelector('[name="nsfw"]');              if (nsfw) nsfw.checked = !!(ch.nsfw || ch.is_nsfw);
-        var rec  = form.querySelector('[name="recording_enabled"]'); if (rec)  rec.checked  = ch.recording_enabled !== false;
-        var chat = form.querySelector('[name="chat_enabled"]');      if (chat) chat.checked  = ch.chat_enabled !== false;
-        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        var streamKey = (stream && (stream.stream_key || stream.key)) || (channel && channel.stream_key) || '';
+        var rtmpUrl   = (stream && stream.rtmp_url) || (state.restreamUrl && channel ? state.restreamUrl.replace(/\/$/, '') + '/live' : '');
+        var whipUrl   = (stream && stream.whip_url) || '';
+
+        if (!rtmpUrl && !whipUrl && !streamKey) {
+            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Create a stream on the Stream tab to reveal ingest details, or check the Settings tab for your persistent stream key.</p></div>';
+            return;
+        }
+
+        function row(label, value) {
+            if (!value) return '';
+            return '<div class="sm-endpoint-row">' +
+                '<div class="sm-endpoint-label">' + esc(label) + '</div>' +
+                '<div class="sm-endpoint-value-row">' +
+                    '<div class="sm-endpoint-code">' + esc(value) + '</div>' +
+                    '<button class="sm-icon-btn" data-sm-action="copy-value" data-copy="' + esc(value) + '" title="Copy">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+        }
+        panel.innerHTML =
+            row('RTMP SERVER URL', rtmpUrl) +
+            row('STREAM KEY', streamKey) +
+            row('WHIP ENDPOINT', whipUrl) +
+            '<p class="sm-note" style="margin-top:0.75rem;">Paste RTMP URL + stream key into OBS → Settings → Stream.</p>';
+    }
+
+    // ── destinations full panel ───────────────────────────────────────────────
+    function renderDestFull() {
+        var listEl = el('[data-sm-dest-list-full]');
+        if (!listEl) return;
+        if (!state.destinations.length) {
+            listEl.innerHTML = '<p class="sm-note">No destinations yet.</p>';
+            return;
+        }
+        listEl.innerHTML = state.destinations.map(function (d) {
+            return '<div class="sm-dest-full-item">' +
+                '<div>' +
+                    '<span class="sm-dest-kind-badge">' + esc(d.kind || 'rtmp') + '</span> ' +
+                    '<strong>' + esc(d.label || d.kind || 'Destination') + '</strong>' +
+                    (d.enabled === false ? ' <span class="pill soft">Disabled</span>' : '') +
+                    (d.target_url ? '<div class="sm-note" style="margin-top:0.15rem;font-size:0.76rem;">' + esc(d.target_url) + '</div>' : '') +
+                '</div>' +
+                '<button class="sm-icon-btn sm-icon-btn-danger" data-sm-action="delete-destination" data-dest-id="' + esc(d.id) + '" title="Remove">' +
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
+                '</button>' +
+            '</div>';
+        }).join('');
+    }
+
+    // ── stream form button state ──────────────────────────────────────────────
+    function updateStreamButtons(liveStream) {
+        var createBtn = el('#sm-create-stream-btn');
+        var goLiveBtn = el('#sm-go-live-btn');
+        var endBtn    = el('#sm-end-stream-btn');
+        if (liveStream && liveStream.is_live) {
+            hide(createBtn); hide(goLiveBtn); show(endBtn);
+        } else if (state.activeStreamId) {
+            hide(createBtn); show(goLiveBtn); hide(endBtn);
+        } else {
+            show(createBtn); hide(goLiveBtn); hide(endBtn);
+        }
     }
 
     // ── load dashboard ────────────────────────────────────────────────────────
@@ -176,50 +316,142 @@
             state.channels     = data.channels     || [];
             state.destinations = data.destinations || [];
             state.streams      = data.streams      || [];
-            state.restreamUrl  = data.restream_url || '';
-            setContent('[data-go-live-channels]',    renderChannelList(state.channels));
-            setContent('[data-go-live-destinations]', renderDestinationList(state.destinations));
-            setContent('[data-go-live-streams]',      renderStreamList(state.streams));
-            setContent('[data-go-live-ingest]',       renderIngestDetails(null));
-            populateChannelSelects();
+            state.restreamUrl  = data.restream_url  || '';
+            state.accountUrl   = data.account_url   || '';
+            renderSlots();
+            renderDestSidebar();
+            renderDestFull();
+            if (state.channels.length) openChannel(state.channels[0].slug);
+            else showView('none');
         }).catch(function (err) {
-            setContent('[data-go-live-channels]',    note('Failed to load: ' + err.message));
-            setContent('[data-go-live-destinations]', note('Failed to load.'));
-            setContent('[data-go-live-streams]',      note('Failed to load.'));
+            var slotsEl = el('[data-sm-slots]');
+            if (slotsEl) slotsEl.innerHTML = '<div class="sm-slot-skeleton" style="color:#f87171">Failed to load: ' + esc(err.message) + '</div>';
+            showView('none');
         });
     }
 
-    // ── forms ─────────────────────────────────────────────────────────────────
-    var channelForm = el('#go-live-channel-form');
-    if (channelForm) {
-        channelForm.addEventListener('submit', function (e) {
+    // ── delegated click handler ───────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var slotItem = e.target.closest('[data-slot-slug]');
+        if (slotItem) { openChannel(slotItem.getAttribute('data-slot-slug')); return; }
+
+        var destItem = e.target.closest('[data-dest-item]');
+        if (destItem) {
+            state.activeChannelSlug = null; renderSlots(); renderDestFull(); showView('destinations'); return;
+        }
+
+        var btn = e.target.closest('[data-sm-action]');
+        if (!btn) return;
+        var action = btn.getAttribute('data-sm-action');
+
+        if (action === 'new-channel') {
+            state.activeChannelSlug = null; renderSlots(); showView('new-channel'); return;
+        }
+        if (action === 'cancel-new-channel') {
+            if (state.channels.length) openChannel(state.channels[0].slug); else showView('none'); return;
+        }
+        if (action === 'copy-value') {
+            var val = btn.getAttribute('data-copy');
+            if (!val) return;
+            copyText(val).then(function () {
+                var orig = btn.innerHTML;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+                setTimeout(function () { btn.innerHTML = orig; }, 1500);
+            });
+            return;
+        }
+        if (action === 'copy-stream-key') {
+            var sf = el('#sm-settings-form');
+            var ki = sf && sf.querySelector('[name="stream_key_display"]');
+            if (ki && ki.value) copyText(ki.value).then(function () { setStatus('settings-form', 'Key copied!'); setTimeout(function () { clearStatus('settings-form'); }, 1500); });
+            return;
+        }
+        if (action === 'toggle-key-visibility') {
+            var ki2 = el('#sm-settings-form [name="stream_key_display"]');
+            if (ki2) ki2.type = ki2.type === 'password' ? 'text' : 'password';
+            return;
+        }
+        if (action === 'regenerate-key') {
+            var slug = state.activeChannelSlug;
+            if (!slug || !confirm('Regenerate stream key for @' + slug + '? Any running stream will be cut.')) return;
+            btn.disabled = true;
+            api('POST', '/api/v1/go-live/channels/' + encodeURIComponent(slug) + '/regenerate-key', {})
+                .then(function (res) {
+                    var ch = res.channel || res;
+                    if (ch && ch.stream_key) {
+                        var ki3 = el('#sm-settings-form [name="stream_key_display"]');
+                        if (ki3) ki3.value = ch.stream_key;
+                        var idx = state.channels.findIndex(function (c) { return c.slug === ch.slug; });
+                        if (idx >= 0) state.channels[idx] = Object.assign({}, state.channels[idx], ch);
+                        setStatus('settings-form', 'New key — copy it now!');
+                    }
+                }).catch(function (err) { setStatus('settings-form', err.message, true); })
+                  .finally(function () { btn.disabled = false; });
+            return;
+        }
+        if (action === 'end-stream') {
+            var sid = btn.getAttribute('data-stream-id') || state.activeStreamId;
+            if (!sid || !confirm('End this stream?')) return;
+            btn.disabled = true;
+            api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(sid) + '/end', {})
+                .then(function (res) {
+                    var s = res.stream || res;
+                    if (s) {
+                        var idx2 = state.streams.findIndex(function (x) { return x.id === s.id; });
+                        if (idx2 >= 0) state.streams[idx2] = s;
+                        if (String(state.activeStreamId) === String(sid)) state.activeStreamId = null;
+                        if (state.activeChannelSlug) renderHistory(state.activeChannelSlug);
+                        updateStreamButtons(null); setStatus('stream-form', 'Stream ended.');
+                    }
+                }).catch(function (err) { alert('Failed: ' + err.message); btn.disabled = false; });
+            return;
+        }
+        if (action === 'delete-destination') {
+            var id = btn.getAttribute('data-dest-id');
+            if (!id || !confirm('Remove this destination?')) return;
+            btn.disabled = true;
+            api('DELETE', '/api/v1/go-live/destinations/' + encodeURIComponent(id))
+                .then(function () {
+                    state.destinations = state.destinations.filter(function (d) { return d.id !== id; });
+                    renderDestSidebar(); renderDestFull();
+                }).catch(function (err) { alert('Delete failed: ' + err.message); btn.disabled = false; });
+            return;
+        }
+    });
+
+    // ── new channel form ──────────────────────────────────────────────────────
+    var newChannelForm = el('#sm-new-channel-form');
+    if (newChannelForm) {
+        newChannelForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var fd = new FormData(channelForm), btn = channelForm.querySelector('[type="submit"]');
-            if (btn) btn.disabled = true; clearStatus('channel-form');
+            var fd = new FormData(newChannelForm);
+            var btn2 = newChannelForm.querySelector('[type="submit"]');
+            if (btn2) btn2.disabled = true; clearStatus('new-channel');
             api('POST', '/api/v1/go-live/channels', {
                 slug: fd.get('slug'), display_name: fd.get('display_name'),
                 description: fd.get('description'), nsfw: fd.get('nsfw') === '1',
             }).then(function (res) {
                 var ch = res.live_channel || res.channel || res;
                 if (ch && ch.slug) {
-                    state.channels.push(ch);
-                    setContent('[data-go-live-channels]', renderChannelList(state.channels));
-                    populateChannelSelects(); channelForm.reset();
-                    setStatus('channel-form', 'Channel created!');
+                    state.channels.push(ch); newChannelForm.reset();
+                    setStatus('new-channel', 'Channel created!');
+                    setTimeout(function () { openChannel(ch.slug); }, 600);
                 }
-            }).catch(function (err) { setStatus('channel-form', err.message, true); })
-              .finally(function () { if (btn) btn.disabled = false; });
+            }).catch(function (err) { setStatus('new-channel', err.message, true); })
+              .finally(function () { if (btn2) btn2.disabled = false; });
         });
     }
 
-    var channelEditForm = el('#go-live-channel-edit-form');
-    if (channelEditForm) {
-        channelEditForm.addEventListener('submit', function (e) {
+    // ── settings form ─────────────────────────────────────────────────────────
+    var settingsForm = el('#sm-settings-form');
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var fd = new FormData(channelEditForm), slug = fd.get('slug');
+            var fd = new FormData(settingsForm);
+            var slug = fd.get('slug') || state.activeChannelSlug;
             if (!slug) return;
-            var btn = channelEditForm.querySelector('[type="submit"]');
-            if (btn) btn.disabled = true; clearStatus('channel-edit-form');
+            var btn3 = settingsForm.querySelector('[type="submit"]');
+            if (btn3) btn3.disabled = true; clearStatus('settings-form');
             api('PATCH', '/api/v1/go-live/channels/' + encodeURIComponent(slug), {
                 display_name: fd.get('display_name'), description: fd.get('description'),
                 visibility: fd.get('visibility'), nsfw: fd.get('nsfw') === '1',
@@ -229,21 +461,92 @@
                 var ch = res.channel || res;
                 if (ch && ch.slug) {
                     var idx = state.channels.findIndex(function (c) { return c.slug === ch.slug; });
-                    if (idx >= 0) state.channels[idx] = ch; else state.channels.push(ch);
-                    setContent('[data-go-live-channels]', renderChannelList(state.channels));
-                    setStatus('channel-edit-form', 'Saved!');
+                    if (idx >= 0) state.channels[idx] = Object.assign({}, state.channels[idx], ch);
+                    renderSlots(); setStatus('settings-form', 'Saved!');
                 }
-            }).catch(function (err) { setStatus('channel-edit-form', err.message, true); })
-              .finally(function () { if (btn) btn.disabled = false; });
+            }).catch(function (err) { setStatus('settings-form', err.message, true); })
+              .finally(function () { if (btn3) btn3.disabled = false; });
         });
     }
 
-    var destForm = el('#go-live-destination-form');
+    // ── stream form ───────────────────────────────────────────────────────────
+    var streamForm = el('#sm-stream-form');
+    if (streamForm) {
+        streamForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var slug = state.activeChannelSlug;
+            if (!slug) { setStatus('stream-form', 'Select a channel first.', true); return; }
+            var fd = new FormData(streamForm);
+            var btn4 = streamForm.querySelector('[type="submit"]');
+            if (btn4) btn4.disabled = true; clearStatus('stream-form');
+            api('POST', '/api/v1/go-live/streams', {
+                channel_slug: slug, title: fd.get('title'),
+                description: fd.get('description'), category: fd.get('category'),
+                protocol: fd.get('protocol') || 'whip', nsfw: fd.get('nsfw') === '1',
+                recording_enabled: true, url_slug: fd.get('url_slug') || undefined,
+            }).then(function (res) {
+                var s = res.stream || res;
+                if (s && s.id) {
+                    state.activeStreamId = s.id; s.channel_slug = slug; state.streams.unshift(s);
+                    var ch = state.channels.filter(function (c) { return c.slug === slug; })[0];
+                    renderEndpoint(s, ch); renderHistory(slug); updateStreamButtons(s.is_live ? s : null);
+                    setStatus('stream-form', 'Stream created — check Endpoint tab for ingest details.');
+                    activateStab('endpoint');
+                }
+            }).catch(function (err) { setStatus('stream-form', err.message, true); })
+              .finally(function () { if (btn4) btn4.disabled = false; });
+        });
+    }
+
+    var goLiveBtn = el('#sm-go-live-btn');
+    if (goLiveBtn) {
+        goLiveBtn.addEventListener('click', function () {
+            var id = state.activeStreamId;
+            if (!id) { setStatus('stream-form', 'No stream created yet.', true); return; }
+            goLiveBtn.disabled = true;
+            api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(id) + '/start', {})
+                .then(function (res) {
+                    var s = res.stream || res;
+                    if (s) {
+                        var idx = state.streams.findIndex(function (x) { return x.id === s.id; });
+                        if (idx >= 0) state.streams[idx] = s;
+                        updateStreamButtons(s); setStatus('stream-form', 'Stream is live!');
+                        if (state.activeChannelSlug) renderHistory(state.activeChannelSlug);
+                    }
+                }).catch(function (err) { setStatus('stream-form', err.message, true); })
+                  .finally(function () { goLiveBtn.disabled = false; });
+        });
+    }
+
+    var endStreamBtn = el('#sm-end-stream-btn');
+    if (endStreamBtn) {
+        endStreamBtn.addEventListener('click', function () {
+            var id = state.activeStreamId;
+            if (!id || !confirm('End this stream?')) return;
+            endStreamBtn.disabled = true;
+            api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(id) + '/end', {})
+                .then(function (res) {
+                    var s = res.stream || res;
+                    if (s) {
+                        var idx = state.streams.findIndex(function (x) { return x.id === s.id; });
+                        if (idx >= 0) state.streams[idx] = s;
+                        state.activeStreamId = null; updateStreamButtons(null);
+                        if (state.activeChannelSlug) renderHistory(state.activeChannelSlug);
+                        setStatus('stream-form', 'Stream ended.');
+                    }
+                }).catch(function (err) { setStatus('stream-form', err.message, true); })
+                  .finally(function () { endStreamBtn.disabled = false; });
+        });
+    }
+
+    // ── destinations form ─────────────────────────────────────────────────────
+    var destForm = el('#sm-dest-form');
     if (destForm) {
         destForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var fd = new FormData(destForm), btn = destForm.querySelector('[type="submit"]');
-            if (btn) btn.disabled = true; clearStatus('destination-form');
+            var fd = new FormData(destForm);
+            var btn5 = destForm.querySelector('[type="submit"]');
+            if (btn5) btn5.disabled = true; clearStatus('dest-form');
             api('POST', '/api/v1/go-live/destinations', {
                 kind: fd.get('kind'), label: fd.get('label'),
                 target_url: fd.get('target_url'), target_key: fd.get('target_key'),
@@ -251,154 +554,14 @@
             }).then(function (res) {
                 var d = res.destination || res;
                 if (d && d.id) {
-                    state.destinations.push(d);
-                    setContent('[data-go-live-destinations]', renderDestinationList(state.destinations));
-                    destForm.reset();
+                    state.destinations.push(d); destForm.reset();
                     var ecb = destForm.querySelector('[name="enabled"]'); if (ecb) ecb.checked = true;
-                    setStatus('destination-form', 'Destination saved!');
+                    renderDestSidebar(); renderDestFull(); setStatus('dest-form', 'Destination saved!');
                 }
-            }).catch(function (err) { setStatus('destination-form', err.message, true); })
-              .finally(function () { if (btn) btn.disabled = false; });
+            }).catch(function (err) { setStatus('dest-form', err.message, true); })
+              .finally(function () { if (btn5) btn5.disabled = false; });
         });
     }
-
-    var streamForm = el('#go-live-stream-form');
-    if (streamForm) {
-        streamForm.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var fd = new FormData(streamForm), btn = streamForm.querySelector('[type="submit"]');
-            if (btn) btn.disabled = true; clearStatus('stream-form');
-            api('POST', '/api/v1/go-live/streams', {
-                channel_slug: fd.get('channel_slug'), title: fd.get('title'),
-                description: fd.get('description'), category: fd.get('category'),
-                protocol: fd.get('protocol'), nsfw: fd.get('nsfw') === '1',
-                recording_enabled: fd.get('recording_enabled') === '1',
-            }).then(function (res) {
-                var s = res.stream || res;
-                if (s && s.id) {
-                    state.activeStreamId = s.id; state.streams.unshift(s);
-                    setContent('[data-go-live-streams]',  renderStreamList(state.streams));
-                    setContent('[data-go-live-ingest]',    renderIngestDetails(s));
-                    streamForm.reset();
-                    var rcb = streamForm.querySelector('[name="recording_enabled"]'); if (rcb) rcb.checked = true;
-                    setStatus('stream-form', 'Stream created — check Ingest details tab.');
-                    var ingestBtn = el('[data-sm-tab="ingest"]'); if (ingestBtn) ingestBtn.click();
-                }
-            }).catch(function (err) { setStatus('stream-form', err.message, true); })
-              .finally(function () { if (btn) btn.disabled = false; });
-        });
-    }
-
-    // ── delegated actions ─────────────────────────────────────────────────────
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-sm-action]');
-        if (!btn) return;
-        var action = btn.getAttribute('data-sm-action');
-
-        if (action === 'copy-value' || action === 'copy-stream-key' || action === 'copy-rtmp-url') {
-            var val = action === 'copy-value' ? btn.getAttribute('data-copy') :
-                      action === 'copy-stream-key' ? (el('[name="stream_key_display"]') || {}).value :
-                      (el('[name="rtmp_url_display"]') || {}).value;
-            if (!val) return;
-            copyToClipboard(val).then(function () {
-                var orig = btn.textContent; btn.textContent = 'Copied!';
-                setTimeout(function () { btn.textContent = orig; }, 1500);
-            });
-            return;
-        }
-
-        if (action === 'regenerate-key') {
-            var form = el('#go-live-channel-edit-form');
-            var slug = form ? form.querySelector('[name="slug"]').value : '';
-            if (!slug) return;
-            if (!confirm('Regenerate stream key for @' + slug + '? Any running stream using the old key will be cut.')) return;
-            btn.disabled = true;
-            api('POST', '/api/v1/go-live/channels/' + encodeURIComponent(slug) + '/regenerate-key', {})
-                .then(function (res) {
-                    var ch = res.channel || res;
-                    if (ch && ch.stream_key) {
-                        var ski = el('[name="stream_key_display"]'); if (ski) ski.value = ch.stream_key;
-                        var idx = state.channels.findIndex(function (c) { return c.slug === ch.slug; });
-                        if (idx >= 0) state.channels[idx] = Object.assign({}, state.channels[idx], ch);
-                    }
-                    setStatus('channel-edit-form', 'Key regenerated — copy it now!');
-                }).catch(function (err) { setStatus('channel-edit-form', err.message, true); })
-                  .finally(function () { btn.disabled = false; });
-            return;
-        }
-
-        if (action === 'edit-channel') {
-            openChannelEdit(btn.getAttribute('data-slug'));
-            return;
-        }
-
-        if (action === 'delete-destination') {
-            var id = btn.getAttribute('data-dest-id');
-            if (!id || !confirm('Remove this destination?')) return;
-            btn.disabled = true;
-            api('DELETE', '/api/v1/go-live/destinations/' + encodeURIComponent(id))
-                .then(function () {
-                    state.destinations = state.destinations.filter(function (d) { return d.id !== id; });
-                    setContent('[data-go-live-destinations]', renderDestinationList(state.destinations));
-                }).catch(function (err) { alert('Delete failed: ' + err.message); btn.disabled = false; });
-            return;
-        }
-
-        if (action === 'start-stream' || action === 'end-stream') {
-            var sid = btn.getAttribute('data-stream-id');
-            if (!sid) return;
-            if (action === 'end-stream' && !confirm('End this stream?')) return;
-            btn.disabled = true;
-            var origText = btn.textContent;
-            btn.textContent = action === 'start-stream' ? 'Starting…' : 'Ending…';
-            var endpoint = action === 'start-stream' ? 'start' : 'end';
-            api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(sid) + '/' + endpoint, {})
-                .then(function (res) {
-                    var s = res.stream || res;
-                    if (s && s.id) {
-                        var idx = state.streams.findIndex(function (x) { return x.id === s.id; });
-                        if (idx >= 0) state.streams[idx] = s;
-                        setContent('[data-go-live-streams]', renderStreamList(state.streams));
-                        if (action === 'start-stream' && (s.rtmp_url || s.stream_key || s.whip_url)) {
-                            setContent('[data-go-live-ingest]', renderIngestDetails(s));
-                        }
-                    }
-                }).catch(function (err) {
-                    alert('Action failed: ' + err.message);
-                    btn.disabled = false; btn.textContent = origText;
-                });
-            return;
-        }
-    });
-
-    // ── dedicated start/end buttons in stream panel ───────────────────────────
-    function wireStreamBtn(btnId, endpoint, label) {
-        var b = el(btnId);
-        if (!b) return;
-        b.addEventListener('click', function () {
-            var id = state.activeStreamId;
-            if (!id) { setStatus('stream-form', 'No active stream.', true); return; }
-            if (endpoint === 'end' && !confirm('End this stream?')) return;
-            b.disabled = true; b.textContent = endpoint === 'start' ? 'Starting…' : 'Ending…';
-            api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(id) + '/' + endpoint, {})
-                .then(function (res) {
-                    var s = res.stream || res;
-                    if (s && s.id) {
-                        var idx = state.streams.findIndex(function (x) { return x.id === s.id; });
-                        if (idx >= 0) state.streams[idx] = s;
-                        setContent('[data-go-live-streams]', renderStreamList(state.streams));
-                        if (endpoint === 'start' && (s.rtmp_url || s.stream_key || s.whip_url)) {
-                            setContent('[data-go-live-ingest]', renderIngestDetails(s));
-                        }
-                        if (endpoint === 'end') state.activeStreamId = null;
-                        setStatus('stream-form', endpoint === 'start' ? 'Stream is live!' : 'Stream ended.');
-                    }
-                }).catch(function (err) { setStatus('stream-form', err.message, true); })
-                  .finally(function () { b.disabled = false; b.textContent = label; });
-        });
-    }
-    wireStreamBtn('#go-live-start-btn', 'start', 'Mark live');
-    wireStreamBtn('#go-live-end-btn',   'end',   'End stream');
 
     // ── boot ──────────────────────────────────────────────────────────────────
     if (document.readyState === 'loading') {
