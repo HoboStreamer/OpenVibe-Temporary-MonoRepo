@@ -117,17 +117,114 @@ async function _resolveFromNetwork(userId, networkBaseUrl, timeoutMs) {
     }
 }
 
-// ── main export ───────────────────────────────────────────────────────────────
+// ── path 5: VOD/clip parent stream lookup via openre-stream channels ──────────
+// For VOD/clip items that carry only a stream_id, look up the channel for that stream.
+async function _resolveFromStreamChannels(streamId, restreamBaseUrl, timeoutMs) {
+    if (!streamId || !restreamBaseUrl) return null;
+    const cacheKey = `channel-for-stream:${streamId}`;
+    const cached = _cacheGet(cacheKey);
+    if (cached !== null) return cached;
+
+    try {
+        const url = `${restreamBaseUrl.replace(/\/$/, '')}/api/v1/channels?stream_id=${encodeURIComponent(streamId)}&limit=1`;
+        const data = await _jsonFetch(url, timeoutMs);
+        const items = data && Array.isArray(data.items) ? data.items : (data && Array.isArray(data.channels) ? data.channels : []);
+        const ch = items[0];
+        const slug = ch && (ch.slug || ch.channel_slug) || null;
+        const result = _isValidSlug(slug) ? slug : null;
+        _cacheSet(cacheKey, result);
+        return result;
+    } catch {
+        return null;
+    }
+}
+
+// ── path 6: VOD parent → look up stream for a VOD id ─────────────────────────
+async function _resolveVodParent(vodId, mediaBaseUrl, timeoutMs) {
+    if (!vodId || !mediaBaseUrl) return null;
+    const cacheKey = `vod-parent:${vodId}`;
+    const cached = _cacheGet(cacheKey);
+    if (cached !== null) return cached;
+
+    try {
+        const url = `${mediaBaseUrl.replace(/\/$/, '')}/api/v1/media/${encodeURIComponent(vodId)}`;
+        const data = await _jsonFetch(url, timeoutMs);
+        const m = data && (data.media || data.item || data);
+        // VODs carry channel_slug, channel_id, or stream_id
+        const slug = (m && (m.channel_slug || (m.metadata && m.metadata.channel_slug))) || null;
+        const streamId = (m && (m.stream_id || (m.metadata && m.metadata.stream_id))) || null;
+        const result = _isValidSlug(slug) ? slug : null;
+        _cacheSet(cacheKey, result);
+        return { slug: result, stream_id: streamId || null };
+    } catch {
+        return null;
+    }
+}
+
+// ── path 7: clip parent → look up media record for a clip ────────────────────
+async function _resolveClipParent(clipId, mediaBaseUrl, timeoutMs) {
+    if (!clipId || !mediaBaseUrl) return null;
+    const cacheKey = `clip-parent:${clipId}`;
+    const cached = _cacheGet(cacheKey);
+    if (cached !== null) return cached;
+
+    try {
+        const url = `${mediaBaseUrl.replace(/\/$/, '')}/api/v1/clips/${encodeURIComponent(clipId)}`;
+        const data = await _jsonFetch(url, timeoutMs);
+        const m = data && (data.clip || data.media || data.item || data);
+        const slug = (m && (m.channel_slug || (m.metadata && m.metadata.channel_slug))) || null;
+        const streamId = (m && (m.stream_id || m.parent_stream_id || (m.metadata && m.metadata.stream_id))) || null;
+        const result = _isValidSlug(slug) ? slug : null;
+        _cacheSet(cacheKey, result);
+        return { slug: result, stream_id: streamId || null };
+    } catch {
+        return null;
+    }
+}
+
+// ── path 8: legacy metadata fields ───────────────────────────────────────────
+function _resolveFromLegacyFields(item) {
+    const candidates = [
+        item.legacy_channel,
+        item.legacy_username,
+        item.streamer_username,
+        item.broadcaster_username,
+        item.hobostreamer_channel,
+        item.legacy_slug,
+    ];
+    for (const c of candidates) {
+        if (_isValidSlug(c)) return _slugify(c) || null;
+    }
+    return null;
+}
+
+// ── path 9: migration map lookup (static, in-process) ────────────────────────
+// Optional: callers may pass opts.migrationMap as a Map<legacyId, slug>.
+function _resolveFromMigrationMap(item, migrationMap) {
+    if (!migrationMap) return null;
+    const candidates = [
+        item.id, item.stream_id, item.legacy_id, item.hobostreamer_stream_id,
+    ].filter(Boolean).map(String);
+    for (const key of candidates) {
+        const slug = migrationMap.get(key);
+        if (_isValidSlug(slug)) return slug;
+    }
+    return null;
+}
+
 
 /**
  * resolveChannelSlug(item, opts)
  *
- * @param {object} item   - stream, vod, or clip object with optional channel_slug,
- *                          channel_name, channel (nested), id, stream_id, owner_user_id
+ * Full 9-path resolution chain for channel slugs.
+ *
+ * @param {object} item   - stream, vod, clip, or paste object
  * @param {object} opts
  *   opts.config.stream.url   — openre-stream base URL
  *   opts.config.network.url  — openvibe-network base URL
+ *   opts.config.media.url    — openvibe-media base URL (for VOD/clip parent lookup)
  *   opts.timeout             — upstream request timeout in ms (default 3000)
+ *   opts.migrationMap        — optional Map<legacyId, slug> for migration lookups
  * @returns {Promise<string|null>} resolved slug or null if unknown
  */
 async function resolveChannelSlug(item, opts) {
@@ -135,6 +232,9 @@ async function resolveChannelSlug(item, opts) {
     opts = opts || {};
     const timeoutMs = opts.timeout || 3000;
     const config = opts.config || {};
+    const restreamUrl = config.stream && config.stream.url;
+    const networkUrl  = config.network && config.network.url;
+    const mediaUrl    = config.media && config.media.url;
 
     // Path 1: direct field
     if (_isValidSlug(item.channel_slug)) return item.channel_slug;
@@ -146,15 +246,50 @@ async function resolveChannelSlug(item, opts) {
         if (derived) return derived;
     }
 
-    const streamId  = item.stream_id || item.id;
-    const userId    = item.owner_user_id || item.user_id || item.creator_id;
-    const restreamUrl = config.stream && config.stream.url;
-    const networkUrl  = config.network && config.network.url;
+    // Path 8: legacy metadata fields (fast, no I/O)
+    const legacySlug = _resolveFromLegacyFields(item);
+    if (legacySlug) return legacySlug;
 
-    // Path 3: openre-stream
+    // Path 9: migration map lookup (fast, no I/O)
+    const migrationSlug = _resolveFromMigrationMap(item, opts.migrationMap);
+    if (migrationSlug) return migrationSlug;
+
+    const streamId = item.stream_id || item.id;
+    const userId   = item.owner_user_id || item.user_id || item.creator_id;
+    const vodId    = item.vod_id || (item.media_type === 'vod' && item.media_id);
+    const clipId   = item.clip_id || (item.media_type === 'clip' && item.media_id);
+
+    // Path 3: openre-stream stream lookup by stream_id
     if (streamId && restreamUrl) {
         const slug = await _resolveFromRestream(streamId, restreamUrl, timeoutMs);
         if (slug) return slug;
+    }
+
+    // Path 5: openre-stream channel lookup for stream_id (channels endpoint)
+    if (streamId && restreamUrl) {
+        const slug = await _resolveFromStreamChannels(streamId, restreamUrl, timeoutMs);
+        if (slug) return slug;
+    }
+
+    // Path 6: VOD parent stream lookup
+    if (vodId && mediaUrl) {
+        const r = await _resolveVodParent(vodId, mediaUrl, timeoutMs);
+        if (r && r.slug) return r.slug;
+        // If VOD points to a stream, try resolving that stream's channel
+        if (r && r.stream_id && restreamUrl) {
+            const slug = await _resolveFromRestream(r.stream_id, restreamUrl, timeoutMs);
+            if (slug) return slug;
+        }
+    }
+
+    // Path 7: clip parent stream/media lookup
+    if (clipId && mediaUrl) {
+        const r = await _resolveClipParent(clipId, mediaUrl, timeoutMs);
+        if (r && r.slug) return r.slug;
+        if (r && r.stream_id && restreamUrl) {
+            const slug = await _resolveFromRestream(r.stream_id, restreamUrl, timeoutMs);
+            if (slug) return slug;
+        }
     }
 
     // Path 4: network user profile

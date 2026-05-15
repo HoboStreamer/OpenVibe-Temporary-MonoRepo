@@ -168,238 +168,210 @@ function renderAuthorizePage({ config, request, sessionUser, errorMessage }) {
 <title>Sign in — OpenVibe</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<link rel="stylesheet" href="/assets/openvibe.css" />
 <style>
-    body {
-        background:
-            radial-gradient(circle at top left, rgba(124, 92, 255, .22), transparent 28%),
-            radial-gradient(circle at 85% 10%, rgba(45, 212, 191, .18), transparent 24%),
-            linear-gradient(180deg, #090c14 0%, #0a1020 46%, #090c14 100%);
-    }
-    .ov-auth-shell {
-        max-width: 1180px;
-        margin: 0 auto;
-        padding: 1.25rem 1.25rem 4rem;
-    }
-    .ov-auth-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(360px, .95fr);
-        gap: 1rem;
-        align-items: stretch;
-    }
-    .ov-auth-panel,
-    .ov-auth-hero,
-    .ov-auth-metric {
-        background: linear-gradient(180deg, rgba(19, 23, 34, .95), rgba(13, 17, 29, .96));
-        border: 1px solid rgba(91, 100, 115, .24);
-        box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
-    }
-    .ov-auth-hero {
-        border-radius: 30px;
-        padding: 1.4rem;
-        position: relative;
-        overflow: hidden;
-    }
-    .ov-auth-hero::before {
-        content: '';
-        position: absolute;
-        inset: -1px;
-        border-radius: inherit;
-        background: linear-gradient(125deg, rgba(124, 92, 255, .18), transparent 34%, rgba(45, 212, 191, .16));
-        pointer-events: none;
-    }
-    .ov-auth-copy,
-    .ov-auth-panel { position: relative; z-index: 1; }
-    .ov-auth-kicker {
-        display: inline-flex;
-        padding: .45rem .75rem;
-        border-radius: 999px;
-        background: rgba(255,255,255,.06);
-        border: 1px solid rgba(255,255,255,.08);
-        text-transform: uppercase;
-        letter-spacing: .14em;
-        font-size: .76rem;
-        font-weight: 800;
-        color: #dbeafe;
-    }
-    .ov-auth-title {
-        margin: 1rem 0 .8rem;
-        font-size: clamp(2.4rem, 5vw, 4.4rem);
-        line-height: .95;
-        letter-spacing: -.05em;
-    }
-    .ov-auth-gradient {
-        background: linear-gradient(120deg, #eef2ff 15%, #c7d2fe 48%, #67e8f9 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-    }
-    .ov-auth-copy p,
-    .ov-auth-list,
-    .ov-auth-muted,
-    .ov-auth-panel p { color: var(--ov-text-dim); }
-    .ov-auth-list { padding-left: 1.1rem; line-height: 1.7; }
-    .ov-auth-list li + li { margin-top: .35rem; }
-    .ov-auth-metrics {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: .85rem;
-        margin-top: 1rem;
-    }
-    .ov-auth-metric {
-        border-radius: 18px;
-        padding: .95rem;
-    }
-    .ov-auth-metric strong {
-        display: block;
-        font-size: 1.45rem;
-        letter-spacing: -.03em;
-    }
-    .ov-auth-metric span {
-        color: var(--ov-text-dim);
-        font-size: .84rem;
-    }
-    .ov-auth-panel {
-        border-radius: 30px;
-        padding: 1.2rem;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .ov-auth-panel h2 { margin: 0; font-size: 1.35rem; }
-    .ov-auth-form { display: grid; gap: .85rem; }
-    .ov-auth-form label { display: grid; gap: .35rem; font-weight: 600; }
-    .ov-auth-form small { color: var(--ov-text-faint); font-weight: 400; }
-    .ov-auth-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
-    .ov-auth-chip-row { display: flex; gap: .55rem; flex-wrap: wrap; }
-    .ov-auth-chip {
-        display: inline-flex;
-        padding: .4rem .7rem;
-        border-radius: 999px;
-        border: 1px solid var(--ov-border);
-        background: rgba(255,255,255,.04);
-        color: var(--ov-text-dim);
-        font-size: .78rem;
-    }
-    .ov-auth-callout {
-        border-radius: 18px;
-        padding: .9rem 1rem;
-        background: rgba(124, 92, 255, .08);
-        border: 1px solid rgba(124, 92, 255, .18);
-    }
-    @media (max-width: 980px) {
-        .ov-auth-grid { grid-template-columns: 1fr; }
-        .ov-auth-metrics { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 640px) {
-        .ov-auth-metrics { grid-template-columns: 1fr; }
-        .ov-auth-actions { flex-direction: column; }
-        .ov-auth-actions .ov-btn { width: 100%; justify-content: center; }
-    }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+    --bg:#0d0d14;--bg-card:#16161f;--bg-input:#1c1c28;
+    --border:#2a2a3a;--border-focus:#7c5cff;
+    --accent:#7c5cff;--accent-glow:rgba(124,92,255,0.35);--accent-dark:#5a3dd4;
+    --accent2:#2dd4bf;
+    --text:#e0e0f0;--text-muted:#7070a0;--text-dim:#505070;
+    --success:#2ecc71;--warn:#e8a020;--danger:#e74c3c;
+}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;overflow-x:hidden}
+/* Animated background */
+.bg-canvas{position:fixed;inset:0;z-index:0}
+.bg-canvas .orb{position:absolute;border-radius:50%;filter:blur(100px);opacity:0.18;animation:orb-drift 20s ease-in-out infinite alternate}
+.bg-canvas .orb:nth-child(1){width:420px;height:420px;background:#7c5cff;top:-120px;left:-120px;animation-delay:0s}
+.bg-canvas .orb:nth-child(2){width:500px;height:500px;background:#2dd4bf;bottom:-160px;right:-160px;animation-delay:-6s}
+.bg-canvas .orb:nth-child(3){width:280px;height:280px;background:#a855f7;top:45%;left:55%;animation-delay:-11s}
+.bg-canvas .orb:nth-child(4){width:240px;height:240px;background:#3b82f6;bottom:25%;left:8%;animation-delay:-16s}
+@keyframes orb-drift{0%{transform:translate(0,0) scale(1)}25%{transform:translate(35px,-28px) scale(1.08)}50%{transform:translate(-18px,45px) scale(0.94)}75%{transform:translate(28px,18px) scale(1.06)}100%{transform:translate(-35px,-38px) scale(1)}}
+.grid-overlay{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(124,92,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(124,92,255,0.025) 1px,transparent 1px);background-size:60px 60px;animation:grid-scroll 35s linear infinite}
+@keyframes grid-scroll{from{background-position:0 0}to{background-position:60px 60px}}
+.particles{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.particles .p{position:absolute;width:2px;height:2px;background:rgba(124,92,255,0.35);border-radius:50%;animation:particle-float linear infinite}
+@keyframes particle-float{from{transform:translateY(100vh) scale(0);opacity:0}10%{opacity:1;transform:translateY(90vh) scale(1)}90%{opacity:.5}to{transform:translateY(-5vh) scale(0.5);opacity:0}}
+/* Container */
+.login-container{position:relative;z-index:10;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+/* Card */
+.login-card{width:100%;max-width:420px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:40px 36px;position:relative;overflow:hidden;box-shadow:0 20px 80px rgba(0,0,0,0.55),0 0 60px rgba(124,92,255,0.04);animation:card-in .6s cubic-bezier(.34,1.56,.64,1)}
+@keyframes card-in{from{transform:scale(.92) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+.login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);animation:shimmer 3s ease-in-out infinite}
+@keyframes shimmer{0%,100%{opacity:0.35}50%{opacity:1}}
+/* Logo */
+.logo{text-align:center;margin-bottom:28px}
+.logo .icon{font-size:46px;display:block;margin-bottom:8px;animation:icon-pulse 2.5s ease-in-out infinite}
+@keyframes icon-pulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.07);filter:brightness(1.2)}}
+.logo h1{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
+.logo p{font-size:12px;color:var(--text-muted);font-weight:500}
+/* Tab bar */
+.tab-bar{display:flex;gap:4px;background:var(--bg-input);border-radius:10px;padding:4px;margin-bottom:22px}
+.tab-bar button{flex:1;padding:8px;border:none;border-radius:8px;font-size:13px;font-weight:600;background:transparent;color:var(--text-muted);cursor:pointer;transition:all .2s}
+.tab-bar button.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(124,92,255,0.35)}
+.tab-bar button:hover:not(.active){color:var(--text)}
+/* Panels */
+.panel{display:none}
+.panel.active{display:block}
+/* Session chooser */
+.chooser-subtitle{font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:18px;line-height:1.5}
+.account-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-input);border:1px solid var(--accent);border-radius:12px;cursor:pointer;text-decoration:none;color:inherit;transition:all .2s;box-shadow:0 0 0 2px var(--accent-glow);margin-bottom:14px}
+.account-item:hover{background:rgba(124,92,255,0.08);transform:translateX(2px)}
+.account-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden}
+.account-avatar img{width:100%;height:100%;object-fit:cover}
+.account-info{flex:1;min-width:0}
+.account-info .name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.account-info .detail{font-size:11px;color:var(--text-muted)}
+.account-arrow{color:var(--text-dim);font-size:18px;flex-shrink:0}
+.chooser-actions{display:flex;flex-direction:column;gap:8px}
+.action-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:1px dashed var(--border);border-radius:10px;background:transparent;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;width:100%}
+.action-btn:hover{border-color:var(--accent-dark);color:var(--text);background:rgba(124,92,255,0.06)}
+/* Forms */
+.field{margin-bottom:15px}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.field input{width:100%;padding:11px 13px;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;font-family:inherit}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.field input::placeholder{color:var(--text-dim)}
+.field small{display:block;margin-top:5px;font-size:11px;color:var(--text-dim);line-height:1.4}
+.submit-btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;cursor:pointer;transition:all .2s}
+.submit-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(124,92,255,0.4)}
+.submit-btn:active{transform:translateY(0)}
+/* Error banner */
+.err-banner{padding:10px 14px;border-radius:8px;font-size:12px;font-weight:500;margin-bottom:14px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c}
+/* Divider */
+.divider{text-align:center;position:relative;margin:20px 0}
+.divider::before{content:'';position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border)}
+.divider span{position:relative;background:var(--bg-card);padding:0 12px;font-size:11px;color:var(--text-dim);font-weight:500}
+/* Anon */
+.anon-btn{width:100%;padding:11px;border:1px dashed var(--border);border-radius:10px;background:transparent;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.anon-btn:hover{border-color:var(--accent-dark);color:var(--text);background:rgba(124,92,255,0.05)}
+/* Services */
+.services{text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.services p{font-size:11px;color:var(--text-dim);margin-bottom:10px}
+.services .icons{display:flex;justify-content:center;gap:14px;font-size:17px;opacity:0.4}
+/* Switch link */
+.switch-link{display:block;text-align:center;margin-top:14px;font-size:12px;color:var(--text-muted);cursor:pointer;text-decoration:none;transition:color .2s}
+.switch-link:hover{color:var(--accent)}
+/* Return target */
+.return-note{font-size:11px;color:var(--text-dim);margin-top:14px;word-break:break-all}
+.return-note code{background:rgba(255,255,255,.05);padding:1px 5px;border-radius:4px;font-size:10px}
+@media(max-width:480px){.login-card{padding:28px 20px;border-radius:16px}.login-container{padding:16px}}
+@media(max-height:820px){.login-container{align-items:flex-start;padding-top:24px}}
 </style>
 </head>
 <body>
-<div class="ov-auth-shell">
-    <div class="ov-auth-grid">
-        <section class="ov-auth-hero">
-            <div class="ov-auth-copy">
-                <div class="ov-auth-kicker">Native OpenVibe identity</div>
-                <h1 class="ov-auth-title">One account for <span class="ov-auth-gradient">streams, chat, community, themes, and tools</span></h1>
-                <p>Sign in once and your OpenVibe session follows you across the network. This native flow signs RS256 JWTs locally, publishes OIDC discovery, and no longer depends on a live Hobo auth redirect to work.</p>
-                <ul class="ov-auth-list">
-                    <li>Canonical session cookie shared across OpenVibe subdomains</li>
-                    <li>OIDC discovery and JWKS stay live on <code>auth.openvibe.network</code></li>
-                    <li>Works for both direct browser sign-in and authorization-code token exchange</li>
-                </ul>
-                <div class="ov-auth-metrics">
-                    <div class="ov-auth-metric"><strong>RS256</strong><span>signed by native OpenVibe keys</span></div>
-                    <div class="ov-auth-metric"><strong>@username</strong><span>portable creator identity</span></div>
-                    <div class="ov-auth-metric"><strong>Cookie + OAuth</strong><span>browser and client flows</span></div>
+<div class="bg-canvas"><div class="orb"></div><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+<div class="grid-overlay"></div>
+<div class="particles" id="particles"></div>
+<div class="login-container">
+    <div class="login-card">
+        <div class="logo">
+            <span class="icon">&#x26FA;</span>
+            <h1>OpenVibe</h1>
+            <p>One account. All of OpenVibe.</p>
+        </div>
+        ${errorMessage ? `<div class="err-banner">${escapeHtml(errorMessage)}</div>` : ''}
+        ${sessionUser ? `
+        <div class="panel active" id="panel-session">
+            <p class="chooser-subtitle">Choose an account to continue</p>
+            <a class="account-item" href="${escapeHtml(continueTarget)}">
+                <div class="account-avatar">${sessionUser.avatar_url
+                    ? `<img src="${escapeHtml(sessionUser.avatar_url)}" alt="">`
+                    : '&#x26FA;'}</div>
+                <div class="account-info">
+                    <div class="name">${escapeHtml(sessionUser.display_name || sessionUser.username)}</div>
+                    <div class="detail">@${escapeHtml(sessionUser.username)}</div>
                 </div>
+                <span class="account-arrow">&#8594;</span>
+            </a>
+            <div class="divider"><span>or</span></div>
+            <div class="chooser-actions">
+                <button class="action-btn" onclick="document.getElementById('panel-session').classList.remove('active');document.getElementById('panel-login').classList.add('active')">
+                    &#128273; Use another account
+                </button>
+                <button class="action-btn" onclick="document.getElementById('panel-session').classList.remove('active');document.getElementById('panel-register').classList.add('active')">
+                    &#10024; Create a new account
+                </button>
             </div>
-        </section>
-        <section class="ov-auth-panel">
-            <div>
-                <h2>${sessionUser ? `Continue as @${escapeHtml(sessionUser.username)}` : 'Create an account or sign in'}</h2>
-                <p>${sessionUser
-                    ? 'You already have a valid OpenVibe session. Continue, switch account, or sign out.'
-                    : (request.prompt === 'login'
-                        ? 'Sign in with your native OpenVibe password using your username or email.'
-                        : 'Create a native OpenVibe account with a password, or continue with imported credentials after migration.')}</p>
-            </div>
-            ${errorMessage ? `<div class="ov-banner warn">${escapeHtml(errorMessage)}</div>` : ''}
-            ${sessionUser ? `<div class="ov-auth-callout">
-                <div class="ov-auth-chip-row">
-                    <span class="ov-auth-chip">@${escapeHtml(sessionUser.username)}</span>
-                    <span class="ov-auth-chip">role=${escapeHtml(sessionUser.role || 'user')}</span>
-                    ${sessionUser.email ? `<span class="ov-auth-chip">${escapeHtml(sessionUser.email)}</span>` : ''}
-                </div>
-                <div class="ov-auth-actions" style="margin-top:1rem;">
-                    <a class="ov-btn ov-btn-primary" href="${escapeHtml(continueTarget)}">Continue</a>
-                    <a class="ov-btn" href="/oauth/authorize?prompt=login&amp;return_to=${encodeURIComponent(continueTarget)}">Switch account</a>
-                    <a class="ov-btn" href="/oauth/logout?return_to=${encodeURIComponent(config.surfaces.network)}">Sign out</a>
-                </div>
-            </div>` : ''}
-            ${request.prompt === 'login' ? `<form class="ov-auth-form" method="post" action="/oauth/authorize">
+        </div>
+        ` : `
+        <div class="tab-bar" id="auth-tabs">
+            <button class="${request.prompt === 'login' ? 'active' : ''}" id="tab-login" onclick="showPanel('login')">Sign In</button>
+            <button class="${request.prompt !== 'login' ? 'active' : ''}" id="tab-register" onclick="showPanel('register')">Create Account</button>
+        </div>
+        <div class="panel ${request.prompt === 'login' ? 'active' : ''}" id="panel-login">
+            <form method="post" action="/oauth/authorize">
                 ${renderHiddenAuthorizeFields(request)}
                 <input type="hidden" name="mode" value="login">
-                <label>
-                    Username or email
-                    <input class="ov-input" type="text" name="identifier" maxlength="160" placeholder="alice or alice@example.com" autocomplete="username" required>
-                </label>
-                <label>
-                    Password
-                    <input class="ov-input" type="password" name="password" minlength="8" autocomplete="current-password" required>
-                </label>
-                <div class="ov-auth-actions">
-                    <button class="ov-btn ov-btn-primary" type="submit">${request.client_id ? 'Sign in and continue' : 'Sign in'}</button>
-                    <a class="ov-btn" href="/oauth/authorize?return_to=${encodeURIComponent(continueTarget)}">Need an account?</a>
+                <div class="field">
+                    <label>Username or email</label>
+                    <input type="text" name="identifier" maxlength="160" placeholder="alice or alice@example.com" autocomplete="username" required>
                 </div>
-            </form>` : `<form class="ov-auth-form" method="post" action="/oauth/authorize">
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" name="password" minlength="8" autocomplete="current-password" required>
+                </div>
+                <button class="submit-btn" type="submit">Sign in &#8594;</button>
+            </form>
+        </div>
+        <div class="panel ${request.prompt !== 'login' ? 'active' : ''}" id="panel-register">
+            <form method="post" action="/oauth/authorize">
                 ${renderHiddenAuthorizeFields(request)}
                 <input type="hidden" name="mode" value="register">
-                <label>
-                    Username
-                    <input class="ov-input" type="text" name="username" maxlength="32" placeholder="openvibe-fan" autocomplete="username" required>
-                    <small>Your canonical handle. Letters, numbers, dots, underscores, and hyphens are cleaned automatically.</small>
-                </label>
-                <label>
-                    Display name
-                    <input class="ov-input" type="text" name="display_name" maxlength="80" placeholder="OpenVibe Fan Club">
-                </label>
-                <label>
-                    Email <small>(optional)</small>
-                    <input class="ov-input" type="email" name="email" maxlength="160" placeholder="you@example.com" autocomplete="email">
-                </label>
-                <label>
-                    Password
-                    <input class="ov-input" type="password" name="password" minlength="8" autocomplete="new-password" required>
-                    <small>Use at least 8 characters. Imported bcrypt credentials continue to work after migration.</small>
-                </label>
-                <label>
-                    Confirm password
-                    <input class="ov-input" type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
-                </label>
-                <div class="ov-auth-actions">
-                    <button class="ov-btn ov-btn-primary" type="submit">${request.client_id ? 'Create account and continue' : 'Create account'}</button>
-                    <a class="ov-btn" href="/oauth/authorize?prompt=login&amp;return_to=${encodeURIComponent(continueTarget)}">Already have an account?</a>
-                    <a class="ov-btn" href="${escapeHtml(config.surfaces.auth)}/.well-known/openid-configuration">View OIDC discovery</a>
+                <div class="field">
+                    <label>Username</label>
+                    <input type="text" name="username" maxlength="32" placeholder="openvibe-fan" autocomplete="username" required>
+                    <small>Letters, numbers, dots, underscores, hyphens. Cleaned automatically.</small>
                 </div>
-            </form>`}
-            ${sessionUser ? '' : `<form class="ov-auth-form" method="post" action="/api/v1/session/anonymous">
-                <input type="hidden" name="return_to" value="${escapeHtml(continueTarget)}">
-                <div class="ov-auth-callout">
-                    <strong>Need to stay anonymous?</strong>
-                    <p style="margin:.45rem 0 0;">OpenVibe can issue a numbered anonymous identity like <code>Anonymous #27115</code> without letting arbitrary display names drift between surfaces.</p>
+                <div class="field">
+                    <label>Display name</label>
+                    <input type="text" name="display_name" maxlength="80" placeholder="OpenVibe Fan Club">
                 </div>
-                <div class="ov-auth-actions">
-                    <button class="ov-btn" type="submit">Continue with anonymous identity</button>
+                <div class="field">
+                    <label>Email <span style="font-weight:400;text-transform:none;font-size:10px">(optional)</span></label>
+                    <input type="email" name="email" maxlength="160" placeholder="you@example.com" autocomplete="email">
                 </div>
-            </form>`}
-            <p class="ov-auth-muted">Return target: <code>${escapeHtml(continueTarget)}</code>${request.client_id ? ` · client=<code>${escapeHtml(request.client_id)}</code>` : ''}</p>
-        </section>
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+                    <small>At least 8 characters. Imported bcrypt credentials work after migration.</small>
+                </div>
+                <div class="field">
+                    <label>Confirm password</label>
+                    <input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+                </div>
+                <button class="submit-btn" type="submit">Create account &#x26FA;</button>
+            </form>
+        </div>
+        `}
+        ${sessionUser ? '' : `
+        <div class="divider"><span>or</span></div>
+        <form method="post" action="/api/v1/session/anonymous">
+            <input type="hidden" name="return_to" value="${escapeHtml(continueTarget)}">
+            <button class="anon-btn" type="submit">&#128100; Continue Anonymously</button>
+        </form>
+        `}
+        <div class="services">
+            <p>Works across the entire network</p>
+            <div class="icons">
+                <span title="openvibe.live">&#128247;</span>
+                <span title="openvibe.chat">&#128172;</span>
+                <span title="openre.stream">&#128225;</span>
+                <span title="openvibe.games">&#127918;</span>
+            </div>
+        </div>
+        <p class="return-note">Return target: <code>${escapeHtml(continueTarget)}</code>${request.client_id ? ` &middot; client=<code>${escapeHtml(request.client_id)}</code>` : ''}</p>
     </div>
 </div>
+<script>
+(function(){var c=document.getElementById('particles');for(var i=0;i<28;i++){var p=document.createElement('div');p.className='p';p.style.left=Math.random()*100+'%';p.style.animationDuration=(8+Math.random()*12)+'s';p.style.animationDelay=-(Math.random()*20)+'s';c.appendChild(p);}})();
+function showPanel(name){
+    document.getElementById('panel-login').classList.toggle('active', name==='login');
+    document.getElementById('panel-register').classList.toggle('active', name==='register');
+    document.getElementById('tab-login').classList.toggle('active', name==='login');
+    document.getElementById('tab-register').classList.toggle('active', name==='register');
+}
+</script>
 </body>
 </html>`;
 }

@@ -15,7 +15,12 @@
     "./media-namespaces": "./media-namespaces.js",
     "./media-events": "./media-events.js",
     "./stream-events": "./stream-events.js",
-    "./game-events": "./game-events.js"
+    "./game-events": "./game-events.js",
+    "./ecosystem": "./ecosystem.js",
+    "./chat-events": "./chat-events.js",
+    "./community-events": "./community-events.js",
+    "./billing-events": "./billing-events.js",
+    "./ai-events": "./ai-events.js"
   },
   "license": "MIT"
 }

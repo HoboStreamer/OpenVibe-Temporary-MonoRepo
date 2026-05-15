@@ -1,5 +1,6 @@
 'use strict';
 
+const ecosystem = require('./ecosystem');
 const topics = require('./topics');
 const events = require('./events');
 const capabilities = require('./capabilities');
@@ -17,6 +18,7 @@ const aiEvents = require('./ai-events');
 const gameEvents = require('./game-events');
 
 module.exports = {
+    ...ecosystem,
     ...topics,
     ...events,
     ...capabilities,

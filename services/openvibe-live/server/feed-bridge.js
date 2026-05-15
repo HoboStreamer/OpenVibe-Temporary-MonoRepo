@@ -426,7 +426,9 @@ function createFeedBridge(options) {
         const featuredChannels = model.listFeaturedChannels({ limit: 8 });
         const trendingNow = model.listTrendingStreams({ limit: 6 });
         const liveNow = model.listLiveNow({ limit: 12 });
-        const recentlyEnded = model.listRecentlyEnded({ limit: 12 });
+        const recentlyEnded = model.listRecentlyEnded({ limit: 500 });
+        const channelsWithStreams = model.listChannelsWithStreams({ limit: 200 });
+        const seenSlugs = new Set(recentlyEnded.map((s) => s.channel_slug).filter(Boolean));
         const recentlyOnlineChannels = recentlyEnded.reduce((list, stream) => {
             if (!stream || !stream.channel_slug || list.some((entry) => entry.slug === stream.channel_slug)) return list;
             const channel = model.getChannelBySlug(stream.channel_slug);
@@ -434,6 +436,14 @@ function createFeedBridge(options) {
             list.push(Object.assign({}, channel, { stats: model.getChannelStats(stream.channel_slug), recentStream: stream }));
             return list;
         }, []);
+        // Fill in any channels with streams not already represented
+        for (const row of channelsWithStreams) {
+            if (!row.channel_slug || seenSlugs.has(row.channel_slug)) continue;
+            const channel = model.getChannelBySlug(row.channel_slug);
+            if (!channel) continue;
+            recentlyOnlineChannels.push(Object.assign({}, channel, { stats: model.getChannelStats(row.channel_slug) }));
+            seenSlugs.add(row.channel_slug);
+        }
 
         const [vods, clips, community, chat] = await Promise.all([
             listCanonicalMediaWithCount('vod', null, HOME_VOD_LIMIT),

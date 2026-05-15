@@ -43,21 +43,27 @@
         return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // Canonical alias normalization — mirrors packages/openvibe-realtime/events.js.
+    // Canonical alias normalization — mirrors @openvibe/contracts/events.js EVENT_ALIASES.
+    // (browser IIFE cannot require() modules, so this must stay in sync manually)
     var ALIASES = {
         'stream.vod_attached':        'stream.vod.attached',
         'stream.ingest_connected':    'stream.ingest.connected',
         'stream.ingest_disconnected': 'stream.ingest.disconnected',
-        'stream.mirrored_to_live':    'stream.mirrored.to.live',
+        'stream.mirrored_to_live':    'stream.mirrored_to_live',
         'community.thread.created':   'thread.created',
         'community.post.created':     'comment.created',
         'community.paste.created':    'paste.created',
         'community.paste.updated':    'paste.updated',
         'chat.message.created':       'chat.message.sent',
         'chat.message_created':       'chat.message.sent',
+        'chat.msg':                   'chat.message.sent',
         'vod.attached':               'stream.vod.attached',
         'clip.materialization_completed': 'clip.materialized',
         'discord.message.created':    'discord.message.received',
+        'discord.message_created':    'discord.message.received',
+        'media.upload_completed':     'media.processing.completed',
+        'tips.tip.posted':            'billing.tip.sent',
+        'tips.tip.created':           'billing.tip.sent',
     };
     function normalizeName(name) {
         var lower = String(name || '').toLowerCase().trim();

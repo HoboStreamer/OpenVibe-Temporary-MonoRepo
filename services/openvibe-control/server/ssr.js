@@ -79,6 +79,7 @@ function shell(title, content, userEmail) {
     <a href="/control/realtime">Realtime</a>
     <a href="/control/community">Community</a>
     <a href="/control/services">Services</a>
+    <a href="/control/ecosystem">Ecosystem</a>
   </nav>
   <div style="margin-left:auto;color:var(--text-muted);font-size:12px;">${escHtml(userEmail || 'admin')}</div>
 </header>
@@ -267,6 +268,75 @@ function renderServicesPage(services, userEmail) {
 `, userEmail);
 }
 
+function renderEcosystemPage(userEmail) {
+    const {
+        ECOSYSTEM_SERVICES,
+        ECOSYSTEM_CATEGORY_LABELS,
+        listServicesByCategory,
+    } = require('@openvibe/contracts/ecosystem');
+
+    function categorySection(cat) {
+        const label = ECOSYSTEM_CATEGORY_LABELS[cat] || cat;
+        const svcs = listServicesByCategory(cat);
+        if (!svcs.length) return '';
+        const cards = svcs.map((s) => {
+            const statusClass = s.status === 'current' ? 'badge-ok' : 'badge-warn';
+            const statusLabel = s.status === 'current' ? 'live' : 'planned';
+            const caps = (s.capabilities || []).slice(0, 6);
+            const deps = (s.dependsOn || []).slice(0, 5);
+            const topics = (s.eventTopics || []).slice(0, 4);
+            const domainLink = s.publicOrigin
+                ? `<a href="${escHtml(s.publicOrigin)}" target="_blank" rel="noopener" style="color:var(--color-accent);font-size:11px">${escHtml(s.domain || s.id)}</a>`
+                : `<span style="color:var(--text-muted);font-size:11px">${escHtml(s.id)}</span>`;
+            const capBadges = caps.map((c) => `<span class="badge badge-info">${escHtml(c)}</span>`).join(' ');
+            const depItems = deps.map((d) => `<span style="font-size:11px;color:var(--text-muted)">${escHtml(d)}</span>`).join(', ');
+            const topicItems = topics.map((t) => `<code style="font-size:11px;background:var(--bg);padding:1px 4px;border-radius:3px">${escHtml(t)}</code>`).join(' ');
+            const repoLink = s.repoSurface
+                ? `<span style="font-size:10px;color:var(--text-muted)">${escHtml(s.repoSurface)}</span>`
+                : '';
+
+            return `<div class="eco-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <strong style="font-size:14px">${escHtml(s.label)}</strong>
+    <span class="badge ${statusClass}" style="font-size:10px">${statusLabel}</span>
+  </div>
+  <div>${domainLink}${repoLink ? ' &nbsp; ' + repoLink : ''}</div>
+  ${capBadges ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">${capBadges}</div>` : ''}
+  ${topics.length ? `<div style="margin-top:2px">${topicItems}</div>` : ''}
+  ${deps.length ? `<div style="font-size:11px;color:var(--text-muted)">depends: ${depItems}</div>` : ''}
+</div>`;
+        }).join('\n');
+
+        return `<section style="margin-bottom:28px">
+  <h3 style="margin-bottom:12px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">${escHtml(label)}</h3>
+  <div class="eco-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px">
+${cards}
+  </div>
+</section>`;
+    }
+
+    const sections = Object.keys(ECOSYSTEM_CATEGORY_LABELS).map(categorySection).join('\n');
+    const totalServices = ECOSYSTEM_SERVICES.length;
+    const liveCount = ECOSYSTEM_SERVICES.filter((s) => s.status === 'current').length;
+    const plannedCount = totalServices - liveCount;
+
+    return shell('Ecosystem', `
+<h2>OpenVibe Ecosystem</h2>
+<p style="color:var(--text-muted);font-size:13px;margin-bottom:20px">
+  ${totalServices} services &nbsp;·&nbsp;
+  <span class="badge badge-ok">${liveCount} live</span>
+  &nbsp;
+  <span class="badge badge-warn">${plannedCount} planned</span>
+  &nbsp;·&nbsp; Single source of truth from <code>@openvibe/contracts</code>
+</p>
+${sections}
+<style>
+.badge-info { background: rgba(59,130,246,.18); color: #93c5fd; border: 1px solid rgba(59,130,246,.3); }
+.badge-warn { background: rgba(234,179,8,.18); color: #fde047; border: 1px solid rgba(234,179,8,.3); }
+</style>
+`, userEmail);
+}
+
 module.exports = {
     renderUnauthorized,
     renderDashboard,
@@ -275,4 +345,5 @@ module.exports = {
     renderRealtimePage,
     renderCommunityPage,
     renderServicesPage,
+    renderEcosystemPage,
 };

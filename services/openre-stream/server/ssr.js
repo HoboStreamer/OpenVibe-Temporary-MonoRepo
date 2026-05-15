@@ -136,6 +136,82 @@ function _styles() {
         footer.page { padding-bottom: 3rem; }
         .footer-row { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; padding: 1.5rem 0; border-top: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 0.88rem; }
         @media (max-width: 700px) { .topbar-inner { flex-wrap: wrap; justify-content: center; } }
+        /* ── Dashboard two-panel layout ────────────────────────────────────── */
+        .dash-page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+        .dash-header-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.4rem; }
+        .dash-layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: 540px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.09); background: rgba(7,13,28,0.72); overflow: hidden; }
+        .dash-sidebar { border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; background: rgba(5,9,22,0.6); }
+        .dash-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem 0.65rem; border-bottom: 1px solid rgba(255,255,255,0.07); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+        .dash-sidebar-label { display: flex; align-items: center; gap: 0.4rem; }
+        .dash-add-btn { width: 24px; height: 24px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: white; font-size: 1rem; line-height: 1; display: grid; place-items: center; font-weight: 700; text-decoration: none; transition: background 0.15s, border-color 0.15s; }
+        .dash-add-btn:hover { background: rgba(34,211,238,0.15); border-color: rgba(34,211,238,0.4); }
+        .dash-slots { flex: 1; overflow-y: auto; padding: 0.5rem 0; }
+        .dash-slot-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1rem; cursor: pointer; border-left: 2px solid transparent; transition: background 0.12s, border-color 0.12s; }
+        .dash-slot-item:hover { background: rgba(255,255,255,0.04); }
+        .dash-slot-item.active { background: rgba(34,211,238,0.07); border-left-color: var(--accent); }
+        .dash-slot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: rgba(255,255,255,0.2); transition: background 0.2s; }
+        .dash-slot-dot.live { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+        .dash-slot-info { flex: 1; min-width: 0; }
+        .dash-slot-title { font-size: 0.88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dash-slot-meta { font-size: 0.73rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; margin-top: 0.1rem; }
+        .dash-slot-proto { display: inline-flex; align-items: center; padding: 0.1rem 0.4rem; border-radius: 4px; background: rgba(255,255,255,0.07); font-size: 0.67rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+        .dash-slot-proto.whip { color: #22d3ee; } .dash-slot-proto.rtmp { color: #f97316; } .dash-slot-proto.browser { color: #a78bfa; } .dash-slot-proto.cli { color: #94a3b8; }
+        .dash-slot-empty { padding: 0.9rem 1rem; color: var(--muted); font-size: 0.82rem; }
+        .dash-sidebar-sect-head { padding: 0.6rem 1rem 0.4rem; border-top: 1px solid rgba(255,255,255,0.07); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+        .dash-dest-sidebar { overflow-y: auto; max-height: 130px; padding-bottom: 0.5rem; }
+        .dash-dest-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 1rem; font-size: 0.82rem; cursor: default; }
+        .dash-dest-badge { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(139,92,246,0.18); color: #a78bfa; flex-shrink: 0; }
+        .dash-dest-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dash-main { display: flex; flex-direction: column; min-width: 0; }
+        .dash-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8rem; padding: 3rem 2rem; text-align: center; color: var(--muted); }
+        .dash-empty h3 { margin: 0; font-size: 1.3rem; color: var(--text); } .dash-empty p { margin: 0; font-size: 0.9rem; }
+        .dash-channel-editor { padding: 1.2rem 1.4rem; flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .dash-channel-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 0.8rem; }
+        .dash-channel-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.2rem; }
+        .dash-channel-url { font-size: 0.8rem; color: var(--muted); font-family: ui-monospace, Consolas, monospace; transition: color 0.15s; }
+        .dash-channel-url:hover { color: var(--accent); }
+        .dash-view-btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); font-size: 0.82rem; font-weight: 700; color: var(--muted); white-space: nowrap; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+        .dash-view-btn:hover { border-color: rgba(34,211,238,0.4); background: rgba(34,211,238,0.08); color: white; }
+        .dash-tabs { display: flex; margin-bottom: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .dash-tab { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.65rem 1rem; font-size: 0.84rem; font-weight: 700; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+        .dash-tab:hover { color: var(--text); } .dash-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+        .dash-tab-content { flex: 1; }
+        .dash-form { display: flex; flex-direction: column; gap: 0.9rem; }
+        .dash-field-group { display: flex; flex-direction: column; gap: 0.35rem; }
+        .dash-field-lbl { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+        .dash-input { width: 100%; padding: 0.7rem 0.85rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white; font-size: 0.9rem; font-family: inherit; transition: border-color 0.15s, background 0.15s; box-sizing: border-box; }
+        .dash-input:focus { outline: none; border-color: rgba(34,211,238,0.5); background: rgba(34,211,238,0.04); }
+        .dash-input::placeholder { color: rgba(148,163,184,0.5); }
+        .dash-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.2rem; }
+        .dash-checkbox { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer; }
+        .dash-checkbox input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+        .dash-key-row { display: flex; align-items: center; gap: 0.4rem; }
+        .dash-key-input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; }
+        .dash-icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+        .dash-icon-btn:hover { border-color: rgba(255,255,255,0.25); color: white; background: rgba(255,255,255,0.08); }
+        .dash-icon-btn-danger:hover { border-color: rgba(248,113,113,0.5); color: #f87171; background: rgba(248,113,113,0.08); }
+        .dash-form-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+        .dash-btn-primary { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1.2rem; border-radius: 999px; font-weight: 700; font-size: 0.88rem; background: linear-gradient(135deg, rgba(139,92,246,0.9), rgba(34,211,238,0.75)); border: none; color: white; cursor: pointer; transition: opacity 0.15s, transform 0.15s; }
+        .dash-btn-primary:hover { opacity: 0.88; transform: translateY(-1px); } .dash-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .dash-status { font-size: 0.82rem; color: var(--muted); } .dash-status.ok { color: #4ade80; } .dash-status.err { color: #f87171; }
+        .dash-endpoint-row { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+        .dash-endpoint-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; color: var(--muted); }
+        .dash-endpoint-value-row { display: flex; align-items: center; gap: 0.4rem; }
+        .dash-endpoint-code { flex: 1; padding: 0.65rem 0.85rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.09); background: rgba(0,0,0,0.3); font-size: 0.8rem; font-family: ui-monospace, Consolas, monospace; color: #e2e8f0; word-break: break-all; min-width: 0; }
+        .dash-dest-list-item { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.65rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .dash-dest-list-item:last-child { border-bottom: none; }
+        .dash-dest-add-sect { margin-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 1rem; }
+        .dash-sect-label { font-size: 0.9rem; font-weight: 800; margin-bottom: 0.8rem; }
+        .dash-history-item { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.7rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .dash-history-item:last-child { border-bottom: none; }
+        .dash-history-title { font-size: 0.9rem; font-weight: 600; }
+        .dash-history-meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+        .dash-note { color: var(--muted); font-size: 0.88rem; margin: 0; }
+        @media (max-width: 700px) {
+            .dash-layout { grid-template-columns: 1fr; }
+            .dash-sidebar { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); max-height: 200px; }
+            .dash-page-header { flex-direction: column; }
+        }
     </style>`;
 }
 
@@ -186,138 +262,238 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
 
 // ── dashboard ─────────────────────────────────────────────────────────────────
 function renderDashboard({ user, channels, destinations, streams, outputs, ingestConfig }) {
-    channels = channels || [];
+    channels     = channels     || [];
     destinations = destinations || [];
-    streams = streams || [];
-    outputs = outputs || [];
+    streams      = streams      || [];
     ingestConfig = ingestConfig || {};
 
     const rtmpBase = ingestConfig.rtmpBase || '';
     const whipBase = ingestConfig.whipBase || '';
+    const userId   = String((user && (user.id || user.sub)) || '');
 
-    // channels section
-    const channelCardsHtml = channels.length
-        ? channels.map((c) => {
-            const streamKey = c.stream_key || c.default_stream_key || (c.metadata && c.metadata.stream_key) || '';
-            const rtmpUrl   = rtmpBase ? `${rtmpBase.replace(/\/$/, '')}/${esc(c.slug || '')}` : '';
-            const whipUrl   = whipBase ? `${whipBase.replace(/\/$/, '')}/${esc(c.slug || '')}` : '';
-            return `<article class="glass-card" data-channel-slug="${esc(c.slug)}">
-                <div class="pill-row">
-                    ${c.is_live ? pill('Live', 'live') : pill('Offline', 'soft')}
-                </div>
-                <h3 class="card-title">${esc(c.display_name || c.slug)}</h3>
-                <p class="muted">@${esc(c.slug)}</p>
-                ${c.description ? `<p class="card-body">${esc(c.description)}</p>` : ''}
-                ${rtmpUrl ? `<div style="margin-top:.7rem"><div class="dp-label">RTMP URL</div>
-                    <div style="display:flex;gap:.4rem;align-items:center;">
-                        <div class="code-block" style="flex:1">${esc(rtmpUrl)}</div>
-                        <button class="btn" data-dash-action="copy" data-copy="${esc(rtmpUrl)}" style="padding:.2rem .6rem;font-size:.75rem;">Copy</button>
-                    </div></div>` : ''}
-                ${streamKey ? `<div style="margin-top:.5rem"><div class="dp-label">Stream key</div>
-                    <div style="display:flex;gap:.4rem;align-items:center;">
-                        <div class="code-block" style="flex:1" data-stream-key="${esc(streamKey)}">${esc(streamKey.substring(0, 8))}…</div>
-                        <button class="btn" data-dash-action="copy" data-copy="${esc(streamKey)}" style="padding:.2rem .6rem;font-size:.75rem;">Copy key</button>
-                        <button class="btn" data-dash-action="regenerate-key" data-slug="${esc(c.slug)}" style="padding:.2rem .6rem;font-size:.75rem;">Regenerate</button>
-                    </div></div>` : ''}
-                ${whipUrl ? `<div style="margin-top:.5rem"><div class="dp-label">WHIP URL</div><div class="code-block">${esc(whipUrl)}</div></div>` : ''}
-                <div class="kicker">Created ${timeAgo(c.created_at)}</div>
-                <div class="inline-actions" style="margin-top:.7rem;">
-                    <button class="btn" data-dash-action="edit-channel" data-slug="${esc(c.slug)}"
-                        data-display-name="${esc(c.display_name || '')}"
-                        data-description="${esc((c.metadata && c.metadata.description) || c.description || '')}">Edit</button>
-                </div>
-            </article>`;
-        }).join('')
-        : `<div class="empty-state">No channels yet. Create one from <a class="link-inline" href="${URLS.live}/go-live">openvibe.live/go-live</a>.</div>`;
-
-    // channel edit panel (hidden, populated by JS)
-    const channelEditPanelHtml = `
-        <div id="dash-channel-edit-panel" style="display:none;margin-bottom:1.5rem;">
-            <article class="glass-card">
-                <div class="eyebrow">Edit channel</div>
-                <form class="form-stack" id="dash-channel-edit-form">
-                    <input type="hidden" name="slug">
-                    <label><span class="dp-label">Display name</span>
-                        <input class="filter-input" type="text" name="display_name" autocomplete="off">
-                    </label>
-                    <label><span class="dp-label">Description</span>
-                        <textarea class="filter-input" name="description" rows="2" style="resize:vertical;"></textarea>
-                    </label>
-                    <div class="form-actions" style="margin-top:.7rem;">
-                        <button class="btn primary" type="submit">Save</button>
-                        <button class="btn" type="button" data-dash-action="close-channel-edit">Cancel</button>
-                        <span id="dash-channel-edit-status" style="margin-left:.5rem;font-size:.85rem;"></span>
+    // Build channel slot items for sidebar
+    const channelSlotsHtml = channels.length
+        ? channels.map((c, i) => {
+            const proto   = ((c.metadata && c.metadata.default_protocol) || 'rtmp').toLowerCase();
+            const isLive  = !!c.is_live;
+            const active  = i === 0 ? ' active' : '';
+            return `<div class="dash-slot-item${active}" data-slot="${esc(c.slug)}">
+                <div class="dash-slot-dot${isLive ? ' live' : ''}"></div>
+                <div class="dash-slot-info">
+                    <div class="dash-slot-title">${esc(c.display_name || c.slug)}</div>
+                    <div class="dash-slot-meta">
+                        <span class="dash-slot-proto ${esc(proto)}">${esc(proto.toUpperCase())}</span>
+                        <span>/${esc(c.slug)}</span>
                     </div>
-                </form>
-            </article>
-        </div>`;
-
-    // destinations section
-    const destCardsHtml = destinations.length
-        ? destinations.map((d) => `<article class="glass-card" data-dest-id="${esc(d.id)}">
-            <div class="pill-row">${pill(d.kind || 'custom', 'soft')}${d.enabled ? '' : ' ' + pill('Disabled', 'muted')}</div>
-            <h3 class="card-title">${esc(d.label || d.kind || 'Destination')}</h3>
-            ${d.target_url ? `<div class="code-block" style="margin-top:.5rem;font-size:.78rem">${esc(d.target_url)}</div>` : ''}
-            <div class="kicker">Added ${timeAgo(d.created_at)}</div>
-            <div class="inline-actions" style="margin-top:.7rem;">
-                <button class="btn" data-dash-action="delete-destination" data-dest-id="${esc(d.id)}" style="color:var(--color-danger,#e55);">Remove</button>
-            </div>
-        </article>`).join('')
-        : `<div class="empty-state">No destinations yet.</div>`;
-
-    // recent streams section
-    const streamRowsHtml = streams.length
-        ? streams.map((s) => {
-            const statusPill = s.is_live ? pill('Live', 'live') : (s.status === 'ended' ? pill('Ended', 'soft') : pill(s.status || 'Idle', 'warn'));
-            const channelName = s.channel_slug || s.channel_display_name || '';
-            return `<div class="glass-card" style="display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;padding:.8rem 1rem">
-                <div>
-                    <div class="pill-row">${statusPill}${channelName ? ` <span class="pill soft">@${esc(channelName)}</span>` : ''}</div>
-                    <strong>${esc(s.title || 'Untitled stream')}</strong>
-                    <div class="kicker">${timeAgo(s.started_at || s.created_at)}</div>
-                </div>
-                <div>
-                    <a class="btn" href="${URLS.live}/@${esc(s.channel_slug || '')}">View →</a>
                 </div>
             </div>`;
         }).join('')
-        : `<div class="empty-state">No recent streams found. Go live from <a class="link-inline" href="${URLS.live}/go-live">openvibe.live/go-live</a> to create your first broadcast.</div>`;
+        : `<div class="dash-slot-empty">No channels — <a href="${esc(URLS.live)}/go-live" class="link-inline">create one</a>.</div>`;
+
+    // Build destination sidebar items
+    const destSidebarHtml = destinations.length
+        ? destinations.map((d) => `<div class="dash-dest-item">
+            <span class="dash-dest-badge">${esc(d.kind || 'rtmp')}</span>
+            <span class="dash-dest-name">${esc(d.label || d.kind || 'Destination')}</span>
+        </div>`).join('')
+        : '<div class="dash-slot-empty" style="font-size:.78rem">None yet</div>';
+
+    // Safe JSON for embedded state
+    const safeJson = JSON.stringify({
+        channels: channels.map((c) => ({
+            slug:             c.slug,
+            display_name:     c.display_name || c.slug,
+            description:      c.description || (c.metadata && c.metadata.description) || '',
+            is_live:          !!c.is_live,
+            stream_key:       c.stream_key || c.default_stream_key || (c.metadata && c.metadata.stream_key) || '',
+            default_protocol: (c.metadata && c.metadata.default_protocol) || 'rtmp',
+            rtmp_url:         rtmpBase ? `${rtmpBase.replace(/\/$/, '')}/${c.slug}` : '',
+            whip_url:         whipBase ? `${whipBase.replace(/\/$/, '')}/${c.slug}` : '',
+            channel_url:      `${URLS.live}/@${c.slug}`,
+        })),
+        destinations: destinations.map((d) => ({
+            id:         d.id,
+            kind:       d.kind || 'custom',
+            label:      d.label || d.kind || 'Destination',
+            target_url: d.target_url || '',
+            enabled:    d.enabled !== false,
+            created_at: d.created_at,
+        })),
+        streams: streams.map((s) => ({
+            id:           s.id,
+            title:        s.title || 'Untitled stream',
+            status:       s.status || 'idle',
+            is_live:      !!s.is_live,
+            channel_slug: s.channel_slug || '',
+            started_at:   s.started_at,
+            created_at:   s.created_at,
+        })),
+        live_url:    URLS.live,
+        user_id:     userId,
+    }).replace(/<\/script>/gi, '<\\/script>').replace(/<!--/g, '<\\!--');
 
     const bodyHtml = `
-        <section style="margin-bottom:1.5rem">
-            <div class="eyebrow">Control room</div>
-            <h1 class="page-title">Your stream dashboard</h1>
-            <p class="page-sub">Channels, destinations, ingest details, and recent broadcasts for <strong>${esc(user && (user.display_name || user.username) || 'your account')}</strong>.</p>
-        </section>
-
-        <div class="data-points">
-            <div class="dp"><div class="dp-label">Channels</div><div class="dp-value">${channels.length}</div></div>
-            <div class="dp"><div class="dp-label">Destinations</div><div class="dp-value">${destinations.length}</div></div>
-            <div class="dp"><div class="dp-label">Recent streams</div><div class="dp-value">${streams.length}</div></div>
-            <div class="dp"><div class="dp-label">Live now</div><div class="dp-value">${streams.filter((s) => s.is_live).length}</div></div>
+        <div class="dash-page-header">
+            <div>
+                <div class="eyebrow">Control room</div>
+                <h1 class="page-title">Stream manager</h1>
+                <p class="page-sub">Ingest, destinations, and broadcasts for <strong>${esc(user && (user.display_name || user.username) || 'your account')}</strong>.</p>
+            </div>
+            <div class="dash-header-actions">
+                <a class="btn" href="${esc(URLS.live)}">openvibe.live</a>
+                <a class="btn" href="${esc(URLS.live)}/go-live">Go Live</a>
+            </div>
         </div>
 
-        <div class="section-head">
-            <h2 class="section-title">My channels &amp; ingest details</h2>
-            <a class="btn" href="${URLS.live}/go-live">+ New channel</a>
-        </div>
-        ${channelEditPanelHtml}
-        <div class="grid2">${channelCardsHtml}</div>
+        <div class="dash-layout">
+            <!-- SIDEBAR -->
+            <aside class="dash-sidebar">
+                <div class="dash-sidebar-head">
+                    <span class="dash-sidebar-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+                        My Channels
+                    </span>
+                    <a class="dash-add-btn" href="${esc(URLS.live)}/go-live" title="Create new channel">+</a>
+                </div>
+                <div class="dash-slots" id="dash-slots">${channelSlotsHtml}</div>
+                <div class="dash-sidebar-sect-head">Destinations</div>
+                <div class="dash-dest-sidebar" id="dash-dest-sidebar">${destSidebarHtml}</div>
+            </aside>
 
-        <div class="section-head">
-            <h2 class="section-title">Destinations</h2>
-            <a class="btn" href="${URLS.live}/go-live#stream-manager">+ Add destination</a>
-        </div>
-        <div class="grid3">${destCardsHtml}</div>
+            <!-- MAIN PANEL -->
+            <div class="dash-main">
+                <!-- No channel selected / empty state -->
+                <div class="dash-empty" id="dash-no-channel"${channels.length ? ' style="display:none"' : ''}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:rgba(34,211,238,0.4)"><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
+                    <h3>Stream manager</h3>
+                    <p>Select a channel from the sidebar to view ingest details, manage destinations, and review recent streams.</p>
+                    <a class="btn" href="${esc(URLS.live)}/go-live">+ Create channel</a>
+                </div>
 
-        <div class="section-head">
-            <h2 class="section-title">Recent streams</h2>
-            <a class="btn" href="${URLS.live}/channels">Browse live</a>
+                <!-- Channel editor -->
+                <div class="dash-channel-editor" id="dash-channel-editor"${!channels.length ? ' style="display:none"' : ''}>
+                    <div class="dash-channel-hdr">
+                        <div>
+                            <div class="dash-channel-name" id="dash-ch-name"></div>
+                            <a class="dash-channel-url" id="dash-ch-url" href="#" target="_blank"></a>
+                        </div>
+                        <a class="dash-view-btn" id="dash-ch-live-link" href="#" target="_blank">
+                            View Live
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+                        </a>
+                    </div>
+
+                    <!-- Tab bar -->
+                    <div class="dash-tabs">
+                        <button class="dash-tab active" data-tab="ingest">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            Ingest
+                        </button>
+                        <button class="dash-tab" data-tab="settings">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </button>
+                        <button class="dash-tab" data-tab="destinations">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                            Destinations
+                        </button>
+                        <button class="dash-tab" data-tab="streams">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
+                            Streams
+                        </button>
+                    </div>
+
+                    <!-- Ingest tab -->
+                    <div class="dash-tab-content" id="dash-panel-ingest">
+                        <div id="dash-ingest-details"><p class="dash-note">Loading…</p></div>
+                    </div>
+
+                    <!-- Settings tab -->
+                    <div class="dash-tab-content" id="dash-panel-settings" style="display:none">
+                        <form id="dash-settings-form" class="dash-form">
+                            <input type="hidden" name="slug">
+                            <label class="dash-field-group">
+                                <span class="dash-field-lbl">DISPLAY NAME</span>
+                                <input class="dash-input" type="text" name="display_name" autocomplete="off">
+                            </label>
+                            <label class="dash-field-group">
+                                <span class="dash-field-lbl">DESCRIPTION</span>
+                                <textarea class="dash-input" name="description" rows="2"></textarea>
+                            </label>
+                            <div class="dash-field-group">
+                                <div class="dash-field-lbl">STREAM KEY</div>
+                                <div class="dash-key-row">
+                                    <input class="dash-input dash-key-input" type="password" name="stream_key" id="dash-sk-input" readonly placeholder="••••••••••••">
+                                    <button type="button" class="dash-icon-btn" id="dash-sk-toggle" title="Show/hide key">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </button>
+                                    <button type="button" class="dash-icon-btn" id="dash-sk-copy" title="Copy key">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    </button>
+                                    <button type="button" class="dash-icon-btn dash-icon-btn-danger" id="dash-sk-regen" title="Regenerate key">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="dash-form-actions">
+                                <button class="dash-btn-primary" type="submit">Save changes</button>
+                                <span id="dash-settings-status" class="dash-status"></span>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Destinations tab -->
+                    <div class="dash-tab-content" id="dash-panel-destinations" style="display:none">
+                        <div id="dash-dest-list"></div>
+                        <div class="dash-dest-add-sect">
+                            <div class="dash-sect-label">Add destination</div>
+                            <form id="dash-dest-form" class="dash-form">
+                                <div class="dash-field-group">
+                                    <span class="dash-field-lbl">KIND</span>
+                                    <select class="dash-input dash-select" name="kind">
+                                        <option value="custom">Custom RTMP</option>
+                                        <option value="youtube">YouTube</option>
+                                        <option value="twitch">Twitch</option>
+                                        <option value="kick">Kick</option>
+                                        <option value="facebook">Facebook</option>
+                                    </select>
+                                </div>
+                                <label class="dash-field-group">
+                                    <span class="dash-field-lbl">LABEL</span>
+                                    <input class="dash-input" type="text" name="label" placeholder="e.g. My Twitch stream" required>
+                                </label>
+                                <label class="dash-field-group">
+                                    <span class="dash-field-lbl">TARGET URL</span>
+                                    <input class="dash-input" type="url" name="target_url" placeholder="rtmp://live.twitch.tv/live" required>
+                                </label>
+                                <label class="dash-field-group">
+                                    <span class="dash-field-lbl">STREAM KEY</span>
+                                    <input class="dash-input" type="text" name="target_key" placeholder="Destination stream key">
+                                </label>
+                                <label class="dash-checkbox">
+                                    <input type="checkbox" name="enabled" value="1" checked>
+                                    <span>Enabled</span>
+                                </label>
+                                <div class="dash-form-actions">
+                                    <button class="dash-btn-primary" type="submit">Save destination</button>
+                                    <span id="dash-dest-status" class="dash-status"></span>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Streams tab -->
+                    <div class="dash-tab-content" id="dash-panel-streams" style="display:none">
+                        <div id="dash-streams-list"><p class="dash-note">No streams loaded yet.</p></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div style="display:grid;gap:.6rem">${streamRowsHtml}</div>
+
+        <script>window.__DASH_DATA__ = ${safeJson};</script>
     `;
 
-    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml, extraScripts: '<script src="/js/dashboard.js"></script>' });
+    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml, extraScripts: '<script src="/js/dashboard.js?v=20260515-2"></script>' });
 }
 
 // ── auth gate (anonymous access to /dashboard) ────────────────────────────────
