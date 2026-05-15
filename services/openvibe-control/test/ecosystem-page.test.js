@@ -24,7 +24,7 @@ for (const label of Object.values(ECOSYSTEM_CATEGORY_LABELS)) {
 }
 
 // ── Contains core service names ───────────────────────────────────────────────
-const coreLabels = ['OpenVibe Live', 'OpenRe.Stream', 'OpenVibe Chat', 'OpenVibe Community', 'OpenVibe Auth'];
+const coreLabels = ['OpenVibe Live', 'OpenRe.Stream', 'OpenVibe Chat', 'Pastes', 'OpenVibe Auth'];
 for (const name of coreLabels) {
     assert.ok(html.includes(name), `Ecosystem page should include service: ${name}`);
 }

@@ -1789,7 +1789,7 @@ function renderChannelCard(channel, baseUrl, options) {
                         <div>
                             <h3 class="card-title">Relay status</h3>
                             <div class="data-points" style="margin-top:0.85rem;">
-                                ${relaySignalsHtml || renderSignalCard({ eyebrow: 'Discord relay', title: 'Relay mappings will surface here', body: 'OpenVibe Community already has relay tables and loop-prevention plumbing; this panel shows when they are active.', meta: 'No enabled relay mappings yet' })}
+                                ${relaySignalsHtml || renderSignalCard({ eyebrow: 'Discord relay', title: 'Relay mappings will surface here', body: 'Pastes already has relay tables and loop-prevention plumbing; this panel shows when they are active.', meta: 'No enabled relay mappings yet' })}
                             </div>
                         </div>
                         <div>
