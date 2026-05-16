@@ -769,7 +769,7 @@
         communityCards.push(signalCard({
             eyebrow: paste.language || 'Paste',
             title: paste.title || paste.slug || 'Untitled paste',
-            body: String(paste.body || 'OpenVibe Community paste').slice(0, 90),
+            body: String(paste.body || 'paste').slice(0, 90),
             meta: String(paste.view_count || 0) + ' views',
         }));
     });

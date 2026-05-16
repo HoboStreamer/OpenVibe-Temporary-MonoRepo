@@ -143,41 +143,14 @@
     </style>
 
 
-    <section class="ov-section">
-        <div class="ov-panel">
-            <div class="ov-grid" id="featured-grid"></div>
-        </div>
-    </section>
-
-
-
-    <section class="ov-section ov-split-grid">
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Service directory</h2>
-                    <p class="ov-section-sub">Press <code>Ctrl/⌘ K</code> any time for the global launcher, or filter the registry inline.</p>
-                </div>
+    <!-- Recent Pastes -->
+    <section class="ov-section" id="recent-pastes-section">
+        <div class="ov-panel" id="recent-pastes-panel">
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
+                <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
             </div>
-            <input class="ov-input" id="filter" placeholder="Filter services by name, category, or tag" style="margin-bottom:1rem" />
-            <div class="ov-grid" id="services-grid"></div>
-        </div>
-        <div class="ov-panel">
-            <div class="ov-section-head">
-                <div>
-                    <h2>Registry pulse</h2>
-                    <p class="ov-section-sub">A quick read on what the network currently knows about itself.</p>
-                </div>
-            </div>
-            <div class="ov-grid" id="pulse-grid"></div>
-            <div class="ov-table-wrap" style="margin-top:1rem;">
-                <table class="ov-table">
-                    <thead>
-                        <tr><th>resolved key</th><th>value</th><th>source</th></tr>
-                    </thead>
-                    <tbody id="registry-rows"></tbody>
-                </table>
-            </div>
+            <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
         </div>
     </section>
 
@@ -188,7 +161,7 @@
                 <p class="ov-section-sub">No investors, no ad surveillance, no premium-tier theatre. The plan is to be useful and to formalize as a not-for-profit once the network can stand on its own.</p>
             </div>
         </div>
-        <div class="ov-grid">
+        <div class="ov-grid" style="grid-template-columns:repeat(5,1fr)">
             <article class="ov-card">
                 <div class="ov-kicker">Open source</div>
                 <h3 class="ov-service-title" style="margin-top:.8rem;">Every surface can be inspected, forked, or self-hosted</h3>
@@ -234,22 +207,15 @@
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('home');
 
-    const [session, remoteServices, launcherState, caps, contracts, namespaces, topics, registry, health] = await Promise.all([
+    const [session, remoteServices, launcherState, topics, health] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.loadServices(),
         OpenVibe.loadLauncherState(),
-        OpenVibe.api('/capabilities').catch(() => ({ items: [] })),
-        OpenVibe.api('/contracts').catch(() => ({ items: [] })),
-        OpenVibe.api('/namespaces').catch(() => ({ items: [] })),
         OpenVibe.api('/topics').catch(() => ({ items: [] })),
-        OpenVibe.loadUrlRegistry(),
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, trusted_issuers: [] })),
     ]);
 
     const items = OpenVibe.mergedServices(remoteServices);
-    const featuredIds = ['openvibe-tools', 'openvibe-live', 'openre-stream', 'openvibe-chat', 'openvibe-community', 'openvibe-my'];
-    const featuredItems = pickByIds(items, featuredIds);
-    const servicesGrid = document.getElementById('services-grid');
 
     OpenVibe.attachLauncher(() => items);
 
@@ -259,54 +225,13 @@
     let lastFavoriteItems = [];
     let lastRecentItems = [];
 
-    function getServiceHref(item) {
-        return item.public_url || '#';
-    }
-
-    function getInitials(name) {
-        return (name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    }
-
-    function renderIconEl(item) {
-        const svgOrEmpty = OpenVibe.icon ? OpenVibe.icon(item.service_id) : '';
-        return svgOrEmpty || `<span style="font-size:.7rem;font-weight:800;">${getInitials(item.display_name || item.service_id)}</span>`;
-    }
-
-    function renderFavGrid(target, items, emptyLabel, emptyMsg) {
-        if (!items.length) {
+    function renderFavGrid(target, favItems, emptyLabel, emptyMsg) {
+        if (!favItems.length) {
             renderEmpty(target, emptyLabel, emptyMsg);
             return;
         }
-        if (currentFavView === 'row') {
-            target.innerHTML = '';
-            target.className = 'ov-fav-row-list';
-            items.forEach(item => {
-                const href = getServiceHref(item);
-                const a = document.createElement('a');
-                a.className = 'ov-fav-row-item';
-                a.href = href;
-                a.dataset.launchService = item.service_id;
-                a.innerHTML = `<span class="ov-fav-row-icon">${renderIconEl(item)}</span><span class="ov-fav-row-name">${OpenVibe.escapeHtml(item.display_name || item.service_id)}</span>`;
-                target.appendChild(a);
-            });
-        } else if (currentFavView === 'icon') {
-            target.innerHTML = '';
-            target.className = 'ov-fav-icon-grid';
-            items.forEach(item => {
-                const href = getServiceHref(item);
-                const a = document.createElement('a');
-                a.className = 'ov-fav-icon-item';
-                a.href = href;
-                a.title = item.display_name || item.service_id;
-                a.dataset.launchService = item.service_id;
-                a.innerHTML = `<span class="ov-fav-icon-el">${renderIconEl(item)}</span>`;
-                target.appendChild(a);
-            });
-        } else {
-            // card view — use existing renderer
-            target.className = 'ov-grid';
-            OpenVibe.renderServiceCards(target, items, { onFavoriteChange: renderLauncherSections });
-        }
+        target.className = 'ov-grid';
+        OpenVibe.renderServiceCards(target, favItems, { onFavoriteChange: renderLauncherSections });
     }
 
     function applyFavView(view) {
@@ -324,7 +249,6 @@
     document.querySelectorAll('.ov-view-btn').forEach(btn => {
         btn.addEventListener('click', () => applyFavView(btn.dataset.view));
     });
-    // set initial active state from storage
     document.querySelectorAll('.ov-view-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === currentFavView);
     });
@@ -334,31 +258,14 @@
         lastFavoriteItems = pickByIds(items, currentState.favorites);
         lastRecentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
 
-        await OpenVibe.renderServiceCards(document.getElementById('featured-grid'), featuredItems, { onFavoriteChange: renderLauncherSections });
-
         renderFavGrid(document.getElementById('favorites-grid'), lastFavoriteItems,
             'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
         renderFavGrid(document.getElementById('recents-grid'), lastRecentItems,
             'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
     }
 
-    async function applyFilter() {
-        const q = document.getElementById('filter').value.toLowerCase();
-        const filtered = items.filter((item) => `${item.display_name || ''} ${item.description || ''} ${item.category || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(q));
-        await OpenVibe.renderServiceCards(servicesGrid, filtered, { onFavoriteChange: renderLauncherSections });
-    }
-
-    document.getElementById('filter').addEventListener('input', function () {
-        applyFilter().catch(() => {});
-    });
     await renderLauncherSections(launcherState);
-    await applyFilter();
 
-    document.getElementById('stat-services').textContent = items.length;
-    document.getElementById('stat-capabilities').textContent = (caps.items || []).length;
-    document.getElementById('stat-contracts').textContent = (contracts.items || []).length;
-    document.getElementById('stat-namespaces').textContent = Object.keys(namespaces.items || {}).length;
-    document.getElementById('stat-themes').textContent = OpenVibe.BUILTIN_THEMES.length;
     document.getElementById('issuer-chip').textContent = `${(health.trusted_issuers || []).length} trusted issuer${(health.trusted_issuers || []).length === 1 ? '' : 's'}`;
     const isAnonymous = !!(session && session.anonymous && session.user);
     document.body.dataset.ovSignedIn = (session.authenticated && session.user) ? '1' : '0';
@@ -503,19 +410,6 @@
         },
     ]);
 
-    const pulseGrid = document.getElementById('pulse-grid');
-    pulseGrid.innerHTML = [
-        { title: 'Health', value: health.ok ? 'OK' : 'Offline', tone: health.ok ? 'ok' : 'danger' },
-        { title: 'Topics', value: String((topics.items || []).length), tone: 'soft' },
-        { title: 'Compat', value: health.federation && health.federation.hobo_tools ? 'On' : 'Native', tone: health.federation && health.federation.hobo_tools ? 'warn' : 'ok' },
-    ].map((card) => `<article class="ov-card"><span class="ov-chip ${card.tone}">${OpenVibe.escapeHtml(card.title)}</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(card.value)}</h3></article>`).join('');
-
-    const registryRows = Object.entries((registry && registry.registry) || {}).slice(0, 8).map(([key, entry]) => `<tr>
-        <td><code>${OpenVibe.escapeHtml(key)}</code></td>
-        <td>${OpenVibe.escapeHtml(String(entry && entry.value || '—'))}</td>
-        <td>${OpenVibe.escapeHtml(String(entry && entry.source || 'unknown'))}</td>
-    </tr>`).join('');
-    document.getElementById('registry-rows').innerHTML = registryRows || '<tr><td colspan="3">No resolved URLs returned yet.</td></tr>';
 })();
 
 // Hero star toggle — auto-favorites when signed in, persists manual overrides
@@ -678,6 +572,427 @@
 
     poll();
     setInterval(poll, 60000);
+})();
+
+/* ── Recent Pastes ── */
+(function() {
+    var communityBase = OpenVibe.resolveSurfaceUrl('community');
+    document.getElementById('pastes-view-all').href = communityBase;
+
+    fetch(communityBase + '/api/community/pastes?limit=6', { mode: 'cors', credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var items = data.items || [];
+            var grid = document.getElementById('recent-pastes-grid');
+            if (!items.length) {
+                grid.innerHTML = '<div class="ov-empty">No pastes yet.</div>';
+                return;
+            }
+            grid.innerHTML = items.map(function(paste) {
+                var slug = paste.slug || paste.id || '';
+                var title = paste.title || slug || 'untitled';
+                var body = String(paste.body || '');
+                var expt = body.length > 140 ? body.slice(0, 139) + '…' : body;
+                var lang = paste.language || 'text';
+                var href = communityBase + '/p/' + OpenVibe.escapeHtml(slug);
+                return '<a class="ov-card" href="' + href + '">' +
+                    '<div class="ov-card-top">' +
+                        '<div>' +
+                            '<div class="ov-service-title">' + OpenVibe.escapeHtml(title) + '</div>' +
+                            '<div class="desc">' + OpenVibe.escapeHtml(expt) + '</div>' +
+                        '</div>' +
+                        '<span class="ov-tag">' + OpenVibe.escapeHtml(lang) + '</span>' +
+                    '</div>' +
+                '</a>';
+            }).join('');
+        })
+        .catch(function() {
+            document.getElementById('recent-pastes-section').style.display = 'none';
+        });
+})();
+</script>
+
+<!-- ── Floating chat bubble ── -->
+<style>
+.ov-chatbubble-btn {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 8000;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--ov-accent, #8b5cf6);
+    border: none;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.45);
+    transition: transform 0.15s, box-shadow 0.15s;
+    color: #fff;
+}
+.ov-chatbubble-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 28px rgba(139,92,246,0.6);
+}
+.ov-chatbubble-btn .ov-chatbubble-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #34d399;
+    border: 2px solid var(--ov-bg, #060917);
+    display: none;
+}
+.ov-chatbubble-btn.has-unread .ov-chatbubble-badge { display: block; }
+
+.ov-chat-widget {
+    position: fixed;
+    bottom: 5.5rem;
+    right: 1.5rem;
+    z-index: 8001;
+    width: 340px;
+    max-height: 480px;
+    display: flex;
+    flex-direction: column;
+    background: color-mix(in srgb, var(--ov-bg, #060917) 92%, white);
+    border: 1px solid var(--ov-border, rgba(148,163,184,.14));
+    border-radius: 18px;
+    box-shadow: 0 16px 60px rgba(0,0,0,0.55);
+    overflow: hidden;
+    transform-origin: bottom right;
+    transition: transform 0.18s cubic-bezier(.2,.8,.2,1), opacity 0.18s;
+}
+.ov-chat-widget[hidden] {
+    display: none;
+}
+
+.ov-cw-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--ov-border, rgba(148,163,184,.14));
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--ov-bg, #060917) 85%, white);
+}
+.ov-cw-header-title {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ov-text, #eef4ff);
+}
+.ov-cw-header-sub {
+    font-size: 0.72rem;
+    color: var(--ov-text-dim, #a7b5d2);
+}
+.ov-cw-close {
+    all: unset;
+    cursor: pointer;
+    color: var(--ov-text-dim, #a7b5d2);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.1rem 0.3rem;
+    border-radius: 6px;
+    transition: color 0.12s, background 0.12s;
+}
+.ov-cw-close:hover { color: var(--ov-text, #eef4ff); background: rgba(255,255,255,0.06); }
+
+.ov-cw-feed {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.6rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.ov-cw-empty {
+    color: var(--ov-text-dim, #a7b5d2);
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 1.5rem 0;
+    margin: auto 0;
+}
+
+.ov-cw-msg {
+    padding: 0.3rem 0.5rem;
+    border-radius: 8px;
+    word-break: break-word;
+}
+.ov-cw-msg:hover { background: rgba(255,255,255,0.03); }
+.ov-cw-msg-meta { display: flex; gap: 0.45rem; align-items: baseline; margin-bottom: 0.1rem; }
+.ov-cw-msg-name { font-size: 0.74rem; font-weight: 700; color: var(--ov-accent, #8b5cf6); }
+.ov-cw-msg-time { font-size: 0.65rem; color: var(--ov-text-dim, #a7b5d2); }
+.ov-cw-msg-body { font-size: 0.83rem; color: var(--ov-text, #eef4ff); line-height: 1.45; }
+
+.ov-cw-composer {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--ov-border, rgba(148,163,184,.14));
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    background: color-mix(in srgb, var(--ov-bg, #060917) 88%, white);
+}
+.ov-cw-who {
+    font-size: 0.68rem;
+    color: var(--ov-text-dim, #a7b5d2);
+    cursor: pointer;
+    transition: color 0.12s;
+}
+.ov-cw-who:hover { color: var(--ov-accent, #8b5cf6); }
+.ov-cw-row { display: flex; gap: 0.4rem; }
+.ov-cw-input {
+    flex: 1;
+    background: color-mix(in srgb, var(--ov-bg, #060917) 75%, white);
+    border: 1px solid var(--ov-border, rgba(148,163,184,.14));
+    border-radius: 8px;
+    padding: 0.45rem 0.7rem;
+    color: var(--ov-text, #eef4ff);
+    font-size: 0.83rem;
+    font-family: var(--ov-font, Inter, sans-serif);
+    outline: none;
+    transition: border-color 0.15s;
+}
+.ov-cw-input:focus { border-color: var(--ov-accent, #8b5cf6); }
+.ov-cw-input::placeholder { color: var(--ov-text-dim, #a7b5d2); }
+
+.ov-cw-name-prompt {
+    padding: 0.6rem 0.85rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.ov-cw-name-prompt p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--ov-text-dim, #a7b5d2);
+}
+
+@media (max-width: 420px) {
+    .ov-chat-widget { width: calc(100vw - 2rem); right: 1rem; }
+    .ov-chatbubble-btn { right: 1rem; bottom: 1rem; }
+}
+</style>
+
+<button class="ov-chatbubble-btn" id="ov-chatbubble-btn" aria-label="Open chat" title="Global chat">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+    </svg>
+    <span class="ov-chatbubble-badge"></span>
+</button>
+
+<div class="ov-chat-widget" id="ov-chat-widget" hidden>
+    <div class="ov-cw-header">
+        <span style="font-size:1rem">#</span>
+        <span class="ov-cw-header-title">global</span>
+        <span class="ov-cw-header-sub">OpenVibe Chat</span>
+        <button class="ov-cw-close" id="ov-cw-close" aria-label="Close chat">✕</button>
+    </div>
+    <div class="ov-cw-feed" id="ov-cw-feed">
+        <div class="ov-cw-empty">Connecting…</div>
+    </div>
+    <div class="ov-cw-composer" id="ov-cw-composer">
+        <div class="ov-cw-who" id="ov-cw-who" title="Click to change name"></div>
+        <div class="ov-cw-row">
+            <input class="ov-cw-input" id="ov-cw-input" type="text" placeholder="Message #global…" maxlength="500" autocomplete="off" />
+            <button class="ov-btn ov-btn-primary" id="ov-cw-send" type="button" style="padding:.45rem .8rem;font-size:.8rem">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var ROOM    = 'global';
+    var POLL    = 3000;
+    var MAX     = 60;
+    var chatBase = null;
+
+    var bubble  = document.getElementById('ov-chatbubble-btn');
+    var widget  = document.getElementById('ov-chat-widget');
+    var closeBtn = document.getElementById('ov-cw-close');
+    var feed    = document.getElementById('ov-cw-feed');
+    var whoEl   = document.getElementById('ov-cw-who');
+    var input   = document.getElementById('ov-cw-input');
+    var sendBtn = document.getElementById('ov-cw-send');
+
+    var lastId  = null;
+    var msgs    = [];
+    var isOpen  = false;
+    var myName  = localStorage.getItem('ov-chat-name') || '';
+    var pollTimer = null;
+    var namingMode = false;
+
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function timeStr(ts) {
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // resolve chat API base via openvibe URL resolver once it's ready
+    function getChatBase() {
+        if (chatBase) return chatBase;
+        if (window.OpenVibe && OpenVibe.resolveSurfaceUrl) {
+            chatBase = OpenVibe.resolveSurfaceUrl('chat');
+        } else {
+            chatBase = 'http://localhost:4800';
+        }
+        return chatBase;
+    }
+
+    function updateWho() {
+        if (!myName) {
+            whoEl.textContent = 'Set a name to chat';
+        } else {
+            whoEl.textContent = 'Chatting as ' + myName + ' · click to change';
+        }
+    }
+    updateWho();
+
+    whoEl.addEventListener('click', function () { enterNamingMode(); });
+
+    function enterNamingMode() {
+        namingMode = true;
+        var composer = document.getElementById('ov-cw-composer');
+        composer.innerHTML =
+            '<div class="ov-cw-name-prompt">' +
+                '<p>Enter your name to chat:</p>' +
+                '<div class="ov-cw-row">' +
+                    '<input class="ov-cw-input" id="ov-cw-nameinput" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '" />' +
+                    '<button class="ov-btn ov-btn-primary" id="ov-cw-nameok" type="button" style="padding:.45rem .8rem;font-size:.8rem">OK</button>' +
+                '</div>' +
+            '</div>';
+        var ni = document.getElementById('ov-cw-nameinput');
+        ni.focus(); ni.select();
+        document.getElementById('ov-cw-nameok').addEventListener('click', function () { saveName(ni.value); });
+        ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveName(ni.value); });
+    }
+
+    function saveName(v) {
+        v = (v || '').trim().slice(0, 32);
+        if (!v) return;
+        myName = v;
+        localStorage.setItem('ov-chat-name', v);
+        namingMode = false;
+        restoreComposer();
+        input.focus();
+    }
+
+    function restoreComposer() {
+        var composer = document.getElementById('ov-cw-composer');
+        composer.innerHTML =
+            '<div class="ov-cw-who" id="ov-cw-who" title="Click to change name"></div>' +
+            '<div class="ov-cw-row">' +
+                '<input class="ov-cw-input" id="ov-cw-input" type="text" placeholder="Message #global…" maxlength="500" autocomplete="off" />' +
+                '<button class="ov-btn ov-btn-primary" id="ov-cw-send" type="button" style="padding:.45rem .8rem;font-size:.8rem">Send</button>' +
+            '</div>';
+        whoEl   = document.getElementById('ov-cw-who');
+        input   = document.getElementById('ov-cw-input');
+        sendBtn = document.getElementById('ov-cw-send');
+        whoEl.addEventListener('click', function () { enterNamingMode(); });
+        sendBtn.addEventListener('click', send);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+        updateWho();
+    }
+
+    function render() {
+        var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+        if (!msgs.length) {
+            feed.innerHTML = '<div class="ov-cw-empty">No messages yet.</div>';
+            return;
+        }
+        feed.innerHTML = msgs.map(function (m) {
+            var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+            return '<div class="ov-cw-msg">' +
+                '<div class="ov-cw-msg-meta">' +
+                    '<span class="ov-cw-msg-name">' + esc(name) + '</span>' +
+                    '<span class="ov-cw-msg-time">' + timeStr(m.created_at) + '</span>' +
+                '</div>' +
+                '<div class="ov-cw-msg-body">' + esc(m.body) + '</div>' +
+            '</div>';
+        }).join('');
+        if (atBottom || lastId === null) feed.scrollTop = feed.scrollHeight;
+    }
+
+    function poll() {
+        var base = getChatBase();
+        fetch(base + '/api/chat/rooms/' + ROOM + '/messages?limit=' + MAX, { mode: 'cors', credentials: 'include' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var items = (data.items || []).slice().reverse();
+                if (!items.length && lastId === null) { render(); return; }
+                if (!items.length) return;
+                var newest = items[items.length - 1].id;
+                if (newest !== lastId) {
+                    var hadMessages = lastId !== null;
+                    msgs = items;
+                    lastId = newest;
+                    if (!isOpen && hadMessages) bubble.classList.add('has-unread');
+                    render();
+                }
+            })
+            .catch(function () {});
+    }
+
+    function startPolling() {
+        if (pollTimer) return;
+        poll();
+        pollTimer = setInterval(poll, POLL);
+    }
+
+    function open() {
+        isOpen = true;
+        widget.hidden = false;
+        bubble.classList.remove('has-unread');
+        if (!myName) enterNamingMode();
+        startPolling();
+        setTimeout(function () { feed.scrollTop = feed.scrollHeight; }, 50);
+    }
+
+    function close() {
+        isOpen = false;
+        widget.hidden = true;
+    }
+
+    bubble.addEventListener('click', function () { isOpen ? close() : open(); });
+    closeBtn.addEventListener('click', close);
+
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+
+    function send() {
+        if (!myName) { enterNamingMode(); return; }
+        var text = (input.value || '').trim();
+        if (!text) return;
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
+        var base = getChatBase();
+        fetch(base + '/api/chat/rooms/' + ROOM + '/messages', {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body: text, metadata: { sender_name: myName } }),
+        })
+        .then(function () { return poll(); })
+        .catch(function () {})
+        .finally(function () {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+        });
+    }
+
+    // start polling in background after page load so unread badge works
+    setTimeout(startPolling, 2000);
 })();
 </script>
 </body>

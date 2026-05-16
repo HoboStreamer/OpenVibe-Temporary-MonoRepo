@@ -238,7 +238,7 @@ const ECOSYSTEM_SERVICES = Object.freeze([
     {
         id: 'openvibe-community',
         domain: 'openvibe.community',
-        label: 'OpenVibe Community',
+        label: 'Pastes',
         category: 'core_product',
         status: 'current',
         repoSurface: 'services/openvibe-community',
