@@ -12,6 +12,7 @@
  */
 
 const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+const { renderIcon } = require('@openvibe/icons');
 
 const URLS = Object.freeze({
     live:    resolvePublicOrigin({ surface: 'live' }),
@@ -207,10 +208,23 @@ function _styles() {
         .dash-history-title { font-size: 0.9rem; font-weight: 600; }
         .dash-history-meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
         .dash-note { color: var(--muted); font-size: 0.88rem; margin: 0; }
+        .bcast-layout { display: grid; grid-template-columns: 1fr 280px; gap: 1rem; }
+        .bcast-preview-wrap { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; }
+        .bcast-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .bcast-pip-overlay { position: absolute; bottom: .5rem; right: .5rem; width: 25%; aspect-ratio: 16/9; border-radius: 4px; overflow: hidden; border: 2px solid rgba(255,255,255,0.4); }
+        .bcast-pip-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .bcast-live-badge { position: absolute; top: .5rem; left: .5rem; background: #ef4444; color: #fff; font-size: .7rem; font-weight: 700; letter-spacing: .06em; padding: .2rem .5rem; border-radius: 4px; display: flex; align-items: center; gap: .3rem; }
+        .bcast-controls { display: flex; flex-direction: column; gap: .8rem; }
+        .bcast-source-btn.active { background: var(--accent); color: #fff; }
+        .bcast-live-row { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: #4ade80; font-weight: 600; }
+        .bcast-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: bcast-pulse 1.2s infinite; }
+        .bcast-timer { font-variant-numeric: tabular-nums; }
+        @keyframes bcast-pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
         @media (max-width: 700px) {
             .dash-layout { grid-template-columns: 1fr; }
             .dash-sidebar { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); max-height: 200px; }
             .dash-page-header { flex-direction: column; }
+            .bcast-layout { grid-template-columns: 1fr; }
         }
     </style>`;
 }
@@ -224,6 +238,8 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%238b5cf6'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='20' font-weight='700' fill='white'%3EOR%3C/text%3E%3C/svg%3E">
     <title>${esc(title || 'OpenRe.Stream')}</title>
     ${_styles()}
+    <link rel="stylesheet" href="/assets/openvibe-icons.css">
+    <script src="/assets/openvibe-icons.js" defer></script>
 </head>
 <body>
     <header class="topbar">
@@ -233,9 +249,9 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
                 <span class="brand-name">openre.stream</span>
             </a>
             <nav class="nav-links">
-                <a class="nav-link" href="/dashboard">Dashboard</a>
-                <a class="nav-link" href="${URLS.live}">openvibe.live</a>
-                <a class="nav-link" href="${URLS.network}">Account</a>
+                <a class="nav-link ov-icon-label" href="/dashboard">${renderIcon('restream', { decorative: true })}<span>Dashboard</span></a>
+                <a class="nav-link ov-icon-label" href="${URLS.live}">${renderIcon('live', { decorative: true })}<span>openvibe.live</span></a>
+                <a class="nav-link ov-icon-label" href="${URLS.network}">${renderIcon('my', { decorative: true })}<span>Account</span></a>
             </nav>
             <div>
                 ${displayName
@@ -401,6 +417,10 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
                             Streams
                         </button>
+                        <button class="dash-tab" data-tab="broadcast">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+                            Broadcast
+                        </button>
                     </div>
 
                     <!-- Ingest tab -->
@@ -486,6 +506,76 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
                     <div class="dash-tab-content" id="dash-panel-streams" style="display:none">
                         <div id="dash-streams-list"><p class="dash-note">No streams loaded yet.</p></div>
                     </div>
+
+                    <!-- Broadcast tab -->
+                    <div class="dash-tab-content" id="dash-panel-broadcast" style="display:none">
+                        <div class="bcast-layout">
+                            <div class="bcast-preview-wrap">
+                                <video id="bcast-preview" class="bcast-preview" autoplay muted playsinline></video>
+                                <div id="bcast-pip-overlay" class="bcast-pip-overlay" style="display:none">
+                                    <video id="bcast-pip-video" class="bcast-pip-video" autoplay muted playsinline></video>
+                                </div>
+                                <div id="bcast-live-badge" class="bcast-live-badge" style="display:none">
+                                    <span class="bcast-dot"></span> LIVE
+                                </div>
+                            </div>
+                            <div class="bcast-controls">
+                                <div class="dash-field-group">
+                                    <div class="dash-field-label">SOURCE</div>
+                                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                                        <button type="button" class="btn bcast-source-btn active" data-source="camera">Camera</button>
+                                        <button type="button" class="btn bcast-source-btn" data-source="screen">Screen</button>
+                                        <button type="button" class="btn bcast-source-btn" data-source="screen+camera">Screen + Cam</button>
+                                    </div>
+                                </div>
+                                <div id="bcast-video-group" class="dash-field-group">
+                                    <div class="dash-field-label">CAMERA</div>
+                                    <select id="bcast-video-select" class="dash-input">
+                                        <option value="">Default camera</option>
+                                    </select>
+                                </div>
+                                <div class="dash-field-group">
+                                    <div class="dash-field-label">MICROPHONE</div>
+                                    <select id="bcast-audio-select" class="dash-input">
+                                        <option value="">Default microphone</option>
+                                    </select>
+                                </div>
+                                <div class="dash-field-group">
+                                    <div class="dash-field-label">QUALITY</div>
+                                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                                        <select id="bcast-res" class="dash-input" style="flex:1;min-width:100px">
+                                            <option value="1280x720">720p</option>
+                                            <option value="1920x1080">1080p</option>
+                                            <option value="854x480">480p</option>
+                                        </select>
+                                        <select id="bcast-fps" class="dash-input" style="width:70px">
+                                            <option value="30">30fps</option>
+                                            <option value="60">60fps</option>
+                                            <option value="24">24fps</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div id="bcast-idle-controls">
+                                    <button type="button" id="bcast-start-btn" class="btn btn-primary" style="width:100%;justify-content:center">
+                                        &#9654; Start Broadcast
+                                    </button>
+                                    <p id="bcast-note" class="dash-note" style="margin-top:.5rem"></p>
+                                </div>
+                                <div id="bcast-live-controls" style="display:none">
+                                    <div class="bcast-live-row">
+                                        <span class="bcast-dot"></span>
+                                        <span id="bcast-timer" class="bcast-timer">00:00</span>
+                                    </div>
+                                    <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem">
+                                        <button type="button" id="bcast-mute-video" class="btn">Cam On</button>
+                                        <button type="button" id="bcast-mute-audio" class="btn">Mic On</button>
+                                        <button type="button" id="bcast-end-btn" class="btn" style="margin-left:auto;color:#f87171;border-color:rgba(248,113,113,0.3)">End Broadcast</button>
+                                    </div>
+                                </div>
+                                <span id="bcast-status" class="dash-status" style="margin-top:.5rem;display:block"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -493,7 +583,7 @@ function renderDashboard({ user, channels, destinations, streams, outputs, inges
         <script>window.__DASH_DATA__ = ${safeJson};</script>
     `;
 
-    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml, extraScripts: '<script src="/js/dashboard.js?v=20260515-2"></script>' });
+    return _shell({ title: 'Dashboard · OpenRe.Stream', user, bodyHtml, extraScripts: '<script src="/js/dashboard.js?v=20260603-1"></script>' });
 }
 
 // ── auth gate (anonymous access to /dashboard) ────────────────────────────────

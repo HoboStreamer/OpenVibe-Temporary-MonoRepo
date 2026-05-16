@@ -4,8 +4,10 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const http = require('http');
 const path = require('path');
 const { createServiceRuntime } = require('@openvibe/runtime');
+const { attachIconAssets } = require('@openvibe/icons/express');
 
 const config = require('./config');
 const db = require('./db');
@@ -16,6 +18,9 @@ const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const { buildSessionResponse } = require('./session');
 const { renderDashboard, renderDashboardAuthGate } = require('./ssr');
+const sfu = require('./sfu');
+const broadcastWs = require('./broadcast-ws');
+const whip = require('./whip');
 
 function deriveBaseUrl(req) {
     const forwardedProto = req.headers['x-forwarded-proto'];
@@ -77,6 +82,7 @@ function buildApp() {
         serviceName: 'openre.stream',
     }));
     app.use(express.static(path.join(__dirname, '..', 'public')));
+    attachIconAssets(app, { routePrefix: '/assets' });
 
     // ── dashboard: authenticated SSR page ─────────────────────────────────
     app.get('/dashboard', (req, res) => {
@@ -106,6 +112,29 @@ function buildApp() {
         return res.send(html);
     });
 
+    // ── WHIP ingest endpoints ──────────────────────────────────────────────
+    // Raw body needed for SDP text
+    app.post('/whip/:channelSlug', express.text({ type: ['text/plain', 'application/sdp', '*/*'], limit: '64kb' }), whip.handleOffer);
+    app.patch('/whip/:channelSlug/:resourceId', express.text({ type: ['application/trickle-ice-sdpfrag', '*/*'], limit: '16kb' }), whip.handleTrickle);
+    app.delete('/whip/:channelSlug/:resourceId', whip.handleDelete);
+
+    // ── CORS preflight for WHIP (OBS needs this) ──────────────────────────
+    app.options('/whip/:channelSlug', (req, res) => {
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Expose-Headers': 'Location',
+        }).status(204).end();
+    });
+    app.options('/whip/:channelSlug/:resourceId', (req, res) => {
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }).status(204).end();
+    });
+
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config, buildSessionResponse }));
 
     app.use((err, _req, res, _next) => {
@@ -118,10 +147,31 @@ function buildApp() {
 
 function start() {
     const { app } = buildApp();
-    const server = app.listen(config.port, config.host, () => {
+    const server = http.createServer(app);
+
+    // Initialize SFU (non-blocking)
+    sfu.init().catch(err => console.warn('[openre-stream] SFU init error:', err.message));
+
+    // Attach broadcast WebSocket server
+    broadcastWs.attach(server);
+
+    // Handle WebSocket upgrades
+    server.on('upgrade', (req, socket, head) => {
+        const url = req.url || '';
+        if (url.startsWith('/ws/broadcast')) {
+            broadcastWs.handleUpgrade(req, socket, head);
+        } else {
+            socket.destroy();
+        }
+    });
+
+    server.listen(config.port, config.host, () => {
         console.log(`[openre-stream] listening on http://${config.host}:${config.port}`);
     });
-    const shutdown = () => { server.close(() => process.exit(0)); };
+    const shutdown = () => {
+        sfu.closeAll();
+        server.close(() => process.exit(0));
+    };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
     return { app, server };

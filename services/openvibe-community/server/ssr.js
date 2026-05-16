@@ -11,6 +11,7 @@
  */
 
 const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+const { renderIcon } = require('@openvibe/icons');
 
 const COMMUNITY_URLS = Object.freeze({
     live:      resolvePublicOrigin({ surface: 'live' }),
@@ -180,12 +181,12 @@ function _styles() {
 
 function _nav(active) {
     const items = [
-        { href: '/pulse',   label: 'Pulse',   id: 'pulse'   },
-        { href: '/threads', label: 'Threads', id: 'threads' },
-        { href: '/pastes',  label: 'Pastes',  id: 'pastes'  },
-        { href: '/chat',    label: 'Chat',    id: 'chat'    },
+        { href: '/pulse',   label: 'Pulse',   id: 'pulse',   icon: 'events'    },
+        { href: '/threads', label: 'Threads', id: 'threads', icon: 'chat'      },
+        { href: '/pastes',  label: 'Pastes',  id: 'pastes',  icon: 'codes'     },
+        { href: '/chat',    label: 'Chat',    id: 'chat',    icon: 'chat'      },
     ];
-    return items.map((item) => `<a class="nav-link${item.id === active ? ' active' : ''}" href="${item.href}">${item.label}</a>`).join('');
+    return items.map((item) => `<a class="nav-link ov-icon-label${item.id === active ? ' active' : ''}" href="${item.href}">${renderIcon(item.icon, { decorative: true })}<span>${item.label}</span></a>`).join('');
 }
 
 function _head({ title, description, canonical }) {
@@ -206,6 +207,8 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%238b5cf6'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='24' font-weight='700' fill='white'%3EOC%3C/text%3E%3C/svg%3E">
     ${_head({ title, description, canonical })}
     ${_styles()}
+    <link rel="stylesheet" href="/assets/openvibe-icons.css">
+    <script src="/assets/openvibe-icons.js" defer></script>
 </head>
 <body>
     <header class="topbar">

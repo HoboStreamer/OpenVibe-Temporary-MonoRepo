@@ -62,6 +62,8 @@ function renderTipsShell() {
     return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/openvibe-icons.css">
+<script src="/assets/openvibe-icons.js" defer></script>
 <title>OpenVibe Tips — hobo-friendly tipping</title>
 <meta name="description" content="OpenVibe Tips: hobo-friendly tipping. No subscription gates, no 30 percent platform tax.">
 <meta name="robots" content="noindex">

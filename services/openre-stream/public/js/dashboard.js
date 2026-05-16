@@ -1,7 +1,8 @@
 /**
- * dashboard.js — openre.stream dashboard  v=20260515-2
+ * dashboard.js — openre.stream dashboard  v=20260603-1
  *
  * Two-panel stream manager: sidebar channel slots + right editor.
+ * Includes browser broadcast via WHIP (WebRTC-HTTP Ingestion Protocol).
  * Reads window.__DASH_DATA__ embedded by server SSR.
  */
 (function () {
@@ -288,10 +289,13 @@
         for (var i = 0; i < tabs.length; i++) {
             tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tabName);
         }
-        var panels = ['ingest', 'settings', 'destinations', 'streams'];
+        var panels = ['ingest', 'settings', 'destinations', 'streams', 'broadcast'];
         for (var j = 0; j < panels.length; j++) {
             var p = el('dash-panel-' + panels[j]);
             if (p) p.style.display = panels[j] === tabName ? '' : 'none';
+        }
+        if (tabName === 'broadcast') {
+            bcast.onTabOpen();
         }
     }
 
@@ -479,6 +483,336 @@
                 .finally(function () { if (btn) btn.disabled = false; });
         });
     }
+
+    // ── browser broadcast (WHIP) ──────────────────────────────────────────────
+
+    var bcast = (function () {
+        var localStream = null;
+        var screenStream = null;
+        var pc = null;
+        var whipResourceUrl = null;
+        var timerInterval = null;
+        var startedAt = null;
+        var videoMuted = false;
+        var audioMuted = false;
+        var currentSource = 'camera';
+        var initialized = false;
+
+        function setStatus(msg, isErr) {
+            var s = el('bcast-status');
+            if (!s) return;
+            s.textContent = msg;
+            s.className = 'dash-status' + (isErr ? ' err' : (msg ? '' : ''));
+        }
+
+        function getWhipUrl() {
+            var slug = state.activeSlug;
+            if (!slug) return null;
+            var ch = null;
+            for (var i = 0; i < state.channels.length; i++) {
+                if (state.channels[i].slug === slug) { ch = state.channels[i]; break; }
+            }
+            if (!ch || !ch.stream_key) return null;
+            return '/whip/' + encodeURIComponent(slug) + '?key=' + encodeURIComponent(ch.stream_key);
+        }
+
+        function enumerateDevices() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+            navigator.mediaDevices.enumerateDevices().then(function (devices) {
+                var vidSel = el('bcast-video-select');
+                var audSel = el('bcast-audio-select');
+                if (!vidSel || !audSel) return;
+                var vids = devices.filter(function (d) { return d.kind === 'videoinput'; });
+                var auds = devices.filter(function (d) { return d.kind === 'audioinput'; });
+                if (vids.length) {
+                    vidSel.innerHTML = vids.map(function (d, i) {
+                        return '<option value="' + esc(d.deviceId) + '">' + esc(d.label || 'Camera ' + i) + '</option>';
+                    }).join('');
+                }
+                if (auds.length) {
+                    audSel.innerHTML = auds.map(function (d, i) {
+                        return '<option value="' + esc(d.deviceId) + '">' + esc(d.label || 'Mic ' + i) + '</option>';
+                    }).join('');
+                }
+            }).catch(function () {});
+        }
+
+        function getVideoConstraints() {
+            var resSel = el('bcast-res');
+            var fpsSel = el('bcast-fps');
+            var vidSel = el('bcast-video-select');
+            var res = resSel ? resSel.value : '1280x720';
+            var parts = res.split('x');
+            var w = parseInt(parts[0]) || 1280;
+            var h = parseInt(parts[1]) || 720;
+            var fps = parseInt(fpsSel ? fpsSel.value : '30') || 30;
+            var deviceId = vidSel ? vidSel.value : '';
+            var c = { width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: fps } };
+            if (deviceId) c.deviceId = { exact: deviceId };
+            return c;
+        }
+
+        function getAudioConstraints() {
+            var audSel = el('bcast-audio-select');
+            var deviceId = audSel ? audSel.value : '';
+            var c = { echoCancellation: true, noiseSuppression: true };
+            if (deviceId) c.deviceId = { exact: deviceId };
+            return c;
+        }
+
+        function acquireMedia(source) {
+            currentSource = source;
+            stopStreams();
+
+            if (source === 'camera') {
+                return navigator.mediaDevices.getUserMedia({ video: getVideoConstraints(), audio: getAudioConstraints() })
+                    .then(function (stream) {
+                        localStream = stream;
+                        var preview = el('bcast-preview');
+                        if (preview) { preview.srcObject = stream; }
+                        var pipWrap = el('bcast-pip-overlay');
+                        if (pipWrap) pipWrap.style.display = 'none';
+                        enumerateDevices();
+                    });
+            } else if (source === 'screen') {
+                return navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true })
+                    .then(function (stream) {
+                        screenStream = stream;
+                        var preview = el('bcast-preview');
+                        if (preview) { preview.srcObject = stream; }
+                        var pipWrap = el('bcast-pip-overlay');
+                        if (pipWrap) pipWrap.style.display = 'none';
+                        stream.getVideoTracks()[0].addEventListener('ended', function () {
+                            if (pc) stopBroadcast('Screen share ended');
+                            else stopStreams();
+                        });
+                        // Try to get mic
+                        return navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints() })
+                            .then(function (micStream) { localStream = micStream; })
+                            .catch(function () {});
+                    });
+            } else if (source === 'screen+camera') {
+                return navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: false })
+                    .then(function (scStream) {
+                        screenStream = scStream;
+                        return navigator.mediaDevices.getUserMedia({ video: getVideoConstraints(), audio: getAudioConstraints() });
+                    })
+                    .then(function (camStream) {
+                        localStream = camStream;
+                        var mainPreview = el('bcast-preview');
+                        if (mainPreview) { mainPreview.srcObject = screenStream; }
+                        var pipVideo = el('bcast-pip-video');
+                        if (pipVideo) { pipVideo.srcObject = camStream; }
+                        var pipWrap = el('bcast-pip-overlay');
+                        if (pipWrap) pipWrap.style.display = '';
+                        screenStream.getVideoTracks()[0].addEventListener('ended', function () {
+                            if (pc) stopBroadcast('Screen share ended');
+                            else stopStreams();
+                        });
+                        enumerateDevices();
+                    });
+            }
+            return Promise.resolve();
+        }
+
+        function stopStreams() {
+            if (localStream) { localStream.getTracks().forEach(function (t) { t.stop(); }); localStream = null; }
+            if (screenStream) { screenStream.getTracks().forEach(function (t) { t.stop(); }); screenStream = null; }
+            var preview = el('bcast-preview');
+            if (preview) { try { preview.srcObject = null; } catch (_) {} }
+        }
+
+        function startBroadcast() {
+            var startBtn = el('bcast-start-btn');
+            if (startBtn) startBtn.disabled = true;
+            setStatus('Requesting media access…');
+
+            var whipUrl = getWhipUrl();
+            if (!whipUrl) {
+                setStatus('Select a channel with a stream key first.', true);
+                if (startBtn) startBtn.disabled = false;
+                return;
+            }
+
+            var mediaPromise = (localStream || screenStream) ? Promise.resolve() : acquireMedia(currentSource);
+
+            mediaPromise
+                .then(function () {
+                    setStatus('Connecting…');
+                    var iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+                    pc = new RTCPeerConnection({ iceServers: iceServers });
+
+                    var videoTrack = null, audioTrack = null;
+
+                    if (currentSource === 'screen+camera') {
+                        if (screenStream) screenStream.getVideoTracks().forEach(function (t) { videoTrack = t; pc.addTrack(t, screenStream); });
+                        if (localStream) localStream.getAudioTracks().forEach(function (t) { audioTrack = t; pc.addTrack(t, localStream); });
+                    } else if (currentSource === 'screen') {
+                        if (screenStream) {
+                            screenStream.getVideoTracks().forEach(function (t) { videoTrack = t; pc.addTrack(t, screenStream); });
+                            screenStream.getAudioTracks().forEach(function (t) { audioTrack = t; pc.addTrack(t, screenStream); });
+                        }
+                        if (localStream) localStream.getAudioTracks().forEach(function (t) { if (!audioTrack) { audioTrack = t; pc.addTrack(t, localStream); } });
+                    } else {
+                        if (localStream) localStream.getTracks().forEach(function (t) {
+                            if (t.kind === 'video') videoTrack = t;
+                            if (t.kind === 'audio') audioTrack = t;
+                            pc.addTrack(t, localStream);
+                        });
+                    }
+
+                    return pc.createOffer().then(function (offer) {
+                        return pc.setLocalDescription(offer);
+                    }).then(function () {
+                        return new Promise(function (resolve) {
+                            var timeout = setTimeout(function () { resolve(pc.localDescription.sdp); }, 3000);
+                            pc.addEventListener('icegatheringstatechange', function () {
+                                if (pc.iceGatheringState === 'complete') { clearTimeout(timeout); resolve(pc.localDescription.sdp); }
+                            });
+                            if (pc.iceGatheringState === 'complete') { clearTimeout(timeout); resolve(pc.localDescription.sdp); }
+                        });
+                    }).then(function (sdp) {
+                        return fetch(whipUrl, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: sdp });
+                    }).then(function (resp) {
+                        if (!resp.ok) return resp.json().catch(function () { return {}; }).then(function (e) {
+                            throw new Error(e.error || 'WHIP failed (' + resp.status + ')');
+                        });
+                        whipResourceUrl = resp.headers.get('Location') || null;
+                        return resp.text();
+                    }).then(function (answerSdp) {
+                        return pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+                    }).then(function () {
+                        pc.addEventListener('connectionstatechange', function () {
+                            var s = pc.connectionState;
+                            if (s === 'failed' || s === 'disconnected') stopBroadcast('Connection lost');
+                        });
+                        showLiveControls(videoTrack, audioTrack);
+                        setStatus('');
+                    });
+                })
+                .catch(function (err) {
+                    setStatus(err.message, true);
+                    if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+                    if (startBtn) startBtn.disabled = false;
+                });
+        }
+
+        function showLiveControls(videoTrack, audioTrack) {
+            var idleEl = el('bcast-idle-controls');
+            var liveEl = el('bcast-live-controls');
+            var badgeEl = el('bcast-live-badge');
+            if (idleEl) idleEl.style.display = 'none';
+            if (liveEl) liveEl.style.display = '';
+            if (badgeEl) badgeEl.style.display = '';
+
+            startedAt = Date.now();
+            timerInterval = setInterval(function () {
+                var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                var h = Math.floor(elapsed / 3600);
+                var m = Math.floor((elapsed % 3600) / 60);
+                var s = elapsed % 60;
+                var timerEl = el('bcast-timer');
+                if (timerEl) {
+                    timerEl.textContent = (h ? String(h).padStart(2, '0') + ':' : '') +
+                        String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+                }
+            }, 1000);
+
+            var muteVidBtn = el('bcast-mute-video');
+            if (muteVidBtn) {
+                muteVidBtn.onclick = function () {
+                    videoMuted = !videoMuted;
+                    if (videoTrack) videoTrack.enabled = !videoMuted;
+                    muteVidBtn.textContent = videoMuted ? 'Cam Off' : 'Cam On';
+                    muteVidBtn.classList.toggle('dash-btn-danger', videoMuted);
+                };
+            }
+
+            var muteAudBtn = el('bcast-mute-audio');
+            if (muteAudBtn) {
+                muteAudBtn.onclick = function () {
+                    audioMuted = !audioMuted;
+                    if (audioTrack) audioTrack.enabled = !audioMuted;
+                    muteAudBtn.textContent = audioMuted ? 'Mic Off' : 'Mic On';
+                    muteAudBtn.classList.toggle('dash-btn-danger', audioMuted);
+                };
+            }
+
+            var endBtn = el('bcast-end-btn');
+            if (endBtn) {
+                endBtn.onclick = function () {
+                    if (confirm('End this broadcast?')) stopBroadcast('Ended by user');
+                };
+            }
+        }
+
+        function stopBroadcast(reason) {
+            clearInterval(timerInterval); timerInterval = null;
+            if (whipResourceUrl) {
+                fetch(whipResourceUrl, { method: 'DELETE' }).catch(function () {});
+                whipResourceUrl = null;
+            }
+            if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+            stopStreams();
+
+            var idleEl = el('bcast-idle-controls');
+            var liveEl = el('bcast-live-controls');
+            var badgeEl = el('bcast-live-badge');
+            if (idleEl) idleEl.style.display = '';
+            if (liveEl) liveEl.style.display = 'none';
+            if (badgeEl) badgeEl.style.display = 'none';
+
+            var startBtn = el('bcast-start-btn');
+            if (startBtn) startBtn.disabled = false;
+
+            setStatus(reason ? 'Broadcast ended: ' + reason : 'Broadcast ended.');
+            videoMuted = false; audioMuted = false;
+        }
+
+        function setupListeners() {
+            if (initialized) return;
+            initialized = true;
+
+            // Source buttons
+            var srcBtns = document.querySelectorAll('.bcast-source-btn');
+            for (var i = 0; i < srcBtns.length; i++) {
+                (function (btn) {
+                    btn.addEventListener('click', function () {
+                        var source = btn.getAttribute('data-source');
+                        if (!source) return;
+                        for (var j = 0; j < srcBtns.length; j++) srcBtns[j].classList.remove('active');
+                        btn.classList.add('active');
+                        currentSource = source;
+                        var vg = el('bcast-video-group');
+                        if (vg) vg.style.display = (source === 'camera' || source === 'screen+camera') ? '' : 'none';
+                        acquireMedia(source).catch(function (err) { setStatus(err.message, true); });
+                    });
+                })(srcBtns[i]);
+            }
+
+            var startBtn = el('bcast-start-btn');
+            if (startBtn) {
+                startBtn.addEventListener('click', function () { startBroadcast(); });
+            }
+        }
+
+        function onTabOpen() {
+            setupListeners();
+            enumerateDevices();
+            var whipUrl = getWhipUrl();
+            var noteEl = el('bcast-note');
+            if (noteEl) {
+                noteEl.textContent = whipUrl ? '' : 'Select a channel in the sidebar to enable broadcasting.';
+                noteEl.style.display = whipUrl ? 'none' : '';
+            }
+            // Start camera preview if nothing active
+            if (!localStream && !screenStream) {
+                acquireMedia('camera').catch(function () {});
+            }
+        }
+
+        return { onTabOpen: onTabOpen, stopBroadcast: stopBroadcast };
+    })();
 
     // ── init ───────────────────────────────────────────────────────────────────
 

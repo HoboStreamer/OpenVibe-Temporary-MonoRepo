@@ -32,7 +32,25 @@ module.exports = {
 
     ingest: {
         rtmp:   process.env.INGEST_RTMP_URL   || 'rtmp://ingest.openre.stream/live',
-        whip:   process.env.INGEST_WHIP_URL   || 'https://ingest.openre.stream/whip',
+        whip:   process.env.INGEST_WHIP_URL   || 'https://openre.stream/whip',
         jsmpeg: process.env.INGEST_JSMPEG_URL || 'wss://ingest.openre.stream/jsmpeg',
+    },
+
+    mediasoup: {
+        listenIp:    process.env.MEDIASOUP_LISTEN_IP    || '0.0.0.0',
+        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || '40.160.240.222',
+        minPort:     parseInt(process.env.MEDIASOUP_MIN_PORT || '12000', 10),
+        maxPort:     parseInt(process.env.MEDIASOUP_MAX_PORT || '12300', 10),
+        mediaCodecs: [
+            { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+            { kind: 'video', mimeType: 'video/VP8',  clockRate: 90000, parameters: { 'x-google-start-bitrate': 1000 } },
+            { kind: 'video', mimeType: 'video/H264', clockRate: 90000, parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f', 'level-asymmetry-allowed': 1 } },
+        ],
+    },
+
+    turn: {
+        url:        process.env.TURN_URL        || 'turn:40.160.240.222:3478',
+        username:   process.env.TURN_USERNAME   || 'hobo',
+        credential: process.env.TURN_CREDENTIAL || 'hobostreamer-turn-2025',
     },
 };

@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolvePublicOrigin } = require('@openvibe/sdk/url-defaults');
+const { renderIcon } = require('@openvibe/icons');
 
 const LIVE_NETWORK_URLS = Object.freeze({
     restream: resolvePublicOrigin({ surface: 'restream' }),
@@ -482,6 +483,7 @@ function _shellStyles() {
         .paste-card .card-title { font-size: 0.98rem; }
         .paste-card .card-kicker { font-size: 0.78rem; color: var(--muted); }
         .paste-card.no-thumb .paste-card-body { padding: 1.2rem; }
+        .paste-card.no-thumb .paste-thumb-link { display: none; }
         .data-points { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
         .eyebrow {
             color: var(--accent);
@@ -1498,14 +1500,14 @@ function _shellScript() {
 
 function renderNav(activeNav) {
     const items = [
-        { href: '/', label: 'Home', id: 'home' },
-        { href: '/channels', label: 'Channels', id: 'channels' },
-        { href: '/vods', label: 'VODs', id: 'vods' },
-        { href: '/clips', label: 'Clips', id: 'clips' },
-        { href: '/go-live', label: 'Go Live', id: 'go-live' },
-        { href: '/updates', label: 'Updates', id: 'updates' },
+        { href: '/', label: 'Home', id: 'home', icon: 'network' },
+        { href: '/channels', label: 'Channels', id: 'channels', icon: 'community' },
+        { href: '/vods', label: 'VODs', id: 'vods', icon: 'media' },
+        { href: '/clips', label: 'Clips', id: 'clips', icon: 'live' },
+        { href: '/go-live', label: 'Go Live', id: 'go-live', icon: 'launch' },
+        { href: '/updates', label: 'Updates', id: 'updates', icon: 'content' },
     ];
-    return items.map((item) => `<a class="nav-link ${item.id === activeNav ? 'active' : ''}" href="${item.href}">${escapeHtml(item.label)}</a>`).join('');
+    return items.map((item) => `<a class="nav-link ov-icon-label ${item.id === activeNav ? 'active' : ''}" href="${item.href}">${renderIcon(item.icon, { decorative: true })}<span>${escapeHtml(item.label)}</span></a>`).join('');
 }
 
 function renderFooter() {
@@ -1564,6 +1566,8 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%238b5cf6'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='18' fill='url(%23g)'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='24' font-weight='700' fill='white'%3EOV%3C/text%3E%3C/svg%3E">
             ${_meta({ title, description, canonical, ogType, ogImage })}
             ${_shellStyles()}
+            <link rel="stylesheet" href="/assets/openvibe-icons.css">
+            <script src="/assets/openvibe-icons.js" defer></script>
         </head>
         <body>
             <header class="topbar">
@@ -2289,7 +2293,7 @@ function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, stat
         </div>`;
 }
 
-function renderSection({ title, subtitle, actionHref, actionLabel, content, emptyTitle, emptyBody, emptyHref, emptyLabel }) {
+function renderSection({ title, titleHtml, subtitle, actionHref, actionLabel, content, emptyTitle, emptyBody, emptyHref, emptyLabel }) {
     const actionHtml = actionHref && actionLabel
         ? `<a class="section-link" href="${actionHref}">${escapeHtml(actionLabel)}</a>`
         : '';
@@ -2301,11 +2305,12 @@ function renderSection({ title, subtitle, actionHref, actionLabel, content, empt
                 <p class="card-body">${escapeHtml(emptyBody || 'This section will populate when more public activity is available.')}</p>
                 ${emptyHref && emptyLabel ? `<div class="form-actions" style="margin-top:1rem;"><a class="button-secondary" href="${emptyHref}">${escapeHtml(emptyLabel)}</a></div>` : ''}
             </article>`;
+    const resolvedTitle = titleHtml || escapeHtml(title || 'Section');
     return `
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">${escapeHtml(title || 'Section')}</h2>
+                    <h2 class="section-title ov-icon-label">${resolvedTitle}</h2>
                     ${subtitle ? `<p class="section-subtitle">${subtitle}</p>` : ''}
                 </div>
                 ${actionHtml}
@@ -2448,7 +2453,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
 
         ${recentlyOnlineHtml ? renderSection({
-            title: '🕐 Recently Online',
+            titleHtml: `${renderIcon('clock', { decorative: true })} Recently Online`,
             subtitle: `${(recentlyOnlineChannels || []).length} creators have streamed recently.`,
             actionHref: '/channels',
             actionLabel: 'All channels',
@@ -2460,7 +2465,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         }) : ''}
 
         ${renderSection({
-            title: '📼 Recent VODs',
+            titleHtml: `${renderIcon('media', { decorative: true })} Recent VODs`,
             subtitle: `${vodCount} replays in the archive.`,
             actionHref: '/vods',
             actionLabel: 'View all VODs',
@@ -2472,7 +2477,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         })}
 
         ${renderSection({
-            title: '✂️ Recent Clips',
+            titleHtml: `${renderIcon('live', { decorative: true })} Recent Clips`,
             subtitle: `${clipCount} clips clipped so far.`,
             actionHref: '/clips',
             actionLabel: 'View all clips',
@@ -2483,37 +2488,11 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
             emptyLabel: 'Clips',
         })}
 
-        ${featuredChannelsHtml ? renderSection({
-            title: 'Featured creators',
-            subtitle: 'Channels worth checking based on recent activity.',
-            actionHref: '/channels',
-            actionLabel: 'All channels',
-            content: `<div class="channel-grid">${featuredChannelsHtml}</div>`,
-        }) : ''}
-
-        <section class="section-panel">
-            <div class="section-head">
-                <div>
-                    <h2 class="section-title">Community pulse</h2>
-                    <p class="section-subtitle">Threads, pastes, and chat rooms from the wider OpenVibe network.</p>
-                </div>
-                <div class="form-actions">
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Community</a>
-                    <a class="section-link" href="${LIVE_NETWORK_URLS.chat}">Chat</a>
-                </div>
-            </div>
-            ${(recentThreadsHtml || roomSignalsHtml) ? `
-            <div class="story-grid" data-community-pulse-grid>
-                ${recentThreadsHtml ? `<div class="list-stack">${recentThreadsHtml}</div>` : ''}
-                ${roomSignalsHtml ? `<div class="list-stack">${roomSignalsHtml}</div>` : ''}
-            </div>` : ''}
-        </section>
-
         ${recentPasteCardsHtml ? `
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">📋 Recent Pastes</h2>
+                    <h2 class="section-title ov-icon-label">${renderIcon('community', { decorative: true })} Recent Pastes</h2>
                     <p class="section-subtitle">Screenshots, notes, and shared content from the community.</p>
                 </div>
                 <a class="section-link" href="${LIVE_NETWORK_URLS.community}">View all pastes</a>
@@ -2801,6 +2780,10 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
                                 History
                             </button>
+                            <button class="sm-tab" role="tab" data-sm-stab="broadcast" id="sm-broadcast-tab">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+                                Broadcast
+                            </button>
                         </div>
 
                         <!-- Stream tab -->
@@ -2961,6 +2944,104 @@ function renderGoLivePage({ baseUrl, session }) {
                         <div class="sm-stab-content" data-sm-stab-panel="history" style="display:none;">
                             <div data-sm-history-panel>
                                 <p class="sm-note">Loading recent streams…</p>
+                            </div>
+                        </div>
+
+                        <!-- Broadcast tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="broadcast" style="display:none;" id="sm-broadcast-panel">
+                            <div class="sm-broadcast-setup" id="sm-bcast-setup">
+                                <div class="sm-bcast-preview-wrap">
+                                    <video id="sm-bcast-preview" class="sm-bcast-preview" autoplay muted playsinline></video>
+                                    <div class="sm-bcast-preview-overlay" id="sm-bcast-pip-overlay" style="display:none;">
+                                        <video id="sm-bcast-pip" class="sm-bcast-pip-video" autoplay muted playsinline></video>
+                                    </div>
+                                    <div class="sm-bcast-preview-label" id="sm-bcast-live-badge" style="display:none;">
+                                        <span class="sm-live-dot"></span> LIVE
+                                    </div>
+                                </div>
+
+                                <div class="sm-bcast-controls">
+                                    <div class="sm-field-group">
+                                        <span class="sm-field-label">SOURCE</span>
+                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn active" id="sm-bcast-camera-btn" data-source="camera">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                Camera
+                                            </button>
+                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-btn" data-source="screen">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                                Screen
+                                            </button>
+                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-pip-btn" data-source="screen+camera">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="14" y="11" width="7" height="5" rx="1" fill="currentColor" opacity="0.7"/></svg>
+                                                Screen + Cam
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="sm-field-group" id="sm-bcast-video-group">
+                                        <span class="sm-field-label">CAMERA</span>
+                                        <select class="sm-input sm-select" id="sm-bcast-video-select">
+                                            <option value="">Default camera</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="sm-field-group">
+                                        <span class="sm-field-label">MICROPHONE</span>
+                                        <select class="sm-input sm-select" id="sm-bcast-audio-select">
+                                            <option value="">Default microphone</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="sm-field-group">
+                                        <span class="sm-field-label">QUALITY</span>
+                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                                            <select class="sm-input sm-select" id="sm-bcast-res" style="flex:1;min-width:110px;">
+                                                <option value="1280x720">720p</option>
+                                                <option value="1920x1080">1080p</option>
+                                                <option value="854x480">480p</option>
+                                                <option value="640x360">360p</option>
+                                            </select>
+                                            <select class="sm-input sm-select" id="sm-bcast-fps" style="width:70px;">
+                                                <option value="30">30fps</option>
+                                                <option value="60">60fps</option>
+                                                <option value="24">24fps</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div id="sm-bcast-idle-controls">
+                                        <button class="sm-btn-primary sm-btn-block" type="button" id="sm-bcast-start-btn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.35rem;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                            Start Broadcast
+                                        </button>
+                                        <p class="sm-note" style="margin-top:0.5rem;" id="sm-bcast-prereq-note">Create a stream on the Stream tab first, then come here to go live from your browser.</p>
+                                    </div>
+
+                                    <div id="sm-bcast-live-controls" style="display:none;">
+                                        <div class="sm-bcast-live-status">
+                                            <span class="sm-live-dot"></span>
+                                            <span id="sm-bcast-timer">00:00</span>
+                                            <span class="sm-bcast-viewers" id="sm-bcast-viewers">0 viewers</span>
+                                        </div>
+                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+                                            <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-video-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                Cam On
+                                            </button>
+                                            <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-audio-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                                                Mic On
+                                            </button>
+                                            <button type="button" class="sm-btn-ghost sm-icon-btn-danger" id="sm-bcast-end-btn">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                                                End Broadcast
+                                            </button>
+                                        </div>
+                                        <span class="sm-status-text" id="sm-bcast-live-status" style="margin-top:0.4rem;display:block;"></span>
+                                    </div>
+                                    <span class="sm-status-text" id="sm-bcast-status"></span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3390,11 +3471,29 @@ function renderGoLivePage({ baseUrl, session }) {
             .sm-dest-full-item:last-child { border-bottom: none; }
             /* stab content spacing */
             .sm-stab-content { flex: 1; }
+            /* broadcast panel */
+            .sm-broadcast-setup { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+            .sm-bcast-preview-wrap {
+                position: relative; border-radius: 12px; overflow: hidden;
+                background: #0a0a0a; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center;
+            }
+            .sm-bcast-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+            .sm-bcast-preview-overlay { position: absolute; bottom: 8px; right: 8px; width: 28%; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; border: 2px solid rgba(255,255,255,0.25); }
+            .sm-bcast-pip-video { width: 100%; height: 100%; object-fit: cover; }
+            .sm-bcast-preview-label { position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 999px; background: rgba(220,38,38,0.85); font-size: 0.72rem; font-weight: 800; color: white; letter-spacing: 0.08em; }
+            .sm-bcast-controls { display: flex; flex-direction: column; gap: 0.75rem; }
+            .sm-bcast-source-btn { padding: 0.4rem 0.8rem !important; font-size: 0.8rem !important; }
+            .sm-bcast-source-btn.active { border-color: var(--accent) !important; color: var(--accent) !important; }
+            .sm-btn-block { width: 100%; justify-content: center; }
+            .sm-bcast-live-status { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 0.85rem; border-radius: 10px; background: rgba(220,38,38,0.12); border: 1px solid rgba(220,38,38,0.3); }
+            .sm-bcast-viewers { font-size: 0.82rem; color: var(--muted); margin-left: auto; }
+            #sm-bcast-timer { font-size: 0.9rem; font-weight: 800; font-family: ui-monospace, monospace; color: #f87171; }
             /* responsive */
             @media (max-width: 740px) {
                 .sm-layout { grid-template-columns: 1fr; }
                 .sm-sidebar { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); max-height: 220px; }
                 .sm-method-grid { grid-template-columns: repeat(2, 1fr); }
+                .sm-broadcast-setup { grid-template-columns: 1fr; }
             }
         `,
     });

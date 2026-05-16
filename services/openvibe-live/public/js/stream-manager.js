@@ -1,7 +1,8 @@
 /**
- * stream-manager.js — go-live page client v=20260515-1
+ * stream-manager.js — go-live page client v=20260603-1
  *
  * Two-panel stream manager: sidebar channel slots + right editor panel.
+ * Includes browser broadcast via WHIP (WebRTC-HTTP Ingestion Protocol).
  * Plain JS IIFE — no module system, no bundler.
  */
 (function () {
@@ -214,6 +215,11 @@
         if (autoBox) {
             var m = card.getAttribute('data-method');
             autoBox.style.display = (m === 'whip' || m === 'rtmp') ? '' : 'none';
+        }
+        // Show broadcast tab when browser method selected
+        if (card.getAttribute('data-method') === 'browser') {
+            activateStab('broadcast');
+            bcast.updatePrereqNote();
         }
     });
 
@@ -562,6 +568,424 @@
               .finally(function () { if (btn5) btn5.disabled = false; });
         });
     }
+
+    // ── browser broadcast (WHIP) ──────────────────────────────────────────────
+    var bcast = (function () {
+        var localStream = null;     // camera/mic
+        var screenStream = null;    // screen share
+        var pc = null;              // RTCPeerConnection
+        var whipResourceUrl = null; // DELETE endpoint
+        var timerInterval = null;
+        var startedAt = null;
+        var videoMuted = false;
+        var audioMuted = false;
+        var currentSource = 'camera';
+
+        function statusEl() { return el('#sm-bcast-status'); }
+        function setStatus(msg, isErr) {
+            var s = statusEl(); if (!s) return;
+            s.textContent = msg;
+            s.className = 'sm-status-text' + (isErr ? ' err' : (msg ? '' : ''));
+        }
+        function liveStatusEl() { return el('#sm-bcast-live-status'); }
+        function setLiveStatus(msg) { var s = liveStatusEl(); if (s) s.textContent = msg; }
+
+        function getWhipBase() {
+            return state.restreamUrl ? state.restreamUrl.replace(/\/$/, '') : 'https://openre.stream';
+        }
+        function getWhipUrl() {
+            var slug = state.activeChannelSlug;
+            var ch = state.channels.filter(function (c) { return c.slug === slug; })[0];
+            var key = ch && ch.stream_key;
+            if (!slug || !key) return null;
+            return getWhipBase() + '/whip/' + encodeURIComponent(slug) + '?key=' + encodeURIComponent(key);
+        }
+
+        function updatePrereqNote() {
+            var noteEl = el('#sm-bcast-prereq-note');
+            if (!noteEl) return;
+            if (!state.activeChannelSlug) {
+                noteEl.textContent = 'Select a channel first, then create a stream on the Stream tab.';
+            } else if (!state.activeStreamId) {
+                noteEl.textContent = 'Create a stream on the Stream tab first, then start broadcasting here.';
+            } else {
+                noteEl.textContent = '';
+            }
+        }
+
+        function enumerateDevices() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+            navigator.mediaDevices.enumerateDevices().then(function (devices) {
+                var vidSel = el('#sm-bcast-video-select');
+                var audSel = el('#sm-bcast-audio-select');
+                if (!vidSel || !audSel) return;
+                var vids = devices.filter(function (d) { return d.kind === 'videoinput'; });
+                var auds = devices.filter(function (d) { return d.kind === 'audioinput'; });
+                if (vids.length) {
+                    vidSel.innerHTML = vids.map(function (d) {
+                        return '<option value="' + esc(d.deviceId) + '">' + esc(d.label || 'Camera ' + vids.indexOf(d)) + '</option>';
+                    }).join('');
+                }
+                if (auds.length) {
+                    audSel.innerHTML = auds.map(function (d) {
+                        return '<option value="' + esc(d.deviceId) + '">' + esc(d.label || 'Mic ' + auds.indexOf(d)) + '</option>';
+                    }).join('');
+                }
+            }).catch(function () {});
+        }
+
+        function getVideoConstraints() {
+            var resSel = el('#sm-bcast-res');
+            var fpsSel = el('#sm-bcast-fps');
+            var vidSel = el('#sm-bcast-video-select');
+            var res = resSel ? resSel.value : '1280x720';
+            var parts = res.split('x');
+            var w = parseInt(parts[0]) || 1280;
+            var h = parseInt(parts[1]) || 720;
+            var fps = parseInt(fpsSel ? fpsSel.value : '30') || 30;
+            var deviceId = vidSel ? vidSel.value : '';
+            var c = { width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: fps } };
+            if (deviceId) c.deviceId = { exact: deviceId };
+            return c;
+        }
+
+        function getAudioConstraints() {
+            var audSel = el('#sm-bcast-audio-select');
+            var deviceId = audSel ? audSel.value : '';
+            var c = { echoCancellation: true, noiseSuppression: true };
+            if (deviceId) c.deviceId = { exact: deviceId };
+            return c;
+        }
+
+        async function acquireMedia(source) {
+            currentSource = source;
+            stopStreams();
+
+            if (source === 'camera') {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: getVideoConstraints(),
+                    audio: getAudioConstraints(),
+                });
+                var preview = el('#sm-bcast-preview');
+                if (preview) { preview.srcObject = localStream; }
+                hide(el('#sm-bcast-pip-overlay'));
+            } else if (source === 'screen') {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: { ideal: 30 } },
+                    audio: true,
+                });
+                // Also get mic
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints() });
+                } catch (_) {}
+                var preview2 = el('#sm-bcast-preview');
+                if (preview2) { preview2.srcObject = screenStream; }
+                hide(el('#sm-bcast-pip-overlay'));
+                // Stop broadcast if screen share ends
+                screenStream.getVideoTracks()[0].addEventListener('ended', function () {
+                    if (pc) stopBroadcast('Screen share ended');
+                    else stopPreview();
+                });
+            } else if (source === 'screen+camera') {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: { ideal: 30 } },
+                    audio: false,
+                });
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: getVideoConstraints(),
+                    audio: getAudioConstraints(),
+                });
+                var mainPreview = el('#sm-bcast-preview');
+                if (mainPreview) { mainPreview.srcObject = screenStream; }
+                var pipVideo = el('#sm-bcast-pip');
+                if (pipVideo) { pipVideo.srcObject = localStream; }
+                show(el('#sm-bcast-pip-overlay'));
+                screenStream.getVideoTracks()[0].addEventListener('ended', function () {
+                    if (pc) stopBroadcast('Screen share ended');
+                    else stopPreview();
+                });
+            }
+            // Re-enumerate devices after getUserMedia (labels become available)
+            enumerateDevices();
+            return localStream || screenStream;
+        }
+
+        function stopStreams() {
+            if (localStream) { localStream.getTracks().forEach(function (t) { t.stop(); }); localStream = null; }
+            if (screenStream) { screenStream.getTracks().forEach(function (t) { t.stop(); }); screenStream = null; }
+            var preview = el('#sm-bcast-preview');
+            if (preview) { try { preview.srcObject = null; } catch (_) {} }
+        }
+
+        function stopPreview() {
+            stopStreams();
+        }
+
+        async function startBroadcast() {
+            var startBtn = el('#sm-bcast-start-btn');
+            if (startBtn) startBtn.disabled = true;
+            setStatus('Requesting media access…');
+
+            var whipUrl = getWhipUrl();
+            if (!whipUrl) {
+                setStatus('Create a stream first (Stream tab) to get a stream key.', true);
+                if (startBtn) startBtn.disabled = false;
+                return;
+            }
+
+            try {
+                // Acquire media if not already previewing
+                if (!localStream && !screenStream) {
+                    await acquireMedia(currentSource);
+                }
+
+                setStatus('Connecting to ingest server…');
+
+                // Build RTC peer connection with TURN/STUN
+                var iceServers = [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                ];
+                // Use server TURN if available
+                if (state.turnConfig) {
+                    iceServers.push(state.turnConfig);
+                }
+
+                pc = new RTCPeerConnection({ iceServers: iceServers });
+
+                // Add tracks to peer connection
+                var videoTrack = null;
+                var audioTrack = null;
+
+                if (currentSource === 'screen+camera') {
+                    // Main video: screen
+                    var screenVideoTracks = screenStream ? screenStream.getVideoTracks() : [];
+                    if (screenVideoTracks.length) {
+                        videoTrack = screenVideoTracks[0];
+                        pc.addTrack(videoTrack, screenStream);
+                    }
+                    // Mix camera audio + screen audio
+                    var camAudioTracks = localStream ? localStream.getAudioTracks() : [];
+                    if (camAudioTracks.length) {
+                        audioTrack = camAudioTracks[0];
+                        pc.addTrack(audioTrack, localStream);
+                    }
+                } else if (currentSource === 'screen') {
+                    var sVideoTracks = screenStream ? screenStream.getVideoTracks() : [];
+                    if (sVideoTracks.length) {
+                        videoTrack = sVideoTracks[0];
+                        pc.addTrack(videoTrack, screenStream);
+                    }
+                    // Use mic audio if available
+                    var micTracks = localStream ? localStream.getAudioTracks() : [];
+                    var screenAudioTracks = screenStream ? screenStream.getAudioTracks() : [];
+                    var micOrScreen = micTracks.length ? micTracks[0] : (screenAudioTracks.length ? screenAudioTracks[0] : null);
+                    if (micOrScreen) {
+                        audioTrack = micOrScreen;
+                        pc.addTrack(audioTrack, micOrScreen.stream || localStream || screenStream);
+                    }
+                } else {
+                    // Camera
+                    if (localStream) {
+                        localStream.getTracks().forEach(function (t) {
+                            if (t.kind === 'video') videoTrack = t;
+                            if (t.kind === 'audio') audioTrack = t;
+                            pc.addTrack(t, localStream);
+                        });
+                    }
+                }
+
+                // Create SDP offer
+                var offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering
+                var sdp = await new Promise(function (resolve, reject) {
+                    var timeout = setTimeout(function () { resolve(pc.localDescription.sdp); }, 3000);
+                    pc.addEventListener('icegatheringstatechange', function () {
+                        if (pc.iceGatheringState === 'complete') {
+                            clearTimeout(timeout);
+                            resolve(pc.localDescription.sdp);
+                        }
+                    });
+                    if (pc.iceGatheringState === 'complete') {
+                        clearTimeout(timeout);
+                        resolve(pc.localDescription.sdp);
+                    }
+                });
+
+                // Send WHIP offer
+                var resp = await fetch(whipUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/sdp' },
+                    body: sdp,
+                });
+
+                if (!resp.ok) {
+                    var errJson = await resp.json().catch(function () { return {}; });
+                    throw new Error(errJson.error || 'WHIP offer failed (' + resp.status + ')');
+                }
+
+                whipResourceUrl = resp.headers.get('Location') || null;
+                var answerSdp = await resp.text();
+                await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+                pc.addEventListener('connectionstatechange', function () {
+                    var cstate = pc.connectionState;
+                    setLiveStatus(cstate === 'connected' ? '' : cstate);
+                    if (cstate === 'failed' || cstate === 'disconnected') {
+                        stopBroadcast('Connection lost');
+                    }
+                });
+
+                // Success — show live controls
+                setStatus('');
+                showLiveControls(videoTrack, audioTrack);
+                setStatus('');
+
+                // Signal stream as started via openvibe-live API
+                if (state.activeStreamId) {
+                    api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(state.activeStreamId) + '/start', {})
+                        .catch(function () {});
+                }
+
+            } catch (err) {
+                setStatus(err.message, true);
+                if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+                if (startBtn) startBtn.disabled = false;
+            }
+        }
+
+        function showLiveControls(videoTrack, audioTrack) {
+            hide(el('#sm-bcast-idle-controls'));
+            show(el('#sm-bcast-live-controls'));
+            show(el('#sm-bcast-live-badge'));
+
+            startedAt = Date.now();
+            timerInterval = setInterval(function () {
+                var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                var h = Math.floor(elapsed / 3600);
+                var m = Math.floor((elapsed % 3600) / 60);
+                var s = elapsed % 60;
+                var timerEl = el('#sm-bcast-timer');
+                if (timerEl) {
+                    timerEl.textContent = (h ? String(h).padStart(2, '0') + ':' : '') +
+                        String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+                }
+            }, 1000);
+
+            // Mute video
+            var muteVideoBtn = el('#sm-bcast-mute-video-btn');
+            if (muteVideoBtn) {
+                muteVideoBtn.onclick = function () {
+                    videoMuted = !videoMuted;
+                    if (videoTrack) videoTrack.enabled = !videoMuted;
+                    muteVideoBtn.innerHTML = videoMuted
+                        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34"/></svg> Cam Off'
+                        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Cam On';
+                };
+            }
+
+            // Mute audio
+            var muteAudioBtn = el('#sm-bcast-mute-audio-btn');
+            if (muteAudioBtn) {
+                muteAudioBtn.onclick = function () {
+                    audioMuted = !audioMuted;
+                    if (audioTrack) audioTrack.enabled = !audioMuted;
+                    muteAudioBtn.innerHTML = audioMuted
+                        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Mic Off'
+                        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Mic On';
+                };
+            }
+
+            // End broadcast
+            var endBtn = el('#sm-bcast-end-btn');
+            if (endBtn) {
+                endBtn.onclick = function () {
+                    if (confirm('End this broadcast?')) stopBroadcast('Ended by user');
+                };
+            }
+        }
+
+        function stopBroadcast(reason) {
+            clearInterval(timerInterval); timerInterval = null;
+
+            // Send WHIP DELETE
+            if (whipResourceUrl) {
+                fetch(whipResourceUrl, { method: 'DELETE' }).catch(function () {});
+                whipResourceUrl = null;
+            }
+
+            if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+
+            stopStreams();
+
+            hide(el('#sm-bcast-live-controls'));
+            hide(el('#sm-bcast-live-badge'));
+            show(el('#sm-bcast-idle-controls'));
+            var startBtn = el('#sm-bcast-start-btn');
+            if (startBtn) startBtn.disabled = false;
+
+            setStatus(reason ? 'Broadcast ended: ' + reason : 'Broadcast ended.');
+
+            // End stream via API
+            if (state.activeStreamId) {
+                api('POST', '/api/v1/go-live/streams/' + encodeURIComponent(state.activeStreamId) + '/end', {})
+                    .then(function (res) {
+                        var s = res.stream || res;
+                        if (s) {
+                            var idx = state.streams.findIndex(function (x) { return x.id === s.id; });
+                            if (idx >= 0) state.streams[idx] = s;
+                            state.activeStreamId = null;
+                            updateStreamButtons(null);
+                            if (state.activeChannelSlug) renderHistory(state.activeChannelSlug);
+                        }
+                    }).catch(function () {});
+            }
+
+            videoMuted = false; audioMuted = false;
+        }
+
+        // Source selection buttons
+        document.addEventListener('click', function (e) {
+            var srcBtn = e.target.closest('.sm-bcast-source-btn');
+            if (!srcBtn) return;
+            var source = srcBtn.getAttribute('data-source');
+            if (!source) return;
+            els('.sm-bcast-source-btn').forEach(function (b) { b.classList.remove('active'); });
+            srcBtn.classList.add('active');
+            currentSource = source;
+            var videoGroup = el('#sm-bcast-video-group');
+            if (videoGroup) videoGroup.style.display = (source === 'camera' || source === 'screen+camera') ? '' : 'none';
+            // Start preview
+            acquireMedia(source).catch(function (err) { setStatus(err.message, true); });
+        });
+
+        // Start broadcast button
+        var startBtn = el('#sm-bcast-start-btn');
+        if (startBtn) {
+            startBtn.addEventListener('click', function () {
+                startBroadcast();
+            });
+        }
+
+        // Init: enumerate devices when broadcast tab is first shown
+        var stabBar2 = el('[data-sm-stab-bar]');
+        if (stabBar2) {
+            stabBar2.addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-sm-stab]');
+                if (btn && btn.getAttribute('data-sm-stab') === 'broadcast') {
+                    enumerateDevices();
+                    updatePrereqNote();
+                    // Start camera preview
+                    if (!localStream && !screenStream) {
+                        acquireMedia('camera').catch(function () {});
+                    }
+                }
+            });
+        }
+
+        return { updatePrereqNote: updatePrereqNote, stopBroadcast: stopBroadcast };
+    })();
 
     // ── boot ──────────────────────────────────────────────────────────────────
     if (document.readyState === 'loading') {
