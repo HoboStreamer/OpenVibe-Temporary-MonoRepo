@@ -68,9 +68,16 @@ async function checkRealtimeSocketIo(options = {}) {
         { ttl_seconds: realtimeConfig.presenceTtlSeconds },
         realtimeConfig.presenceTtlSeconds > 0 ? null : 'Presence TTL must be greater than zero.',
     ));
+    // In offline/dry-run mode a disabled bridge simply means Redis is not yet
+    // running (expected before the stack is started) — treat as yellow, not red.
+    const bridgeStatus = bridgeState.mode === 'redis-stream'
+        ? 'green'
+        : (bridgeState.mode === 'polling'
+            ? 'yellow'
+            : (offline ? 'yellow' : 'red'));
     checks.push(buildCheck(
         'event_bridge_mode',
-        bridgeState.mode === 'redis-stream' ? 'green' : (bridgeState.mode === 'polling' ? 'yellow' : 'red'),
+        bridgeStatus,
         bridgeState,
         bridgeState.mode === 'redis-stream'
             ? null
