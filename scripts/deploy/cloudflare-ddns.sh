@@ -140,6 +140,18 @@ RECORDS=(
   "openvibe.live|openvibe.live|false"
   "openre.stream|openre.stream|false"
   "openvibe.media|openvibe.media|false"
+
+  # openre.stream RTMP ingest subdomain (DNS-only)
+  "openre.stream|ingest.openre.stream|false"
+
+  # Legacy Hobo Network
+  "alexfrison.net|alexfrison.net|true"
+  "alexfrison.net|www.alexfrison.net|true"
+  "hobostreamer.com|hobostreamer.com|false"
+  "hobostreamer.com|www.hobostreamer.com|true"
+  "hobo.tools|hobo.tools|true"
+  "hobo.tools|*.hobo.tools|true"
+  "hobo.quest|hobo.quest|true"
 )
 
 ERRORS=0
@@ -157,3 +169,19 @@ fi
 echo "$NEW_IP" > "$LAST_IP_FILE"
 chmod 600 "$LAST_IP_FILE"
 log "All records updated successfully → $NEW_IP"
+
+# Update MEDIASOUP_ANNOUNCED_IP in openvibe .env so WebRTC stays reachable
+ENV_FILE="/opt/openvibe/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  if grep -q "^MEDIASOUP_ANNOUNCED_IP=" "$ENV_FILE"; then
+    sed -i "s|^MEDIASOUP_ANNOUNCED_IP=.*|MEDIASOUP_ANNOUNCED_IP=${NEW_IP}|" "$ENV_FILE"
+  else
+    echo "MEDIASOUP_ANNOUNCED_IP=${NEW_IP}" >> "$ENV_FILE"
+  fi
+  log "Updated MEDIASOUP_ANNOUNCED_IP=${NEW_IP}"
+  # Gracefully restart openre-stream so it picks up the new announced IP
+  if systemctl is-active --quiet openre-stream 2>/dev/null; then
+    systemctl restart openre-stream
+    log "Restarted openre-stream with new announced IP"
+  fi
+fi

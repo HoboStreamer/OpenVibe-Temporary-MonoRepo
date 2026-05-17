@@ -127,6 +127,18 @@ RECORDS=(
   "openvibe.live|openvibe.live|false"
   "openre.stream|openre.stream|false"
   "openvibe.media|openvibe.media|false"
+
+  # openre.stream RTMP ingest subdomain (DNS-only — direct TCP port 1935)
+  "openre.stream|ingest.openre.stream|false"
+
+  # Legacy Hobo Network (kept running alongside OpenVibe)
+  "alexfrison.net|alexfrison.net|true"
+  "alexfrison.net|www.alexfrison.net|true"
+  "hobostreamer.com|hobostreamer.com|false"
+  "hobostreamer.com|www.hobostreamer.com|true"
+  "hobo.tools|hobo.tools|true"
+  "hobo.tools|*.hobo.tools|true"
+  "hobo.quest|hobo.quest|true"
 )
 
 ERRORS=0

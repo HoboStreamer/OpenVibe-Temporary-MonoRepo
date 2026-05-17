@@ -78,6 +78,22 @@ cert "openvibe.vip"       -d "openvibe.vip"
 cert "openvibe.host"      -d "openvibe.host"
 cert "openvibe.tips"      -d "openvibe.tips"
 
+# ── Legacy Hobo Network domains ───────────────────────────────────────────────
+cert "alexfrison.net" \
+  -d "alexfrison.net" \
+  -d "www.alexfrison.net"
+
+cert "hobostreamer.com" \
+  -d "hobostreamer.com" \
+  -d "www.hobostreamer.com"
+
+cert "hobo.tools wildcard" \
+  -d "hobo.tools" \
+  -d "*.hobo.tools"
+
+cert "hobo.quest" \
+  -d "hobo.quest"
+
 echo
 log "Certificate provisioning complete."
 log "Auto-renewal is handled by: systemctl status snap.certbot.renew.timer"
