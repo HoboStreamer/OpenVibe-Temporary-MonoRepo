@@ -1,0 +1,20 @@
+[Unit]
+Description=Cloudflare Dynamic DNS updater for OpenVibe
+Documentation=https://github.com/HoboStreamer/OpenVibe-Temporary-MonoRepo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openvibe/scripts/deploy/cloudflare-ddns.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflare-ddns
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/cache/cloudflare-ddns
+ReadOnlyPaths=/etc/cloudflare

@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Cloudflare DDNS update every 5 minutes
+Documentation=https://github.com/HoboStreamer/OpenVibe-Temporary-MonoRepo
+
+[Timer]
+# Run 30 seconds after boot, then every 5 minutes
+OnBootSec=30s
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
