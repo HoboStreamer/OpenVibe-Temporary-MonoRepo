@@ -8,6 +8,39 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openvibe
+          POSTGRES_PASSWORD: openvibe
+          POSTGRES_DB: openvibe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openvibe"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      OPENVIBE_DATABASE_URL: postgresql://openvibe:openvibe@localhost:5432/openvibe
+      OPENVIBE_STAGING_DATABASE_URL: postgresql://openvibe:openvibe@localhost:5432/openvibe
+      OPENVIBE_REDIS_URL: redis://localhost:6379/0
+      PGUSER: openvibe
+      PGPORT: 5432
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
