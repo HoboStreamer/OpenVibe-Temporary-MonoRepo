@@ -37,6 +37,7 @@ let _db = null;
 function init(dbPath) {
     if (_db) return _db;
     const resolved = dbPath || defaultSqlitePath();
+    require('fs').mkdirSync(require('path').dirname(resolved), { recursive: true });
     _db = new Database(resolved);
     _db.pragma('journal_mode = WAL');
     _db.exec(SCHEMA_SQL);

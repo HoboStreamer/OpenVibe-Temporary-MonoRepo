@@ -15,6 +15,8 @@ module.exports = {
     serviceId: 'openvibe-api',
     internalKey: process.env.INTERNAL_API_KEY || 'change-me-in-production',
 
+    dbPath: process.env.OPENVIBE_API_DB_PATH || null,
+
     auth: {
         issuer: process.env.OPENVIBE_AUTH_ISSUER || resolvePublicOrigin({ surface: 'network' }),
         publicKeyPath: process.env.OPENVIBE_PUBLIC_KEY_PATH || null,
