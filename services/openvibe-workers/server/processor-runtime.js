@@ -191,6 +191,9 @@ function createWorkerHost(options) {
                 },
             });
             if (workerBundle.worker) {
+                workerBundle.worker.on('error', (error) => {
+                    console.error('[openvibe-workers] worker error:', error && error.message || error);
+                });
                 workerBundle.worker.on('failed', (job, error) => {
                     state.last_error = {
                         job_id: job && job.id || null,

@@ -190,10 +190,10 @@ function _nav(active) {
 }
 
 function _head({ title, description, canonical }) {
-    return `<title>${escapeHtml(title || 'Pastes')}</title>
-        <meta name="description" content="${escapeHtml(description || 'Pastes')}">
+    return `<title>${escapeHtml(title || 'OpenVibe Community')}</title>
+        <meta name="description" content="${escapeHtml(description || 'OpenVibe Community')}">
         ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical)}">` : ''}
-        <meta property="og:title" content="${escapeHtml(title || 'Pastes')}">
+        <meta property="og:title" content="${escapeHtml(title || 'OpenVibe Community')}">
         <meta property="og:description" content="${escapeHtml(description || '')}">
         <meta property="og:type" content="website">`;
 }
@@ -325,7 +325,7 @@ function renderThreadsPage(threads, opts) {
             });
         })();
         </script>`;
-    return _shell({ title: 'Threads · Pastes', description: 'Community discussions from the OpenVibe network.', active: 'threads', bodyHtml });
+    return _shell({ title: 'Threads — OpenVibe Community', description: 'Community discussions from the OpenVibe network.', active: 'threads', bodyHtml });
 }
 
 // ── renderPastesPage ──────────────────────────────────────────────────────────
@@ -365,7 +365,7 @@ function renderPastesPage(pastes, opts) {
             });
         })();
         </script>`;
-    return _shell({ title: 'Pastes · Pastes', description: 'Public code snippets and notes from the OpenVibe network.', active: 'pastes', bodyHtml });
+    return _shell({ title: 'Pastes — OpenVibe Community', description: 'Public code snippets and notes from the OpenVibe network.', active: 'pastes', bodyHtml });
 }
 
 // ── renderPasteViewPage ───────────────────────────────────────────────────────
@@ -373,7 +373,7 @@ function renderPasteViewPage(paste, opts) {
     opts = opts || {};
     if (!paste) {
         const bodyHtml = `<div class="empty-state"><h2>Paste not found</h2><p>This paste may have been deleted or is not publicly visible.</p><a class="link-inline" href="/pastes">← Back to pastes</a></div>`;
-        return _shell({ title: 'Not found · Pastes', active: 'pastes', bodyHtml });
+        return _shell({ title: 'Not found — OpenVibe Community', active: 'pastes', bodyHtml });
     }
     const title = paste.title || 'Untitled paste';
     const lang  = paste.language || 'txt';
@@ -448,7 +448,7 @@ function renderPasteViewPage(paste, opts) {
         })();
         </script>`;
     const canonical = `${COMMUNITY_URLS.community}/p/${encodeURIComponent(paste.slug || '')}`;
-    return _shell({ title: `${title} · Pastes`, description: paste.description || `${pasteLanguageLabel(lang)} paste`, canonical, active: 'pastes', bodyHtml });
+    return _shell({ title: `${title} — OpenVibe Community`, description: paste.description || `${pasteLanguageLabel(lang)} paste`, canonical, active: 'pastes', bodyHtml });
 }
 
 // ── renderPulsePage ───────────────────────────────────────────────────────────
@@ -491,7 +491,7 @@ function renderPulsePage(threads, pastes, opts) {
             <p>Nothing in the pulse yet. Community activity will appear here.</p>
             <a class="link-inline" href="${COMMUNITY_URLS.network}">Visit the network →</a>
         </div>` : ''}`;
-    return _shell({ title: 'Community Pulse · Pastes', description: 'Recent threads and pastes from the OpenVibe network.', active: 'pulse', bodyHtml });
+    return _shell({ title: 'Community Pulse — OpenVibe Community', description: 'Recent threads and pastes from the OpenVibe network.', active: 'pulse', bodyHtml });
 }
 
 // ── renderChatPage ────────────────────────────────────────────────────────────
@@ -528,7 +528,7 @@ function renderChatPage(discordMessages, opts) {
                 ${messagesHtml}
             </div>
         </section>`;
-    return _shell({ title: 'Chat · Pastes', description: 'Recent community chat messages relayed from Discord.', active: 'chat', bodyHtml });
+    return _shell({ title: 'Chat — OpenVibe Community', description: 'Recent community chat messages relayed from Discord.', active: 'chat', bodyHtml });
 }
 
 // ── renderThreadDetailPage ────────────────────────────────────────────────────
@@ -536,7 +536,7 @@ function renderThreadDetailPage(thread, posts, opts) {
     opts = opts || {};
     if (!thread) {
         const bodyHtml = `<section class="hero"><h1 class="page-title">Thread not found</h1><p><a class="link-inline" href="/threads">Back to threads →</a></p></section>`;
-        return _shell({ title: 'Thread not found · Pastes', active: 'threads', bodyHtml });
+        return _shell({ title: 'Thread not found — OpenVibe Community', active: 'threads', bodyHtml });
     }
     const title   = escapeHtml(thread.title || 'Untitled thread');
     const body    = thread.body ? `<p style="white-space:pre-wrap;">${escapeHtml(thread.body)}</p>` : '';
@@ -586,7 +586,7 @@ function renderThreadDetailPage(thread, posts, opts) {
             </div>
             <div style="display:flex;flex-direction:column;gap:0.75rem;">${postsHtml}</div>
         </section>`;
-    return _shell({ title: title + ' · Pastes', description: thread.body ? String(thread.body).slice(0, 160) : title, active: 'threads', bodyHtml });
+    return _shell({ title: title + ' — OpenVibe Community', description: thread.body ? String(thread.body).slice(0, 160) : title, active: 'threads', bodyHtml });
 }
 
 module.exports = {

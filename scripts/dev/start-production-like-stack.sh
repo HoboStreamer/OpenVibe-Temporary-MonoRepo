@@ -114,7 +114,7 @@ start_service network @openvibe/network \
   OPENRE_STREAM_INTERNAL_URL=http://localhost:4700 \
   OPENVIBE_CHAT_INTERNAL_URL=http://localhost:4800 \
   OPENVIBE_COMMUNITY_INTERNAL_URL=http://localhost:4900 \
-  OPENVIBE_BILLING_INTERNAL_URL=http://localhost:5000 \
+  OPENVIBE_BILLING_INTERNAL_URL=http://localhost:5001 \
   OPENVIBE_AI_INTERNAL_URL=http://localhost:5100 \
   OPENVIBE_GAMES_INTERNAL_URL=http://localhost:5200
 
@@ -177,7 +177,7 @@ start_service community @openvibe/community \
   OPENVIBE_CHAT_URL=http://localhost:4800
 
 start_service billing @openvibe/billing \
-  PORT=5000 \
+  PORT=5001 \
   OPENVIBE_PERSISTENCE_MODE=postgres \
   OPENVIBE_DATABASE_URL="$DB_URL" \
   OPENVIBE_STAGING_DATABASE_URL="$DB_URL" \
@@ -209,7 +209,7 @@ start_service workers @openvibe/workers \
   OPENVIBE_EVENTS_URL=http://localhost:4400 \
   OPENVIBE_MEDIA_URL=http://localhost:4500 \
   OPENVIBE_AI_URL=http://localhost:5100 \
-  OPENVIBE_BILLING_INTERNAL_URL=http://localhost:5000 \
+  OPENVIBE_BILLING_INTERNAL_URL=http://localhost:5001 \
   OPENVIBE_CONTENT_INTERNAL_URL=http://localhost:5500 \
   OPENVIBE_NETWORK_INTERNAL_URL=http://localhost:4100 \
   OPENVIBE_MIGRATION_BUNDLE_DIR="$ROOT_DIR/data/migrations/hobo-production-staging/openvibe-target" \
