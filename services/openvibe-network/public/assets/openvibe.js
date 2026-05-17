@@ -756,6 +756,7 @@
             { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
         const paintSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`;
+        const bellSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6V11c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
         return `<header class="ov-nav"><div class="ov-nav-inner">
             <a href="${escapeHtml(resolveSurfaceUrl('network'))}" class="ov-brand">
                 <span class="ov-brand-mark">${icon('network') || 'OV'}</span>
@@ -770,6 +771,19 @@
                     <div class="ov-theme-popup" id="ov-theme-popup" hidden>
                         <div class="ov-theme-swatches" id="ov-theme-swatches"></div>
                         <a class="ov-theme-explore" href="${escapeHtml(resolveSurfaceUrl('themes'))}">Explore more themes!</a>
+                    </div>
+                </div>
+                <div class="ov-bell-wrap" id="ov-bell-wrap" style="position:relative;display:none;">
+                    <button class="ov-theme-btn" id="ov-bell-btn" type="button" aria-label="Notifications" aria-expanded="false">${bellSvg}<span class="ov-bell-badge" id="ov-bell-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--ov-danger,#fb7185);color:#fff;border-radius:999px;font-size:0.65rem;font-weight:800;padding:1px 5px;line-height:1.4;"></span></button>
+                    <div class="ov-bell-panel" id="ov-bell-panel" hidden style="position:absolute;top:calc(100% + 8px);right:0;width:320px;background:color-mix(in srgb,var(--ov-bg) 92%,white);border:1px solid var(--ov-border);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:999;overflow:hidden;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;border-bottom:1px solid var(--ov-border);">
+                            <span style="font-weight:700;font-size:0.9rem;">Notifications</span>
+                            <button id="ov-bell-read-all" type="button" style="font-size:0.75rem;color:var(--ov-accent);background:none;border:none;cursor:pointer;padding:0;">Mark all read</button>
+                        </div>
+                        <div id="ov-bell-list" style="max-height:360px;overflow-y:auto;"></div>
+                        <div style="padding:0.6rem 1rem;border-top:1px solid var(--ov-border);text-align:center;">
+                            <a href="${escapeHtml(resolveSurfaceUrl('my'))}#notifications" style="font-size:0.8rem;color:var(--ov-accent);">View all notifications</a>
+                        </div>
                     </div>
                 </div>
                 <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
@@ -896,6 +910,83 @@
         });
     }
 
+    async function initNotificationBell() {
+        const session = await loadSession();
+        if (!session || !session.authenticated || session.anonymous) return;
+        const wrap = global.document.getElementById('ov-bell-wrap');
+        const btn = global.document.getElementById('ov-bell-btn');
+        const badge = global.document.getElementById('ov-bell-badge');
+        const panel = global.document.getElementById('ov-bell-panel');
+        const list = global.document.getElementById('ov-bell-list');
+        const readAllBtn = global.document.getElementById('ov-bell-read-all');
+        if (!wrap || !btn || !badge || !panel || !list) return;
+        wrap.style.display = '';
+
+        async function fetchUnreadCount() {
+            try {
+                const data = await api('/notifications/unread-count');
+                const count = data && data.count || 0;
+                if (count > 0) {
+                    badge.textContent = count > 99 ? '99+' : String(count);
+                    badge.style.display = '';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch { /* ignore */ }
+        }
+
+        async function loadNotifications() {
+            try {
+                const data = await api('/notifications?limit=10');
+                const items = data && data.items || [];
+                if (!items.length) {
+                    list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--ov-text-dim);font-size:0.85rem;">No notifications yet.</div>';
+                    return;
+                }
+                list.innerHTML = items.map((n) => `<div style="padding:0.75rem 1rem;border-bottom:1px solid var(--ov-border);cursor:pointer;opacity:${n.is_read ? 0.65 : 1};" data-notif-id="${escapeHtml(n.id)}" data-notif-url="${escapeHtml(n.url || '')}">
+                    <div style="font-size:0.82rem;font-weight:${n.is_read ? 400 : 700};color:var(--ov-text);">${escapeHtml(n.title)}</div>
+                    ${n.message ? `<div style="font-size:0.78rem;color:var(--ov-text-dim);margin-top:0.25rem;">${escapeHtml(n.message)}</div>` : ''}
+                    <div style="font-size:0.72rem;color:var(--ov-text-dim);margin-top:0.2rem;">${formatRelativeTime(n.created_at)}</div>
+                </div>`).join('');
+                list.querySelectorAll('[data-notif-id]').forEach((row) => {
+                    row.addEventListener('click', async function () {
+                        const nid = row.dataset.notifId;
+                        const url = row.dataset.notifUrl;
+                        api(`/notifications/${encodeURIComponent(nid)}/read`, { method: 'POST' }).catch(() => {});
+                        panel.hidden = true;
+                        btn.setAttribute('aria-expanded', 'false');
+                        if (url) global.location.href = url;
+                        else await loadNotifications();
+                        await fetchUnreadCount();
+                    });
+                });
+            } catch { /* ignore */ }
+        }
+
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = !panel.hidden;
+            panel.hidden = open;
+            btn.setAttribute('aria-expanded', String(!open));
+            if (!open) loadNotifications().catch(() => {});
+        });
+        global.document.addEventListener('click', function () {
+            panel.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+        });
+        if (readAllBtn) {
+            readAllBtn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                await api('/notifications/read-all', { method: 'POST' }).catch(() => {});
+                badge.style.display = 'none';
+                await loadNotifications();
+            });
+        }
+
+        await fetchUnreadCount();
+        setInterval(fetchUnreadCount, 30000);
+    }
+
     async function renderChrome(activeKey) {
         await loadUrlRegistry();
         const navMount = global.document.getElementById('nav-mount');
@@ -904,6 +995,7 @@
         if (footerMount) footerMount.innerHTML = footer();
         hydrateNavSession().catch(() => {});
         initThemePicker();
+        initNotificationBell().catch(() => {});
     }
 
     function attachLauncher(getItems) {
@@ -967,6 +1059,7 @@
         icon,
         iconLabel,
         getUserModule,
+        initNotificationBell,
         loadAccountLinked,
         loadAccountProfile,
         loadAccountSessions,

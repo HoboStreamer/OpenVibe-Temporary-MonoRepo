@@ -462,6 +462,11 @@
         return loadSyncedThemePreference();
     }
 
+    async function primeEnvironment(force) {
+        applySavedTheme();
+        await loadSession(force);
+    }
+
     async function startAnonymousSession(options) {
         await networkRequestJson('/api/v1/session/anonymous', {
             method: 'POST',
@@ -742,6 +747,8 @@
         loadSession,
         mergedServices,
         navbar,
+        primeTheme,
+        primeEnvironment,
         primeTheme,
         renderChrome,
         renderServiceCards,

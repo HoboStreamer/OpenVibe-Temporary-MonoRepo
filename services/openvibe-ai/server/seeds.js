@@ -7,6 +7,124 @@
 const model = require('./model');
 const { SEED_SOURCES } = require('./sources');
 
+// ── real provider helpers ───────────────────────────────────────────────────
+// Each function idempotently ensures a DB provider record exists.
+// The runtime adapter is already registered in providers.js; the DB record
+// maps route_key → provider so runner.js knows which adapter to invoke.
+
+function _openaiProvider() {
+    let p = model.getProviderByKey('openai');
+    if (p) return p;
+    return model.createProvider({
+        provider_key: 'openai',
+        display_name: 'OpenAI',
+        status: 'active',
+        auth_mode: 'bearer',
+        default_model: 'gpt-4o-mini',
+        supports_chat: true, supports_json: true, supports_embeddings: true,
+        supports_tools: true, supports_streaming: false,
+        timeout_ms: 30000, priority: 10,
+        metadata: { env_key: 'OPENVIBE_AI_OPENAI_KEY', base_url: 'https://api.openai.com' },
+    });
+}
+
+function _openaiModels(providerId) {
+    const ensure = (m) => {
+        const existing = model.getModelByKey(providerId, m.model_key);
+        if (existing) return existing;
+        return model.createModel(Object.assign({ provider_id: providerId, status: 'active' }, m));
+    };
+    return {
+        chat:  ensure({ model_key: 'gpt-4o-mini',              model_type: 'chat',      display_name: 'GPT-4o Mini',        supports_json: true, context_window: 128000 }),
+        chat4: ensure({ model_key: 'gpt-4o',                   model_type: 'chat',      display_name: 'GPT-4o',             supports_json: true, context_window: 128000 }),
+        embed: ensure({ model_key: 'text-embedding-3-small',   model_type: 'embedding', display_name: 'Text Embedding 3 S', context_window: 8191 }),
+    };
+}
+
+function _anthropicProvider() {
+    let p = model.getProviderByKey('anthropic');
+    if (p) return p;
+    return model.createProvider({
+        provider_key: 'anthropic',
+        display_name: 'Anthropic',
+        status: 'active',
+        auth_mode: 'bearer',
+        default_model: 'claude-3-5-haiku-20241022',
+        supports_chat: true, supports_json: true, supports_embeddings: false,
+        supports_tools: false, supports_streaming: false,
+        timeout_ms: 30000, priority: 20,
+        metadata: { env_key: 'OPENVIBE_AI_ANTHROPIC_KEY', base_url: 'https://api.anthropic.com' },
+    });
+}
+
+function _anthropicModels(providerId) {
+    const ensure = (m) => {
+        const existing = model.getModelByKey(providerId, m.model_key);
+        if (existing) return existing;
+        return model.createModel(Object.assign({ provider_id: providerId, status: 'active' }, m));
+    };
+    return {
+        haiku:  ensure({ model_key: 'claude-3-5-haiku-20241022',  model_type: 'chat', display_name: 'Claude 3.5 Haiku', supports_json: true, context_window: 200000 }),
+        sonnet: ensure({ model_key: 'claude-3-5-sonnet-20241022', model_type: 'chat', display_name: 'Claude 3.5 Sonnet', supports_json: true, context_window: 200000 }),
+    };
+}
+
+function _ollamaProvider() {
+    let p = model.getProviderByKey('ollama');
+    if (p) return p;
+    return model.createProvider({
+        provider_key: 'ollama',
+        display_name: 'Ollama (local)',
+        status: 'active',
+        auth_mode: 'none',
+        default_model: 'llama3',
+        supports_chat: true, supports_json: true, supports_embeddings: true,
+        supports_tools: false, supports_streaming: false,
+        timeout_ms: 120000, priority: 50,
+        metadata: { env_key: 'OPENVIBE_AI_OLLAMA_URL', base_url: 'http://127.0.0.1:11434' },
+    });
+}
+
+function _ollamaModels(providerId) {
+    const ensure = (m) => {
+        const existing = model.getModelByKey(providerId, m.model_key);
+        if (existing) return existing;
+        return model.createModel(Object.assign({ provider_id: providerId, status: 'active' }, m));
+    };
+    return {
+        chat:  ensure({ model_key: 'llama3',          model_type: 'chat',      display_name: 'Llama 3', context_window: 8192 }),
+        embed: ensure({ model_key: 'nomic-embed-text', model_type: 'embedding', display_name: 'Nomic Embed Text', context_window: 8192 }),
+    };
+}
+
+function _openrouterProvider() {
+    let p = model.getProviderByKey('openrouter');
+    if (p) return p;
+    return model.createProvider({
+        provider_key: 'openrouter',
+        display_name: 'OpenRouter',
+        status: 'active',
+        auth_mode: 'bearer',
+        default_model: 'meta-llama/llama-3.1-8b-instruct:free',
+        supports_chat: true, supports_json: false, supports_embeddings: false,
+        supports_tools: false, supports_streaming: false,
+        timeout_ms: 45000, priority: 30,
+        metadata: { env_key: 'OPENVIBE_AI_OPENROUTER_KEY', base_url: 'https://openrouter.ai' },
+    });
+}
+
+function _openrouterModels(providerId) {
+    const ensure = (m) => {
+        const existing = model.getModelByKey(providerId, m.model_key);
+        if (existing) return existing;
+        return model.createModel(Object.assign({ provider_id: providerId, status: 'active' }, m));
+    };
+    return {
+        chat: ensure({ model_key: 'meta-llama/llama-3.1-8b-instruct:free', model_type: 'chat', display_name: 'Llama 3.1 8B (free)', context_window: 131072 }),
+    };
+}
+
+// ── stub provider ───────────────────────────────────────────────────────────
 function _stubProvider() {
     let p = model.getProviderByKey('stub');
     if (p) return p;
@@ -356,9 +474,23 @@ function _sources() {
 }
 
 function seedAll() {
-    const provider = _stubProvider();
-    const models   = _stubModels(provider.id);
-    _routes(provider, models);
+    const stubProvider = _stubProvider();
+    const stubModels   = _stubModels(stubProvider.id);
+
+    // Real providers — idempotent, created if not present
+    const openaiProvider      = _openaiProvider();
+    const openaiModels        = _openaiModels(openaiProvider.id);
+    const anthropicProvider   = _anthropicProvider();
+    /* anthropicModels */      _anthropicModels(anthropicProvider.id);
+    const ollamaProvider      = _ollamaProvider();
+    /* ollamaModels */         _ollamaModels(ollamaProvider.id);
+    const openrouterProvider  = _openrouterProvider();
+    /* openrouterModels */     _openrouterModels(openrouterProvider.id);
+
+    // Routes: prefer openai primary with stub as fallback (stub stays if no openai key)
+    // Routes are seeded using stub; at runtime providers.js resolves the adapter by key.
+    _routes(openaiProvider, openaiModels);
+
     _templates();
     _workflows();
     _sources();

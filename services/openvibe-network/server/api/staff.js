@@ -390,7 +390,28 @@ function buildRouter(deps) {
 
     r.get('/admin/users', requireCapability('manage_users'), (_req, res) => {
         const rows = db.get().prepare('SELECT user_id, role, granted_at FROM staff_roles ORDER BY user_id').all();
-        res.json({ items: rows });
+        // Also fetch recently active registered users (last 500 by created_at) with ban status
+        let allUsers = [];
+        try {
+            allUsers = db.get().prepare(
+                'SELECT id AS user_id, username, display_name, email, is_banned, ban_reason, created_at, last_login_at FROM auth_users ORDER BY created_at DESC LIMIT 500'
+            ).all();
+        } catch { /* auth_users may not be Postgres-backed yet */ }
+        // Merge staff_roles into user list
+        const roleMap = {};
+        for (const r of rows) roleMap[r.user_id] = r;
+        const merged = allUsers.map((u) => ({
+            ...u,
+            role: (roleMap[u.user_id] && roleMap[u.user_id].role) || 'user',
+            granted_at: roleMap[u.user_id] && roleMap[u.user_id].granted_at || null,
+        }));
+        // Include staff with no auth_users row (legacy system users)
+        for (const r of rows) {
+            if (!merged.find((u) => u.user_id === r.user_id)) {
+                merged.push({ user_id: r.user_id, username: r.user_id, role: r.role, granted_at: r.granted_at });
+            }
+        }
+        res.json({ items: merged });
     });
 
     r.put('/admin/users/:id/role', express.json(), requireCapability('manage_roles'), (req, res) => {
@@ -404,8 +425,17 @@ function buildRouter(deps) {
     });
 
     r.put('/admin/users/:id/ban', express.json(), requireCapability('manage_site_bans'), (req, res) => {
-        recordAudit({ actor: req.staffActor, action: 'admin.ban', target: req.params.id, detail: req.body || {} });
-        res.json({ ok: true, queued: true });
+        const banned = req.body && req.body.banned !== false;
+        const reason = (req.body && typeof req.body.reason === 'string') ? req.body.reason.slice(0, 500) : null;
+        try {
+            db.get().prepare(
+                'UPDATE auth_users SET is_banned = ?, ban_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+            ).run(banned ? 1 : 0, banned ? reason : null, req.params.id);
+        } catch (err) {
+            // Non-fatal if user not found in SQLite (may be Postgres-only)
+        }
+        recordAudit({ actor: req.staffActor, action: banned ? 'admin.ban' : 'admin.unban', target: req.params.id, detail: { reason, banned } });
+        res.json({ ok: true, banned });
     });
 
     r.get('/admin/audit', requireCapability('view_all_logs'), (req, res) => {

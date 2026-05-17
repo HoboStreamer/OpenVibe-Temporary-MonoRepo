@@ -46,10 +46,7 @@ function decideSend({ req, room, model }) {
     if (req && req.serviceActor) return { allow: true, reason: 'service actor' };
     const actor = actorOfReq(req);
     if (actor.type === 'anonymous') {
-        if (room.visibility === 'public' || room.visibility === 'unlisted') {
-            return { allow: true, reason: 'anonymous send to public room' };
-        }
-        return { allow: false, reason: 'anonymous send not allowed in private rooms' };
+        return { allow: false, reason: 'anonymous send not allowed' };
     }
 
     if (ROOM_TYPES_REQUIRING_MEMBERSHIP.has(room.room_type) || room.visibility === 'private' || room.visibility === 'restricted') {

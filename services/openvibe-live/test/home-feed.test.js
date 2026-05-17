@@ -163,7 +163,9 @@ function request(server, requestPath, host) {
     process.env.DB_PATH = path.join(tmpDir, 'live.db');
     process.env.OPENVIBE_EVENTS_URL = 'http://127.0.0.1:1';
     process.env.OPENVIBE_MEDIA_URL = `http://127.0.0.1:${mediaServer.address().port}`;
+    process.env.OPENVIBE_MEDIA_INTERNAL_URL = `http://127.0.0.1:${mediaServer.address().port}`;
     process.env.OPENVIBE_COMMUNITY_URL = `http://127.0.0.1:${communityServer.address().port}`;
+    process.env.OPENVIBE_COMMUNITY_INTERNAL_URL = `http://127.0.0.1:${communityServer.address().port}`;
     process.env.OPENVIBE_HOBOSTREAMER_ROOT = legacyRoot;
     process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
     process.env.OPENVIBE_OPENVIBE_LIVE_PERSISTENCE_MODE = 'sqlite';

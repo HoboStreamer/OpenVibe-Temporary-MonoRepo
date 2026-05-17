@@ -209,7 +209,7 @@ body {
 </head>
 <body>
 <div id="nav-mount"></div>
-
+<div id="phase16-chip" class="ov-chip" style="display:none" aria-hidden="true"></div>
 <div class="chat-shell">
     <nav class="chat-sidebar">
         <div class="chat-sidebar-label">Rooms</div>
@@ -352,6 +352,49 @@ body {
         } catch {}
     }
 
+    // ── WebSocket real-time push ──────────────────────────────────
+    let wsConnected = false;
+    let pollTimer = null;
+
+    function connectWs() {
+        try {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+            ws.addEventListener('open', () => {
+                wsConnected = true;
+                ws.send(JSON.stringify({ type: 'join', roomId: ROOM, displayName: myName }));
+                // Stop polling when WS is up
+                if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            });
+            ws.addEventListener('message', (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); } catch { return; }
+                if (msg.type === 'message' && msg.roomId === ROOM && msg.message) {
+                    const m = msg.message;
+                    const isDupe = msgs.some((x) => x.id === m.id);
+                    if (!isDupe) {
+                        msgs = [...msgs.slice(-MAX + 1), m];
+                        lastId = m.id;
+                        render();
+                    }
+                }
+            });
+            ws.addEventListener('close', () => {
+                wsConnected = false;
+                // Fall back to polling
+                if (!pollTimer) pollTimer = setInterval(poll, POLL);
+                // Reconnect after 3s
+                setTimeout(connectWs, 3000);
+            });
+            ws.addEventListener('error', () => {
+                ws.close();
+            });
+        } catch {
+            // WebSocket not available, use polling only
+            if (!pollTimer) pollTimer = setInterval(poll, POLL);
+        }
+    }
+
     // ── send ─────────────────────────────────────────────────────
     const input   = document.getElementById('chat-input');
     const sendBtn = document.getElementById('chat-send');
@@ -369,7 +412,8 @@ body {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ body: text, metadata: { sender_name: myName } }),
             });
-            await poll();
+            // If WS is connected, message will arrive via push; otherwise poll now
+            if (!wsConnected) await poll();
         } catch {}
         input.disabled = false;
         sendBtn.disabled = false;
@@ -382,7 +426,10 @@ body {
     });
 
     await poll();
-    setInterval(poll, POLL);
+    connectWs();
+    // Also start a slow poll as backstop (every 10s)
+    pollTimer = setInterval(poll, 10000);
+
 })();
 </script>
 </body>

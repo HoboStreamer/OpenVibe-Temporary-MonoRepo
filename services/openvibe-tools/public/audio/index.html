@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Tools — OpenVibe Tools</title>
+<style>
+:root{--bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--border:#2a2a3d;--accent:#7c3aed;--accent2:#a855f7;--text:#e8e8f0;--text2:#9090a8;--card:#13131e;}
+*{box-sizing:border-box;margin:0;padding:0;}body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;height:56px;gap:1rem;}
+.nav-brand{font-size:1.1rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.nav-links{display:flex;gap:.5rem;margin-left:auto;}.nav-links a{padding:.375rem .75rem;border-radius:6px;font-size:.875rem;color:var(--text2);transition:color .15s,background .15s;}
+.nav-links a:hover,.nav-links a.active{color:var(--text);background:var(--bg3);}
+.hero{text-align:center;padding:3rem 1.5rem 1.5rem;}h1{font-size:2rem;font-weight:800;margin-bottom:.5rem;}.hero p{color:var(--text2);}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem;padding:1.5rem;max-width:900px;margin:0 auto;}
+.tool-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;gap:.6rem;transition:border-color .2s,transform .15s;}
+.tool-card:hover{border-color:var(--accent);transform:translateY(-2px);}
+.tool-card-icon{font-size:1.75rem;}.tool-card h3{font-size:.95rem;font-weight:600;}.tool-card p{font-size:.8rem;color:var(--text2);line-height:1.5;flex:1;}
+.tag{display:inline-block;padding:.15rem .4rem;border-radius:4px;font-size:.7rem;font-weight:500;background:#3b0764;color:#c084fc;}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-brand">OpenVibe Tools</a>
+  <div class="nav-links"><a href="/audio" class="active">Audio</a><a href="/image">Image</a><a href="/text">Text</a><a href="/download">Download</a></div>
+</nav>
+<div class="hero">
+  <h1>🎵 Audio Tools</h1>
+  <p>FFmpeg-powered audio processing. Free, fast, private.</p>
+</div>
+<div class="tools-grid">
+  <a href="/audio/convert" class="tool-card"><div class="tool-card-icon">🔄</div><h3>Converter</h3><p>Convert between MP3, WAV, FLAC, OGG, M4A, AAC, OPUS and more.</p><span class="tag">Convert</span></a>
+  <a href="/audio/trim" class="tool-card"><div class="tool-card-icon">✂️</div><h3>Trimmer</h3><p>Trim audio to a specific start and end time.</p><span class="tag">Edit</span></a>
+  <a href="/audio/normalize" class="tool-card"><div class="tool-card-icon">📊</div><h3>Normalize</h3><p>Normalize loudness to a target LUFS level.</p><span class="tag">Enhance</span></a>
+  <a href="/audio/speed" class="tool-card"><div class="tool-card-icon">⚡</div><h3>Speed Changer</h3><p>Speed up or slow down audio from 0.25x to 4x.</p><span class="tag">Effect</span></a>
+  <a href="/audio/reverse" class="tool-card"><div class="tool-card-icon">🔁</div><h3>Reverse</h3><p>Play audio backwards.</p><span class="tag">Effect</span></a>
+  <a href="/audio/extract" class="tool-card"><div class="tool-card-icon">🎬</div><h3>Extract Audio</h3><p>Rip the audio track from any video file.</p><span class="tag">Extract</span></a>
+  <a href="/audio/metadata" class="tool-card"><div class="tool-card-icon">🏷️</div><h3>Metadata Inspector</h3><p>View title, artist, bitrate, codec, duration and more.</p><span class="tag">Inspect</span></a>
+</div>
+</body>
+</html>

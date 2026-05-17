@@ -23,9 +23,9 @@ process.env.OPENVIBE_OPENVIBE_LIVE_PERSISTENCE_MODE = 'sqlite';
 process.env.OPENVIBE_DATABASE_URL = '';
 process.env.OPENVIBE_STAGING_DATABASE_URL = '';
 process.env.OPENVIBE_OPENVIBE_LIVE_DATABASE_URL = '';
-delete process.env.OPENVIBE_CHAT_URL;
-delete process.env.OPENVIBE_BILLING_URL;
-delete process.env.OPENVIBE_AI_URL;
+process.env.OPENVIBE_CHAT_URL = 'http://127.0.0.1:1';
+process.env.OPENVIBE_BILLING_URL = 'http://127.0.0.1:1';
+process.env.OPENVIBE_AI_URL = 'http://127.0.0.1:1';
 
 const { buildApp } = require('../server/index');
 const model = require('../server/model');

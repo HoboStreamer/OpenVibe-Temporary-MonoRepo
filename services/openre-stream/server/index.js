@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const { createServiceRuntime } = require('@openvibe/runtime');
 const { attachIconAssets } = require('@openvibe/icons/express');
@@ -83,6 +84,16 @@ function buildApp() {
     }));
     app.use(express.static(path.join(__dirname, '..', 'public')));
     attachIconAssets(app, { routePrefix: '/assets' });
+
+    // ── VOD / HLS static serving ───────────────────────────────────────────
+    const vodDir = path.join(path.dirname(config.db.path), 'vods');
+    fs.mkdirSync(vodDir, { recursive: true });
+    app.use('/vods', express.static(vodDir, {
+        setHeaders: (res, filePath) => {
+            if (filePath.endsWith('.m3u8')) res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            else if (filePath.endsWith('.ts')) res.setHeader('Content-Type', 'video/mp2t');
+        },
+    }));
 
     // ── dashboard: authenticated SSR page ─────────────────────────────────
     app.get('/dashboard', (req, res) => {

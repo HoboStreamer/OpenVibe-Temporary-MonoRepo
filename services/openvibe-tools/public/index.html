@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenVibe Tools</title>
+<meta name="description" content="Free online tools for audio, image, text and media processing. No sign-up required.">
+<link rel="icon" href="/assets/openvibe-icons.js" type="text/javascript">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --bg2: #12121a;
+  --bg3: #1a1a26;
+  --border: #2a2a3d;
+  --accent: #7c3aed;
+  --accent2: #a855f7;
+  --text: #e8e8f0;
+  --text2: #9090a8;
+  --success: #22c55e;
+  --error: #ef4444;
+  --card-bg: #13131e;
+  --card-hover: #1c1c2e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+a { color: inherit; text-decoration: none; }
+
+/* Nav */
+nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; height: 56px; gap: 1rem; }
+.nav-brand { font-size: 1.1rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.nav-links { display: flex; gap: 0.5rem; margin-left: auto; }
+.nav-links a { padding: 0.375rem 0.75rem; border-radius: 6px; font-size: 0.875rem; color: var(--text2); transition: color 0.15s, background 0.15s; }
+.nav-links a:hover, .nav-links a.active { color: var(--text); background: var(--bg3); }
+
+/* Hero */
+.hero { text-align: center; padding: 4rem 1.5rem 2rem; }
+.hero h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, #fff 0%, var(--accent2) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { color: var(--text2); font-size: 1.1rem; max-width: 480px; margin: 0 auto; }
+
+/* Tool grid */
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; padding: 2rem 1.5rem 4rem; max-width: 1100px; margin: 0 auto; }
+.tool-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; transition: border-color 0.2s, background 0.2s, transform 0.15s; cursor: pointer; }
+.tool-card:hover { border-color: var(--accent); background: var(--card-hover); transform: translateY(-2px); }
+.tool-card-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+.tool-card h3 { font-size: 1rem; font-weight: 600; }
+.tool-card p { font-size: 0.875rem; color: var(--text2); line-height: 1.5; flex: 1; }
+.tool-card-tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+
+/* Categories */
+.cat-audio .tool-card-icon { background: #1a0d2e; }
+.cat-image .tool-card-icon { background: #0d1a2e; }
+.cat-text  .tool-card-icon { background: #0d2e1a; }
+.cat-download .tool-card-icon { background: #2e1a0d; }
+.cat-audio .tool-card-tag  { background: #3b0764; color: #c084fc; }
+.cat-image .tool-card-tag  { background: #0c4a6e; color: #7dd3fc; }
+.cat-text  .tool-card-tag  { background: #14532d; color: #86efac; }
+.cat-download .tool-card-tag { background: #7c2d12; color: #fdba74; }
+
+/* Section headers */
+.section-label { padding: 0.5rem 1.5rem 0; max-width: 1100px; margin: 0 auto; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text2); }
+
+@media (max-width: 480px) { .hero h1 { font-size: 1.75rem; } .tools-grid { padding: 1.25rem 1rem 3rem; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">OpenVibe Tools</span>
+  <div class="nav-links">
+    <a href="/audio" id="nav-audio">Audio</a>
+    <a href="/image" id="nav-image">Image</a>
+    <a href="/text" id="nav-text">Text</a>
+    <a href="/download" id="nav-download">Download</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>Free Online Tools</h1>
+  <p>Audio, image, text, and media tools. Fast, private, no sign-up required.</p>
+</div>
+
+<p class="section-label">Audio Tools</p>
+<div class="tools-grid" id="audio-tools"></div>
+
+<p class="section-label">Image Tools</p>
+<div class="tools-grid" id="image-tools"></div>
+
+<p class="section-label">Text Tools</p>
+<div class="tools-grid" id="text-tools"></div>
+
+<p class="section-label">Download Tools</p>
+<div class="tools-grid" id="download-tools"></div>
+
+<script>
+const TOOLS = {
+  audio: [
+    { icon: '🎵', title: 'Audio Converter', desc: 'Convert between MP3, WAV, FLAC, OGG, M4A, AAC, OPUS and more.', href: '/audio/convert', tag: 'Convert' },
+    { icon: '✂️', title: 'Audio Trimmer', desc: 'Trim audio to a specific start and end time. No quality loss.', href: '/audio/trim', tag: 'Edit' },
+    { icon: '📊', title: 'Normalize Volume', desc: 'Normalize audio loudness to a target LUFS level automatically.', href: '/audio/normalize', tag: 'Enhance' },
+    { icon: '⚡', title: 'Change Speed', desc: 'Speed up or slow down audio from 0.25x to 4x.', href: '/audio/speed', tag: 'Edit' },
+    { icon: '🔁', title: 'Reverse Audio', desc: 'Play your audio file backwards.', href: '/audio/reverse', tag: 'Effect' },
+    { icon: '🎬', title: 'Extract Audio', desc: 'Rip the audio track from any video file.', href: '/audio/extract', tag: 'Extract' },
+    { icon: '🏷️', title: 'Audio Metadata', desc: 'Inspect title, artist, bitrate, duration, codec and more.', href: '/audio/metadata', tag: 'Inspect' },
+  ],
+  image: [
+    { icon: '🖼️', title: 'Image Converter', desc: 'Convert to PNG, JPEG, WebP, AVIF, TIFF, GIF, ICO and more.', href: '/image/convert', tag: 'Convert' },
+    { icon: '📐', title: 'Image Resizer', desc: 'Resize images by pixel dimensions with fit/contain/cover modes.', href: '/image/resize', tag: 'Resize' },
+    { icon: '🗜️', title: 'Image Compressor', desc: 'Reduce image file size while controlling quality.', href: '/image/compress', tag: 'Compress' },
+    { icon: '✂️', title: 'Image Cropper', desc: 'Crop images to exact pixel coordinates.', href: '/image/crop', tag: 'Edit' },
+    { icon: '🔍', title: 'Image Metadata', desc: 'View dimensions, format, color space, DPI, and more.', href: '/image/metadata', tag: 'Inspect' },
+  ],
+  text: [
+    { icon: '📊', title: 'Word Counter', desc: 'Count words, characters, sentences, paragraphs and reading time.', href: '/text/analyze', tag: 'Analyze' },
+    { icon: 'Aa', title: 'Case Converter', desc: 'Convert to UPPER, lower, Title, camelCase, snake_case, kebab-case and more.', href: '/text/case', tag: 'Transform' },
+    { icon: '🔐', title: 'Encode / Decode', desc: 'Base64, URL, HTML, Hex, Binary, and Morse code encode/decode.', href: '/text/encode', tag: 'Encode' },
+    { icon: '🔍', title: 'Find & Replace', desc: 'Find and replace text with optional regex and case-insensitive modes.', href: '/text/replace', tag: 'Edit' },
+    { icon: '↕️', title: 'Sort Lines', desc: 'Sort text lines alphabetically, numerically, or in reverse.', href: '/text/sort', tag: 'Sort' },
+    { icon: '🚫', title: 'Remove Duplicates', desc: 'Remove duplicate lines from text, optionally case-insensitive.', href: '/text/dedupe', tag: 'Clean' },
+  ],
+  download: [
+    { icon: '🎵', title: 'Download Audio', desc: 'Download audio from YouTube, SoundCloud, and 1000+ sites as MP3/FLAC.', href: '/download/audio', tag: 'Download' },
+    { icon: '🎬', title: 'Download Video', desc: 'Download video from YouTube and other platforms up to 1080p.', href: '/download/video', tag: 'Download' },
+    { icon: 'ℹ️', title: 'URL Inspector', desc: 'Inspect available formats and metadata for any supported URL.', href: '/download/info', tag: 'Inspect' },
+  ],
+};
+
+function renderTools(containerId, category, tools) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = tools.map(t => `
+    <a href="${t.href}" class="tool-card cat-${category}">
+      <div class="tool-card-icon">${t.icon}</div>
+      <h3>${t.title}</h3>
+      <p>${t.desc}</p>
+      <span class="tool-card-tag">${t.tag}</span>
+    </a>
+  `).join('');
+}
+
+renderTools('audio-tools',    'audio',    TOOLS.audio);
+renderTools('image-tools',    'image',    TOOLS.image);
+renderTools('text-tools',     'text',     TOOLS.text);
+renderTools('download-tools', 'download', TOOLS.download);
+</script>
+</body>
+</html>

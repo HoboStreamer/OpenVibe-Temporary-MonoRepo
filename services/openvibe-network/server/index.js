@@ -27,6 +27,7 @@ const contractRegistry = require('./api/contract-registry');
 const urlRegistry = require('./api/url-registry');
 const runtimeParity = require('./api/runtime-parity');
 const staff = require('./api/staff');
+const notifications = require('./api/notifications');
 const { seedCapabilityRegistry } = require('./capabilities');
 
 function buildApp() {
@@ -111,6 +112,7 @@ function buildApp() {
     apiRouter.use(urlRegistry.buildRouter({ config }));
     apiRouter.use(runtimeParity.buildRouter({ events }));
     apiRouter.use(staff.buildRouter({ config }));
+    apiRouter.use(notifications.buildRouter({ events }));
     apiRouter.use(nativeAuth.buildAccountRouter());
 
     apiRouter.get('/session', (req, res) => res.json(nativeAuth.buildSessionResponse(req)));

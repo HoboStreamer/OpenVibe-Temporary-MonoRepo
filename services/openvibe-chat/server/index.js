@@ -4,6 +4,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const http = require('http');
 const path = require('path');
 const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
@@ -14,6 +15,7 @@ const model = require('./model');
 const { buildEventBus } = require('./events');
 const { buildRouter } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
+const chatWs = require('./chat-ws');
 
 function seedGlobalRoom() {
     try {
@@ -96,7 +98,7 @@ function buildApp() {
         return res.json({ authenticated: false, anonymous: false, user: null });
     });
 
-    app.use('/api/chat', buildRouter({ eventBus }));
+    app.use('/api/chat', buildRouter({ eventBus, chatWs }));
 
     app.use((err, _req, res, _next) => {
         console.error('[chat] unhandled:', err.message);
@@ -108,7 +110,21 @@ function buildApp() {
 
 function start() {
     const { app } = buildApp();
-    const server = app.listen(config.port, config.host, () => {
+    const server = http.createServer(app);
+
+    // Attach WebSocket server
+    chatWs.attach(server, model);
+
+    server.on('upgrade', (req, socket, head) => {
+        const url = req.url || '';
+        if (url.startsWith('/ws/chat')) {
+            chatWs.handleUpgrade(req, socket, head);
+        } else {
+            socket.destroy();
+        }
+    });
+
+    server.listen(config.port, config.host, () => {
         console.log(`[openvibe-chat] listening on http://${config.host}:${config.port}`);
     });
     const shutdown = () => { console.log('[openvibe-chat] shutting down'); server.close(() => process.exit(0)); };

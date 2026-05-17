@@ -1,0 +1,102 @@
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// OpenVibe Tools Service — Port 5700
+// Audio, image, text, and download processing utility hub.
+// ═══════════════════════════════════════════════════════════════
+
+const path = require('path');
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const { createServiceRuntime } = require('@openvibe/runtime');
+const { attachIconAssets } = require('@openvibe/icons/express');
+
+const config = require('./config');
+const retention = require('./retention');
+const audioRoutes = require('./audio/routes');
+const imageRoutes = require('./image/routes');
+const downloadRoutes = require('./download/routes');
+const textRoutes = require('./text/routes');
+
+const app = express();
+
+// ── Trusted proxy (Cloudflare → nginx → node) ───────────────────
+app.set('trust proxy', 2);
+
+// ── Helmet ───────────────────────────────────────────────────────
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+            imgSrc: ["'self'", 'data:', 'blob:'],
+            connectSrc: ["'self'"],
+        },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// ── CORS ─────────────────────────────────────────────────────────
+const allowedOrigins = [
+    'https://openvibe.tools',
+    'https://openvibe.network',
+    'https://openvibe.live',
+    ...(config.nodeEnv === 'development' ? ['http://localhost:3000', 'http://localhost:5700'] : []),
+];
+app.use(cors({
+    origin(origin, cb) {
+        if (!origin || allowedOrigins.some(o => origin === o || origin.endsWith('.openvibe.network'))) {
+            cb(null, true);
+        } else {
+            cb(null, false);
+        }
+    },
+    credentials: false,
+}));
+
+// ── Static files ──────────────────────────────────────────────────
+const publicDir = path.resolve(__dirname, '..', 'public');
+attachIconAssets(app);
+app.use(express.static(publicDir, { extensions: ['html'] }));
+
+// ── Feature routes ────────────────────────────────────────────────
+app.use('/audio', audioRoutes);
+app.use('/image', imageRoutes);
+app.use('/download', downloadRoutes);
+app.use('/text', textRoutes);
+
+// ── Runtime health/metrics/ready endpoints ────────────────────────
+const runtime = createServiceRuntime({
+    name: 'openvibe-tools',
+    version: process.env.npm_package_version || '0.1.0',
+});
+runtime.attach(app);
+
+// ── 404 ───────────────────────────────────────────────────────────
+app.use((req, res) => {
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+    res.status(404).send('<h1>404 Not Found</h1>');
+});
+
+// ── Error handler ─────────────────────────────────────────────────
+app.use((err, req, res, _next) => {
+    console.error('[tools] error:', err.message);
+    if (req.path.startsWith('/api/')) return res.status(500).json({ error: 'Internal error' });
+    res.status(500).send('<h1>500 Internal Server Error</h1>');
+});
+
+// ── Start ─────────────────────────────────────────────────────────
+const server = app.listen(config.port, config.host, () => {
+    retention.start();
+    console.log(`[tools] OpenVibe Tools running on http://${config.host}:${config.port}`);
+});
+
+process.on('SIGTERM', () => {
+    retention.stop();
+    server.close(() => process.exit(0));
+});
+
+module.exports = app;

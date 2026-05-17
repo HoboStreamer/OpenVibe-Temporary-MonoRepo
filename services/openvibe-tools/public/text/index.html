@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Tools — OpenVibe Tools</title>
+<style>
+:root{--bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--border:#2a2a3d;--accent:#7c3aed;--accent2:#a855f7;--text:#e8e8f0;--text2:#9090a8;--card:#13131e;--success:#22c55e;--error:#ef4444;}
+*{box-sizing:border-box;margin:0;padding:0;}body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;}
+nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;height:56px;gap:1rem;}
+.nav-brand{font-size:1.1rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.nav-links{display:flex;gap:.5rem;margin-left:auto;}.nav-links a{padding:.375rem .75rem;border-radius:6px;font-size:.875rem;color:var(--text2);}
+.nav-links a:hover,.nav-links a.active{color:var(--text);background:var(--bg3);}
+main{max-width:860px;margin:0 auto;padding:2rem 1.5rem;}h1{font-size:1.75rem;font-weight:800;margin-bottom:.5rem;}.subtitle{color:var(--text2);margin-bottom:1.5rem;}
+.tool-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem;}
+.tab-btn{padding:.4rem .9rem;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s;}
+.tab-btn.active,.tab-btn:hover{border-color:var(--accent);background:rgba(124,58,237,.12);color:var(--accent2);}
+.tab-pane{display:none;}.tab-pane.active{display:block;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;}
+@media(max-width:600px){.two-col{grid-template-columns:1fr;}}
+textarea{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.75rem;font-family:monospace;font-size:.875rem;line-height:1.6;resize:vertical;outline:none;transition:border-color .2s;}
+textarea:focus{border-color:var(--accent);}
+.form-group{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.75rem;}
+.form-group label{font-size:.8rem;color:var(--text2);font-weight:500;}
+select,input[type=text],input[type=number]{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.45rem .75rem;font-size:.875rem;outline:none;width:100%;transition:border-color .2s;}
+select:focus,input:focus{border-color:var(--accent);}
+.btn-row{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;}
+.btn{padding:.55rem 1.2rem;border-radius:7px;font-size:.875rem;font-weight:600;cursor:pointer;border:none;transition:opacity .15s;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}.btn-primary:hover{opacity:.9;}
+.btn-sm{padding:.35rem .75rem;font-size:.8rem;background:var(--bg3);color:var(--text2);border:1px solid var(--border);}
+.btn-sm:hover{color:var(--text);border-color:var(--accent);}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.75rem;margin-top:.75rem;}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.75rem;text-align:center;}
+.stat-val{font-size:1.5rem;font-weight:700;color:var(--accent2);}
+.stat-key{font-size:.75rem;color:var(--text2);margin-top:.2rem;}
+.checkbox-row{display:flex;align-items:center;gap:.4rem;font-size:.8rem;cursor:pointer;}
+input[type=checkbox]{width:auto;accent-color:var(--accent);}
+.copy-btn{font-size:.75rem;padding:.25rem .5rem;border-radius:4px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;margin-left:.5rem;}
+.copy-btn:hover{color:var(--accent2);}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-brand">OpenVibe Tools</a>
+  <div class="nav-links"><a href="/audio">Audio</a><a href="/image">Image</a><a href="/text" class="active">Text</a><a href="/download">Download</a></div>
+</nav>
+<main>
+  <h1>📝 Text Tools</h1>
+  <p class="subtitle">Word counter, case converter, encoder, find & replace, sort, dedupe — all in one place.</p>
+
+  <div class="tool-tabs">
+    <button class="tab-btn active" onclick="switchTab('analyze')">📊 Word Counter</button>
+    <button class="tab-btn" onclick="switchTab('case')">Aa Case</button>
+    <button class="tab-btn" onclick="switchTab('encode')">🔐 Encode/Decode</button>
+    <button class="tab-btn" onclick="switchTab('replace')">🔍 Find & Replace</button>
+    <button class="tab-btn" onclick="switchTab('sort')">↕️ Sort Lines</button>
+    <button class="tab-btn" onclick="switchTab('dedupe')">🚫 Dedupe</button>
+  </div>
+
+  <!-- Word Counter -->
+  <div class="tab-pane active" id="tab-analyze">
+    <div class="two-col">
+      <div>
+        <div class="form-group"><label>Input Text</label><textarea id="analyze-input" rows="14" placeholder="Paste or type your text here…"></textarea></div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="doAnalyze()">Count Words</button><button class="btn btn-sm" onclick="document.getElementById('analyze-input').value=''">Clear</button></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Statistics</label></div>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="stat-val" id="s-words">—</div><div class="stat-key">Words</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-chars">—</div><div class="stat-key">Characters</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-chars-ns">—</div><div class="stat-key">No Spaces</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-sentences">—</div><div class="stat-key">Sentences</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-paragraphs">—</div><div class="stat-key">Paragraphs</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-lines">—</div><div class="stat-key">Lines</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-reading">—</div><div class="stat-key">Read Time</div></div>
+          <div class="stat-card"><div class="stat-val" id="s-avgword">—</div><div class="stat-key">Avg Word Len</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case Converter -->
+  <div class="tab-pane" id="tab-case">
+    <div class="two-col">
+      <div>
+        <div class="form-group"><label>Input Text</label><textarea id="case-input" rows="10" placeholder="Enter text to transform…"></textarea></div>
+        <div class="form-group">
+          <label>Mode</label>
+          <select id="case-mode">
+            <option value="upper">UPPERCASE</option><option value="lower">lowercase</option><option value="title">Title Case</option>
+            <option value="sentence">Sentence case</option><option value="camel">camelCase</option><option value="snake">snake_case</option>
+            <option value="kebab">kebab-case</option><option value="pascal">PascalCase</option><option value="alternating">aLtErNaTiNg</option><option value="inverse">iNVERSE</option>
+          </select>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="doCase()">Transform</button></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Result <button class="copy-btn" onclick="copyText('case-output')">Copy</button></label><textarea id="case-output" rows="10" placeholder="Result will appear here…" readonly></textarea></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Encode/Decode -->
+  <div class="tab-pane" id="tab-encode">
+    <div class="two-col">
+      <div>
+        <div class="form-group"><label>Input Text</label><textarea id="encode-input" rows="10" placeholder="Enter text to encode or decode…"></textarea></div>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+          <div class="form-group" style="flex:1"><label>Format</label><select id="encode-format"><option value="base64">Base64</option><option value="url">URL Encode</option><option value="html">HTML Entities</option><option value="hex">Hex</option><option value="binary">Binary</option><option value="morse">Morse Code</option></select></div>
+          <div class="form-group" style="flex:1"><label>Direction</label><select id="encode-dir"><option value="encode">Encode →</option><option value="decode">← Decode</option></select></div>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="doEncode()">Convert</button></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Result <button class="copy-btn" onclick="copyText('encode-output')">Copy</button></label><textarea id="encode-output" rows="10" placeholder="Result will appear here…" readonly></textarea></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Find & Replace -->
+  <div class="tab-pane" id="tab-replace">
+    <div class="form-group"><label>Input Text</label><textarea id="replace-input" rows="8" placeholder="Paste text here…"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:.75rem">
+      <div class="form-group"><label>Find</label><input type="text" id="replace-find" placeholder="Search for…"></div>
+      <div class="form-group"><label>Replace with</label><input type="text" id="replace-with" placeholder="Replace with…"></div>
+    </div>
+    <div style="display:flex;gap:1rem;margin-bottom:.75rem">
+      <label class="checkbox-row"><input type="checkbox" id="replace-regex"> Regex</label>
+      <label class="checkbox-row"><input type="checkbox" id="replace-ci"> Case-insensitive</label>
+    </div>
+    <div class="btn-row"><button class="btn btn-primary" onclick="doReplace()">Find & Replace</button></div>
+    <div class="form-group" style="margin-top:.75rem"><label>Result <button class="copy-btn" onclick="copyText('replace-output')">Copy</button></label><textarea id="replace-output" rows="8" placeholder="Result will appear here…" readonly></textarea></div>
+  </div>
+
+  <!-- Sort Lines -->
+  <div class="tab-pane" id="tab-sort">
+    <div class="two-col">
+      <div>
+        <div class="form-group"><label>Input (one item per line)</label><textarea id="sort-input" rows="12" placeholder="Line 1&#10;Line 2&#10;Line 3…"></textarea></div>
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:.75rem">
+          <label class="checkbox-row"><input type="checkbox" id="sort-reverse"> Reverse</label>
+          <label class="checkbox-row"><input type="checkbox" id="sort-ci"> Case-insensitive</label>
+          <label class="checkbox-row"><input type="checkbox" id="sort-numeric"> Numeric</label>
+          <label class="checkbox-row"><input type="checkbox" id="sort-unique"> Unique only</label>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="doSort()">Sort Lines</button></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Result <button class="copy-btn" onclick="copyText('sort-output')">Copy</button></label><textarea id="sort-output" rows="12" placeholder="Sorted result…" readonly></textarea></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedupe -->
+  <div class="tab-pane" id="tab-dedupe">
+    <div class="two-col">
+      <div>
+        <div class="form-group"><label>Input (one item per line)</label><textarea id="dedupe-input" rows="12" placeholder="Enter lines (duplicates will be removed)…"></textarea></div>
+        <label class="checkbox-row" style="margin-bottom:.75rem"><input type="checkbox" id="dedupe-ci"> Case-insensitive matching</label>
+        <div class="btn-row"><button class="btn btn-primary" onclick="doDedupe()">Remove Duplicates</button></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Result <button class="copy-btn" onclick="copyText('dedupe-output')">Copy</button></label><textarea id="dedupe-output" rows="12" placeholder="Deduplicated result…" readonly></textarea></div>
+        <div id="dedupe-stats" style="font-size:.8rem;color:var(--text2);margin-top:.5rem"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+function switchTab(id) {
+  document.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  document.getElementById('tab-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function copyText(id) {
+  var el = document.getElementById(id);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(el.value).catch(function(){});
+  } else {
+    el.select();
+    document.execCommand('copy');
+  }
+}
+
+async function post(url, body) {
+  var res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!res.ok) { var e = await res.json().catch(function(){return{error:res.statusText};}); throw new Error(e.error || res.statusText); }
+  return res.json();
+}
+
+async function doAnalyze() {
+  var t = document.getElementById('analyze-input').value;
+  try {
+    var d = await post('/text/api/analyze', { text: t });
+    var s = d.stats;
+    document.getElementById('s-words').textContent = s.words.toLocaleString();
+    document.getElementById('s-chars').textContent = s.characters.toLocaleString();
+    document.getElementById('s-chars-ns').textContent = s.charactersNoSpaces.toLocaleString();
+    document.getElementById('s-sentences').textContent = s.sentences.toLocaleString();
+    document.getElementById('s-paragraphs').textContent = s.paragraphs.toLocaleString();
+    document.getElementById('s-lines').textContent = s.lines.toLocaleString();
+    var rt = s.readingTimeSec < 60 ? s.readingTimeSec + 's' : s.readingTimeMin + 'm';
+    document.getElementById('s-reading').textContent = rt;
+    document.getElementById('s-avgword').textContent = s.avgWordLength;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function doCase() {
+  try {
+    var d = await post('/text/api/case', { text: document.getElementById('case-input').value, mode: document.getElementById('case-mode').value });
+    document.getElementById('case-output').value = d.result;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function doEncode() {
+  try {
+    var d = await post('/text/api/encode', { text: document.getElementById('encode-input').value, format: document.getElementById('encode-format').value, direction: document.getElementById('encode-dir').value });
+    document.getElementById('encode-output').value = d.result;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function doReplace() {
+  try {
+    var d = await post('/text/api/replace', {
+      text: document.getElementById('replace-input').value,
+      find: document.getElementById('replace-find').value,
+      replace: document.getElementById('replace-with').value,
+      regex: document.getElementById('replace-regex').checked,
+      caseInsensitive: document.getElementById('replace-ci').checked,
+    });
+    document.getElementById('replace-output').value = d.result;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function doSort() {
+  try {
+    var d = await post('/text/api/sort', {
+      text: document.getElementById('sort-input').value,
+      reverse: document.getElementById('sort-reverse').checked,
+      caseInsensitive: document.getElementById('sort-ci').checked,
+      numeric: document.getElementById('sort-numeric').checked,
+      unique: document.getElementById('sort-unique').checked,
+    });
+    document.getElementById('sort-output').value = d.result;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function doDedupe() {
+  try {
+    var input = document.getElementById('dedupe-input').value;
+    var d = await post('/text/api/dedupe', { text: input, caseInsensitive: document.getElementById('dedupe-ci').checked });
+    document.getElementById('dedupe-output').value = d.result;
+    var inLines = input.split('\n').length;
+    var outLines = d.result.split('\n').length;
+    document.getElementById('dedupe-stats').textContent = 'Removed ' + (inLines - outLines) + ' duplicate(s). ' + outLines + ' unique lines remain.';
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// Live word count on input
+document.getElementById('analyze-input').addEventListener('input', function() {
+  var t = this.value;
+  var w = t.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('s-words').textContent = w.toLocaleString();
+  document.getElementById('s-chars').textContent = t.length.toLocaleString();
+});
+</script>
+</body>
+</html>

@@ -121,6 +121,36 @@ function buildApp() {
         res.send(communitySSR.renderChatPage(messages));
     });
 
+    // Forum surface — served at /forum/* (also used by openvibe.forum domain via nginx)
+    app.get('/forum', (_req, res) => {
+        const m = require('./model');
+        const spaces = m.listSpaces({ visibility: 'public', limit: 40 });
+        const recentThreads = m.listThreads({ limit: 20, status: 'open' });
+        // Annotate spaces with thread counts
+        const spacesAnnotated = spaces.map((s) => {
+            try {
+                const count = require('./db').get().prepare(`SELECT COUNT(*) AS c FROM community_threads WHERE space_id = ? AND status != 'archived'`).get(s.id);
+                return Object.assign({}, s, { thread_count: count && count.c || 0 });
+            } catch {
+                return Object.assign({}, s, { thread_count: 0 });
+            }
+        });
+        res.send(communitySSR.renderForumHomePage(spacesAnnotated, recentThreads));
+    });
+    app.get('/forum/s/:slug', (req, res) => {
+        const m = require('./model');
+        const space = m.getSpace(req.params.slug);
+        // Threads are stored with community_id = space.id in this data model
+        const threads = space ? m.listThreads({ community_id: space.id, limit: 60, status: 'open' }) : [];
+        res.send(communitySSR.renderForumSpacePage(space, threads));
+    });
+    app.get('/forum/t/:id', (req, res) => {
+        const m = require('./model');
+        const thread = m.getThread(req.params.id);
+        const posts = thread ? m.listPosts({ thread_id: thread.id, limit: 200 }) : [];
+        res.send(communitySSR.renderForumThreadPage(thread, posts));
+    });
+
     // /threads/:idOrSlug — HTML thread detail page (before API mounts so it only
     // fires for browser Accept: text/html requests; API clients hit /api/community/threads/:id)
     app.get('/threads/:idOrSlug', (req, res) => {

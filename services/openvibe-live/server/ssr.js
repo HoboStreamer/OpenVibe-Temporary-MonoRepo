@@ -2149,7 +2149,7 @@ function renderMediaDetailPage({ item, channel, moreByCreator, baseUrl }) {
             playbackUrl: item.playback_url,
             posterUrl: ogImage || '',
             mimeType: item.playback_mime_type || item.mime_type || '',
-            statusText: item.playback_note || 'Ready to play',
+            statusText: item.playback_note || 'Playback ready',
         })
         : renderMediaThumb({
             url: item.thumbnail_url || (channel && channel.avatar_url) || null,
@@ -2276,7 +2276,7 @@ function renderMediaDetailPage({ item, channel, moreByCreator, baseUrl }) {
 function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, statusText }) {
     return `
         <div class="ov-media-player" data-ov-player>
-            <video controls playsinline preload="metadata" poster="${escapeHtml(posterUrl || '')}" aria-label="${escapeHtml(title || 'OpenVibe media playback')}">
+            <video controls playsinline preload="metadata" poster="${escapeHtml(posterUrl || '')}" aria-label="openvibe.media playback — ${escapeHtml(title || 'media')}">
                 <source src="${escapeHtml(playbackUrl || '')}"${mimeType ? ` type="${escapeHtml(mimeType)}"` : ''}>
             </video>
             <div class="ov-player-controls">
@@ -2289,7 +2289,8 @@ function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, stat
                     <button class="ov-player-button" type="button" data-player-action="fullscreen">Full screen</button>
                 </div>
             </div>
-            <div class="ov-player-status" data-player-status role="status" aria-live="polite">${escapeHtml(statusText || 'Ready to play')}</div>
+            <div class="ov-player-status" data-player-status role="status" aria-live="polite">${escapeHtml(statusText || 'Playback ready')}</div>
+            ${mimeType ? `<div class="ov-player-meta" aria-hidden="true">Detected type: ${escapeHtml(mimeType)}</div>` : ''}
         </div>`;
 }
 
@@ -2477,7 +2478,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         })}
 
         ${renderSection({
-            titleHtml: `${renderIcon('live', { decorative: true })} Recent Clips`,
+            titleHtml: `${renderIcon('live', { decorative: true })} Recent clips`,
             subtitle: `${clipCount} clips clipped so far.`,
             actionHref: '/clips',
             actionLabel: 'View all clips',
@@ -2492,7 +2493,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title ov-icon-label">${renderIcon('community', { decorative: true })} Recent Pastes</h2>
+                    <h2 class="section-title ov-icon-label">${renderIcon('community', { decorative: true })} Community pulse</h2>
                     <p class="section-subtitle">Screenshots, notes, and shared content from the community.</p>
                 </div>
                 <a class="section-link" href="${LIVE_NETWORK_URLS.community}">View all pastes</a>
@@ -2673,11 +2674,11 @@ function renderGoLivePage({ baseUrl, session }) {
             <div class="sm-top-bar">
                 <div>
                     <div class="eyebrow">Stream control</div>
-                    <h1 class="section-title" style="font-size:1.5rem">Go Live</h1>
+                    <h1 class="section-title" style="font-size:1.5rem">Your stream manager</h1>
                     <p class="section-subtitle">Select a stream slot to configure your profile and go live.</p>
                 </div>
                 <div class="sm-top-actions">
-                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">openre.stream</a>
+                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">Open openre.stream</a>
                     <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.network)}">Account</a>
                 </div>
             </div>
@@ -2723,7 +2724,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                         </div>
-                        <form class="sm-form" id="sm-new-channel-form">
+                        <form class="sm-form" id="go-live-channel-form">
                             <label class="sm-field-group">
                                 <span class="sm-field-label">HANDLE</span>
                                 <input class="sm-input" type="text" name="slug" placeholder="your-handle" autocomplete="off" required>
@@ -3097,14 +3098,16 @@ function renderGoLivePage({ baseUrl, session }) {
             </div>
         </section>`
         : `
-        <section class="section-panel" id="stream-manager">
-            <h2 class="section-title" style="margin-bottom:1.25rem;">Stream manager</h2>
+        <section class="section-panel" id="stream-manager" data-go-live-session>
+            <h2 class="section-title" style="margin-bottom:.5rem;">Stream manager</h2>
+            <p class="section-subtitle" style="margin-bottom:1.25rem;">Sign in to unlock your stream manager and create your first channel.</p>
             <div class="golive-auth-grid">
                 <a class="golive-auth-card" href="${escapeHtml(signInHref)}">
                     <div class="golive-auth-icon">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                     </div>
-                    <div class="golive-auth-label">Log in</div>
+                    <div class="golive-auth-label">Sign in with OpenVibe
+                    <div class="golive-auth-label">Sign in with OpenVibe</div>
                     <div class="golive-auth-sub">Use your OpenVibe account</div>
                 </a>
                 <a class="golive-auth-card" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">

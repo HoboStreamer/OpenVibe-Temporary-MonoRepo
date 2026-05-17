@@ -12,7 +12,7 @@ const model = require('./model');
 const policy = require('./policy');
 const { CHAT_EVENT_TYPES } = require('@openvibe/contracts');
 
-function buildRouter({ eventBus }) {
+function buildRouter({ eventBus, chatWs }) {
     const r = express.Router();
     const json = express.json({ limit: '512kb' });
 
@@ -114,6 +114,8 @@ function buildRouter({ eventBus }) {
         syncDmReadState(room, a);
         eventBus.publishChatEvent(CHAT_EVENT_TYPES.MESSAGE_CREATED,
             { room_id: room.id, message_id: msg.id, room_type: room.room_type, sender_type: msg.sender_type, sender_id: msg.sender_id }, a);
+        // Push to WebSocket subscribers
+        if (chatWs) chatWs.broadcastToRoom(room.id, publicMessage(msg));
         res.status(201).json({ message: msg });
     });
 

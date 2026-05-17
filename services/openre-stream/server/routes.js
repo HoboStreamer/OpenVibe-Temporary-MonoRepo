@@ -3,6 +3,7 @@
 const express = require('express');
 const model = require('./model');
 const policy = require('./policy');
+const recorder = require('./recorder');
 const { STREAM_EVENT_TYPES } = require('@openvibe/contracts/stream-events');
 
 function buildRouter({ eventBus, config, buildSessionResponse }) {
@@ -211,7 +212,29 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
         model.recordIngestConnected({ stream_id: s.id, protocol: b.protocol || s.protocol, client_addr: b.client_addr, details: b.details });
         eventBus.publishStreamEvent(STREAM_EVENT_TYPES.INGEST_CONNECTED, s, ch, { protocol: b.protocol || s.protocol });
-        res.json({ ok: true });
+
+        // Auto-start recording if channel has recording_enabled
+        const recordingEnabled = !!(ch.metadata && ch.metadata.recording_enabled !== false);
+        if (recordingEnabled && !recorder.isRecording(s.id)) {
+            try {
+                const { hlsDir, playlistPath } = recorder.startRecording(s, ch, config);
+                const dvr = config.publicBaseUrl
+                    ? `${config.publicBaseUrl}/vods/${encodeURIComponent(ch.slug)}/${encodeURIComponent(s.id)}/index.m3u8`
+                    : playlistPath;
+                model.upsertRecording({
+                    stream_id: s.id,
+                    channel_slug: ch.slug,
+                    status: 'recording',
+                    dvr_playlist_url: dvr,
+                    started_at: new Date().toISOString(),
+                    metadata: { hls_dir: hlsDir, playlist_path: playlistPath },
+                });
+            } catch (err) {
+                console.warn(`[routes] auto-recording failed for ${s.id}: ${err.message}`);
+            }
+        }
+
+        res.json({ ok: true, recording: recorder.isRecording(s.id) });
     });
     r.post('/ingest/disconnected', json, (req, res) => {
         const b = req.body || {};
@@ -221,7 +244,24 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         try { policy.assert(policy.decideStreamWrite({ req, channel: ch }), { ...actorMeta(req), action: 'ingest.disconnected' }); }
         catch (err) { return res.status(err.status || 403).json({ error: err.message, reason: err.reason }); }
         model.recordIngestDisconnected({ stream_id: s.id });
-        eventBus.publishStreamEvent(STREAM_EVENT_TYPES.INGEST_DISCONNECTED, s, ch);
+
+        // Stop recording if active
+        const stopped = recorder.stopRecording(s.id);
+        if (stopped) {
+            model.upsertRecording({
+                stream_id: s.id,
+                channel_slug: ch.slug,
+                status: 'completed',
+                ended_at: new Date().toISOString(),
+                metadata: { hls_dir: stopped.hlsDir, playlist_path: stopped.playlistPath },
+            });
+            eventBus.publishStreamEvent(STREAM_EVENT_TYPES.INGEST_DISCONNECTED, s, ch, {
+                recording_playlist: stopped.playlistPath,
+            });
+        } else {
+            eventBus.publishStreamEvent(STREAM_EVENT_TYPES.INGEST_DISCONNECTED, s, ch);
+        }
+
         res.json({ ok: true });
     });
 
@@ -275,6 +315,11 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         const row = model.lookupLegacy(req.params.source, req.params.kind, req.params.legacyId);
         if (!row) return res.status(404).json({ error: 'not mapped' });
         res.json({ new_id: row.new_id });
+    });
+
+    // ── recording state ───────────────────────────────────────
+    r.get('/recordings/active', (_req, res) => {
+        res.json({ items: recorder.listRecordings() });
     });
 
     return r;

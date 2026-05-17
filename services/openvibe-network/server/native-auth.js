@@ -295,6 +295,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:-ap
             </div>
         </div>
         ` : `
+        <p class="chooser-subtitle">Create an account or sign in to continue.</p>
         <div class="tab-bar" id="auth-tabs">
             <button class="${request.prompt === 'login' ? 'active' : ''}" id="tab-login" onclick="showPanel('login')">Sign In</button>
             <button class="${request.prompt !== 'login' ? 'active' : ''}" id="tab-register" onclick="showPanel('register')">Create Account</button>

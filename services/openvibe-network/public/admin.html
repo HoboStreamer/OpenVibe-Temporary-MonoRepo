@@ -404,24 +404,75 @@
     if (!canManageUsers) {
         usersTarget.innerHTML = renderEmpty('Role management unavailable', 'Sign in with manage_users to view the staff role table. manage_roles is required to change a role.');
     } else {
+        const canBan = capList.includes('manage_site_bans');
         const users = await OpenVibe.api('/admin/users').catch(() => ({ items: [] }));
         usersTarget.innerHTML = `
-            <div class="ov-section-head"><div><h2>Users & staff roles</h2><p class="ov-section-sub">Current staff role assignments from the control plane.</p></div></div>
+            <div class="ov-section-head"><div><h2>Users & staff roles</h2><p class="ov-section-sub">Network user accounts with role assignments and ban controls.</p></div></div>
             <div class="ov-table-wrap">
                 <table class="ov-table">
-                    <thead><tr><th>user</th><th>role</th><th>granted</th><th>action</th></tr></thead>
-                    <tbody>${(users.items || []).length ? (users.items || []).map((row) => `<tr data-user-row="${OpenVibe.escapeHtml(row.user_id)}"><td><code>${OpenVibe.escapeHtml(row.user_id)}</code></td><td>${canManageRoles ? `<select class="ov-select" data-role-select="${OpenVibe.escapeHtml(row.user_id)}">${ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === row.role ? 'selected' : ''}>${role}</option>`).join('')}</select>` : OpenVibe.escapeHtml(row.role)}</td><td>${OpenVibe.escapeHtml(OpenVibe.formatDateTime(row.granted_at))}</td><td>${canManageRoles ? `<button class="ov-btn" type="button" data-save-role="${OpenVibe.escapeHtml(row.user_id)}">Save</button>` : '<span class="ov-tag warn">read-only</span>'}</td></tr>`).join('') : '<tr><td colspan="4">No staff roles assigned yet.</td></tr>'}</tbody>
+                    <thead><tr><th>user</th><th>username</th><th>role</th><th>banned</th>${canBan ? '<th>ban action</th>' : ''}<th>role action</th></tr></thead>
+                    <tbody>${(users.items || []).length ? (users.items || []).map((row) => `<tr data-user-row="${OpenVibe.escapeHtml(row.user_id)}">
+                        <td><code>${OpenVibe.escapeHtml(row.user_id)}</code></td>
+                        <td>${OpenVibe.escapeHtml(row.username || row.user_id)}</td>
+                        <td>${canManageRoles ? `<select class="ov-select" data-role-select="${OpenVibe.escapeHtml(row.user_id)}">${ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === row.role ? 'selected' : ''}>${role}</option>`).join('')}</select>` : OpenVibe.escapeHtml(row.role || 'user')}</td>
+                        <td>${row.is_banned ? `<span class="ov-tag danger">banned</span>${row.ban_reason ? ` <span class="ov-muted" style="font-size:.75rem;">${OpenVibe.escapeHtml(row.ban_reason)}</span>` : ''}` : '<span class="ov-tag ok">active</span>'}</td>
+                        ${canBan ? `<td>${row.is_banned
+                            ? `<button class="ov-btn" type="button" data-unban-user="${OpenVibe.escapeHtml(row.user_id)}" style="color:var(--ov-accent);">Unban</button>`
+                            : `<button class="ov-btn" type="button" data-ban-user="${OpenVibe.escapeHtml(row.user_id)}" style="color:var(--ov-danger,#fb7185);">Ban</button>`}</td>` : ''}
+                        <td>${canManageRoles ? `<button class="ov-btn" type="button" data-save-role="${OpenVibe.escapeHtml(row.user_id)}">Save role</button>` : '<span class="ov-tag warn">read-only</span>'}</td>
+                    </tr>`).join('') : '<tr><td colspan="6">No users found.</td></tr>'}</tbody>
                 </table>
             </div>
-            <p class="ov-muted" id="users-status" style="margin-top:1rem;">${canManageRoles ? 'Update a role and click Save to write through /admin/users/:id/role.' : 'You can view staff users, but not change their roles.'}</p>`;
+            <p class="ov-muted" id="users-status" style="margin-top:1rem;">${canManageRoles ? 'Update a role and click Save role to persist via /admin/users/:id/role.' : 'You can view users but not change their roles.'}</p>
+            ${canBan ? `<div id="ban-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;">
+                <div style="background:var(--ov-bg);border:1px solid var(--ov-border);border-radius:16px;padding:2rem;width:min(400px,90vw);">
+                    <h3>Ban user</h3>
+                    <p class="ov-muted" id="ban-modal-target" style="margin-top:.5rem;"></p>
+                    <label for="ban-reason-input" style="display:block;margin-top:1rem;font-size:.85rem;font-weight:600;">Reason (optional)</label>
+                    <input class="ov-input" id="ban-reason-input" style="margin-top:.5rem;width:100%;" maxlength="500" placeholder="Policy violation, spam…" />
+                    <div style="display:flex;gap:.75rem;margin-top:1.5rem;justify-content:flex-end;">
+                        <button class="ov-btn ov-btn-ghost" type="button" id="ban-cancel">Cancel</button>
+                        <button class="ov-btn" type="button" id="ban-confirm" style="background:var(--ov-danger,#fb7185);color:#fff;border:none;">Ban user</button>
+                    </div>
+                </div>
+            </div>` : ''}`;
 
-        if (canManageRoles) {
-            usersTarget.addEventListener('click', async function (event) {
-                const button = event.target.closest('[data-save-role]');
-                if (!button) return;
-                const userId = button.dataset.saveRole;
-                const select = Array.from(usersTarget.querySelectorAll('[data-role-select]')).find((element) => element.dataset.roleSelect === userId);
-                const status = document.getElementById('users-status');
+        const status = document.getElementById('users-status');
+        let pendingBanUserId = null;
+
+        if (canBan) {
+            const modal = document.getElementById('ban-modal');
+            const reasonInput = document.getElementById('ban-reason-input');
+            const banModalTarget = document.getElementById('ban-modal-target');
+            document.getElementById('ban-cancel').addEventListener('click', function () {
+                modal.hidden = true;
+                pendingBanUserId = null;
+            });
+            document.getElementById('ban-confirm').addEventListener('click', async function () {
+                if (!pendingBanUserId) return;
+                const reason = reasonInput.value.trim();
+                modal.hidden = true;
+                status.textContent = `Banning ${pendingBanUserId}…`;
+                try {
+                    await OpenVibe.api(`/admin/users/${encodeURIComponent(pendingBanUserId)}/ban`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ banned: true, reason }),
+                    });
+                    status.textContent = `Banned ${pendingBanUserId}.`;
+                    window.location.reload();
+                } catch (err) {
+                    status.textContent = `Failed to ban ${pendingBanUserId} (${err.status || 'error'}).`;
+                }
+                pendingBanUserId = null;
+            });
+        }
+
+        usersTarget.addEventListener('click', async function (event) {
+            const saveBtn = event.target.closest('[data-save-role]');
+            if (saveBtn && canManageRoles) {
+                const userId = saveBtn.dataset.saveRole;
+                const select = usersTarget.querySelector(`[data-role-select="${CSS.escape(userId)}"]`);
                 status.textContent = `Saving role for ${userId}…`;
                 try {
                     await OpenVibe.api(`/admin/users/${encodeURIComponent(userId)}/role`, {
@@ -430,11 +481,36 @@
                         body: JSON.stringify({ role: select.value }),
                     });
                     status.textContent = `Role updated for ${userId}.`;
-                } catch (error) {
-                    status.textContent = `Could not update ${userId} (${error.status || 'error'}).`;
+                } catch (err) {
+                    status.textContent = `Could not update ${userId} (${err.status || 'error'}).`;
                 }
-            });
-        }
+                return;
+            }
+            const banBtn = event.target.closest('[data-ban-user]');
+            if (banBtn && canBan) {
+                pendingBanUserId = banBtn.dataset.banUser;
+                document.getElementById('ban-reason-input').value = '';
+                document.getElementById('ban-modal-target').textContent = `You are about to ban user: ${pendingBanUserId}`;
+                document.getElementById('ban-modal').hidden = false;
+                return;
+            }
+            const unbanBtn = event.target.closest('[data-unban-user]');
+            if (unbanBtn && canBan) {
+                const userId = unbanBtn.dataset.unbanUser;
+                status.textContent = `Unbanning ${userId}…`;
+                try {
+                    await OpenVibe.api(`/admin/users/${encodeURIComponent(userId)}/ban`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ banned: false }),
+                    });
+                    status.textContent = `Unbanned ${userId}.`;
+                    window.location.reload();
+                } catch (err) {
+                    status.textContent = `Failed to unban ${userId} (${err.status || 'error'}).`;
+                }
+            }
+        });
     }
 
     document.getElementById('tab-registry').innerHTML = `

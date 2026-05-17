@@ -1,11 +1,15 @@
 'use strict';
 
-// openvibe-ai — provider registry. Real provider adapters are added here as
-// thin seams: they accept config + record metadata but never expose API keys.
+// openvibe-ai — provider registry.
+// Real provider adapters are registered here. Each adapter accepts config and
+// record metadata but never exposes API keys in responses.
 //
 // Default provider (`stub`) works with no external credentials.
 
-const { stubProvider } = require('./providers/stub');
+const { stubProvider }      = require('./providers/stub');
+const { openaiProvider }    = require('./providers/openai');
+const { anthropicProvider } = require('./providers/anthropic');
+const { ollamaProvider }    = require('./providers/ollama');
 
 const _registry = new Map();
 
@@ -23,31 +27,95 @@ function get(key) {
 function has(key) { return _registry.has(key); }
 function list()   { return Array.from(_registry.keys()); }
 
-// ── External provider seams (skeletal — no real network calls without key)
-// Each seam validates that the env-var name is configured before attempting
-// any HTTP request. Without a configured key, calls fall through to stub.
-function _httpSeam(key, displayKey) {
-    return {
-        key,
-        supports(f) { return ['chat', 'generate', 'summarize', 'classify', 'extract', 'enrich'].includes(f); },
-        _envVar(envName) {
-            const v = envName ? process.env[envName] : null;
-            return v && String(v).trim() ? v : null;
-        },
-        async chat(args) {
-            // Without a real key, always fall through to stub for safe local dev.
-            if (!this._envVar(args && args._api_key_env)) {
-                return Object.assign({}, await stubProvider.chat(args), {
-                    metadata: { stub: true, fallback_from: key, reason: 'no api key configured' },
+// ── OpenRouter seam (thin adapter using OpenAI-compatible API) ────────────────
+function _openrouterSeam() {
+    const ENV_KEY = 'OPENVIBE_AI_OPENROUTER_KEY';
+    const https = require('https');
+    function _getKey() { const v = process.env[ENV_KEY]; return v && v.trim() ? v.trim() : null; }
+    function _post(body, apiKey) {
+        return new Promise((resolve, reject) => {
+            const payload = JSON.stringify(body);
+            const req = https.request({
+                hostname: 'openrouter.ai',
+                path: '/api/v1/chat/completions',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                    'HTTP-Referer': 'https://openvibe.network',
+                    'X-Title': 'OpenVibe',
+                    'Content-Length': Buffer.byteLength(payload),
+                },
+                timeout: 30000,
+            }, (res) => {
+                const chunks = [];
+                res.on('data', (c) => chunks.push(c));
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(Buffer.concat(chunks).toString());
+                        if (res.statusCode >= 400) { reject(Object.assign(new Error(`OpenRouter HTTP ${res.statusCode}`), { json })); }
+                        else { resolve(json); }
+                    } catch (e) { reject(e); }
                 });
-            }
-            // Real adapter would go here. We intentionally do not implement HTTP
-            // calls in Phase 7 to keep the service offline-safe by default.
-            return Object.assign({}, await stubProvider.chat(args), {
-                metadata: { stub: true, fallback_from: key, reason: 'real adapter deferred' },
             });
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(new Error('OpenRouter timeout')); });
+            req.write(payload); req.end();
+        });
+    }
+    return {
+        key: 'openrouter',
+        supports(f) { return ['chat', 'generate', 'summarize'].includes(f); },
+        async chat({ messages, model, temperature, max_tokens }) {
+            const apiKey = _getKey();
+            if (!apiKey) return { text: null, metadata: { stub: true, fallback_from: 'openrouter', reason: 'no api key' } };
+            const result = await _post({ model: model || 'openai/gpt-4o-mini', messages: messages || [], temperature: temperature != null ? temperature : 0.7, max_tokens: max_tokens || 1024 }, apiKey);
+            const choice = result.choices && result.choices[0];
+            return { text: choice && choice.message && choice.message.content || '', metadata: { model: result.model, usage: result.usage, provider: 'openrouter' } };
         },
-        async generate(args)  { return this.chat({ messages: [{ role: 'user', content: args.prompt || '' }], _api_key_env: args._api_key_env }); },
+        async generate({ prompt, model, temperature, max_tokens }) {
+            return this.chat({ messages: [{ role: 'user', content: prompt || '' }], model, temperature, max_tokens });
+        },
+        async summarize(args) { return openaiProvider.summarize.call(this, args); },
+        async classify(args)  { return stubProvider.classify(args); },
+        async extract(args)   { return stubProvider.extract(args); },
+        async enrich(args)    { return stubProvider.enrich(args); },
+        async embed(args)     { return stubProvider.embed(args); },
+    };
+}
+
+// ── Local HTTP / custom seam (for self-hosted OpenAI-compatible APIs) ─────────
+function _localHttpSeam() {
+    const ENV_URL = 'OPENVIBE_AI_LOCAL_HTTP_URL';
+    const http = require('http');
+    const https = require('https');
+    function _getUrl() { const v = process.env[ENV_URL]; return v && v.trim() ? v.trim().replace(/\/$/, '') : null; }
+    function _post(baseUrl, body) {
+        return new Promise((resolve, reject) => {
+            const payload = JSON.stringify(body);
+            const url = new URL(baseUrl + '/v1/chat/completions');
+            const mod = url.protocol === 'https:' ? https : http;
+            const req = mod.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }, timeout: 30000 }, (res) => {
+                const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString())); } catch (e) { reject(e); } });
+            });
+            req.on('error', reject); req.on('timeout', () => req.destroy(new Error('local_http timeout'))); req.write(payload); req.end();
+        });
+    }
+    return {
+        key: 'local_http',
+        supports(f) { return ['chat', 'generate'].includes(f); },
+        async chat({ messages, model, temperature, max_tokens }) {
+            const baseUrl = _getUrl();
+            if (!baseUrl) return { text: null, metadata: { stub: true, fallback_from: 'local_http', reason: 'OPENVIBE_AI_LOCAL_HTTP_URL not set' } };
+            try {
+                const result = await _post(baseUrl, { model: model || 'local', messages: messages || [], temperature: temperature != null ? temperature : 0.7, max_tokens: max_tokens || 1024 });
+                const choice = result.choices && result.choices[0];
+                return { text: choice && choice.message && choice.message.content || '', metadata: { model: result.model, provider: 'local_http' } };
+            } catch (err) {
+                return { text: null, metadata: { stub: true, fallback_from: 'local_http', reason: err.message } };
+            }
+        },
+        async generate({ prompt, model, temperature, max_tokens }) { return this.chat({ messages: [{ role: 'user', content: prompt || '' }], model, temperature, max_tokens }); },
         async summarize(args) { return stubProvider.summarize(args); },
         async classify(args)  { return stubProvider.classify(args); },
         async extract(args)   { return stubProvider.extract(args); },
@@ -57,12 +125,14 @@ function _httpSeam(key, displayKey) {
 }
 
 register(stubProvider);
-register(_httpSeam('openai',     'OpenAI'));
-register(_httpSeam('anthropic',  'Anthropic'));
-register(_httpSeam('gemini',     'Gemini'));
-register(_httpSeam('openrouter', 'OpenRouter'));
-register(_httpSeam('ollama',     'Ollama'));
-register(_httpSeam('local_http', 'Local HTTP'));
-register(_httpSeam('custom',     'Custom'));
+register(openaiProvider);
+register(anthropicProvider);
+register(ollamaProvider);
+register(_openrouterSeam());
+register(_localHttpSeam());
+// 'gemini' and 'custom' are currently served by stub (no adapter yet)
+register({ key: 'gemini',  supports: stubProvider.supports.bind(stubProvider), ...stubProvider, key: 'gemini'  });
+register({ key: 'custom',  supports: stubProvider.supports.bind(stubProvider), ...stubProvider, key: 'custom'  });
 
 module.exports = { register, get, has, list };
+
