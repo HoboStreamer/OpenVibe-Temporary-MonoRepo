@@ -9,31 +9,6 @@ jobs:
   validate:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: openvibe
-          POSTGRES_PASSWORD: openvibe
-          POSTGRES_DB: openvibe
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U openvibe"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
       OPENVIBE_DATABASE_URL: postgresql://openvibe:openvibe@localhost:5432/openvibe
       OPENVIBE_STAGING_DATABASE_URL: postgresql://openvibe:openvibe@localhost:5432/openvibe
@@ -68,6 +43,16 @@ jobs:
 
       - name: Offline scalable readiness
         run: npm run readiness
+
+      - name: Start infrastructure services
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER openvibe WITH PASSWORD 'openvibe';"
+          sudo -u postgres psql -c "CREATE DATABASE openvibe OWNER openvibe;"
+          sudo apt-get install -y redis-server
+          sudo systemctl start redis-server
+          until pg_isready -h 127.0.0.1 -p 5432 -U openvibe; do sleep 1; done
+          until redis-cli ping; do sleep 1; done
 
       - name: Start local production-like stack
         run: npm run stack:local:start
