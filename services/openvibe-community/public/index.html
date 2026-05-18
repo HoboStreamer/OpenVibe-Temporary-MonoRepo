@@ -6,6 +6,57 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
+<style>
+.ov-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.ov-modal-overlay.open {
+    display: flex;
+}
+.ov-modal {
+    background: var(--ov-surface, #1a1a2e);
+    border: 1px solid var(--ov-border, rgba(255,255,255,0.08));
+    border-radius: 12px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+    position: relative;
+}
+.ov-modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    color: var(--ov-muted, #888);
+    font-size: 1.25rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+}
+.ov-modal-close:hover {
+    color: var(--ov-text, #fff);
+    background: var(--ov-hover, rgba(255,255,255,0.06));
+}
+.paste-card-img {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 0.6rem;
+    display: block;
+}
+</style>
 </head>
 <body>
 <div id="nav-mount"></div>
@@ -15,20 +66,24 @@
     <section class="ov-section">
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
             <h1 style="margin:0;font-size:1.5rem;color:var(--ov-text);">Pastes</h1>
-            <a class="ov-btn ov-btn-primary" href="#new-paste" style="margin-left:auto;">New paste</a>
+            <button class="ov-btn ov-btn-primary" id="open-paste-modal-btn" style="margin-left:auto;">New paste</button>
         </div>
         <div class="ov-grid" id="pastes-grid"></div>
     </section>
+</main>
 
-    <section class="ov-card" id="new-paste" style="max-width:680px;margin:0 auto 4rem;">
-        <div class="ov-card-top">
+<!-- Create paste modal -->
+<div class="ov-modal-overlay" id="paste-modal" role="dialog" aria-modal="true" aria-labelledby="paste-modal-title">
+    <div class="ov-modal">
+        <button class="ov-modal-close" id="close-paste-modal-btn" aria-label="Close">&times;</button>
+        <div class="ov-card-top" style="margin-bottom:1rem;">
             <div>
-                <h2 style="margin:0;font-size:1.05rem;">Create a paste</h2>
+                <h2 id="paste-modal-title" style="margin:0;font-size:1.05rem;">Create a paste</h2>
                 <div class="desc">Share a snippet, note, or idea.</div>
             </div>
             <span class="ov-tag" id="paste-mode-tag">sign-in required</span>
         </div>
-        <form id="paste-form" style="margin-top:1rem">
+        <form id="paste-form">
             <div class="ov-form-grid">
                 <label class="ov-field">
                     <span>Title</span>
@@ -39,14 +94,19 @@
                 <span>Body</span>
                 <textarea class="ov-textarea" name="body" rows="6" placeholder="Paste body…"></textarea>
             </label>
-            <div class="ov-action-row">
+            <label class="ov-field" style="margin-top:0.85rem">
+                <span>Image URL <span class="ov-muted" style="font-weight:normal;">(optional)</span></span>
+                <input class="ov-input" name="image_url" type="url" placeholder="https://example.com/image.png" />
+            </label>
+            <div class="ov-action-row" style="margin-top:1rem;">
                 <button class="ov-btn ov-btn-primary" type="submit" id="paste-submit-btn">Create paste</button>
                 <button class="ov-btn ov-btn-ghost" type="button" id="paste-reset-btn">Reset</button>
             </div>
             <div class="ov-banner" id="paste-status" style="margin-top:1rem">Sign in to create a new paste.</div>
         </form>
-    </section>
-</main>
+    </div>
+</div>
+
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js?v=20260517-1"></script>
@@ -54,6 +114,21 @@
 (async function () {
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('community');
+
+    const overlay = document.getElementById('paste-modal');
+
+    function openModal() {
+        overlay.classList.add('open');
+        document.getElementById('paste-form').querySelector('[name="title"]').focus();
+    }
+    function closeModal() {
+        overlay.classList.remove('open');
+    }
+
+    document.getElementById('open-paste-modal-btn').addEventListener('click', openModal);
+    document.getElementById('close-paste-modal-btn').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
     function excerpt(value, length) {
         const text = String(value || '').trim();
@@ -72,8 +147,11 @@
 
     function renderPastes(items) {
         document.getElementById('pastes-grid').innerHTML = items.length
-            ? items.map(paste => `
+            ? items.map(paste => {
+                const imgUrl = paste.metadata && paste.metadata.image_url ? OpenVibe.escapeHtml(paste.metadata.image_url) : null;
+                return `
                 <a class="ov-card" href="/p/${OpenVibe.escapeHtml(paste.slug || paste.id || '')}">
+                    ${imgUrl ? `<img class="paste-card-img" src="${imgUrl}" alt="" loading="lazy" />` : ''}
                     <div class="ov-card-top">
                         <div>
                             <div class="ov-service-title">${OpenVibe.escapeHtml(paste.title || paste.slug || paste.id || 'untitled')}</div>
@@ -81,8 +159,9 @@
                         </div>
                         <span class="ov-tag">${OpenVibe.escapeHtml(paste.language || 'text')}</span>
                     </div>
-                </a>`).join('')
-            : '<div class="ov-empty">No pastes yet. Be the first to create one below.</div>';
+                </a>`;
+            }).join('')
+            : '<div class="ov-empty">No pastes yet. Be the first to create one.</div>';
     }
 
     async function syncPasteComposer() {
@@ -117,16 +196,22 @@
         e.preventDefault();
         const formData = new FormData(e.target);
         const status = document.getElementById('paste-status');
+        const imageUrl = (formData.get('image_url') || '').trim();
         try {
             const res = await fetch('/api/community/pastes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: formData.get('title'), body: formData.get('body') }),
+                body: JSON.stringify({
+                    title: formData.get('title'),
+                    body: formData.get('body'),
+                    metadata: imageUrl ? { image_url: imageUrl } : undefined,
+                }),
             });
             if (!res.ok) throw new Error(`status ${res.status}`);
             delete status.dataset.locked;
             status.textContent = 'Paste created.';
             e.target.reset();
+            closeModal();
             renderPastes(await loadPastes());
         } catch (err) {
             status.dataset.locked = 'true';
