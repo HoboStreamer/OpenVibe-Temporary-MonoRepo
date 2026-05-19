@@ -36,6 +36,8 @@ function buildS3Client(options) {
         endpoint: opts.endpoint || undefined,
         forcePathStyle: !!opts.forcePathStyle,
         credentials: buildCredentials(opts),
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
     });
 }
 

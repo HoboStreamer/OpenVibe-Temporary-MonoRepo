@@ -22,13 +22,7 @@ function buildAuthClient(config) {
             label: 'openvibe',
         });
     }
-    if (process.env.HOBO_TOOLS_URL && process.env.HOBO_TOOLS_PUBLIC_KEY) {
-        authClient.addIssuer({
-            issuer: process.env.HOBO_TOOLS_URL,
-            publicKeyPath: process.env.HOBO_TOOLS_PUBLIC_KEY,
-            label: 'hobo-tools',
-        });
-    }
+    // hobo-tools federation removed — OpenVibe auth only
     return authClient;
 }
 

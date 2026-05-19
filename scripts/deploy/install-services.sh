@@ -94,7 +94,7 @@ for svc in "${!SERVICES[@]}"; do
 
   if [[ ! -f "$entry_point" ]]; then
     log "SKIP $svc — $entry_point not found"
-    (( SKIPPED++ ))
+    SKIPPED=$((SKIPPED + 1))
     continue
   fi
 
@@ -134,7 +134,7 @@ WantedBy=multi-user.target
 UNIT
 
   chmod 644 "$unit_file"
-  (( INSTALLED++ ))
+  INSTALLED=$((INSTALLED + 1))
 done
 
 # ── Ensure data/logs dirs exist ───────────────────────────────────────────────

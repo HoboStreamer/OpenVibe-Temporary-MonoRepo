@@ -45,7 +45,7 @@ module.exports = {
     auth: {
         issuer:  resolveAuthIssuer(),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
-        cookieNames: ['openvibe_token', 'hobo_token', 'token'],
+        cookieNames: ['openvibe_token', 'token'],
     },
 
     ai: {

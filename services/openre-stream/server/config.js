@@ -27,7 +27,7 @@ module.exports = {
         url: resolvePublicOrigin({ surface: 'auth' }),
         publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
-        cookieNames: ['openvibe_token', 'hobo_token', 'token'],
+        cookieNames: ['openvibe_token', 'token'],
     },
 
     ingest: {
@@ -48,9 +48,13 @@ module.exports = {
         ],
     },
 
+    rtmp: {
+        port: parseInt(process.env.RTMP_PORT || '1935', 10),
+    },
+
     turn: {
         url:        process.env.TURN_URL        || 'turn:40.160.240.222:3478',
-        username:   process.env.TURN_USERNAME   || 'hobo',
-        credential: process.env.TURN_CREDENTIAL || 'hobostreamer-turn-2025',
+        username:   process.env.TURN_USERNAME   || 'openvibe',
+        credential: process.env.TURN_CREDENTIAL || 'openvibe-turn',
     },
 };

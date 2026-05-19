@@ -29,7 +29,7 @@ module.exports = {
         issuer:        resolveAuthIssuer(),
         publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY
             || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
-        cookieNames: ['openvibe_token', 'hobo_token', 'token'],
+        cookieNames: ['openvibe_token', 'token'],
     },
 
     // Connector secrets (loaded from env; creators store per-connector tokens in DB)

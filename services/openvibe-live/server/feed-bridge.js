@@ -185,7 +185,7 @@ function derivePlaybackState(record, config, metadata) {
     const publicPlaybackMaxBytes = Math.max(0, safeNumber(config && config.mediaPublicPlaybackMaxBytes, DEFAULT_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES));
     const withinApiSizeGuard = !sizeBytes || sizeBytes <= publicPlaybackMaxBytes;
     const playbackApiUrl = buildPlaybackApiUrl(config && config.media && config.media.url, mediaId);
-    const playbackFileUrl = buildPlaybackFileUrl(config && config.media && config.media.url, mediaId);
+    const playbackFileUrl = buildPlaybackFileUrl(config && config.media && (config.media.publicUrl || config.media.url), mediaId);
     const playbackReady = !!(mediaId && hasBacking && mimeType);
     return {
         playbackReady,
@@ -428,20 +428,33 @@ function createFeedBridge(options) {
         const liveNow = model.listLiveNow({ limit: 12 });
         const recentlyEnded = model.listRecentlyEnded({ limit: 500 });
         const channelsWithStreams = model.listChannelsWithStreams({ limit: 200 });
-        const seenSlugs = new Set(recentlyEnded.map((s) => s.channel_slug).filter(Boolean));
-        const recentlyOnlineChannels = recentlyEnded.reduce((list, stream) => {
-            if (!stream || !stream.channel_slug || list.some((entry) => entry.slug === stream.channel_slug)) return list;
-            const channel = model.getChannelBySlug(stream.channel_slug);
-            if (!channel) return list;
-            list.push(Object.assign({}, channel, { stats: model.getChannelStats(stream.channel_slug), recentStream: stream }));
-            return list;
-        }, []);
+        // Group up to 4 recent streams per channel (sorted by recency, already from listRecentlyEnded)
+        const streamsByChannel = new Map();
+        for (const stream of recentlyEnded) {
+            if (!stream || !stream.channel_slug) continue;
+            const existing = streamsByChannel.get(stream.channel_slug) || [];
+            if (existing.length < 4) {
+                existing.push(stream);
+                streamsByChannel.set(stream.channel_slug, existing);
+            }
+        }
+        const seenSlugs = new Set(streamsByChannel.keys());
+        const recentlyOnlineChannels = [];
+        for (const [slug, streams] of streamsByChannel) {
+            const channel = model.getChannelBySlug(slug);
+            if (!channel) continue;
+            recentlyOnlineChannels.push(Object.assign({}, channel, {
+                stats: model.getChannelStats(slug),
+                recentStream: streams[0],
+                recentStreams: streams,
+            }));
+        }
         // Fill in any channels with streams not already represented
         for (const row of channelsWithStreams) {
             if (!row.channel_slug || seenSlugs.has(row.channel_slug)) continue;
             const channel = model.getChannelBySlug(row.channel_slug);
             if (!channel) continue;
-            recentlyOnlineChannels.push(Object.assign({}, channel, { stats: model.getChannelStats(row.channel_slug) }));
+            recentlyOnlineChannels.push(Object.assign({}, channel, { stats: model.getChannelStats(row.channel_slug), recentStreams: [] }));
             seenSlugs.add(row.channel_slug);
         }
 

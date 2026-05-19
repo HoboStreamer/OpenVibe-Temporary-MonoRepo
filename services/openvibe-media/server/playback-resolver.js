@@ -64,7 +64,7 @@ async function resolvePlayback(media, locations, storage, options) {
         };
     }
 
-    const signed = requiresSignedPlayback({ visibility: media.visibility, signed: source.forceSigned === true || location.signed_url_required });
+    const signed = requiresSignedPlayback({ visibility: media.visibility, signed: source.forceSigned === true || !!location.signed_url_required });
     const contentType = resolveMediaContentType(media, location);
     const download = signed
         ? await storage.signDownload({

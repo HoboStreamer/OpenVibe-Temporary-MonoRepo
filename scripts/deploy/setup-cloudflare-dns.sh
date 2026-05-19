@@ -131,14 +131,11 @@ RECORDS=(
   # openre.stream RTMP ingest subdomain (DNS-only — direct TCP port 1935)
   "openre.stream|ingest.openre.stream|false"
 
-  # Legacy Hobo Network (kept running alongside OpenVibe)
+  # alexfrison.net — personal resume site hosted on the Pi
   "alexfrison.net|alexfrison.net|true"
   "alexfrison.net|www.alexfrison.net|true"
-  "hobostreamer.com|hobostreamer.com|false"
-  "hobostreamer.com|www.hobostreamer.com|true"
-  "hobo.tools|hobo.tools|true"
-  "hobo.tools|*.hobo.tools|true"
-  "hobo.quest|hobo.quest|true"
+  # NOTE: hobostreamer.com, hobo.tools, hobo.quest intentionally NOT managed here.
+  # Those domains point to GitHub Pages explaining the shutdown — leave as-is.
 )
 
 ERRORS=0

@@ -214,7 +214,11 @@ function iconSvg(name, options) {
         return `<span class="ov-icon-fallback">${fallbackGlyph(title)}</span>`;
     }
     const rendered = renderFontAwesomeIcon(definition, title ? { title } : undefined);
-    return rendered && rendered.html ? rendered.html.join('') : `<span class="ov-icon-fallback">${fallbackGlyph(title)}</span>`;
+    const raw = rendered && rendered.html ? rendered.html.join('') : null;
+    if (!raw) return `<span class="ov-icon-fallback">${fallbackGlyph(title)}</span>`;
+    // Add explicit width/height so mobile browsers render inline SVG correctly
+    // without relying solely on CSS (some mobile WebViews apply CSS late or not at all)
+    return raw.replace(/^<svg /, '<svg width="1em" height="1em" ');
 }
 
 function escapeAttribute(value) {

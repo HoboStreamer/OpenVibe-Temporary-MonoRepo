@@ -26,17 +26,19 @@ module.exports = {
     events:    { url: process.env.OPENVIBE_EVENTS_URL || 'http://127.0.0.1:4400' },
     network:   { url: resolvePublicOrigin({ surface: 'network' }) },
     stream:    { url: resolvePublicOrigin({ surface: 'restream' }) },
-    media:     { url: process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
+    media:     { url: process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }), publicUrl: process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
     community: { url: process.env.OPENVIBE_COMMUNITY_INTERNAL_URL || process.env.OPENVIBE_COMMUNITY_URL || resolvePublicOrigin({ surface: 'community' }) },
     legacy: {
-        hobostreamerRoot: process.env.OPENVIBE_HOBOSTREAMER_ROOT || '/opt/hobostreamer',
+        hobostreamerRoot: process.env.OPENVIBE_LEGACY_SOURCE_ROOT
+            ? require('path').join(process.env.OPENVIBE_LEGACY_SOURCE_ROOT, 'hobostreamer')
+            : '/opt/old-files/hobostreamer',
     },
     auth: {
         issuer: resolveAuthIssuer(),
         url: resolvePublicOrigin({ surface: 'auth' }),
         publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
         jwksUrl: process.env.OPENVIBE_AUTH_JWKS_URL || null,
-        cookieNames: ['openvibe_token', 'hobo_token', 'token'],
+        cookieNames: ['openvibe_token', 'token'],
     },
 
     // Phase 16: downstream product surfaces consulted by the integrations

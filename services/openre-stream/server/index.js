@@ -22,6 +22,7 @@ const { renderDashboard, renderDashboardAuthGate } = require('./ssr');
 const sfu = require('./sfu');
 const broadcastWs = require('./broadcast-ws');
 const whip = require('./whip');
+const { createRTMPServer } = require('./rtmp-server');
 
 function deriveBaseUrl(req) {
     const forwardedProto = req.headers['x-forwarded-proto'];
@@ -162,6 +163,10 @@ function start() {
 
     // Initialize SFU (non-blocking)
     sfu.init().catch(err => console.warn('[openre-stream] SFU init error:', err.message));
+
+    // Start native RTMP ingest server
+    const rtmpServer = createRTMPServer({ config, eventBus: buildEventBus(config) });
+    rtmpServer.start();
 
     // Attach broadcast WebSocket server
     broadcastWs.attach(server);

@@ -99,21 +99,6 @@ function buildIdentity(config) {
         console.warn('[Identity] no OpenVibe-native public key — running federation-only');
     }
 
-    // Federation: trust hobo-tools too
-    if (config.hoboTools.publicUrl && config.hoboTools.publicKeyPath) {
-        const hoboPub = readPemSafe(config.hoboTools.publicKeyPath);
-        if (hoboPub) {
-            trustedIssuers.push({
-                issuer: config.hoboTools.publicUrl,
-                label: 'hobo-tools',
-                publicKey: hoboPub,
-                kid: 'hobo-tools-1',
-            });
-        } else {
-            console.warn(`[Identity] HOBO_TOOLS_URL set but key at ${config.hoboTools.publicKeyPath} unreadable`);
-        }
-    }
-
     if (trustedIssuers.length === 0) {
         console.warn('[Identity] WARNING: no trusted issuers configured — auth verification will fail');
     } else {
@@ -157,9 +142,7 @@ function buildIdentity(config) {
                 code_challenge_methods_supported: ['S256', 'plain'],
                 token_endpoint_auth_methods_supported: ['none'],
                 openvibe: {
-                    federation: config.hoboTools.publicUrl
-                        ? { mode: 'trusted-legacy-verifier', upstream: config.hoboTools.publicUrl }
-                        : { mode: 'native-only' },
+                    federation: { mode: 'native-only' },
                     trusted_issuers: trustedIssuers.map(i => ({ issuer: i.issuer, label: i.label })),
                 },
             };

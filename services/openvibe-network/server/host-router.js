@@ -43,7 +43,7 @@ function detectSurface(host, surfaces) {
     return 'network';
 }
 
-function attachHostRouter({ app, config, hoboToolsProxy, identity, nativeAuth }) {
+function attachHostRouter({ app, config, identity, nativeAuth }) {
     const publicDir = path.resolve(__dirname, '..', 'public');
     const authUrl = String(config.surfaces.auth || '').replace(/\/$/, '');
 

@@ -2,13 +2,8 @@
 
 // openvibe-network — URL registry surface.
 //
-// This endpoint returns the runtime-resolved OpenVibe URL registry.
-// Legacy hobo-tools values may still be imported best-effort when explicitly
-// configured for migration diagnostics, but the OpenVibe runtime view is
-// authoritative.
-//
-// Consumers (HoboStreamer, future OpenVibe services) get a single endpoint
-// that always works, even when hobo-tools is offline (fallback to env+overlay).
+// Returns the runtime-resolved OpenVibe URL registry.
+// Consumers get a single endpoint for all service discovery.
 
 const express = require('express');
 const db = require('../db');
@@ -21,31 +16,7 @@ function buildRouter(deps) {
     r.get('/url-registry/resolved', async (_req, res) => {
         const merged = {};
 
-        // Legacy hobo-tools (best-effort, never fatal)
-        if (config.hoboTools.internalUrl) {
-            try {
-                const url = `${config.hoboTools.internalUrl}/internal/url-registry/resolved`;
-                const upstream = await fetch(url, {
-                    headers: { 'X-Internal-Key': config.internalKey, 'Accept': 'application/json' },
-                });
-                if (upstream.ok) {
-                    const body = await upstream.json();
-                    if (body && body.registry && typeof body.registry === 'object') {
-                        for (const [k, v] of Object.entries(body.registry)) {
-                            merged[k] = (v && typeof v === 'object' && 'value' in v)
-                                ? { value: v.value, source: v.source || 'hobo-tools' }
-                                : { value: v, source: 'hobo-tools' };
-                        }
-                    }
-                } else {
-                    console.warn(`[url-registry] hobo-tools fetch returned ${upstream.status}`);
-                }
-            } catch (err) {
-                console.warn(`[url-registry] hobo-tools fetch failed: ${err.message}`);
-            }
-        }
-
-        // OpenVibe surface URLs (always present so consumers can find us)
+        // OpenVibe surface URLs
         const surfaceMap = {
             OPENVIBE_NETWORK_URL: config.surfaces.network,
             OPENVIBE_AUTH_URL:    config.surfaces.auth,

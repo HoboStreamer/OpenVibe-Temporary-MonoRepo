@@ -113,12 +113,6 @@ module.exports = {
         }),
     },
 
-    hoboTools: {
-        publicUrl:   trim(process.env.HOBO_TOOLS_URL),
-        internalUrl: trim(process.env.HOBO_TOOLS_INTERNAL_URL),
-        publicKeyPath: process.env.HOBO_TOOLS_PUBLIC_KEY || '',
-    },
-
     openvibeKeys: {
         privatePath: process.env.OPENVIBE_PRIVATE_KEY || './data/keys/openvibe-private.pem',
         publicPath:  process.env.OPENVIBE_PUBLIC_KEY  || './data/keys/openvibe-public.pem',

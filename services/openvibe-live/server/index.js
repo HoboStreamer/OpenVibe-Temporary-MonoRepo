@@ -400,9 +400,21 @@ function buildApp() {
     }));
 
     app.get('/channels', (req, res) => {
+        const channels = model.listChannels({ limit: 200 });
+        const recentStreamsMap = model.listRecentStreamsGroupedByChannel(600);
+        const enrichedChannels = channels.map((ch) => Object.assign({}, ch, {
+            recentStreams: recentStreamsMap.get(ch.slug) || [],
+            recentStream: (recentStreamsMap.get(ch.slug) || [])[0] || null,
+            stats: model.getChannelStats(ch.slug),
+        }));
+        const featuredChannels = model.listFeaturedChannels({ limit: 10 }).map((ch) => Object.assign({}, ch, {
+            recentStreams: recentStreamsMap.get(ch.slug) || [],
+            recentStream: (recentStreamsMap.get(ch.slug) || [])[0] || null,
+            stats: model.getChannelStats(ch.slug),
+        }));
         res.type('html').send(ssr.renderChannelsPage({
-            channels: model.listChannels({ limit: 200 }),
-            featuredChannels: model.listFeaturedChannels({ limit: 10 }),
+            channels: enrichedChannels,
+            featuredChannels,
             categories: model.listTopCategories({ limit: 12 }),
             baseUrl: deriveBaseUrl(req),
         }));

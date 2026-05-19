@@ -175,6 +175,15 @@ function normalizeCreatorSlug(value) {
     return raw && raw.toLowerCase() !== 'unknown' ? raw : '';
 }
 
+function sanitizeStreamTitle(title) {
+    if (!title) return null;
+    // Filter raw hobostreamer broadcast IDs like "STREAM 1042 1777693187691"
+    if (/^stream(\s+\d+)+$/i.test(String(title).trim())) return null;
+    // Filter generic default titles like "finditfixit's Stream", "someuser's Stream"
+    if (/^.+'s\s+stream$/i.test(String(title).trim())) return null;
+    return String(title).trim() || null;
+}
+
 function channelPath(slug) {
     const normalized = normalizeCreatorSlug(slug);
     return normalized ? `/@${encodeURIComponent(normalized)}` : '/channels';
@@ -535,6 +544,9 @@ function _shellStyles() {
         .data-point { padding: 0.95rem; }
         .data-point-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
         .data-point-value { margin-top: 0.35rem; font-size: 1.15rem; font-weight: 800; }
+        .hero-stat-bar { display: flex; gap: 0.5rem 1rem; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 0.92rem; margin-top: 1.25rem; }
+        .hero-stat strong { color: white; font-weight: 800; font-size: 1rem; }
+        .hero-stat-sep { color: rgba(255,255,255,0.18); user-select: none; font-size: 1rem; }
         .link-inline { color: var(--accent); text-decoration: underline; text-underline-offset: 0.2em; }
         .search-bar { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
         .filter-input,
@@ -634,9 +646,14 @@ function _shellStyles() {
             .ov-player-controls {
                 grid-template-columns: 1fr;
             }
-            .topbar-inner { flex-wrap: wrap; justify-content: center; }
-            .nav-links { justify-content: center; }
-            .nav-account { justify-content: center; width: 100%; }
+            .topbar-inner { flex-wrap: wrap; }
+            .brand { flex: 1; }
+            .nav-links { order: 3; width: 100%; padding: 0 0 0.5rem; justify-content: flex-start; }
+        }
+        @media (max-width: 640px) {
+            .brand-name { display: none; }
+            .nav-link span { display: none; }
+            .nav-link { padding: 0.68rem 0.85rem; min-width: 2.7rem; }
         }
         .footer-links-grid {
             display: grid;
@@ -695,6 +712,127 @@ function _shellStyles() {
             font-size: 0.82rem;
             color: var(--muted);
         }
+        /* ── Compact video card (VODs / Clips grid) ── */
+        .vc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 0.75rem;
+        }
+        .vc-card {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(12,20,38,0.8);
+            border: 1px solid rgba(255,255,255,0.07);
+            transition: transform 0.15s, border-color 0.15s;
+        }
+        .vc-card:hover { transform: translateY(-3px); border-color: rgba(34,211,238,0.28); }
+        .vc-thumb {
+            position: relative;
+            aspect-ratio: 16/9;
+            background: radial-gradient(circle at top left, rgba(139,92,246,0.2), transparent 55%), rgba(8,13,28,0.95);
+            overflow: hidden;
+        }
+        .vc-thumb img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.2s;
+        }
+        .vc-card:hover .vc-thumb img { transform: scale(1.04); }
+        .vc-thumb-empty {
+            display: flex; align-items: center; justify-content: center;
+            width: 100%; height: 100%; color: rgba(255,255,255,0.18);
+        }
+        .vc-duration {
+            position: absolute; bottom: 5px; right: 6px;
+            background: rgba(0,0,0,0.84); color: #fff;
+            font-size: 0.68rem; font-weight: 700;
+            padding: 2px 5px; border-radius: 4px; letter-spacing: 0.02em;
+        }
+        .vc-views {
+            position: absolute; bottom: 5px; left: 6px;
+            background: rgba(0,0,0,0.72); color: rgba(255,255,255,0.82);
+            font-size: 0.66rem; font-weight: 600;
+            padding: 2px 5px; border-radius: 4px;
+            display: inline-flex; align-items: center; gap: 3px;
+        }
+        .vc-info { padding: 7px 9px 9px; }
+        .vc-title {
+            font-size: 0.87rem; font-weight: 650; line-height: 1.35;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; margin-bottom: 3px;
+        }
+        .vc-meta { font-size: 0.74rem; color: var(--muted); }
+        .vc-channel { color: var(--muted-strong); text-decoration: none; }
+        .vc-channel:hover { color: var(--accent); }
+        @media (max-width: 600px) {
+            .vc-grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 8px; }
+        }
+        /* ── Streamer group card (Recently Online / Channels) ── */
+        .channel-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)) !important; }
+        .sgc {
+            background: rgba(12,20,38,0.8);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: border-color 0.15s;
+        }
+        .sgc:hover { border-color: rgba(34,211,238,0.22); }
+        .sgc.is-live { border-color: rgba(239,68,68,0.45); }
+        .sgc-header {
+            display: flex; align-items: center; gap: 9px;
+            padding: 10px 12px 9px;
+            text-decoration: none; color: inherit;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .sgc-header:hover .sgc-name { color: var(--accent); }
+        .sgc-avatar {
+            width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent-2), var(--accent));
+            color: #000; font-size: 0.62rem; font-weight: 800;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .sgc-name {
+            font-weight: 700; font-size: 0.9rem;
+            flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sgc-last-online { font-size: 0.7rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+        .sgc-live-badge {
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em;
+            color: #ef4444; background: rgba(239,68,68,0.14);
+            border-radius: 4px; padding: 2px 5px; flex-shrink: 0;
+        }
+        .sgc-streams { display: flex; flex-direction: column; }
+        .sgc-stream {
+            display: flex; align-items: center; gap: 9px;
+            padding: 6px 10px;
+            text-decoration: none; color: inherit;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.1s;
+        }
+        .sgc-stream:hover { background: rgba(255,255,255,0.025); }
+        .sgc-stream-thumb {
+            width: 62px; height: 35px; border-radius: 4px; flex-shrink: 0;
+            background: rgba(255,255,255,0.06); overflow: hidden;
+        }
+        .sgc-stream-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .sgc-stream-info { min-width: 0; }
+        .sgc-stream-title {
+            font-size: 0.8rem; font-weight: 600;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sgc-stream-meta { font-size: 0.68rem; color: var(--muted); margin-top: 1px; }
+        .sgc-visit {
+            display: block; text-align: center; padding: 7px;
+            font-size: 0.76rem; color: var(--accent); font-weight: 600;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            text-decoration: none; transition: background 0.1s;
+        }
+        .sgc-visit:hover { background: rgba(34,211,238,0.05); }
     </style>`;
 }
 
@@ -1623,10 +1761,78 @@ function renderMediaThumb({ url, title, eyebrow, subtitle, initials, baseUrl, hr
     return `<div class="media-thumb ${imageUrl ? 'has-image' : ''}">${inner}</div>`;
 }
 
+function renderVideoCard(stream, baseUrl) {
+    const slug = normalizeCreatorSlug(stream.channel_slug);
+    const channelName = stream.channel_name || (slug ? `@${slug}` : 'Creator');
+    const title = sanitizeStreamTitle(stream.title) || 'Untitled stream';
+    const href = stream.route_url || (slug ? streamPath(slug, stream.id) : '/channels');
+    const thumbUrl = (stream.thumbnail_url && canRenderImageUrl(stream.thumbnail_url))
+        ? absoluteUrl(stream.thumbnail_url, baseUrl) : null;
+    const duration = stream.duration_seconds ? formatDurationSeconds(stream.duration_seconds) : null;
+    const viewCount = stream.view_count || stream.viewer_count || 0;
+    const rawDate = stream.created_at || stream.updated_at || stream.started_at;
+    const filterText = `${title} ${slug || ''} ${channelName} ${stream.category || ''}`.toLowerCase();
+    return `
+        <a class="vc-card" href="${escapeHtml(href)}" title="${escapeHtml(title)}" data-stream-id="${escapeHtml(String(stream.id || ''))}" data-filter-group="vods" data-filter-text="${escapeHtml(filterText)}" data-views="${escapeHtml(String(viewCount))}" data-date="${escapeHtml(rawDate || '')}">
+            <div class="vc-thumb">
+                ${thumbUrl
+                    ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(title)}" loading="lazy" onerror="this.parentElement.classList.add('no-img');this.remove();">`
+                    : `<div class="vc-thumb-empty"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.25"><path d="M15 10l-5-3v6l5-3z"/><rect x="2" y="5" width="20" height="14" rx="2"/></svg></div>`}
+                ${duration ? `<span class="vc-duration">${escapeHtml(duration)}</span>` : ''}
+                ${viewCount ? `<span class="vc-views"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${escapeHtml(formatCompactNumber(viewCount))}</span>` : ''}
+            </div>
+            <div class="vc-info">
+                <div class="vc-title">${escapeHtml(title)}</div>
+                <div class="vc-meta"><span class="vc-channel">@${escapeHtml(slug || channelName)}</span>${rawDate ? ` · ${escapeHtml(timeAgo(rawDate))}` : ''}</div>
+            </div>
+        </a>`;
+}
+
+function renderStreamerGroupCard(channel, baseUrl) {
+    const slug = channel.slug || 'unknown';
+    const displayName = channel.display_name || slug;
+    const href = channelPath(slug);
+    const currentStream = channel.currentStream || null;
+    const isLive = !!(currentStream && currentStream.is_live);
+    const streams = (channel.recentStreams || (channel.recentStream ? [channel.recentStream] : [])).slice(0, 4);
+    const lastOnline = !isLive && streams[0] && streams[0].ended_at ? timeAgo(streams[0].ended_at) : null;
+    const initials = initialsFrom(displayName);
+    const stats = channel.stats || null;
+    const statsBits = [];
+    if (stats) {
+        statsBits.push(`${formatNumber(stats.total_streams || 0)} stream${Number(stats.total_streams || 0) === 1 ? '' : 's'}`);
+    }
+
+    const streamsHtml = streams.length ? streams.map((s) => {
+        const streamTitle = sanitizeStreamTitle(s.title) || 'Stream';
+        const streamHref = streamPath(slug, s.id);
+        const thumbUrl = s.thumbnail_url && canRenderImageUrl(s.thumbnail_url) ? absoluteUrl(s.thumbnail_url, baseUrl) : null;
+        const timeStr = s.ended_at ? timeAgo(s.ended_at) : (s.started_at ? timeAgo(s.started_at) : '');
+        const dur = s.duration_seconds ? formatDurationSeconds(s.duration_seconds) : null;
+        return `<a class="sgc-stream" href="${escapeHtml(streamHref)}">
+            <div class="sgc-stream-thumb">${thumbUrl ? `<img src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" onerror="this.remove();">` : ''}</div>
+            <div class="sgc-stream-info">
+                <div class="sgc-stream-title">${escapeHtml(streamTitle)}</div>
+                <div class="sgc-stream-meta">${escapeHtml(timeStr)}${dur ? ` · ${escapeHtml(dur)}` : ''}</div>
+            </div>
+        </a>`;
+    }).join('') : '';
+
+    return `<div class="sgc${isLive ? ' is-live' : ''}">
+        <a class="sgc-header" href="${escapeHtml(href)}">
+            <span class="sgc-avatar">${escapeHtml(initials)}</span>
+            <span class="sgc-name">${escapeHtml(displayName)}</span>
+            ${isLive ? '<span class="sgc-live-badge">LIVE</span>' : (lastOnline ? `<span class="sgc-last-online">${escapeHtml(lastOnline)}</span>` : '')}
+        </a>
+        <div class="sgc-streams">${streamsHtml}</div>
+        <a class="sgc-visit" href="${escapeHtml(href)}">${statsBits.length ? escapeHtml(statsBits[0]) + ' · ' : ''}Visit →</a>
+    </div>`;
+}
+
 function renderStreamCard(stream, channel, baseUrl, options) {
     const opts = options || {};
     const slug = normalizeCreatorSlug(stream.channel_slug || (channel && channel.slug));
-    const channelName = stream.channel_name || (channel && (channel.display_name || channel.slug)) || slug || 'Creator';
+    const channelName = stream.channel_name || (channel && (channel.display_name || channel.slug)) || (slug ? `@${slug}` : 'Creator');
     const isReplayMedia = stream.kind === 'vod' || stream.kind === 'clip';
     const href = stream.route_url || (slug ? streamPath(slug, stream.id) : '/channels');
     const audiencePill = stream.is_live
@@ -1670,7 +1876,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
         <article class="glass-card is-inline" data-reveal data-stream-id="${escapeHtml(String(stream.id || ''))}" data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}" data-views="${escapeHtml(String(viewCount))}" data-date="${escapeHtml(stream.created_at || stream.updated_at || stream.started_at || '')}">
             ${renderMediaThumb({
                 url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
-                title: stream.title || 'Untitled stream',
+                title: sanitizeStreamTitle(stream.title) || 'Untitled stream',
                 eyebrow: stream.is_live ? 'Live now' : (opts.badge || 'Broadcast'),
                 subtitle: channelName,
                 initials: initialsFrom(channelName),
@@ -1678,7 +1884,7 @@ function renderStreamCard(stream, channel, baseUrl, options) {
                 href,
             })}
             <div class="pill-row">${tags}</div>
-            <a class="card-link" href="${href}"><h3 class="card-title">${escapeHtml(stream.title || 'Untitled stream')}</h3></a>
+            <a class="card-link" href="${href}"><h3 class="card-title">${escapeHtml(sanitizeStreamTitle(stream.title) || 'Untitled stream')}</h3></a>
             <div class="card-kicker">${kicker}</div>
             ${detailBits.length ? `<p class="card-body">${escapeHtml(detailBits.join(' · '))}</p>` : ''}
             <div class="card-footer">
@@ -2081,7 +2287,7 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                     <div class="pill-row">
                         ${renderPill(isLive ? 'Live now' : 'Not live', isLive ? 'live' : 'muted')}
                         ${stream.category ? renderPill(stream.category, 'primary') : ''}
-                        ${stream.source === 'hobostreamer' ? renderPill('Migrated session', 'warn') : renderPill('Native session', 'success')}
+                        ${renderPill('Stream session', 'success')}
                     </div>
                     <p class="card-body">${escapeHtml(stream.vod_media_id ? `A VOD attachment is already linked to this broadcast (${stream.vod_media_id}).` : 'This broadcast does not yet expose a VOD attachment in the current runtime graph.')}</p>
                 </article>
@@ -2338,49 +2544,54 @@ function renderChannelCard(channel, baseUrl, options) {
     const stats = opts.stats || channel.stats || null;
     const slug = channel.slug || 'unknown';
     const displayName = channel.display_name || slug;
-    const descriptorBits = [
-        `@${slug}`,
-        channel.category || null,
-        previewStream && previewStream.category ? previewStream.category : null,
-    ].filter(Boolean);
+    // Primary category: prefer last stream category, fall back to channel category
+    const category = (previewStream && previewStream.category) || channel.category || null;
+    // Last-live time — most important piece of info for recently-online context
+    const lastLiveTime = previewStream && previewStream.ended_at ? timeAgo(previewStream.ended_at) : null;
+    const cleanTitle = sanitizeStreamTitle(previewStream && previewStream.title);
+    const rawDurationSec = previewStream && previewStream.duration_seconds
+        ? previewStream.duration_seconds
+        : (previewStream && previewStream.ended_at && previewStream.started_at
+            ? Math.max(0, Math.round((new Date(String(previewStream.ended_at).includes('T') ? previewStream.ended_at : previewStream.ended_at.replace(' ', 'T') + 'Z') - new Date(String(previewStream.started_at).includes('T') ? previewStream.started_at : previewStream.started_at.replace(' ', 'T') + 'Z')) / 1000))
+            : 0);
+    const streamDuration = rawDurationSec > 60 ? formatDurationSeconds(rawDurationSec) : null;
     const statsBits = [];
     if (stats) {
         statsBits.push(`${formatNumber(stats.total_streams || 0)} stream${Number(stats.total_streams || 0) === 1 ? '' : 's'}`);
         if (stats.vods) statsBits.push(`${formatNumber(stats.vods)} VOD${Number(stats.vods) === 1 ? '' : 's'}`);
         if (stats.clips) statsBits.push(`${formatNumber(stats.clips)} clip${Number(stats.clips) === 1 ? '' : 's'}`);
     }
-    const filterText = `${displayName} ${slug} ${descriptorBits.join(' ')} ${statsBits.join(' ')}`.toLowerCase();
+    const filterText = `${displayName} ${slug} ${category || ''} ${statsBits.join(' ')}`.toLowerCase();
     return `
         <article class="glass-card is-inline" data-reveal data-filter-group="${escapeHtml(opts.filterGroup || '')}" data-filter-text="${escapeHtml(filterText)}">
             ${renderMediaThumb({
                 url: (previewStream && previewStream.thumbnail_url) || channel.avatar_url || null,
-                title: (previewStream && previewStream.title) || `${displayName} channel`,
-                eyebrow: currentStream ? 'Live creator' : (previewStream ? 'Recent creator' : 'Creator route'),
+                title: cleanTitle || displayName,
+                eyebrow: currentStream ? 'Live now' : (lastLiveTime || (previewStream ? 'Recently' : 'Channel')),
                 subtitle: displayName,
                 initials: initialsFrom(displayName),
                 baseUrl,
             })}
             <div class="pill-row">
                 ${currentStream ? renderPill('Live now', 'live') : renderPill('Offline', 'muted')}
-                ${channel.category ? renderPill(channel.category, 'primary') : ''}
-                ${previewStream && previewStream.category ? renderPill(previewStream.category, 'soft') : ''}
+                ${category ? renderPill(category, 'soft') : ''}
             </div>
             <a class="card-link" href="${channelPath(slug)}"><h3 class="card-title">${escapeHtml(displayName)}</h3></a>
-            <div class="card-kicker">@${escapeHtml(slug)}${descriptorBits.length > 1 ? ` · ${escapeHtml(descriptorBits.slice(1).join(' · '))}` : ''}</div>
-            <p class="card-body">${escapeHtml(channel.description || (previewStream ? `Latest stream: ${previewStream.title || 'Untitled stream'}` : 'Creator route ready for live sessions, VODs, and clips.'))}</p>
+            <div class="card-kicker">@${escapeHtml(slug)}${lastLiveTime ? ` · last live ${escapeHtml(lastLiveTime)}` : ''}</div>
+            ${cleanTitle ? `<p class="card-body">${escapeHtml(cleanTitle)}${streamDuration ? ` · ${escapeHtml(streamDuration)}` : ''}</p>` : (streamDuration ? `<p class="card-body">${escapeHtml(streamDuration)}</p>` : (channel.description ? `<p class="card-body">${escapeHtml(channel.description)}</p>` : ''))}
             <div class="card-footer">
-                <span class="meta-item">${escapeHtml(statsBits.join(' · ') || (previewStream && previewStream.started_at ? `Last active ${timeAgo(previewStream.started_at)}` : 'Waiting for the next stream'))}</span>
-                <a class="link-inline" href="${channelPath(slug)}">Open creator →</a>
+                <span class="meta-item">${escapeHtml(statsBits.join(' · ') || 'New channel')}</span>
+                <a class="link-inline" href="${channelPath(slug)}">Visit →</a>
             </div>
         </article>`;
 }
 
 function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, recentlyEnded, recentlyOnlineChannels, recentVods, recentClips, categories, stats, community, chat, baseUrl }) {
     const liveNowHtml = (liveNow || []).slice(0, 6).map((stream) => renderStreamCard(stream, null, baseUrl, { badge: 'Live now', badgeTone: 'live' })).join('');
-    const recentlyOnlineHtml = (recentlyOnlineChannels || []).slice(0, 12).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
-    const recentVodsHtml = (recentVods || []).slice(0, 12).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'VOD', badgeTone: 'success' })).join('');
-    const recentClipsHtml = (recentClips || []).slice(0, 12).map((item) => renderStreamCard(item, null, baseUrl, { badge: 'Clip', badgeTone: 'primary' })).join('');
-    const featuredChannelsHtml = (featuredChannels || []).slice(0, 8).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, previewStream: channel.recentStream, currentStream: channel.currentStream })).join('');
+    const recentlyOnlineHtml = (recentlyOnlineChannels || []).slice(0, 12).map((channel) => renderStreamerGroupCard(channel, baseUrl)).join('');
+    const recentVodsHtml = (recentVods || []).slice(0, 12).map((item) => renderVideoCard(item, baseUrl)).join('');
+    const recentClipsHtml = (recentClips || []).slice(0, 12).map((item) => renderVideoCard(item, baseUrl)).join('');
+    const featuredChannelsHtml = (featuredChannels || []).slice(0, 8).map((channel) => renderStreamerGroupCard(channel, baseUrl)).join('');
     const recentThreadsHtml = (((community && community.recentThreads) || []).slice(0, 4)).map((thread) => renderSignalCard({
         eyebrow: 'Thread',
         title: thread.title || 'Untitled thread',
@@ -2425,13 +2636,15 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                 <h1 class="hero-heading">Watch live, share clips, and <span class="hero-gradient">never lose your route.</span></h1>
                 <p>A live streaming home that keeps your channel, VODs, and community all at the same @handle — no platform churn required.</p>
             </div>
-            <div class="data-points" style="margin-top:1.5rem;">
-                <div class="data-point"><div class="data-point-label">Live now</div><div class="data-point-value" data-live-count>${escapeHtml(String(liveCount))}</div></div>
-                <div class="data-point"><div class="data-point-label">Channels</div><div class="data-point-value">${escapeHtml(formatNumber(channelCount))}</div></div>
-                <div class="data-point"><div class="data-point-label">VODs</div><div class="data-point-value">${escapeHtml(formatNumber(vodCount))}</div></div>
-                <div class="data-point"><div class="data-point-label">Clips</div><div class="data-point-value">${escapeHtml(formatNumber(clipCount))}</div></div>
-                ${totalStreams ? `<div class="data-point"><div class="data-point-label">Total streams</div><div class="data-point-value">${escapeHtml(formatNumber(totalStreams))}</div></div>` : ''}
-                ${streamTime ? `<div class="data-point"><div class="data-point-label">Stream time</div><div class="data-point-value">${escapeHtml(formatDurationSeconds(streamTime))}</div></div>` : ''}
+            <div class="hero-stat-bar">
+                <span class="hero-stat"><strong data-live-count>${escapeHtml(String(liveCount))}</strong> live</span>
+                <span class="hero-stat-sep">·</span>
+                <span class="hero-stat"><strong>${escapeHtml(formatNumber(channelCount))}</strong> channels</span>
+                <span class="hero-stat-sep">·</span>
+                <span class="hero-stat"><strong>${escapeHtml(formatNumber(vodCount))}</strong> VODs</span>
+                <span class="hero-stat-sep">·</span>
+                <span class="hero-stat"><strong>${escapeHtml(formatNumber(clipCount))}</strong> clips</span>
+                ${totalStreams ? `<span class="hero-stat-sep">·</span><span class="hero-stat"><strong>${escapeHtml(formatNumber(totalStreams))}</strong> streams</span>` : ''}
             </div>
             ${liveNowHtml ? `
             <div style="margin-top:1.5rem;">
@@ -2455,7 +2668,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${recentlyOnlineHtml ? renderSection({
             titleHtml: `${renderIcon('clock', { decorative: true })} Recently Online`,
-            subtitle: `${(recentlyOnlineChannels || []).length} creators have streamed recently.`,
+            subtitle: null,
             actionHref: '/channels',
             actionLabel: 'All channels',
             content: `<div class="channel-grid">${recentlyOnlineHtml}</div>`,
@@ -2467,10 +2680,10 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${renderSection({
             titleHtml: `${renderIcon('media', { decorative: true })} Recent VODs`,
-            subtitle: `${vodCount} replays in the archive.`,
+            subtitle: null,
             actionHref: '/vods',
             actionLabel: 'View all VODs',
-            content: recentVodsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentVodsHtml}</div>` : null,
+            content: recentVodsHtml ? `<div class="vc-grid">${recentVodsHtml}</div>` : null,
             emptyTitle: 'No VODs yet',
             emptyBody: 'When replays are ready they show up here automatically.',
             emptyHref: '/vods',
@@ -2479,10 +2692,10 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 
         ${renderSection({
             titleHtml: `${renderIcon('live', { decorative: true })} Recent clips`,
-            subtitle: `${clipCount} clips clipped so far.`,
+            subtitle: null,
             actionHref: '/clips',
             actionLabel: 'View all clips',
-            content: recentClipsHtml ? `<div class="card-grid" data-filter-group-host="home-media">${recentClipsHtml}</div>` : null,
+            content: recentClipsHtml ? `<div class="vc-grid">${recentClipsHtml}</div>` : null,
             emptyTitle: 'No clips yet',
             emptyBody: 'Clips appear here once they have been saved.',
             emptyHref: '/clips',
@@ -2504,28 +2717,29 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         <section class="section-panel">
             <div class="section-head">
                 <div>
-                    <h2 class="section-title">Why OpenVibe exists</h2>
-                    <p class="section-subtitle">Burnout, corporate drift, and the urge to build something worth staying in.</p>
+                    <h2 class="section-title">Built different</h2>
+                    <p class="section-subtitle">No algorithm, no ads, no dark patterns.</p>
+                </div>
+                <div class="inline-actions">
+                    <a class="section-link" href="/go-live">Start streaming</a>
+                    <a class="section-link" href="/channels">Browse channels</a>
                 </div>
             </div>
-            <div class="story-grid">
+            <div class="story-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">The short version</div>
-                    <p class="card-body">We burned out watching platforms we loved get hollowed out — ad auctions replacing real feeds, AI-generated music flooding every corner of the internet, algorithms nudging creators toward whatever kept engagement metrics green instead of what they actually wanted to make.</p>
-                    <p class="card-body" style="margin-top:0.7rem;">OpenVibe is not for profit. It is an attempt to build a streaming and community space that behaves like it was made for people, not for a growth dashboard.</p>
+                    <div class="eyebrow">No algorithm</div>
+                    <h3 class="card-title">Your channel, chronologically</h3>
+                    <p class="card-body">No recommendation engine deciding what gets seen. Your stream appears when you go live. Feeds are sorted by time, not by what keeps people anxious.</p>
                 </article>
                 <article class="glass-card" data-reveal>
-                    <div class="eyebrow">What we actually promise</div>
-                    <ul class="flow-list">
-                        <li>Your @handle stays the same across live, VODs, clips, and the community — no platform migrations required.</li>
-                        <li>No advertising, no recommendation engine optimizing for addiction, no dark patterns to inflate session time.</li>
-                        <li>If something is broken or incomplete we will say so instead of pretending it is a feature.</li>
-                        <li>Small tools for real people: restreaming, pastes, chat, community threads — without needing five accounts to use all of them.</li>
-                    </ul>
-                    <div class="form-actions" style="margin-top:1rem;">
-                        <a class="button-secondary" href="/go-live">Start streaming</a>
-                        <a class="button-ghost" href="/channels">Browse channels</a>
-                    </div>
+                    <div class="eyebrow">One handle</div>
+                    <h3 class="card-title">Stream everywhere, exist here</h3>
+                    <p class="card-body">Your @handle ties together live, VODs, clips, and community. Multistream to Twitch or YouTube — your home base stays put.</p>
+                </article>
+                <article class="glass-card" data-reveal>
+                    <div class="eyebrow">Open source</div>
+                    <h3 class="card-title">Built in the open</h3>
+                    <p class="card-body">Every line of platform code is public. Run your own instance, fork it, or just verify what we do with your data. No hidden systems.</p>
                 </article>
             </div>
         </section>`;
@@ -2540,38 +2754,18 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
 }
 
 function renderChannelsPage({ channels, featuredChannels, categories, baseUrl }) {
-    const featuredHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, currentStream: channel.currentStream, previewStream: channel.recentStream })).join('');
-    const allChannelsHtml = (channels || []).slice(0, 200).map((channel) => renderChannelCard(channel, baseUrl, { stats: channel.stats, currentStream: channel.currentStream, previewStream: channel.recentStream, filterGroup: 'channels' })).join('');
+    const featuredHtml = (featuredChannels || []).slice(0, 6).map((channel) => renderStreamerGroupCard(channel, baseUrl)).join('');
+    const allChannelsHtml = (channels || []).slice(0, 200).map((channel) => renderStreamerGroupCard(channel, baseUrl)).join('');
     const categoryChips = (categories || []).slice(0, 10).map((category) => `<button class="button-ghost" type="button" data-chip-target="#channels-filter" data-chip-value="${escapeHtml(category.name || category.category || category.label || '')}">${escapeHtml(category.name || category.category || category.label || 'Uncategorized')}</button>`).join('');
     const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">Creator directory</div>
-                <h1 class="hero-heading">Browse every staged <span class="hero-gradient">creator route</span></h1>
-                <p>Search channels, inspect their recent activity, and jump directly into current or replay-ready broadcasts.</p>
+        <section class="section-panel">
+            <div class="search-bar" style="justify-content:space-between;margin-bottom:1rem;">
+                <input id="channels-filter" class="filter-input" type="search" placeholder="Search channels" aria-label="Search channels" style="flex:1;max-width:340px;" data-filter-input="channels">
+                ${categoryChips}
             </div>
-        </section>
-        ${renderSection({
-            title: 'Featured creators',
-            subtitle: 'Channels with live momentum or strong recent activity.',
-            content: featuredHtml ? `<div class="channel-grid">${featuredHtml}</div>` : null,
-            emptyTitle: 'Featured creators will appear here',
-            emptyBody: 'Once more activity lands in the live graph, featured ranking becomes more useful.',
-        })}
-        ${renderSection({
-            title: 'All channels',
-            subtitle: 'Filter by handle, category, or recent activity.',
-            content: `
-                <div class="search-bar">
-                    <input id="channels-filter" class="filter-input" type="search" placeholder="Search creators" data-filter-input="channels" aria-label="Search creators">
-                    ${categoryChips}
-                </div>
-                ${allChannelsHtml ? `<div class="channel-grid">${allChannelsHtml}</div>` : ''}`,
-            emptyTitle: 'No channels are staged yet',
-            emptyBody: 'Creator routes will show up here once the live service has channel records to expose.',
-            emptyHref: '/go-live',
-            emptyLabel: 'Open go-live',
-        })}`;
+            ${featuredHtml ? `<div class="channel-grid" style="margin-bottom:1.5rem;">${featuredHtml}</div>` : ''}
+            ${allChannelsHtml ? `<div class="channel-grid" data-filter-grid="channels">${allChannelsHtml}</div>` : ''}
+        </section>`;
     return renderPage({
         title: 'Channels — openvibe.live',
         description: 'Browse every staged OpenVibe Live creator route.',
@@ -2579,22 +2773,36 @@ function renderChannelsPage({ channels, featuredChannels, categories, baseUrl })
         activeNav: 'channels',
         bodyHtml: pageContent,
         baseUrl,
+        extraScripts: `
+        (function() {
+            var input = document.getElementById('channels-filter');
+            var grid = document.querySelector('[data-filter-grid="channels"]');
+            if (!input || !grid) return;
+            input.addEventListener('input', function() {
+                var q = input.value.toLowerCase().trim();
+                grid.querySelectorAll('.sgc').forEach(function(card) {
+                    var name = (card.querySelector('.sgc-name') || {}).textContent || '';
+                    var titles = Array.from(card.querySelectorAll('.sgc-stream-title')).map(function(el) { return el.textContent; }).join(' ');
+                    card.style.display = (!q || (name + ' ' + titles).toLowerCase().includes(q)) ? '' : 'none';
+                });
+            });
+        })();`,
     });
 }
 
 function renderCollectionPage({ kind, title, description, emptyMessage, items, baseUrl }) {
     const navKey = kind === 'clips' ? 'clips' : 'vods';
-    const cardsHtml = (items || []).slice(0, 200).map((item) => renderStreamCard(item, null, baseUrl, { filterGroup: navKey, hideBadge: true })).join('');
+    const cardsHtml = (items || []).slice(0, 200).map((item) => renderVideoCard(item, baseUrl)).join('');
     const pageContent = `
         <section class="section-panel">
             <div class="search-bar" style="justify-content:space-between;">
-                <input class="filter-input" type="search" placeholder="Search" data-filter-input="${navKey}" aria-label="Search ${navKey}" style="flex:1;">
+                <input class="filter-input" type="search" placeholder="Search ${navKey}" data-filter-input="${navKey}" aria-label="Search ${navKey}" style="flex:1;max-width:340px;">
                 <div class="sort-group" data-sort-group="${navKey}">
                     <button class="sort-btn active" data-sort="recent">Recent</button>
                     <button class="sort-btn" data-sort="popularity">Popularity</button>
                 </div>
             </div>
-            ${cardsHtml ? `<div class="card-grid" style="margin-top:1rem;" data-sort-grid="${navKey}">${cardsHtml}</div>` : `
+            ${cardsHtml ? `<div class="vc-grid" data-sort-grid="${navKey}" data-filter-grid="${navKey}">${cardsHtml}</div>` : `
             <article class="empty-state" data-reveal>
                 <h3 class="card-title">${navKey === 'clips' ? 'No clips yet' : 'No VODs yet'}</h3>
                 <p class="card-body">${escapeHtml(emptyMessage || 'Nothing here yet.')}</p>
@@ -2627,6 +2835,7 @@ function renderCollectionPage({ kind, title, description, emptyMessage, items, b
         }`,
         extraScripts: `
         (function() {
+            // Sort
             document.querySelectorAll('[data-sort-group]').forEach(function(group) {
                 const key = group.dataset.sortGroup;
                 const grid = document.querySelector('[data-sort-grid="' + key + '"]');
@@ -2635,18 +2844,26 @@ function renderCollectionPage({ kind, title, description, emptyMessage, items, b
                     btn.addEventListener('click', function() {
                         group.querySelectorAll('.sort-btn').forEach(function(b) { b.classList.remove('active'); });
                         btn.classList.add('active');
-                        const cards = Array.from(grid.querySelectorAll('article[data-stream-id]'));
+                        const cards = Array.from(grid.querySelectorAll('[data-stream-id]'));
                         cards.sort(function(a, b) {
                             if (btn.dataset.sort === 'popularity') {
-                                const av = parseInt(a.dataset.views || '0', 10);
-                                const bv = parseInt(b.dataset.views || '0', 10);
-                                return bv - av;
+                                return parseInt(b.dataset.views || '0', 10) - parseInt(a.dataset.views || '0', 10);
                             }
-                            const ad = a.dataset.date || '';
-                            const bd = b.dataset.date || '';
-                            return bd.localeCompare(ad);
+                            return (b.dataset.date || '').localeCompare(a.dataset.date || '');
                         });
                         cards.forEach(function(c) { grid.appendChild(c); });
+                    });
+                });
+            });
+            // Search filter
+            document.querySelectorAll('[data-filter-input]').forEach(function(input) {
+                const key = input.dataset.filterInput;
+                const grid = document.querySelector('[data-filter-grid="' + key + '"]');
+                if (!grid) return;
+                input.addEventListener('input', function() {
+                    const q = input.value.toLowerCase().trim();
+                    grid.querySelectorAll('[data-filter-text]').forEach(function(card) {
+                        card.style.display = (!q || (card.dataset.filterText || '').includes(q)) ? '' : 'none';
                     });
                 });
             });

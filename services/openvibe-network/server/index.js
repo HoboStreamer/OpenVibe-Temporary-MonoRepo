@@ -13,7 +13,6 @@ const db = require('./db');
 const audit = require('./audit');
 const { buildIdentity } = require('./identity');
 const { buildNativeAuth } = require('./native-auth');
-const { buildHoboToolsProxy } = require('./proxy');
 const { attachHostRouter } = require('./host-router');
 const { serviceActorMiddleware } = require('./middleware/service-actor');
 
@@ -50,7 +49,7 @@ function buildApp() {
         source: 'openvibe-network',
     });
 
-    const hoboToolsProxy = buildHoboToolsProxy(config);
+    const hoboToolsProxy = null; // legacy proxy removed
 
     const app = express();
     app.set('trust proxy', 1);
@@ -64,7 +63,7 @@ function buildApp() {
         serviceName: 'openvibe-network',
         getHealth: () => ({
             persistence: db.describePersistence(),
-            federation: config.hoboTools.publicUrl ? { hobo_tools: config.hoboTools.publicUrl } : { mode: 'native' },
+            federation: { mode: 'native' },
             trusted_issuers: identity.trustedIssuers.map((issuer) => ({ issuer: issuer.issuer, label: issuer.label })),
             surface_count: Object.keys(config.surfaces || {}).length,
         }),
@@ -84,11 +83,10 @@ function buildApp() {
                     details: { url: config.events.url || null },
                 },
                 {
-                    name: 'native_mode_default',
-                    ok: !config.hoboTools.publicUrl,
+                    name: 'native_mode',
+                    ok: true,
                     critical: false,
-                    details: { legacy_proxy_url: config.hoboTools.publicUrl || null },
-                    message: config.hoboTools.publicUrl ? 'Legacy federation is configured as an optional runtime path.' : null,
+                    details: { mode: 'native-only' },
                 },
             ],
             extra: {

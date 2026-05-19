@@ -47,7 +47,7 @@ done
 
 run_phase() {
   local n="$1" name="$2"
-  [[ -z "$ONLY_PHASE" || "$ONLY_PHASE" == "$n" ]] || return 0
+  [[ -z "$ONLY_PHASE" || "$ONLY_PHASE" == "$n" ]] || return 1
   step "Phase $n: $name"
 }
 
@@ -74,13 +74,28 @@ run_phase 1 "System prerequisites" && {
   log "PostgreSQL: $(systemctl is-active postgresql)"
   log "Redis:      $(systemctl is-active redis-server)"
 
-  # Install certbot + DNS plugin via snap
+  # Install certbot + Cloudflare DNS plugin
+  # Prefer snap when available; fall back to pip3 (works on Raspberry Pi OS without snap)
   if ! command -v certbot >/dev/null 2>&1; then
-    snap install certbot --classic
-    snap set certbot trust-plugin-with-root=ok
-    snap install certbot-dns-cloudflare
-    log "certbot installed via snap"
+    if command -v snap >/dev/null 2>&1; then
+      snap install certbot --classic
+      snap set certbot trust-plugin-with-root=ok
+      snap install certbot-dns-cloudflare
+      log "certbot installed via snap"
+    else
+      log "snap not available — installing certbot via apt + pip3..."
+      apt-get install -y certbot python3-certbot-dns-cloudflare
+      log "certbot installed via apt"
+    fi
   else
+    # Ensure Cloudflare plugin is installed even if certbot already exists
+    if ! certbot plugins 2>/dev/null | grep -q dns_cloudflare; then
+      if command -v snap >/dev/null 2>&1; then
+        snap install certbot-dns-cloudflare || true
+      else
+        apt-get install -y python3-certbot-dns-cloudflare || true
+      fi
+    fi
     log "certbot already installed"
   fi
 }
@@ -126,9 +141,33 @@ run_phase 2 "Cloudflare credentials" && {
 run_phase 3 "npm install + rebuild native modules" && {
   cd "$OPENVIBE_ROOT"
 
-  # Run npm install as the service user (not root)
-  sudo -u jackewl bash -c "cd '$OPENVIBE_ROOT' && npm install"
-  sudo -u jackewl bash -c "cd '$OPENVIBE_ROOT' && npm rebuild better-sqlite3 --build-from-source"
+  # Install packages without running native build scripts yet.
+  # better-sqlite3 and mediasoup need special ARM64 handling.
+  log "Installing npm packages (--ignore-scripts)..."
+  sudo -u jackewl bash -c "cd '$OPENVIBE_ROOT' && npm install --ignore-scripts"
+
+  # Fix better-sqlite3 ARM64 build: node-gyp configure does not pre-create the
+  # .deps directory tree that gcc needs when writing dependency (.d.raw) files.
+  log "Building better-sqlite3 (ARM64 workaround)..."
+  sudo -u jackewl bash -c "
+    cd '$OPENVIBE_ROOT/node_modules/better-sqlite3'
+    npx --yes node-gyp configure
+    # Mirror obj.target directory tree under .deps so gcc can write .d.raw files
+    if [[ -d build/Release/obj.target ]]; then
+      find build/Release/obj.target -type d | while read d; do
+        mkdir -p \"build/Release/.deps/\${d#build/Release/}\"
+      done
+    fi
+    # Also create gen/sqlite3 subtree which is created lazily during compilation
+    mkdir -p build/Release/.deps/Release/obj.target/sqlite3/gen/sqlite3
+    npx --yes node-gyp build --release
+  "
+  log "better-sqlite3 built OK"
+
+  # Run remaining install scripts for all other packages
+  log "Running post-install scripts for other packages..."
+  sudo -u jackewl bash -c "cd '$OPENVIBE_ROOT' && npm rebuild --build-from-source 2>&1 | grep -v better-sqlite3 || true"
+
   log "npm install and native rebuild complete"
 }
 

@@ -256,6 +256,26 @@ function listChannelsWithStreams({ limit }) {
     `).all(cap);
 }
 
+function listRecentStreamsGroupedByChannel(limit) {
+    const cap = clampLimit(limit, 200, 1000);
+    const streams = db.get().prepare(`
+        SELECT * FROM live_streams
+        WHERE channel_slug IS NOT NULL AND TRIM(channel_slug) != ''
+        AND status != 'started'
+        ORDER BY COALESCE(ended_at, started_at, created_at) DESC, rowid DESC
+        LIMIT ?
+    `).all(cap).map(hydrateStream);
+    const grouped = new Map();
+    for (const stream of streams) {
+        const existing = grouped.get(stream.channel_slug) || [];
+        if (existing.length < 4) {
+            existing.push(stream);
+            grouped.set(stream.channel_slug, existing);
+        }
+    }
+    return grouped;
+}
+
 function listRecentVodStreams({ limit }) {
     const cap = clampLimit(limit, 12);
     return db.get().prepare(`
@@ -462,7 +482,7 @@ function recordLegacy({ source, kind, legacy_id, new_id }) {
 
 module.exports = {
     upsertChannel, getChannelBySlug, getChannelByOwnerUserId, listChannels,
-    upsertStream, getStreamById, listStreams, listLiveNow, listRecentlyEnded, listChannelsWithStreams, listRecentVodStreams, listRecentClips, listVods, listClips,
+    upsertStream, getStreamById, listStreams, listLiveNow, listRecentlyEnded, listChannelsWithStreams, listRecentStreamsGroupedByChannel, listRecentVodStreams, listRecentClips, listVods, listClips,
     listFeaturedChannels, listTrendingStreams, listTopCategories, getChannelStats, getHomeStats, getCurrentLiveStream,
     getStreamTimeline,
     recordMirror, recordLegacy,

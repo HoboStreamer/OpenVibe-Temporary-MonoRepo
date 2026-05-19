@@ -47,7 +47,7 @@ function socketToken(socket) {
     const headers = socket.handshake && socket.handshake.headers || {};
     const query = socket.handshake && socket.handshake.query || {};
     const cookies = parseCookieHeader(headers.cookie);
-    const raw = auth.token || headers.authorization || query.token || cookies.openvibe_token || cookies.hobo_token || cookies.token || '';
+    const raw = auth.token || headers.authorization || query.token || cookies.openvibe_token || cookies.token || '';
     return String(raw || '').trim().replace(/^Bearer\s+/i, '');
 }
 

@@ -144,14 +144,10 @@ RECORDS=(
   # openre.stream RTMP ingest subdomain (DNS-only)
   "openre.stream|ingest.openre.stream|false"
 
-  # Legacy Hobo Network
+  # alexfrison.net — personal resume site on the Pi
   "alexfrison.net|alexfrison.net|true"
   "alexfrison.net|www.alexfrison.net|true"
-  "hobostreamer.com|hobostreamer.com|false"
-  "hobostreamer.com|www.hobostreamer.com|true"
-  "hobo.tools|hobo.tools|true"
-  "hobo.tools|*.hobo.tools|true"
-  "hobo.quest|hobo.quest|true"
+  # NOTE: hobostreamer.com, hobo.tools, hobo.quest point to GitHub Pages — not managed here.
 )
 
 ERRORS=0

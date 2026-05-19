@@ -24,6 +24,7 @@ PG_DB="openvibe"
 PG_DB_STAGING="openvibe_staging"
 PG_DUMP="$OLD_FILES/tmp/pg-openvibe-20260517.dump"
 PG_DUMP_STAGING="$OLD_FILES/tmp/pg-openvibe-staging-20260517.dump"
+PG_CLUSTER_SQL="$OLD_FILES/tmp/postgres-full-backup-20260517.sql"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 log() { echo "[$(date -Iseconds)] $*"; }
@@ -88,26 +89,32 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${PG_DB_STAG
 
 log "PostgreSQL user and databases ready"
 
-# Restore main dump
-if [[ -f "$PG_DUMP" ]]; then
+# Restore main dump (PG17 custom-format dump preferred; fall back to plain cluster SQL on PG15)
+PG_BIN_VER=$(pg_restore --version 2>/dev/null | awk '{print $3}' | cut -d. -f1)
+if [[ -f "$PG_DUMP" && "${PG_BIN_VER:-0}" -ge 17 ]]; then
   log "Restoring production database from $PG_DUMP ..."
   PGPASSWORD="$PG_PASSWORD" pg_restore \
     -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
     --no-owner --no-privileges --if-exists --clean \
     "$PG_DUMP" 2>&1 | grep -v "^pg_restore:" || true
   log "Production database restored"
+  if [[ -f "$PG_DUMP_STAGING" ]]; then
+    log "Restoring staging database from $PG_DUMP_STAGING ..."
+    PGPASSWORD="$PG_PASSWORD" pg_restore \
+      -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB_STAGING" \
+      --no-owner --no-privileges --if-exists --clean \
+      "$PG_DUMP_STAGING" 2>&1 | grep -v "^pg_restore:" || true
+    log "Staging database restored"
+  fi
+elif [[ -f "$PG_CLUSTER_SQL" ]]; then
+  log "pg_restore is v${PG_BIN_VER:-?} (< 17); restoring from plain cluster dump $PG_CLUSTER_SQL ..."
+  log "(this drops and recreates openvibe + openvibe_staging databases)"
+  sudo -u postgres psql -c "DROP DATABASE IF EXISTS ${PG_DB};" -c "DROP DATABASE IF EXISTS ${PG_DB_STAGING};" >/dev/null
+  sudo -u postgres psql -v ON_ERROR_STOP=0 -q -f "$PG_CLUSTER_SQL" 2>&1 \
+    | grep -E "^psql:.*ERROR" | grep -v "transaction_timeout\|already exists" || true
+  log "Cluster dump restored (transaction_timeout warnings are expected on PG<17 and safe to ignore)"
 else
-  log "WARN: Postgres dump not found at $PG_DUMP — skipping"
-fi
-
-# Restore staging dump
-if [[ -f "$PG_DUMP_STAGING" ]]; then
-  log "Restoring staging database from $PG_DUMP_STAGING ..."
-  PGPASSWORD="$PG_PASSWORD" pg_restore \
-    -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB_STAGING" \
-    --no-owner --no-privileges --if-exists --clean \
-    "$PG_DUMP_STAGING" 2>&1 | grep -v "^pg_restore:" || true
-  log "Staging database restored"
+  log "WARN: No usable Postgres dump found — skipping restore"
 fi
 
 # ── Step 3: SQLite databases ──────────────────────────────────────────────────

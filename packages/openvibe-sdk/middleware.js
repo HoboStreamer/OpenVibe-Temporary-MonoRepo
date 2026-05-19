@@ -10,7 +10,6 @@ function extractToken(req) {
     if (auth && auth.startsWith('Bearer ')) return auth.slice(7);
     if (req.cookies) {
         if (req.cookies.openvibe_token) return req.cookies.openvibe_token;
-        if (req.cookies.hobo_token)     return req.cookies.hobo_token;
         if (req.cookies.token)          return req.cookies.token;
     }
     if (req.query && req.query.token) return req.query.token;

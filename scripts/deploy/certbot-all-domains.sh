@@ -78,21 +78,13 @@ cert "openvibe.vip"       -d "openvibe.vip"
 cert "openvibe.host"      -d "openvibe.host"
 cert "openvibe.tips"      -d "openvibe.tips"
 
-# ── Legacy Hobo Network domains ───────────────────────────────────────────────
+# ── alexfrison.net — personal resume site on the Pi ──────────────────────────
 cert "alexfrison.net" \
   -d "alexfrison.net" \
   -d "www.alexfrison.net"
 
-cert "hobostreamer.com" \
-  -d "hobostreamer.com" \
-  -d "www.hobostreamer.com"
-
-cert "hobo.tools wildcard" \
-  -d "hobo.tools" \
-  -d "*.hobo.tools"
-
-cert "hobo.quest" \
-  -d "hobo.quest"
+# NOTE: hobostreamer.com, hobo.tools, hobo.quest are intentionally NOT requested.
+# Those domains point to GitHub Pages explaining the shutdown.
 
 echo
 log "Certificate provisioning complete."

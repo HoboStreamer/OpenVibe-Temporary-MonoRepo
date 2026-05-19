@@ -83,16 +83,8 @@ PROD_CONF="$OPENVIBE_ROOT/deploy/nginx/conf.d/openvibe-production.conf"
 ln -sf "$PROD_CONF" "$NGINX_CONF_D/openvibe.conf"
 log "Symlinked $PROD_CONF → $NGINX_CONF_D/openvibe.conf"
 
-# Symlink legacy Hobo config (only if cert exists to avoid nginx startup failure)
-LEGACY_CONF="$OPENVIBE_ROOT/deploy/nginx/conf.d/legacy-hobo.conf"
-if [[ -f "$LEGACY_CONF" ]]; then
-  if [[ -f /etc/letsencrypt/live/hobostreamer.com/fullchain.pem ]]; then
-    ln -sf "$LEGACY_CONF" "$NGINX_CONF_D/legacy-hobo.conf"
-    log "Symlinked legacy-hobo.conf"
-  else
-    log "SKIP legacy-hobo.conf — TLS certs not yet issued (run certbot-all-domains.sh first)"
-  fi
-fi
+# Legacy Hobo domains (hobostreamer.com, hobo.tools, hobo.quest) intentionally
+# NOT served from this nginx — they point to GitHub Pages explaining the shutdown.
 
 # Symlink alexfrison.net config (only if cert exists)
 AF_CONF="$OPENVIBE_ROOT/deploy/nginx/conf.d/alexfrison.conf"

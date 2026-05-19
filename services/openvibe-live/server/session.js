@@ -76,7 +76,6 @@ function clearSessionCookies(res, baseUrl) {
     };
     if (secureCookies(baseUrl)) options.secure = true;
     res.clearCookie('openvibe_token', options);
-    res.clearCookie('hobo_token', options);
     res.clearCookie('token', options);
 }
 
