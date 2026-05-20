@@ -88,6 +88,9 @@ function buildApp() {
     // Overlay routes — public (for OBS browser sources)
     app.use('/overlay', buildOverlayRouter({ config }));
 
+    // Session endpoint — required by the shared openvibe.js frontend on every surface.
+    app.get('/api/v1/session', (req, res) => res.json(buildSessionResponse(req)));
+
     // API routes — service actor middleware for internal calls
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config, buildSessionResponse }));
 
