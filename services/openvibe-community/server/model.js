@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const path = require('path');
 const db = require('./db');
 
 function newId(prefix) { return `${prefix}_${crypto.randomBytes(12).toString('hex')}`; }
@@ -246,12 +247,18 @@ function findPostBySource(source_type, source_id) {
 // ── pastes ───────────────────────────────────────────────
 function hydratePaste(r) {
     if (!r) return null;
+    const metadata = safeJson(r.metadata_json, {});
+    // Inject image_url from screenshot_path (legacy hobostreamer migration)
+    if (metadata.screenshot_path && !metadata.image_url) {
+        const fileName = path.basename(String(metadata.screenshot_path));
+        if (fileName) metadata.image_url = `/api/paste-screenshots/${encodeURIComponent(fileName)}`;
+    }
     return {
         id: r.id, slug: r.slug, title: r.title, body: r.body, language: r.language,
         visibility: r.visibility, expires_at: r.expires_at || null,
         created_by_actor_type: r.created_by_actor_type, created_by_actor_id: r.created_by_actor_id,
         view_count: r.view_count,
-        metadata: safeJson(r.metadata_json, {}),
+        metadata,
         deleted_at: r.deleted_at || null,
         created_at: r.created_at, updated_at: r.updated_at,
     };

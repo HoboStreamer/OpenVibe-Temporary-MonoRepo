@@ -35,4 +35,11 @@ module.exports = {
     discord: {
         webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || null,
     },
+
+    legacy: {
+        pasteScreenshotDir: process.env.OPENVIBE_COMMUNITY_PASTE_SCREENSHOT_DIR
+            || (process.env.OPENVIBE_LEGACY_SOURCE_ROOT
+                ? path.join(process.env.OPENVIBE_LEGACY_SOURCE_ROOT, 'hobostreamer', 'data', 'pastes', 'screenshots')
+                : path.join('/opt/old-files', 'hobostreamer', 'data', 'pastes', 'screenshots')),
+    },
 };

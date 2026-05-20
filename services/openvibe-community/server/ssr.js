@@ -269,7 +269,8 @@ function _pasteCard(paste) {
     const title = paste.title || 'Untitled paste';
     const href  = `/p/${encodeURIComponent(paste.slug || paste.id || '')}`;
     const lang  = paste.language || 'txt';
-    const preview = paste.content
+    const imageUrl = paste.metadata && paste.metadata.image_url ? paste.metadata.image_url : null;
+    const preview = !imageUrl && paste.content
         ? escapeHtml(String(paste.content).split('\n').slice(0, 4).join('\n')).replace(/\n/g, '<br>') + (paste.content.split('\n').length > 4 ? '\n…' : '')
         : '';
     return `<article class="glass-card">
@@ -278,6 +279,7 @@ function _pasteCard(paste) {
             <span class="pill">${escapeHtml(pasteLanguageLabel(lang))}</span>
             ${paste.visibility === 'public' ? '' : `<span class="pill warn">${escapeHtml(paste.visibility || 'unlisted')}</span>`}
         </div>
+        ${imageUrl ? `<a href="${escapeHtml(href)}"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" class="paste-card-img" loading="lazy" style="width:100%;max-height:160px;object-fit:cover;border-radius:6px;margin:.5rem 0"></a>` : ''}
         <a href="${escapeHtml(href)}"><h3 class="card-title">${escapeHtml(title)}</h3></a>
         ${preview ? `<pre class="paste-content" style="max-height:120px;overflow:hidden">${preview}</pre>` : ''}
         <div class="card-kicker">

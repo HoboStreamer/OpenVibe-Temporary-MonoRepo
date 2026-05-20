@@ -5,6 +5,11 @@ const model = require('./model');
 const policy = require('./policy');
 const { COMMUNITY_EVENT_TYPES } = require('@openvibe/contracts');
 
+function injectPasteImageUrl(paste) {
+    // image_url is already injected by model.hydratePaste; this is a no-op passthrough
+    return paste;
+}
+
 function buildRouter({ eventBus, config }) {
     const r = express.Router();
     const json = express.json({ limit: '1mb' });
@@ -196,7 +201,8 @@ function buildRouter({ eventBus, config }) {
 
     // ── pastes ───────────────────────────────────────────
     r.get('/pastes', (req, res) => {
-        res.json({ items: model.listPastes({ visibility: 'public', limit: req.query.limit }) });
+        const items = model.listPastes({ visibility: 'public', limit: req.query.limit });
+        res.json({ items: items.map(injectPasteImageUrl) });
     });
     r.post('/pastes', json, (req, res) => {
         const a = actorMeta(req);
@@ -208,7 +214,7 @@ function buildRouter({ eventBus, config }) {
         eventBus.publishCommunityEvent(COMMUNITY_EVENT_TYPES.PASTE_CREATED,
             { paste_id: paste.id, slug: paste.slug }, a);
         const url = `${config.publicBaseUrl}/p/${encodeURIComponent(paste.slug)}`;
-        res.status(201).json({ paste, url });
+        res.status(201).json({ paste: injectPasteImageUrl(paste), url });
     });
     r.get('/pastes/:slug', (req, res) => {
         const paste = model.getPasteBySlug(req.params.slug);
@@ -216,7 +222,7 @@ function buildRouter({ eventBus, config }) {
         try { policy.assert(policy.decideRead({ req, target: { visibility: paste.visibility, created_by_actor_type: paste.created_by_actor_type, created_by_actor_id: paste.created_by_actor_id } })); }
         catch (err) { return denied(res, err); }
         model.bumpPasteView(paste.slug);
-        res.json({ paste });
+        res.json({ paste: injectPasteImageUrl(paste) });
     });
     r.put('/pastes/:slug', json, (req, res) => {
         const paste = model.getPasteBySlug(req.params.slug);

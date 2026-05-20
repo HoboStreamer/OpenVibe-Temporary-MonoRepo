@@ -8,6 +8,7 @@ const path = require('path');
 const { attachIconAssets } = require('@openvibe/icons/express');
 const { createServiceRuntime } = require('@openvibe/runtime');
 
+const fs = require('fs');
 const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
@@ -62,6 +63,17 @@ function buildApp() {
 
     attachIconAssets(app, { routePrefix: '/assets' });
     app.use(express.static(path.join(__dirname, '..', 'public')));
+
+    // Serve legacy paste screenshots from hobostreamer migration
+    app.get('/api/paste-screenshots/:filename', (req, res) => {
+        const fileName = path.basename(String(req.params.filename || ''));
+        if (!fileName || fileName.startsWith('.')) return res.status(404).end();
+        const dir = config.legacy && config.legacy.pasteScreenshotDir;
+        if (!dir) return res.status(404).end();
+        const filePath = path.join(dir, fileName);
+        if (!fs.existsSync(filePath)) return res.status(404).end();
+        return res.sendFile(filePath);
+    });
     app.use(optionalOpenVibeAuth(authClient));
 
     // /api/v1/session — required by the shared openvibe.js frontend on every surface.
