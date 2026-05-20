@@ -13,10 +13,13 @@ const { buildStorage } = require(path.join(ROOT, 'services', 'openvibe-media', '
 const storageModel = require(path.join(ROOT, 'services', 'openvibe-media', 'server', 'storage-model.js'));
 
 function hashFile(filePath) {
-    const hash = crypto.createHash('sha256');
-    const input = fs.readFileSync(filePath);
-    hash.update(input);
-    return hash.digest('hex');
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data', chunk => hash.update(chunk));
+        stream.on('end', () => resolve(hash.digest('hex')));
+        stream.on('error', reject);
+    });
 }
 
 function extensionFor(filePath) {
