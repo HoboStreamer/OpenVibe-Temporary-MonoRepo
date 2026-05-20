@@ -41,7 +41,8 @@ function request(server, requestPath, host) {
 
 (async function main() {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openvibe-live-home-feed-'));
-    const legacyRoot = path.join(tmpDir, 'legacy-hobostreamer');
+    // config.js derives hobostreamerRoot as path.join(OPENVIBE_LEGACY_SOURCE_ROOT, 'hobostreamer')
+    const legacyRoot = path.join(tmpDir, 'hobostreamer');
     fs.mkdirSync(path.join(legacyRoot, 'data', 'thumbnails'), { recursive: true });
     fs.mkdirSync(path.join(legacyRoot, 'data', 'pastes', 'screenshots'), { recursive: true });
     fs.writeFileSync(path.join(legacyRoot, 'data', 'thumbnails', 'archive-run.webp'), 'thumb-bytes');
@@ -166,7 +167,7 @@ function request(server, requestPath, host) {
     process.env.OPENVIBE_MEDIA_INTERNAL_URL = `http://127.0.0.1:${mediaServer.address().port}`;
     process.env.OPENVIBE_COMMUNITY_URL = `http://127.0.0.1:${communityServer.address().port}`;
     process.env.OPENVIBE_COMMUNITY_INTERNAL_URL = `http://127.0.0.1:${communityServer.address().port}`;
-    process.env.OPENVIBE_HOBOSTREAMER_ROOT = legacyRoot;
+    process.env.OPENVIBE_LEGACY_SOURCE_ROOT = tmpDir; // config.js joins this with 'hobostreamer'
     process.env.OPENVIBE_PERSISTENCE_MODE = 'sqlite';
     process.env.OPENVIBE_OPENVIBE_LIVE_PERSISTENCE_MODE = 'sqlite';
     process.env.OPENVIBE_DATABASE_URL = '';

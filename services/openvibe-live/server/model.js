@@ -55,7 +55,7 @@ function getStreamDurationSeconds(stream, nowMs) {
     return Math.max(0, Math.round((finishedAt - startedAt) / 1000));
 }
 
-const MODEL_CACHE_TTL_MS = 5000;
+const MODEL_CACHE_TTL_MS = 30000;
 let _channelsCache = null;
 let _channelsCacheAt = 0;
 let _streamsCache = null;
@@ -412,17 +412,17 @@ function listTopCategories({ limit }) {
 }
 
 function getHomeStats() {
-    const sql = db.get();
     const liveNow = listLiveNow({ limit: 200 });
     const allKnownStreams = allStreams();
+    const allKnownChannels = allChannels();
     const clipStreams = allKnownStreams.filter((stream) => stream.has_clips);
     const categories = listTopCategories({ limit: 100 });
     const nowMs = Date.now();
     return {
-        live_now: sql.prepare(`SELECT COUNT(*) AS count FROM live_streams WHERE status = 'started'`).get().count,
-        channels: sql.prepare(`SELECT COUNT(*) AS count FROM live_channels`).get().count,
-        vods: sql.prepare(`SELECT COUNT(*) AS count FROM live_streams WHERE vod_media_id IS NOT NULL AND TRIM(vod_media_id) != ''`).get().count,
-        total_streams: sql.prepare(`SELECT COUNT(*) AS count FROM live_streams`).get().count,
+        live_now: allKnownStreams.filter((s) => s.status === 'started').length,
+        channels: allKnownChannels.length,
+        vods: allKnownStreams.filter((s) => !!(s.vod_media_id && String(s.vod_media_id).trim())).length,
+        total_streams: allKnownStreams.length,
         current_viewers: liveNow.reduce((total, stream) => total + (stream.viewer_count || 0), 0),
         peak_live_viewers: liveNow.reduce((total, stream) => total + (stream.peak_viewers || 0), 0),
         stream_time_seconds: allKnownStreams.reduce((total, stream) => total + getStreamDurationSeconds(stream, nowMs), 0),

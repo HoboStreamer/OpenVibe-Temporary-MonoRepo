@@ -27,7 +27,8 @@ const { applyStreamEvent } = require('../server/ingestion');
 const { STREAM_EVENT_TYPES } = require('@openvibe/contracts/stream-events');
 
 const ch = model.upsertChannel({ slug: 'alice', display_name: 'Alice', description: 'streamer' });
-const s = model.upsertStream({ id: 'strm_1', channel_slug: 'alice', status: 'started', title: 'speedrun', started_at: '2026-01-01T00:00:00Z', thumbnail_url: '/api/thumbnails/alice-live.svg' });
+const recentStartedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 min ago — within listLiveNow's 8-hour window
+const s = model.upsertStream({ id: 'strm_1', channel_slug: 'alice', status: 'started', title: 'speedrun', started_at: recentStartedAt, thumbnail_url: '/api/thumbnails/alice-live.svg' });
 const ended = model.upsertStream({
     id: 'strm_2',
     channel_slug: 'alice',
@@ -160,7 +161,7 @@ assert.ok(/Live now/.test(homeHtml), 'home page renders live-now section');
 assert.ok(/Community pulse/.test(homeHtml), 'home page renders community section');
 assert.ok(/Recent VODs/.test(homeHtml), 'home page renders vod section');
 assert.ok(/Recent clips/.test(homeHtml), 'home page renders clips section');
-assert.ok(/Why OpenVibe exists/.test(homeHtml), 'home page renders origin story section');
+assert.ok(/Built different/.test(homeHtml), 'home page renders origin story section');
 assert.ok(/openre\.stream/.test(homeHtml), 'home page emphasizes openre.stream');
 assert.ok(/archive run/.test(homeHtml), 'home page shows canonical vod card');
 assert.ok(/top deck glitch/.test(homeHtml), 'home page shows canonical clip card');

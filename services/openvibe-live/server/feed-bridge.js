@@ -9,7 +9,7 @@ const HOME_VOD_LIMIT = 12;
 const HOME_CLIP_LIMIT = 12;
 const HOME_PASTE_LIMIT = 10;
 const CHANNEL_MEDIA_LIMIT = 24;
-const DEFAULT_HOME_FEED_CACHE_TTL_MS = 15000;
+const DEFAULT_HOME_FEED_CACHE_TTL_MS = 60000;
 const DEFAULT_REMOTE_TIMEOUT_MS = 4000;
 const DEFAULT_MEDIA_PUBLIC_PLAYBACK_MAX_BYTES = 500 * 1024 * 1024;
 const MIME_TYPE_BY_EXTENSION = Object.freeze({
@@ -232,6 +232,7 @@ function createFeedBridge(options) {
     const cacheTtlMs = Math.max(0, safeNumber(config.homeFeedCacheTtlMs, DEFAULT_HOME_FEED_CACHE_TTL_MS));
     const canonicalMediaCache = new Map();
     const communityCache = createAsyncTimedCache(cacheTtlMs);
+    const homeViewModelCache = createAsyncTimedCache(cacheTtlMs);
 
     function resolveExistingFile(dirPath, fileName) {
         if (!dirPath || !fileName) return null;
@@ -517,7 +518,7 @@ function createFeedBridge(options) {
 
     return {
         buildCommunityViewModel,
-        buildHomeViewModel,
+        buildHomeViewModel() { return homeViewModelCache.getOrLoad(buildHomeViewModel); },
         buildChannelMedia,
         listCanonicalVods(query) {
             const q = query || {};
