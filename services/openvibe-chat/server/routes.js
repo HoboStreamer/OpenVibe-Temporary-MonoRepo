@@ -421,6 +421,54 @@ function buildRouter({ eventBus, chatWs }) {
         res.json(result);
     });
 
+    // Path-based TTS queue route for internal service-to-service calls (billing → chat).
+    // POST /tts/queue/:ownerType/:ownerId — enqueue a TTS item with owner from URL.
+    r.post('/tts/queue/:ownerType/:ownerId', json, (req, res) => {
+        const a = policy.actorOfReq(req);
+        const ot = req.params.ownerType;
+        const oid = req.params.ownerId;
+        const b = req.body || {};
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: ot, owner_id: oid })); }
+        catch (err) { return denied(res, err); }
+        const item = model.enqueueAudio({
+            owner_type: ot, owner_id: oid, queue_type: 'tts',
+            text: b.message || b.text,
+            source_type: b.source || b.source_type || 'tip',
+            source_id: b.tip_id || b.source_id,
+            requested_by_actor_type: b.sender_actor_type || a.type,
+            requested_by_actor_id: b.sender_actor_id || a.id,
+            metadata: Object.assign({}, b.metadata, b.tip_id ? { tip_id: b.tip_id, amount_minor: b.amount_minor, currency: b.currency } : {}),
+            priority: b.priority,
+        });
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.TTS_QUEUED, { queue_id: item.id, owner_type: ot, owner_id: oid }, actorMeta(req));
+        res.status(201).json({ item });
+    });
+
+    // Path-based audio queue route for internal service-to-service calls (billing → chat).
+    // POST /audio/queue/:ownerType/:ownerId — enqueue an audio item with owner from URL.
+    r.post('/audio/queue/:ownerType/:ownerId', json, (req, res) => {
+        const a = policy.actorOfReq(req);
+        const ot = req.params.ownerType;
+        const oid = req.params.ownerId;
+        const b = req.body || {};
+        try { policy.assert(policy.decideTtsOwnership({ req, owner_type: ot, owner_id: oid })); }
+        catch (err) { return denied(res, err); }
+        const item = model.enqueueAudio({
+            owner_type: ot, owner_id: oid,
+            queue_type: b.queue_type || 'soundboard',
+            source_type: b.source || b.source_type || 'tip', source_id: b.tip_id || b.source_id,
+            requested_by_actor_type: b.sender_actor_type || a.type,
+            requested_by_actor_id: b.sender_actor_id || a.id,
+            text: b.message || b.text, audio_url: b.audio_url, media_id: b.media_id,
+            external_provider: b.external_provider, external_url: b.external_url,
+            playback: b.playback,
+            metadata: Object.assign({}, b.metadata, b.tip_id ? { tip_id: b.tip_id, amount_minor: b.amount_minor, currency: b.currency } : {}),
+            priority: b.priority,
+        });
+        eventBus.publishChatEvent(CHAT_EVENT_TYPES.AUDIO_QUEUED, { queue_id: item.id, queue_type: item.queue_type }, actorMeta(req));
+        res.status(201).json({ item });
+    });
+
     // ── audio queue (soundboard / media-request / alerts) ─
     r.get('/audio/queue', (req, res) => {
         const a = policy.actorOfReq(req);

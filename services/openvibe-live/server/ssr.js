@@ -652,7 +652,8 @@ function _shellStyles() {
         }
         @media (max-width: 640px) {
             .brand-name { display: none; }
-            .nav-link span { display: none; }
+            .nav-link span:not(.ov-icon) { display: none; }
+            .nav-link .ov-icon { font-size: 1.25rem; }
             .nav-link { padding: 0.68rem 0.85rem; min-width: 2.7rem; }
         }
         .footer-links-grid {
@@ -711,6 +712,108 @@ function _shellStyles() {
         .golive-auth-sub {
             font-size: 0.82rem;
             color: var(--muted);
+        }
+        /* ── Go Live hero (logged-out) ── */
+        .golive-hero {
+            max-width: 680px;
+        }
+        .golive-method-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .golive-method-card {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+            padding: 1.25rem 1.2rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+        }
+        .golive-method-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            background: rgba(34,211,238,0.1);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.25rem;
+        }
+        .golive-method-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: white;
+        }
+        .golive-method-sub {
+            font-size: 0.82rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .golive-cta-row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.25rem;
+        }
+        .golive-cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.7rem 1.4rem;
+            border-radius: 999px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            text-decoration: none;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        .golive-cta-primary {
+            background: var(--accent);
+            color: #070d1c;
+        }
+        .golive-cta-primary:hover { opacity: 0.88; }
+        .golive-cta-ghost {
+            border: 1px solid var(--border);
+            color: var(--muted-strong);
+            background: rgba(255,255,255,0.04);
+        }
+        .golive-cta-ghost:hover { border-color: var(--accent); color: white; }
+        .golive-restream-note {
+            font-size: 0.84rem;
+            color: var(--muted);
+            margin: 0;
+        }
+        .golive-restream-note a { color: var(--accent); text-decoration: none; }
+        .golive-restream-note a:hover { text-decoration: underline; }
+        /* ── Destination presets ── */
+        .sm-dest-presets {
+            margin-bottom: 0.75rem;
+        }
+        .sm-dest-preset-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 0.35rem;
+        }
+        .sm-dest-preset-btn {
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid rgba(139,92,246,0.35);
+            background: rgba(139,92,246,0.1);
+            color: #c4b5fd;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .sm-dest-preset-btn:hover {
+            background: rgba(139,92,246,0.25);
+            border-color: rgba(139,92,246,0.65);
+            color: white;
         }
         /* ── Compact video card (VODs / Clips grid) ── */
         .vc-grid {
@@ -3278,7 +3381,17 @@ function renderGoLivePage({ baseUrl, session }) {
                         <div class="sm-panel-header" style="margin-top:1.5rem;">
                             <h4 class="sm-panel-title" style="font-size:0.95rem;">Add destination</h4>
                         </div>
-                        <form class="sm-form" id="sm-dest-form">
+                        <div class="sm-dest-presets">
+                            <span class="sm-field-label" style="display:block;margin-bottom:0.5rem;">QUICK ADD</span>
+                            <div class="sm-dest-preset-row">
+                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="kick" data-preset-label="Kick" data-preset-url="rtmp://fa723fc1b171.global-contribute.live-video.net/app/">Kick</button>
+                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="twitch" data-preset-label="Twitch" data-preset-url="rtmp://live.twitch.tv/app/">Twitch</button>
+                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="youtube" data-preset-label="YouTube" data-preset-url="rtmp://a.rtmp.youtube.com/live2">YouTube</button>
+                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="RobotStreamer" data-preset-url="rtmp://stream.robotstreamer.com/live">RobotStreamer</button>
+                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="" data-preset-url="">Custom RTMP</button>
+                            </div>
+                        </div>
+                        <form class="sm-form" id="sm-dest-form" style="margin-top:0.75rem;">
                             <div class="sm-field-group">
                                 <span class="sm-field-label">KIND</span>
                                 <select class="sm-input sm-select" name="kind">
@@ -3287,6 +3400,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                     <option value="twitch">Twitch</option>
                                     <option value="kick">Kick</option>
                                     <option value="facebook">Facebook</option>
+                                    <option value="robotstreamer">RobotStreamer</option>
                                 </select>
                             </div>
                             <label class="sm-field-group">
@@ -3315,92 +3429,56 @@ function renderGoLivePage({ baseUrl, session }) {
             </div>
         </section>`
         : `
-        <section class="section-panel" id="stream-manager" data-go-live-session>
-            <h2 class="section-title" style="margin-bottom:.5rem;">Stream manager</h2>
-            <p class="section-subtitle" style="margin-bottom:1.25rem;">Sign in to unlock your stream manager and create your first channel.</p>
-            <div class="golive-auth-grid">
-                <a class="golive-auth-card" href="${escapeHtml(signInHref)}">
-                    <div class="golive-auth-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        <section class="section-panel" id="stream-manager">
+            <div class="golive-hero">
+                <h1 class="section-title" style="margin-bottom:0.5rem;">Go live</h1>
+                <p class="section-subtitle" style="margin-bottom:2rem;">Three ways to stream. Pick what fits your setup.</p>
+                <div class="golive-method-grid">
+                    <div class="golive-method-card">
+                        <div class="golive-method-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        </div>
+                        <div class="golive-method-name">Browser</div>
+                        <div class="golive-method-sub">Camera, mic, or screen — no software needed</div>
                     </div>
-                    <div class="golive-auth-label">Sign in with OpenVibe
-                    <div class="golive-auth-label">Sign in with OpenVibe</div>
-                    <div class="golive-auth-sub">Use your OpenVibe account</div>
-                </a>
-                <a class="golive-auth-card" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">
-                    <div class="golive-auth-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                    <div class="golive-method-card">
+                        <div class="golive-method-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
+                        </div>
+                        <div class="golive-method-name">OBS / WHIP</div>
+                        <div class="golive-method-sub">Connect OBS via WHIP encoder — low latency, full control</div>
                     </div>
-                    <div class="golive-auth-label">Stream without account</div>
-                    <div class="golive-auth-sub">Go live on openre.stream</div>
-                </a>
+                    <div class="golive-method-card">
+                        <div class="golive-method-icon">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+                        </div>
+                        <div class="golive-method-name">RTMP</div>
+                        <div class="golive-method-sub">Streamlabs, IRL Pro, FFmpeg, or any RTMP encoder</div>
+                    </div>
+                </div>
+                <div class="golive-cta-row">
+                    <a class="golive-cta-btn golive-cta-primary" href="${escapeHtml(signInHref)}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                        Sign in to get started
+                    </a>
+                    <a class="golive-cta-btn golive-cta-ghost" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                        Stream on openre.stream
+                    </a>
+                </div>
+                <p class="golive-restream-note">Need to stream to Twitch, YouTube, and Kick simultaneously? <a href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">openre.stream</a> handles multi-destination restreaming — no account required.</p>
             </div>
         </section>`;
     const pageContent = `
         ${managerSection}
-        ${!signedIn ? renderSection({
-            title: 'Broadcast tracks',
-            subtitle: 'Choose the publishing style that matches your setup today.',
-            content: `<div class="feature-grid">${tracksHtml}</div>`,
-        }) + renderSection({
-            title: 'A simple creator loop',
-            subtitle: 'Keep the public route, the live session, and the after-stream surface tied together.',
-            content: `
-                <div class="story-grid">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Streamer flow</div>
-                        <ol class="flow-list">
-                            <li>Claim or verify the creator account and public channel handle.</li>
-                            <li>Create a stream record and grab the ingest details you need.</li>
-                            <li>Go live and let the session mirror into the canonical OpenVibe live graph.</li>
-                            <li>Keep VODs, clips, chat, and community tied back to that same creator route.</li>
-                        </ol>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Truth first</div>
-                        <p class="card-body">The live surface stays honest. It shows live sessions, recent broadcasts, viewer counts, VOD linkage, and clip state when those facts exist — and clean empty states when they do not.</p>
-                    </article>
-                </div>`,
-        }) + renderSection({
-            title: 'Where openre.stream fits',
-            subtitle: 'Separate the stream-routing control plane from the discovery layer without fragmenting creator identity.',
-            content: `
-                <div class="story-grid">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Control plane</div>
-                        <p class="card-body">Use openre.stream when you need ingest orchestration, multi-destination restreaming, or a dedicated operator workflow. Let openvibe.live stay focused on discovery, channel identity, and replay/highlight visibility.</p>
-                        <ul class="flow-list">
-                            <li>Keep the creator's canonical public route on <code>openvibe.live</code>.</li>
-                            <li>Use <code>openre.stream</code> for the routing and publishing complexity.</li>
-                            <li>Mirror the resulting session back into the live graph so clips, VODs, and discovery continue from one source of truth.</li>
-                        </ul>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Why split it</div>
-                        <div class="data-points">
-                            <div class="data-point">
-                                <div class="data-point-label">Discovery</div>
-                                <div class="data-point-value">openvibe.live</div>
-                            </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Routing</div>
-                                <div class="data-point-value">openre.stream</div>
-                            </div>
-                            <div class="data-point">
-                                <div class="data-point-label">Conversation</div>
-                                <div class="data-point-value">openvibe.chat</div>
-                            </div>
-                        </div>
-                    </article>
-                </div>`,
-        }) : ''}
+
     `;
     return renderPage({
         title: 'Go live — openvibe.live',
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260515-2"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260520-1"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */

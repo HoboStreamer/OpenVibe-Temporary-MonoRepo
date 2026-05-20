@@ -548,6 +548,25 @@
     // ── destinations form ─────────────────────────────────────────────────────
     var destForm = el('#sm-dest-form');
     if (destForm) {
+        // Preset quick-add buttons pre-fill the form fields
+        var presetContainer = destForm.closest('[data-sm-dest-panel]');
+        if (presetContainer) {
+            presetContainer.addEventListener('click', function (e) {
+                var btn = e.target.closest('.sm-dest-preset-btn');
+                if (!btn) return;
+                var kind = btn.getAttribute('data-preset-kind') || 'custom';
+                var label = btn.getAttribute('data-preset-label') || '';
+                var url = btn.getAttribute('data-preset-url') || '';
+                var kindSel = destForm.querySelector('[name="kind"]');
+                var labelInput = destForm.querySelector('[name="label"]');
+                var urlInput = destForm.querySelector('[name="target_url"]');
+                var keyInput = destForm.querySelector('[name="target_key"]');
+                if (kindSel) kindSel.value = kind;
+                if (labelInput) labelInput.value = label;
+                if (urlInput) urlInput.value = url;
+                if (keyInput) { keyInput.value = ''; keyInput.focus(); }
+            });
+        }
         destForm.addEventListener('submit', function (e) {
             e.preventDefault();
             var fd = new FormData(destForm);

@@ -81,6 +81,24 @@ function buildApp() {
     app.use(serviceActorMiddleware(config.internalKey));
     app.use(optionalOpenVibeAuth(authClient));
 
+    // /api/v1/session — required by the shared openvibe.js frontend on every surface.
+    function buildChatSessionResponse(req) {
+        if (req.user) {
+            return {
+                authenticated: !!(req.user && !req.user.anonymous && !req.user.anon),
+                anonymous: !!(req.user.anonymous || req.user.anon),
+                user: {
+                    id: String(req.user.sub || req.user.id || ''),
+                    username: req.user.username || req.user.preferred_username || null,
+                    display_name: req.user.display_name || req.user.name || req.user.username || null,
+                    role: req.user.role || 'user',
+                },
+            };
+        }
+        return { authenticated: false, anonymous: false, user: null };
+    }
+    app.get('/api/v1/session', (req, res) => res.json(buildChatSessionResponse(req)));
+
     // Shim so openvibe.js loadSession() works on this domain.
     app.get('/account/session', (req, res) => {
         if (req.user) {
@@ -98,7 +116,10 @@ function buildApp() {
         return res.json({ authenticated: false, anonymous: false, user: null });
     });
 
-    app.use('/api/chat', buildRouter({ eventBus, chatWs }));
+    const chatRouter = buildRouter({ eventBus, chatWs });
+    app.use('/api/chat', chatRouter);
+    // Alias: billing and other services call /api/v1/chat/<path> — route them to chatRouter.
+    app.use('/api/v1/chat', chatRouter);
 
     app.use((err, _req, res, _next) => {
         console.error('[chat] unhandled:', err.message);

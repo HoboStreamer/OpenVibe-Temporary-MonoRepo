@@ -104,9 +104,9 @@ assert.ok(/<title>speedrun — Alice — openvibe\.live<\/title>/.test(streamHtm
 assert.ok(/<link rel="canonical" href="[^"]+\/@alice\/s\/strm_1"/.test(streamHtml));
 
 const goLiveHtml = ssr.renderGoLivePage({ baseUrl: config.publicBaseUrl });
-assert.ok(/Sign in to unlock your stream manager/.test(goLiveHtml), 'go-live page gates creator controls for guests');
-assert.ok(/data-go-live-session/.test(goLiveHtml), 'go-live page includes the session-aware dashboard mount');
-assert.ok(/Sign in with OpenVibe/.test(goLiveHtml), 'go-live page exposes a working local sign-in CTA');
+assert.ok(/golive-method-grid/.test(goLiveHtml), 'go-live page renders streaming method grid for guests');
+assert.ok(/golive-cta-primary/.test(goLiveHtml), 'go-live page has a sign-in CTA for guests');
+assert.ok(/Sign in to get started/.test(goLiveHtml), 'go-live page exposes a working local sign-in CTA');
 assert.ok(!/id="go-live-channel-form"/.test(goLiveHtml), 'go-live page should not show channel creation controls to guests');
 
 const signedInGoLiveHtml = ssr.renderGoLivePage({

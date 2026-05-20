@@ -27,8 +27,10 @@ module.exports = {
 
     auth: {
         issuer:        resolveAuthIssuer(),
+        url:           resolvePublicOrigin({ surface: 'auth' }),
         publicKeyPath: process.env.OPENVIBE_AUTH_PUBLIC_KEY
             || path.resolve(__dirname, '..', '..', 'openvibe-network', 'data', 'keys', 'openvibe-public.pem'),
+        jwksUrl:       process.env.OPENVIBE_AUTH_JWKS_URL || null,
         cookieNames: ['openvibe_token', 'token'],
     },
 

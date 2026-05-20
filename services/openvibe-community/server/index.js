@@ -64,6 +64,23 @@ function buildApp() {
     app.use(express.static(path.join(__dirname, '..', 'public')));
     app.use(optionalOpenVibeAuth(authClient));
 
+    // /api/v1/session — required by the shared openvibe.js frontend on every surface.
+    app.get('/api/v1/session', (req, res) => {
+        if (req.user) {
+            return res.json({
+                authenticated: !!(req.user && !req.user.anonymous && !req.user.anon),
+                anonymous: !!(req.user.anonymous || req.user.anon),
+                user: {
+                    id: String(req.user.sub || req.user.id || ''),
+                    username: req.user.username || req.user.preferred_username || null,
+                    display_name: req.user.display_name || req.user.name || req.user.username || null,
+                    role: req.user.role || 'user',
+                },
+            });
+        }
+        return res.json({ authenticated: false, anonymous: false, user: null });
+    });
+
     const apiRouter = buildRouter({ eventBus, config });
 
     // Canonical API surface.
