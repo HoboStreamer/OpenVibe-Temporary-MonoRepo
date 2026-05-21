@@ -94,6 +94,43 @@ function asyncRoute(handler) {
     };
 }
 
+// ── GitHub releases cache ──────────────────────────────────────
+const _githubCache = { data: null, expires: 0, pending: null };
+
+function fetchGithubReleases() {
+    const now = Date.now();
+    if (_githubCache.data && now < _githubCache.expires) return Promise.resolve(_githubCache.data);
+    if (_githubCache.pending) return _githubCache.pending;
+    const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'openvibe-live/1.0' };
+    if (config.github.token) headers['Authorization'] = `Bearer ${config.github.token}`;
+    _githubCache.pending = fetch(`https://api.github.com/repos/${config.github.repo}/releases?per_page=20`, { headers })
+        .then((res) => {
+            if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+            return res.json();
+        })
+        .then((raw) => {
+            const items = (Array.isArray(raw) ? raw : [])
+                .filter((r) => !r.prerelease && !r.draft)
+                .map((r) => ({
+                    id: r.tag_name,
+                    date: (r.published_at || r.created_at || '').slice(0, 10),
+                    title: r.name || r.tag_name,
+                    body: (r.body || '').trim().slice(0, 500),
+                    url: r.html_url,
+                }));
+            _githubCache.data = items;
+            _githubCache.expires = Date.now() + config.github.releaseCacheTtlMs;
+            _githubCache.pending = null;
+            return items;
+        })
+        .catch((err) => {
+            console.warn('[openvibe-live] GitHub releases fetch failed:', err.message);
+            _githubCache.pending = null;
+            return _githubCache.data; // return stale on error, or null
+        });
+    return _githubCache.pending;
+}
+
 function normalizeCreatorSlugInput(value) {
     return String(value || '')
         .trim()
@@ -459,9 +496,10 @@ function buildApp() {
         }));
     });
 
-    app.get('/updates', (req, res) => {
-        res.type('html').send(ssr.renderUpdatesPage({ baseUrl: deriveBaseUrl(req) }));
-    });
+    app.get('/updates', asyncRoute(async (req, res) => {
+        const releases = await fetchGithubReleases();
+        res.type('html').send(ssr.renderUpdatesPage({ baseUrl: deriveBaseUrl(req), releases: releases || null }));
+    }));
 
     app.get('/@:slug', asyncRoute(async (req, res) => {
         await renderChannelRoute(req, res, req.params.slug);
@@ -695,6 +733,10 @@ function buildApp() {
     }));
     app.get('/api/v1/featured-channels', (_req, res) => res.json({ items: model.listFeaturedChannels({ limit: 12 }) }));
     app.get('/api/v1/categories', (_req, res) => res.json({ items: model.listTopCategories({ limit: 24 }) }));
+    app.get('/api/v1/updates', asyncRoute(async (_req, res) => {
+        const releases = await fetchGithubReleases();
+        res.json({ items: releases || [], cached_at: _githubCache.expires ? _githubCache.expires - config.github.releaseCacheTtlMs : 0 });
+    }));
     app.get('/api/v1/vods', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalVods({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
     app.get('/api/v1/clips', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalClips({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
     app.get('/api/v1/pastes', asyncRoute(async (_req, res) => {

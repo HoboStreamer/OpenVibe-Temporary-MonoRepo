@@ -54,4 +54,10 @@ module.exports = {
         enabled: process.env.LIVE_SUBSCRIBE_STREAM_EVENTS !== 'false',
         callbackUrl: process.env.LIVE_SUBSCRIBE_CALLBACK_URL || null,
     },
+
+    github: {
+        repo: process.env.GITHUB_REPO || 'openvibe/openvibe',
+        token: process.env.GITHUB_TOKEN || '',
+        releaseCacheTtlMs: parseInt(process.env.GITHUB_RELEASES_CACHE_TTL_MS, 10) || 900000, // 15 min
+    },
 };

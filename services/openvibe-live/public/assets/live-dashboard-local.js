@@ -506,3 +506,70 @@
 
     refreshDashboard(false).catch(() => {});
 }());
+
+// ── Pjax navigation ───────────────────────────────────────────
+(function () {
+    'use strict';
+    var PJAX_PATHS = ['/', '/channels', '/vods', '/clips', '/updates'];
+    var navigating = false;
+
+    function isPjaxPath(pathname) {
+        return PJAX_PATHS.some(function (p) {
+            return pathname === p || (p !== '/' && pathname.startsWith(p + '?'));
+        });
+    }
+
+    function setNavActive(pathname) {
+        document.querySelectorAll('.nav-link[data-ov-pjax]').forEach(function (link) {
+            var href = link.getAttribute('href') || '';
+            link.classList.toggle('active', href === pathname || (href !== '/' && pathname.startsWith(href)));
+        });
+    }
+
+    function pjaxNavigate(href, push) {
+        if (navigating) return Promise.resolve();
+        navigating = true;
+        var url;
+        try { url = new URL(href, window.location.origin); } catch (_) { window.location.href = href; navigating = false; return Promise.resolve(); }
+        if (!isPjaxPath(url.pathname)) { window.location.href = href; navigating = false; return Promise.resolve(); }
+        return fetch(url.href, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+            .then(function (res) {
+                if (!res.ok) { window.location.href = href; return; }
+                return res.text();
+            })
+            .then(function (html) {
+                if (!html) return;
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                var newMain = doc.querySelector('main.page-shell');
+                var currentMain = document.querySelector('main.page-shell');
+                if (!newMain || !currentMain) { window.location.href = href; return; }
+                currentMain.innerHTML = newMain.innerHTML;
+                document.title = doc.title || document.title;
+                if (push) history.pushState({ ovpjax: true, href: url.href }, document.title, url.href);
+                setNavActive(url.pathname);
+                window.scrollTo(0, 0);
+                if (typeof window.OvInitContent === 'function') window.OvInitContent(currentMain);
+            })
+            .catch(function () { window.location.href = href; })
+            .then(function () { navigating = false; });
+    }
+
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a[data-ov-pjax]');
+        if (!link) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        var href = link.getAttribute('href');
+        if (!href) return;
+        var url;
+        try { url = new URL(href, window.location.origin); } catch (_) { return; }
+        if (url.href === window.location.href) { e.preventDefault(); return; }
+        e.preventDefault();
+        pjaxNavigate(url.href, true);
+    });
+
+    window.addEventListener('popstate', function (e) {
+        if (e.state && e.state.ovpjax) pjaxNavigate(window.location.href, false);
+    });
+}());
+

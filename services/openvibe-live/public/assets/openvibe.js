@@ -180,6 +180,16 @@
         root.style.setProperty('--ov-text-faint', theme.textFaint);
         root.style.setProperty('--ov-border', theme.border);
         root.style.setProperty('--ov-shadow', theme.shadow);
+        // Legacy aliases for SSR services (openvibe-live etc.) that use --bg/--accent/--text/--panel/--border
+        root.style.setProperty('--accent', theme.accent);
+        root.style.setProperty('--accent-2', theme.accent2);
+        root.style.setProperty('--bg', theme.bg);
+        root.style.setProperty('--panel', theme.bgElev);
+        root.style.setProperty('--panel-strong', theme.bgElev2);
+        root.style.setProperty('--border', theme.border);
+        root.style.setProperty('--text', theme.text);
+        root.style.setProperty('--muted', theme.textFaint);
+        root.style.setProperty('--muted-strong', theme.textDim);
         if (!options || options.persistLocal !== false) {
             try {
                 global.localStorage.setItem(LOCAL_THEME_KEY, theme.id);

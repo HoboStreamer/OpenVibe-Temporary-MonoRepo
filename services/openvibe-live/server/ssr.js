@@ -1064,75 +1064,31 @@ function _shellScript() {
                 Promise.resolve(window.OpenVibe.primeTheme()).catch(function () {});
             }
 
-            Array.prototype.forEach.call(document.querySelectorAll('[data-reveal]'), function (element) {
-                element.classList.add('is-visible');
-            });
-
-            var updatesFeed = document.querySelector('[data-updates-feed]');
-            if (updatesFeed) {
-                var storageKey = 'openvibe-live:updates-seen';
-                var signature = updatesFeed.dataset.updatesFeed || '';
-                var cards = Array.prototype.slice.call(updatesFeed.querySelectorAll('[data-update-id]'));
-                var status = updatesFeed.querySelector('[data-updates-status]');
-                var clearButton = updatesFeed.querySelector('[data-updates-clear]');
-                var seen = false;
-                try {
-                    seen = !!window.localStorage && window.localStorage.getItem(storageKey) === signature;
-                } catch (_storageError) {
-                    seen = false;
-                }
-                var applyUpdatesState = function (allSeen) {
-                    cards.forEach(function (card) {
-                        card.classList.toggle('is-unread', !allSeen);
-                    });
-                    if (status) {
-                        status.textContent = allSeen ? 'All caught up' : String(cards.length) + ' recent changes';
-                    }
-                    if (clearButton) clearButton.hidden = allSeen;
-                };
-                applyUpdatesState(seen || !cards.length);
-                if (clearButton) {
-                    clearButton.addEventListener('click', function () {
-                        try {
-                            if (window.localStorage) window.localStorage.setItem(storageKey, signature);
-                        } catch (_storageError) {
-                            // ignore storage failures
-                        }
-                        applyUpdatesState(true);
-                    });
-                }
+            var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            var _revealObs = null;
+            var _counterObs = null;
+            var formatter = new Intl.NumberFormat('en-US');
+            var compactFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+            function formatCount(value, mode) {
+                return mode === 'compact' ? compactFormatter.format(value) : formatter.format(Math.round(value));
             }
 
-            Array.prototype.forEach.call(document.querySelectorAll('[data-filter-input]'), function (input) {
-                var group = input.dataset.filterInput;
-                var cards = Array.prototype.slice.call(document.querySelectorAll('[data-filter-group="' + group + '"]'));
-                var status = document.querySelector('[data-filter-status="' + group + '"]');
-                var apply = function () {
-                    var query = String(input.value || '').trim().toLowerCase();
-                    var visible = 0;
-                    cards.forEach(function (card) {
-                        var haystack = String(card.dataset.filterText || '').toLowerCase();
-                        var show = !query || haystack.indexOf(query) !== -1;
-                        card.hidden = !show;
-                        if (show) visible += 1;
-                    });
-                    if (status) {
-                        status.textContent = query ? String(visible) + ' matching results' : String(cards.length) + ' total items';
-                    }
-                };
-                input.addEventListener('input', apply);
-                apply();
-            });
-
-            Array.prototype.forEach.call(document.querySelectorAll('[data-chip-target]'), function (chip) {
-                chip.addEventListener('click', function () {
-                    var target = document.querySelector(chip.dataset.chipTarget || '');
-                    if (!target) return;
-                    target.value = chip.dataset.chipValue || '';
-                    target.dispatchEvent(new Event('input', { bubbles: true }));
-                    target.focus();
-                });
-            });
+            function animateCounter(el) {
+                if (el.dataset.countAnimated === 'true') return;
+                el.dataset.countAnimated = 'true';
+                var target = Number(el.dataset.countTo || 0);
+                if (!Number.isFinite(target)) return;
+                var mode = el.dataset.countFormat || 'integer';
+                var duration = 900;
+                var startedAt = performance.now();
+                function frame(now) {
+                    var progress = Math.min((now - startedAt) / duration, 1);
+                    var eased = 1 - Math.pow(1 - progress, 3);
+                    el.textContent = formatCount(target * eased, mode);
+                    if (progress < 1) requestAnimationFrame(frame);
+                }
+                requestAnimationFrame(frame);
+            }
 
             function formatPlayerTime(seconds) {
                 var value = Number(seconds);
@@ -1147,213 +1103,357 @@ function _shellScript() {
                 return String(minutes) + ':' + String(secs).padStart(2, '0');
             }
 
-            Array.prototype.forEach.call(document.querySelectorAll('[data-ov-player]'), function (root) {
-                var video = root.querySelector('video');
-                if (!video) return;
-                var playToggle = root.querySelector('[data-player-action="toggle"]');
-                var muteToggle = root.querySelector('[data-player-action="mute"]');
-                var fullscreenToggle = root.querySelector('[data-player-action="fullscreen"]');
-                var seek = root.querySelector('[data-player-seek]');
-                var volumeInput = root.querySelector('[data-player-volume]');
-                var timeEl = root.querySelector('[data-player-time]');
-                var statusEl = root.querySelector('[data-player-status]');
-                var overlay = root.querySelector('[data-player-overlay]');
-                var centerBtn = root.querySelector('[data-player-center]');
-                var hintDuration = Number(root.dataset.durationHint) || 0;
-                var hideTimer = null;
-                var centerFlashTimer = null;
+            window.OvInitContent = function initContent(container) {
+                var root = container || document.body;
 
-                function setStatus(msg) { if (statusEl) statusEl.textContent = msg; }
-
-                function effectiveDuration() {
-                    return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : hintDuration;
+                // Reveal animations
+                if (!_revealObs && !reducedMotion && 'IntersectionObserver' in window) {
+                    _revealObs = new IntersectionObserver(function (entries) {
+                        entries.forEach(function (entry) {
+                            if (!entry.isIntersecting) return;
+                            entry.target.classList.add('is-visible');
+                            _revealObs.unobserve(entry.target);
+                        });
+                    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
                 }
-
-                function sync() {
-                    var dur = effectiveDuration();
-                    var cur = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-                    var paused = video.paused || video.ended;
-                    if (playToggle) {
-                        playToggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
-                        playToggle.innerHTML = paused
-                            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
-                            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-                    }
-                    if (muteToggle) {
-                        var muted = video.muted || video.volume === 0;
-                        muteToggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
-                        muteToggle.innerHTML = muted
-                            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
-                            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
-                    }
-                    if (timeEl) timeEl.textContent = formatPlayerTime(cur) + ' / ' + formatPlayerTime(dur > 0 ? dur : null);
-                    if (seek && seek.dataset.seeking !== 'true') {
-                        seek.disabled = !dur;
-                        seek.value = dur ? String(Math.round((cur / dur) * 1000)) : '0';
-                    }
-                    if (volumeInput && document.activeElement !== volumeInput) {
-                        volumeInput.value = String(video.muted ? 0 : video.volume);
-                    }
-                }
-
-                function showOverlay() {
-                    if (overlay) overlay.classList.add('is-visible');
-                    clearTimeout(hideTimer);
-                    if (!video.paused) {
-                        hideTimer = setTimeout(function () {
-                            if (!video.paused && overlay) overlay.classList.remove('is-visible');
-                        }, 3000);
-                    }
-                }
-
-                function flashCenterBtn(nowPaused) {
-                    if (!centerBtn) return;
-                    centerBtn.innerHTML = nowPaused
-                        ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
-                        : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-                    centerBtn.classList.add('is-flash');
-                    clearTimeout(centerFlashTimer);
-                    centerFlashTimer = setTimeout(function () { centerBtn.classList.remove('is-flash'); }, 500);
-                }
-
-                video.controls = false;
-                setStatus('');
-                showOverlay();
-                sync();
-
-                root.addEventListener('mousemove', showOverlay);
-                root.addEventListener('mouseenter', showOverlay);
-                root.addEventListener('mouseleave', function () {
-                    clearTimeout(hideTimer);
-                    if (!video.paused && overlay) overlay.classList.remove('is-visible');
+                Array.prototype.forEach.call(root.querySelectorAll('[data-reveal]'), function (el) {
+                    if (_revealObs) _revealObs.observe(el);
+                    else el.classList.add('is-visible');
                 });
-                root.addEventListener('touchstart', function (e) {
-                    if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
-                    if (overlay && overlay.classList.contains('is-visible')) {
-                        if (!video.paused) { overlay.classList.remove('is-visible'); clearTimeout(hideTimer); }
-                    } else {
-                        showOverlay();
+
+                // Counter animations
+                if (!_counterObs && !reducedMotion && 'IntersectionObserver' in window) {
+                    _counterObs = new IntersectionObserver(function (entries) {
+                        entries.forEach(function (entry) {
+                            if (!entry.isIntersecting) return;
+                            animateCounter(entry.target);
+                            _counterObs.unobserve(entry.target);
+                        });
+                    }, { threshold: 0.65 });
+                }
+                Array.prototype.forEach.call(root.querySelectorAll('[data-count-to]'), function (el) {
+                    if (_counterObs) _counterObs.observe(el);
+                    else animateCounter(el);
+                });
+
+                // Hero stage frame cycling
+                var heroStage = root.querySelector('[data-hero-stage]');
+                if (heroStage && !heroStage._ovHeroInit) {
+                    heroStage._ovHeroInit = true;
+                    var frames = Array.prototype.slice.call(heroStage.querySelectorAll('[data-hero-frame]'));
+                    var activeIndex = Math.max(0, frames.findIndex(function (f) { return f.classList.contains('is-active'); }));
+                    frames.forEach(function (f, i) { f.classList.toggle('is-active', i === activeIndex); });
+                    if (!reducedMotion && frames.length > 1) {
+                        setInterval(function () {
+                            frames[activeIndex].classList.remove('is-active');
+                            var nextIndex = activeIndex;
+                            while (frames.length > 1 && nextIndex === activeIndex) {
+                                nextIndex = Math.floor(Math.random() * frames.length);
+                            }
+                            activeIndex = nextIndex;
+                            frames[activeIndex].classList.add('is-active');
+                        }, 4200);
                     }
-                }, { passive: true });
-                root.addEventListener('click', function (e) {
-                    if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
-                    var wasPaused = video.paused || video.ended;
-                    flashCenterBtn(!wasPaused);
+                }
+
+                // Rotating words
+                var rotator = root.querySelector('[data-rotating-words]');
+                if (rotator && !rotator._ovRotatorInit) {
+                    rotator._ovRotatorInit = true;
+                    var words = String(rotator.dataset.rotatingWords || '').split('|').map(function (w) { return w.trim(); }).filter(Boolean);
+                    var wordIndex = 0;
+                    function applyWord() { rotator.textContent = words[wordIndex] || 'creators'; rotator.classList.add('is-active'); }
+                    applyWord();
+                    if (!reducedMotion && words.length > 1) {
+                        setInterval(function () {
+                            rotator.classList.remove('is-active');
+                            setTimeout(function () { wordIndex = (wordIndex + 1) % words.length; applyWord(); }, 160);
+                        }, 2400);
+                    }
+                }
+
+                // Updates feed
+                var updatesFeed = root.querySelector('[data-updates-feed]');
+                if (updatesFeed) {
+                    var storageKey = 'openvibe-live:updates-seen';
+                    var signature = updatesFeed.dataset.updatesFeed || '';
+                    var cards = Array.prototype.slice.call(updatesFeed.querySelectorAll('[data-update-id]'));
+                    var status = updatesFeed.querySelector('[data-updates-status]');
+                    var clearButton = updatesFeed.querySelector('[data-updates-clear]');
+                    var seen = false;
+                    try {
+                        seen = !!window.localStorage && window.localStorage.getItem(storageKey) === signature;
+                    } catch (_storageError) {
+                        seen = false;
+                    }
+                    var applyUpdatesState = function (allSeen) {
+                        cards.forEach(function (card) {
+                            card.classList.toggle('is-unread', !allSeen);
+                        });
+                        if (status) {
+                            status.textContent = allSeen ? 'All caught up' : String(cards.length) + ' recent changes';
+                        }
+                        if (clearButton) clearButton.hidden = allSeen;
+                    };
+                    applyUpdatesState(seen || !cards.length);
+                    if (clearButton) {
+                        clearButton.addEventListener('click', function () {
+                            try {
+                                if (window.localStorage) window.localStorage.setItem(storageKey, signature);
+                            } catch (_storageError) {
+                                // ignore storage failures
+                            }
+                            applyUpdatesState(true);
+                        });
+                    }
+                }
+
+                // Filter inputs
+                Array.prototype.forEach.call(root.querySelectorAll('[data-filter-input]'), function (input) {
+                    var group = input.dataset.filterInput;
+                    var filterCards = Array.prototype.slice.call(document.querySelectorAll('[data-filter-group="' + group + '"]'));
+                    var filterStatus = document.querySelector('[data-filter-status="' + group + '"]');
+                    var apply = function () {
+                        var query = String(input.value || '').trim().toLowerCase();
+                        var visible = 0;
+                        filterCards.forEach(function (card) {
+                            var haystack = String(card.dataset.filterText || '').toLowerCase();
+                            var show = !query || haystack.indexOf(query) !== -1;
+                            card.hidden = !show;
+                            if (show) visible += 1;
+                        });
+                        if (filterStatus) {
+                            filterStatus.textContent = query ? String(visible) + ' matching results' : String(filterCards.length) + ' total items';
+                        }
+                    };
+                    input.addEventListener('input', apply);
+                    apply();
+                });
+
+                // Chip targets
+                Array.prototype.forEach.call(root.querySelectorAll('[data-chip-target]'), function (chip) {
+                    chip.addEventListener('click', function () {
+                        var target = document.querySelector(chip.dataset.chipTarget || '');
+                        if (!target) return;
+                        target.value = chip.dataset.chipValue || '';
+                        target.dispatchEvent(new Event('input', { bubbles: true }));
+                        target.focus();
+                    });
+                });
+
+                // Video players
+                Array.prototype.forEach.call(root.querySelectorAll('[data-ov-player]'), function (playerRoot) {
+                    var video = playerRoot.querySelector('video');
+                    if (!video) return;
+                    var playToggle = playerRoot.querySelector('[data-player-action="toggle"]');
+                    var muteToggle = playerRoot.querySelector('[data-player-action="mute"]');
+                    var fullscreenToggle = playerRoot.querySelector('[data-player-action="fullscreen"]');
+                    var seek = playerRoot.querySelector('[data-player-seek]');
+                    var volumeInput = playerRoot.querySelector('[data-player-volume]');
+                    var timeEl = playerRoot.querySelector('[data-player-time]');
+                    var statusEl = playerRoot.querySelector('[data-player-status]');
+                    var overlay = playerRoot.querySelector('[data-player-overlay]');
+                    var centerBtn = playerRoot.querySelector('[data-player-center]');
+                    var hintDuration = Number(playerRoot.dataset.durationHint) || 0;
+                    var hideTimer = null;
+                    var centerFlashTimer = null;
+
+                    function setStatus(msg) { if (statusEl) statusEl.textContent = msg; }
+
+                    function effectiveDuration() {
+                        return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : hintDuration;
+                    }
+
+                    function sync() {
+                        var dur = effectiveDuration();
+                        var cur = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+                        var paused = video.paused || video.ended;
+                        if (playToggle) {
+                            playToggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+                            playToggle.innerHTML = paused
+                                ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+                                : '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                        }
+                        if (muteToggle) {
+                            var muted = video.muted || video.volume === 0;
+                            muteToggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+                            muteToggle.innerHTML = muted
+                                ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+                                : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+                        }
+                        if (timeEl) timeEl.textContent = formatPlayerTime(cur) + ' / ' + formatPlayerTime(dur > 0 ? dur : null);
+                        if (seek && seek.dataset.seeking !== 'true') {
+                            seek.disabled = !dur;
+                            seek.value = dur ? String(Math.round((cur / dur) * 1000)) : '0';
+                        }
+                        if (volumeInput && document.activeElement !== volumeInput) {
+                            volumeInput.value = String(video.muted ? 0 : video.volume);
+                        }
+                    }
+
+                    function showOverlay() {
+                        if (overlay) overlay.classList.add('is-visible');
+                        clearTimeout(hideTimer);
+                        if (!video.paused) {
+                            hideTimer = setTimeout(function () {
+                                if (!video.paused && overlay) overlay.classList.remove('is-visible');
+                            }, 3000);
+                        }
+                    }
+
+                    function flashCenterBtn(nowPaused) {
+                        if (!centerBtn) return;
+                        centerBtn.innerHTML = nowPaused
+                            ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+                            : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                        centerBtn.classList.add('is-flash');
+                        clearTimeout(centerFlashTimer);
+                        centerFlashTimer = setTimeout(function () { centerBtn.classList.remove('is-flash'); }, 500);
+                    }
+
+                    video.controls = false;
+                    setStatus('');
                     showOverlay();
-                    if (wasPaused) {
-                        video.play().catch(function () { setStatus('Playback could not start.'); });
-                    } else {
-                        video.pause();
-                    }
-                });
+                    sync();
 
-                document.addEventListener('keydown', function (e) {
-                    if (!document.body.contains(root)) return;
-                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
-                    if (e.key === ' ' || e.key === 'k') {
-                        e.preventDefault();
+                    playerRoot.addEventListener('mousemove', showOverlay);
+                    playerRoot.addEventListener('mouseenter', showOverlay);
+                    playerRoot.addEventListener('mouseleave', function () {
+                        clearTimeout(hideTimer);
+                        if (!video.paused && overlay) overlay.classList.remove('is-visible');
+                    });
+                    playerRoot.addEventListener('touchstart', function (e) {
+                        if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
+                        if (overlay && overlay.classList.contains('is-visible')) {
+                            if (!video.paused) { overlay.classList.remove('is-visible'); clearTimeout(hideTimer); }
+                        } else {
+                            showOverlay();
+                        }
+                    }, { passive: true });
+                    playerRoot.addEventListener('click', function (e) {
+                        if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
                         var wasPaused = video.paused || video.ended;
                         flashCenterBtn(!wasPaused);
                         showOverlay();
-                        if (wasPaused) { video.play().catch(function () {}); } else { video.pause(); }
-                    } else if (e.key === 'f' || e.key === 'F') {
-                        e.preventDefault();
-                        if (document.fullscreenElement) { document.exitFullscreen && document.exitFullscreen(); }
-                        else if (root.requestFullscreen) { root.requestFullscreen(); }
-                    } else if (e.key === 'm' || e.key === 'M') {
-                        e.preventDefault();
-                        video.muted = !video.muted;
-                        if (!video.muted && video.volume === 0) video.volume = 0.7;
-                        showOverlay(); sync();
-                    } else if (e.key === 'ArrowRight') {
-                        e.preventDefault();
-                        var dur = effectiveDuration();
-                        if (dur) { video.currentTime = Math.min(video.currentTime + 5, dur); showOverlay(); sync(); }
-                    } else if (e.key === 'ArrowLeft') {
-                        e.preventDefault();
-                        video.currentTime = Math.max(video.currentTime - 5, 0);
-                        showOverlay(); sync();
-                    }
-                });
-
-                if (playToggle) {
-                    playToggle.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        var wasPaused = video.paused || video.ended;
                         if (wasPaused) {
                             video.play().catch(function () { setStatus('Playback could not start.'); });
                         } else {
                             video.pause();
                         }
-                        showOverlay();
                     });
-                }
 
-                if (muteToggle) {
-                    muteToggle.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        video.muted = !video.muted;
-                        if (!video.muted && video.volume === 0) video.volume = 0.7;
-                        sync(); showOverlay();
-                    });
-                }
-
-                if (fullscreenToggle) {
-                    fullscreenToggle.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        if (document.fullscreenElement) {
-                            document.exitFullscreen && document.exitFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
-                        } else if (root.requestFullscreen) {
-                            root.requestFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
+                    document.addEventListener('keydown', function (e) {
+                        if (!document.body.contains(playerRoot)) return;
+                        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+                        if (e.key === ' ' || e.key === 'k') {
+                            e.preventDefault();
+                            var wasPaused = video.paused || video.ended;
+                            flashCenterBtn(!wasPaused);
+                            showOverlay();
+                            if (wasPaused) { video.play().catch(function () {}); } else { video.pause(); }
+                        } else if (e.key === 'f' || e.key === 'F') {
+                            e.preventDefault();
+                            if (document.fullscreenElement) { document.exitFullscreen && document.exitFullscreen(); }
+                            else if (playerRoot.requestFullscreen) { playerRoot.requestFullscreen(); }
+                        } else if (e.key === 'm' || e.key === 'M') {
+                            e.preventDefault();
+                            video.muted = !video.muted;
+                            if (!video.muted && video.volume === 0) video.volume = 0.7;
+                            showOverlay(); sync();
+                        } else if (e.key === 'ArrowRight') {
+                            e.preventDefault();
+                            var dur = effectiveDuration();
+                            if (dur) { video.currentTime = Math.min(video.currentTime + 5, dur); showOverlay(); sync(); }
+                        } else if (e.key === 'ArrowLeft') {
+                            e.preventDefault();
+                            video.currentTime = Math.max(video.currentTime - 5, 0);
+                            showOverlay(); sync();
                         }
-                        showOverlay();
                     });
-                }
 
-                if (seek) {
-                    seek.addEventListener('input', function (e) {
-                        e.stopPropagation();
-                        seek.dataset.seeking = 'true';
-                        var dur = effectiveDuration();
-                        if (timeEl && dur) {
-                            var nextTime = (Number(seek.value) / 1000) * dur;
-                            timeEl.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(dur);
-                        }
-                        showOverlay();
-                    });
-                    seek.addEventListener('change', function (e) {
-                        e.stopPropagation();
-                        var dur = effectiveDuration();
-                        if (dur) video.currentTime = (Number(seek.value) / 1000) * dur;
-                        delete seek.dataset.seeking;
-                        sync(); showOverlay();
-                    });
-                }
-
-                if (volumeInput) {
-                    volumeInput.addEventListener('input', function (e) {
-                        e.stopPropagation();
-                        var vol = Math.max(0, Math.min(1, Number(volumeInput.value)));
-                        video.volume = vol;
-                        video.muted = vol === 0;
+                    if (playToggle) {
+                        playToggle.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            var wasPaused = video.paused || video.ended;
+                            if (wasPaused) {
+                                video.play().catch(function () { setStatus('Playback could not start.'); });
+                            } else {
+                                video.pause();
+                            }
+                            showOverlay();
+                        });
+                    }
+                    if (muteToggle) {
+                        muteToggle.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            video.muted = !video.muted;
+                            if (!video.muted && video.volume === 0) video.volume = 0.7;
+                            sync(); showOverlay();
+                        });
+                    }
+                    if (fullscreenToggle) {
+                        fullscreenToggle.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            if (document.fullscreenElement) {
+                                document.exitFullscreen && document.exitFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
+                            } else if (playerRoot.requestFullscreen) {
+                                playerRoot.requestFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
+                            }
+                            showOverlay();
+                        });
+                    }
+                    if (seek) {
+                        seek.addEventListener('input', function (e) {
+                            e.stopPropagation();
+                            seek.dataset.seeking = 'true';
+                            var dur = effectiveDuration();
+                            if (timeEl && dur) {
+                                var nextTime = (Number(seek.value) / 1000) * dur;
+                                timeEl.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(dur);
+                            }
+                            showOverlay();
+                        });
+                        seek.addEventListener('change', function (e) {
+                            e.stopPropagation();
+                            var dur = effectiveDuration();
+                            if (dur) video.currentTime = (Number(seek.value) / 1000) * dur;
+                            delete seek.dataset.seeking;
+                            sync(); showOverlay();
+                        });
+                    }
+                    if (volumeInput) {
+                        volumeInput.addEventListener('input', function (e) {
+                            e.stopPropagation();
+                            var vol = Math.max(0, Math.min(1, Number(volumeInput.value)));
+                            video.volume = vol;
+                            video.muted = vol === 0;
+                            sync();
+                        });
+                    }
+                    video.addEventListener('loadedmetadata', sync);
+                    video.addEventListener('durationchange', sync);
+                    video.addEventListener('timeupdate', sync);
+                    video.addEventListener('volumechange', sync);
+                    video.addEventListener('play', function () { setStatus(''); sync(); showOverlay(); });
+                    video.addEventListener('pause', function () { setStatus(video.ended ? 'Playback finished' : ''); sync(); showOverlay(); });
+                    video.addEventListener('waiting', function () { setStatus('Buffering\u2026'); });
+                    video.addEventListener('canplay', function () {
+                        if (statusEl && statusEl.textContent === 'Buffering\u2026') setStatus('');
                         sync();
                     });
-                }
-
-                video.addEventListener('loadedmetadata', sync);
-                video.addEventListener('durationchange', sync);
-                video.addEventListener('timeupdate', sync);
-                video.addEventListener('volumechange', sync);
-                video.addEventListener('play', function () { setStatus(''); sync(); showOverlay(); });
-                video.addEventListener('pause', function () { setStatus(video.ended ? 'Playback finished' : ''); sync(); showOverlay(); });
-                video.addEventListener('waiting', function () { setStatus('Buffering\u2026'); });
-                video.addEventListener('canplay', function () {
-                    if (statusEl && statusEl.textContent === 'Buffering\u2026') setStatus('');
-                    sync();
+                    video.addEventListener('ended', function () { setStatus('Playback finished'); sync(); showOverlay(); });
+                    video.addEventListener('error', function () { setStatus('Could not play this video in your browser.'); });
                 });
-                video.addEventListener('ended', function () { setStatus('Playback finished'); sync(); showOverlay(); });
-                video.addEventListener('error', function () { setStatus('Could not play this video in your browser.'); });
-            });
+
+                // Re-execute embedded page scripts (for pjax navigation)
+                Array.prototype.forEach.call(root.querySelectorAll('script[data-ov-page-script]'), function (s) {
+                    var ns = document.createElement('script');
+                    ns.textContent = s.textContent;
+                    s.parentNode.replaceChild(ns, s);
+                });
+            };
+
+            window.OvInitContent(document.body);
         })();
     </script>`;
 }
@@ -1885,14 +1985,14 @@ function _shellScript() {
 
 function renderNav(activeNav) {
     const items = [
-        { href: '/', label: 'Home', id: 'home', icon: 'network' },
-        { href: '/channels', label: 'Channels', id: 'channels', icon: 'community' },
-        { href: '/vods', label: 'VODs', id: 'vods', icon: 'media' },
-        { href: '/clips', label: 'Clips', id: 'clips', icon: 'live' },
-        { href: '/go-live', label: 'Go Live', id: 'go-live', icon: 'launch' },
-        { href: '/updates', label: 'Updates', id: 'updates', icon: 'content' },
+        { href: '/', label: 'Home', id: 'home', icon: 'network', pjax: true },
+        { href: '/channels', label: 'Channels', id: 'channels', icon: 'community', pjax: true },
+        { href: '/vods', label: 'VODs', id: 'vods', icon: 'media', pjax: true },
+        { href: '/clips', label: 'Clips', id: 'clips', icon: 'live', pjax: true },
+        { href: '/go-live', label: 'Go Live', id: 'go-live', icon: 'launch', pjax: false },
+        { href: '/updates', label: 'Updates', id: 'updates', icon: 'content', pjax: true },
     ];
-    return items.map((item) => `<a class="nav-link ov-icon-label ${item.id === activeNav ? 'active' : ''}" href="${item.href}">${renderIcon(item.icon, { decorative: true })}<span>${escapeHtml(item.label)}</span></a>`).join('');
+    return items.map((item) => `<a class="nav-link ov-icon-label ${item.id === activeNav ? 'active' : ''}" href="${item.href}"${item.pjax ? ' data-ov-pjax' : ''}>${renderIcon(item.icon, { decorative: true })}<span>${escapeHtml(item.label)}</span></a>`).join('');
 }
 
 function renderFooter() {
@@ -1975,13 +2075,13 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             ${extraStyles ? `<style>${extraStyles}</style>` : ''}
             <main class="page-shell">
                 ${bodyHtml}
+                ${extraScripts ? `<script data-ov-page-script="1">${extraScripts}</script>` : ''}
             </main>
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
             <script src="/assets/live-dashboard-local.js?v=20260604-1"></script>
             <script src="/js/realtime.js?v=20260507-1"></script>
             ${_shellScript()}
-            ${extraScripts ? `<script>${extraScripts}</script>` : ''}
         </body>
         </html>`;
 }
@@ -3994,12 +4094,14 @@ function renderGoLivePage({ baseUrl, session }) {
     });
 }
 
-function renderUpdatesPage({ baseUrl }) {
-    const updatesHtml = BUILD_UPDATES.map((item) => `
-        <article class="timeline-card" data-reveal>
+function renderUpdatesPage({ baseUrl, releases }) {
+    const items = (releases && releases.length > 0) ? releases : BUILD_UPDATES;
+    const updatesHtml = items.map((item) => `
+        <article class="timeline-card" data-reveal data-update-id="${escapeHtml(String(item.id || ''))}">
             <div class="eyebrow">${escapeHtml(item.date)}</div>
             <h3 class="card-title">${escapeHtml(item.title)}</h3>
             <p class="card-body">${escapeHtml(item.body)}</p>
+            ${item.url ? `<a class="link-inline" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">View on GitHub →</a>` : ''}
         </article>
     `).join('');
     const pageContent = `
