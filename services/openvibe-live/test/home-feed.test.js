@@ -222,7 +222,7 @@ function request(server, requestPath, host) {
         assert.strictEqual(vodPage.status, 200, 'vod detail route returns 200');
         assert.ok(vodPage.body.includes('archive run'), 'vod detail renders canonical media title');
         assert.ok(vodPage.body.includes('openvibe.media playback'), 'vod detail links to canonical playback');
-        assert.ok(vodPage.body.includes('Playback ready'), 'vod detail treats storage-backed media as playable even when status lags');
+        assert.ok(vodPage.body.includes('ov-player-overlay'), 'vod detail treats storage-backed media as playable even when status lags');
         assert.ok(vodPage.body.includes('data-ov-player'), 'vod detail renders custom player shell');
         assert.ok(vodPage.body.includes('/files/media%3Ahobostreamer-vod%3A7'), 'vod detail uses direct file playback source');
         assert.strictEqual(mediaCounts.get, 1, 'detail route fetches the canonical media object once');

@@ -123,10 +123,10 @@ assert.ok(/Open openre\.stream/.test(signedInGoLiveHtml), 'go-live page links in
 
 const vodHtml = ssr.renderMediaDetailPage({ item: vodCard, channel: ch, baseUrl: config.publicBaseUrl });
 assert.ok(/archive run/.test(vodHtml), 'media detail page renders canonical vod title');
-assert.ok(/Playback ready/.test(vodHtml), 'media detail page renders playback-ready state');
+assert.ok(/ov-player-overlay/.test(vodHtml), 'media detail page renders playback-ready overlay controls');
 assert.ok(/openvibe\.media playback/.test(vodHtml), 'media detail page links to canonical media playback');
 assert.ok(/data-ov-player/.test(vodHtml), 'media detail page renders the custom player shell');
-assert.ok(/Detected type/.test(vodHtml), 'media detail page surfaces detected playback type');
+assert.ok(/data-duration-hint/.test(vodHtml), 'media detail page passes duration hint to player for webm fix');
 
 const homeHtml = ssr.renderHomePage({
     channels: model.listChannels({ limit: 50 }),

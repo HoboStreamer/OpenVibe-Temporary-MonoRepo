@@ -875,7 +875,7 @@
         swatchContainer.querySelectorAll('[data-theme-id]').forEach((swatchBtn) => {
             swatchBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                applyTheme(swatchBtn.dataset.themeId);
+                syncThemePreference(swatchBtn.dataset.themeId);
                 swatchContainer.querySelectorAll('[data-theme-id]').forEach((s) => s.classList.remove('ov-theme-swatch--active'));
                 swatchBtn.classList.add('ov-theme-swatch--active');
                 popup.hidden = true;

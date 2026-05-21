@@ -517,7 +517,6 @@ function _shellStyles() {
         .list-stack,
         .form-grid,
         .hero-aside-stack,
-        .ov-media-player,
         .footer-links.is-column {
             display: grid;
             gap: 1rem;
@@ -667,32 +666,102 @@ function _shellStyles() {
             letter-spacing: 0.12em;
             text-transform: uppercase;
         }
-        .media-stage iframe,
-        .ov-media-player video {
+        .media-stage iframe {
             width: 100%;
             aspect-ratio: 16 / 9;
             border-radius: 20px;
             border: 0;
             background: rgba(5, 9, 22, 0.92);
         }
-        .ov-player-controls {
-            display: grid;
-            gap: 0.75rem;
-            align-items: center;
-            grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+        .ov-media-player {
+            position: relative;
+            overflow: hidden;
+            border-radius: 20px;
+            background: #000;
+            border: none;
+            box-shadow: none;
+            cursor: pointer;
+            user-select: none;
         }
-        .ov-player-range,
-        .ov-player-volume { width: 100%; accent-color: #22d3ee; }
-        .ov-player-volume { min-width: 84px; max-width: 108px; }
-        .ov-player-time { font-size: 0.92rem; color: var(--muted-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .ov-player-status { color: var(--muted); font-size: 0.92rem; min-height: 1.25em; }
+        .ov-media-player video {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            display: block;
+            background: rgba(5, 9, 22, 0.92);
+        }
+        .ov-player-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+        .ov-player-overlay.is-visible { opacity: 1; pointer-events: auto; }
+        .ov-player-center-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(1.1);
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            pointer-events: none;
+        }
+        .ov-player-center-btn.is-flash { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        .ov-player-bar {
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+            padding: 2.5rem 0.85rem 0.7rem;
+        }
+        .ov-player-progress { margin-bottom: 0.55rem; }
+        .ov-player-range { width: 100%; accent-color: #22d3ee; cursor: pointer; display: block; }
+        .ov-player-controls-row { display: flex; align-items: center; gap: 0.4rem; }
+        .ov-player-btn {
+            appearance: none;
+            border: none;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            padding: 0.4rem;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .ov-player-btn:hover { background: rgba(255, 255, 255, 0.15); }
+        .ov-player-btn svg { display: block; pointer-events: none; }
+        .ov-player-time { font-size: 0.8rem; color: rgba(255, 255, 255, 0.9); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 0.2rem; }
+        .ov-player-spacer { flex: 1; }
+        .ov-player-volume-group { display: flex; align-items: center; gap: 0.35rem; }
+        .ov-player-volume { width: 72px; accent-color: #22d3ee; cursor: pointer; }
+        .ov-player-status {
+            position: absolute;
+            top: 0.75rem;
+            left: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.75rem;
+            pointer-events: none;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            min-height: 1em;
+        }
+        @media (max-width: 480px) { .ov-player-volume-group { display: none; } }
         [data-reveal] { opacity: 1; transform: none; }
         [data-reveal].is-visible { opacity: 1; transform: none; }
         @media (max-width: 980px) {
             .hero-grid,
             .split-grid,
-            .footer-grid,
-            .ov-player-controls {
+            .footer-grid {
                 grid-template-columns: 1fr;
             }
             .topbar-inner { flex-wrap: wrap; }
@@ -1085,93 +1154,188 @@ function _shellScript() {
                 var muteToggle = root.querySelector('[data-player-action="mute"]');
                 var fullscreenToggle = root.querySelector('[data-player-action="fullscreen"]');
                 var seek = root.querySelector('[data-player-seek]');
-                var volume = root.querySelector('[data-player-volume]');
-                var time = root.querySelector('[data-player-time]');
-                var status = root.querySelector('[data-player-status]');
+                var volumeInput = root.querySelector('[data-player-volume]');
+                var timeEl = root.querySelector('[data-player-time]');
+                var statusEl = root.querySelector('[data-player-status]');
+                var overlay = root.querySelector('[data-player-overlay]');
+                var centerBtn = root.querySelector('[data-player-center]');
+                var hintDuration = Number(root.dataset.durationHint) || 0;
+                var hideTimer = null;
+                var centerFlashTimer = null;
 
-                var setStatus = function (message) {
-                    if (status) status.textContent = message;
-                };
+                function setStatus(msg) { if (statusEl) statusEl.textContent = msg; }
 
-                var sync = function () {
-                    var duration = Number.isFinite(video.duration) ? video.duration : 0;
-                    var current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-                    if (playToggle) playToggle.textContent = video.paused || video.ended ? 'Play' : 'Pause';
-                    if (muteToggle) muteToggle.textContent = video.muted || video.volume === 0 ? 'Unmute' : 'Mute';
-                    if (time) time.textContent = formatPlayerTime(current) + ' / ' + formatPlayerTime(duration);
+                function effectiveDuration() {
+                    return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : hintDuration;
+                }
+
+                function sync() {
+                    var dur = effectiveDuration();
+                    var cur = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+                    var paused = video.paused || video.ended;
+                    if (playToggle) {
+                        playToggle.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+                        playToggle.innerHTML = paused
+                            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+                            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    }
+                    if (muteToggle) {
+                        var muted = video.muted || video.volume === 0;
+                        muteToggle.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+                        muteToggle.innerHTML = muted
+                            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+                            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+                    }
+                    if (timeEl) timeEl.textContent = formatPlayerTime(cur) + ' / ' + formatPlayerTime(dur > 0 ? dur : null);
                     if (seek && seek.dataset.seeking !== 'true') {
-                        seek.disabled = !duration;
-                        seek.value = duration ? String(Math.round((current / duration) * 1000)) : '0';
+                        seek.disabled = !dur;
+                        seek.value = dur ? String(Math.round((cur / dur) * 1000)) : '0';
                     }
-                    if (volume && document.activeElement !== volume) {
-                        volume.value = String(video.muted ? 0 : video.volume);
+                    if (volumeInput && document.activeElement !== volumeInput) {
+                        volumeInput.value = String(video.muted ? 0 : video.volume);
                     }
-                };
+                }
+
+                function showOverlay() {
+                    if (overlay) overlay.classList.add('is-visible');
+                    clearTimeout(hideTimer);
+                    if (!video.paused) {
+                        hideTimer = setTimeout(function () {
+                            if (!video.paused && overlay) overlay.classList.remove('is-visible');
+                        }, 3000);
+                    }
+                }
+
+                function flashCenterBtn(nowPaused) {
+                    if (!centerBtn) return;
+                    centerBtn.innerHTML = nowPaused
+                        ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+                        : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    centerBtn.classList.add('is-flash');
+                    clearTimeout(centerFlashTimer);
+                    centerFlashTimer = setTimeout(function () { centerBtn.classList.remove('is-flash'); }, 500);
+                }
 
                 video.controls = false;
-                video.preload = 'metadata';
-                setStatus('Ready to play');
+                setStatus('');
+                showOverlay();
                 sync();
 
+                root.addEventListener('mousemove', showOverlay);
+                root.addEventListener('mouseenter', showOverlay);
+                root.addEventListener('mouseleave', function () {
+                    clearTimeout(hideTimer);
+                    if (!video.paused && overlay) overlay.classList.remove('is-visible');
+                });
+                root.addEventListener('touchstart', function (e) {
+                    if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
+                    if (overlay && overlay.classList.contains('is-visible')) {
+                        if (!video.paused) { overlay.classList.remove('is-visible'); clearTimeout(hideTimer); }
+                    } else {
+                        showOverlay();
+                    }
+                }, { passive: true });
+                root.addEventListener('click', function (e) {
+                    if (e.target.closest && (e.target.closest('[data-player-action]') || e.target.closest('[data-player-seek]') || e.target.closest('[data-player-volume]'))) return;
+                    var wasPaused = video.paused || video.ended;
+                    flashCenterBtn(!wasPaused);
+                    showOverlay();
+                    if (wasPaused) {
+                        video.play().catch(function () { setStatus('Playback could not start.'); });
+                    } else {
+                        video.pause();
+                    }
+                });
+
+                document.addEventListener('keydown', function (e) {
+                    if (!document.body.contains(root)) return;
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+                    if (e.key === ' ' || e.key === 'k') {
+                        e.preventDefault();
+                        var wasPaused = video.paused || video.ended;
+                        flashCenterBtn(!wasPaused);
+                        showOverlay();
+                        if (wasPaused) { video.play().catch(function () {}); } else { video.pause(); }
+                    } else if (e.key === 'f' || e.key === 'F') {
+                        e.preventDefault();
+                        if (document.fullscreenElement) { document.exitFullscreen && document.exitFullscreen(); }
+                        else if (root.requestFullscreen) { root.requestFullscreen(); }
+                    } else if (e.key === 'm' || e.key === 'M') {
+                        e.preventDefault();
+                        video.muted = !video.muted;
+                        if (!video.muted && video.volume === 0) video.volume = 0.7;
+                        showOverlay(); sync();
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        var dur = effectiveDuration();
+                        if (dur) { video.currentTime = Math.min(video.currentTime + 5, dur); showOverlay(); sync(); }
+                    } else if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        video.currentTime = Math.max(video.currentTime - 5, 0);
+                        showOverlay(); sync();
+                    }
+                });
+
                 if (playToggle) {
-                    playToggle.addEventListener('click', function () {
-                        var action = video.paused || video.ended ? video.play() : Promise.resolve(video.pause());
-                        Promise.resolve(action).catch(function () {
-                            setStatus('Playback could not start in this browser session.');
-                        }).finally(sync);
+                    playToggle.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        var wasPaused = video.paused || video.ended;
+                        if (wasPaused) {
+                            video.play().catch(function () { setStatus('Playback could not start.'); });
+                        } else {
+                            video.pause();
+                        }
+                        showOverlay();
                     });
                 }
 
                 if (muteToggle) {
-                    muteToggle.addEventListener('click', function () {
+                    muteToggle.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         video.muted = !video.muted;
-                        if (!video.muted && video.volume === 0) {
-                            video.volume = 0.7;
-                        }
-                        sync();
+                        if (!video.muted && video.volume === 0) video.volume = 0.7;
+                        sync(); showOverlay();
                     });
                 }
 
                 if (fullscreenToggle) {
-                    fullscreenToggle.addEventListener('click', function () {
-                        if (document.fullscreenElement && document.exitFullscreen) {
-                            document.exitFullscreen().catch(function () {
-                                setStatus('Fullscreen is not available here.');
-                            });
-                            return;
+                    fullscreenToggle.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        if (document.fullscreenElement) {
+                            document.exitFullscreen && document.exitFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
+                        } else if (root.requestFullscreen) {
+                            root.requestFullscreen().catch(function () { setStatus('Fullscreen unavailable.'); });
                         }
-                        if (root.requestFullscreen) {
-                            root.requestFullscreen().catch(function () {
-                                setStatus('Fullscreen is not available here.');
-                            });
-                        }
+                        showOverlay();
                     });
                 }
 
                 if (seek) {
-                    seek.addEventListener('input', function () {
+                    seek.addEventListener('input', function (e) {
+                        e.stopPropagation();
                         seek.dataset.seeking = 'true';
-                        var duration = Number.isFinite(video.duration) ? video.duration : 0;
-                        if (time && duration) {
-                            var nextTime = (Number(seek.value) / 1000) * duration;
-                            time.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(duration);
+                        var dur = effectiveDuration();
+                        if (timeEl && dur) {
+                            var nextTime = (Number(seek.value) / 1000) * dur;
+                            timeEl.textContent = formatPlayerTime(nextTime) + ' / ' + formatPlayerTime(dur);
                         }
+                        showOverlay();
                     });
-                    seek.addEventListener('change', function () {
-                        var duration = Number.isFinite(video.duration) ? video.duration : 0;
-                        if (duration) {
-                            video.currentTime = (Number(seek.value) / 1000) * duration;
-                        }
+                    seek.addEventListener('change', function (e) {
+                        e.stopPropagation();
+                        var dur = effectiveDuration();
+                        if (dur) video.currentTime = (Number(seek.value) / 1000) * dur;
                         delete seek.dataset.seeking;
-                        sync();
+                        sync(); showOverlay();
                     });
                 }
 
-                if (volume) {
-                    volume.addEventListener('input', function () {
-                        var nextVolume = Math.max(0, Math.min(1, Number(volume.value)));
-                        video.volume = nextVolume;
-                        video.muted = nextVolume === 0;
+                if (volumeInput) {
+                    volumeInput.addEventListener('input', function (e) {
+                        e.stopPropagation();
+                        var vol = Math.max(0, Math.min(1, Number(volumeInput.value)));
+                        video.volume = vol;
+                        video.muted = vol === 0;
                         sync();
                     });
                 }
@@ -1180,16 +1344,15 @@ function _shellScript() {
                 video.addEventListener('durationchange', sync);
                 video.addEventListener('timeupdate', sync);
                 video.addEventListener('volumechange', sync);
-                video.addEventListener('play', function () { setStatus('Playing'); sync(); });
-                video.addEventListener('pause', function () { setStatus(video.ended ? 'Playback finished' : 'Paused'); sync(); });
-                video.addEventListener('waiting', function () { setStatus('Buffering…'); });
+                video.addEventListener('play', function () { setStatus(''); sync(); showOverlay(); });
+                video.addEventListener('pause', function () { setStatus(video.ended ? 'Playback finished' : ''); sync(); showOverlay(); });
+                video.addEventListener('waiting', function () { setStatus('Buffering\u2026'); });
                 video.addEventListener('canplay', function () {
-                    if (video.paused && !video.ended) setStatus('Ready to play');
+                    if (statusEl && statusEl.textContent === 'Buffering\u2026') setStatus('');
+                    sync();
                 });
-                video.addEventListener('ended', function () { setStatus('Playback finished'); sync(); });
-                video.addEventListener('error', function () {
-                    setStatus('Playback error: the bytes exist, but this browser could not open the source.');
-                });
+                video.addEventListener('ended', function () { setStatus('Playback finished'); sync(); showOverlay(); });
+                video.addEventListener('error', function () { setStatus('Could not play this video in your browser.'); });
             });
         })();
     </script>`;
@@ -1317,66 +1480,6 @@ function _shellScript() {
             border-radius: 20px;
             background: rgba(5, 9, 22, 0.8);
         }
-        .ov-media-player {
-            display: grid;
-            gap: 0.85rem;
-            padding: 0.85rem;
-            border-radius: 24px;
-            border: 1px solid rgba(34, 211, 238, 0.16);
-            background:
-                radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 52%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(7, 13, 28, 0.94));
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-        }
-        .ov-media-player video {
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            border-radius: 20px;
-            display: block;
-            background: rgba(5, 9, 22, 0.92);
-        }
-        .ov-player-controls {
-            display: grid;
-            gap: 0.75rem;
-            align-items: center;
-            grid-template-columns: auto auto minmax(0, 1fr) auto auto;
-        }
-        .ov-player-button {
-            appearance: none;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(255, 255, 255, 0.06);
-            color: white;
-            border-radius: 999px;
-            padding: 0.62rem 0.9rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-        }
-        .ov-player-button:hover {
-            transform: translateY(-1px);
-            border-color: rgba(34, 211, 238, 0.32);
-            background: rgba(34, 211, 238, 0.12);
-        }
-        .ov-player-range,
-        .ov-player-volume {
-            width: 100%;
-            accent-color: #22d3ee;
-        }
-        .ov-player-volume {
-            min-width: 84px;
-            max-width: 108px;
-        }
-        .ov-player-time {
-            font-size: 0.92rem;
-            color: var(--muted-strong);
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-        }
-        .ov-player-status {
-            color: var(--muted);
-            font-size: 0.92rem;
-            min-height: 1.25em;
-        }
         [data-reveal] {
             opacity: 1;
             transform: none;
@@ -1427,14 +1530,6 @@ function _shellScript() {
             .button-row {
                 flex-direction: column;
                 align-items: stretch;
-            }
-            .ov-player-controls {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .ov-player-time,
-            .ov-player-range,
-            .ov-player-volume {
-                grid-column: 1 / -1;
             }
             .page-shell {
                 width: min(var(--max-width), calc(100vw - 1.2rem));
@@ -2507,7 +2602,7 @@ function renderMediaDetailPage({ item, channel, moreByCreator, baseUrl }) {
             playbackUrl: item.playback_url,
             posterUrl: ogImage || '',
             mimeType: item.playback_mime_type || item.mime_type || '',
-            statusText: item.playback_note || 'Playback ready',
+            durationSeconds: item.duration_seconds || 0,
         })
         : renderMediaThumb({
             url: item.thumbnail_url || (channel && channel.avatar_url) || null,
@@ -2631,24 +2726,37 @@ function renderMediaDetailPage({ item, channel, moreByCreator, baseUrl }) {
     });
 }
 
-function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, statusText }) {
+function renderCustomMediaPlayer({ title, playbackUrl, posterUrl, mimeType, durationSeconds }) {
     return `
-        <div class="ov-media-player" data-ov-player>
-            <video controls playsinline preload="metadata" poster="${escapeHtml(posterUrl || '')}" aria-label="openvibe.media playback — ${escapeHtml(title || 'media')}">
+        <div class="ov-media-player" data-ov-player data-duration-hint="${escapeHtml(String(durationSeconds || 0))}">
+            <video playsinline preload="metadata" poster="${escapeHtml(posterUrl || '')}" aria-label="openvibe.media playback \u2014 ${escapeHtml(title || 'media')}">
                 <source src="${escapeHtml(playbackUrl || '')}"${mimeType ? ` type="${escapeHtml(mimeType)}"` : ''}>
             </video>
-            <div class="ov-player-controls">
-                <button class="ov-player-button" type="button" data-player-action="toggle">Play</button>
-                <button class="ov-player-button" type="button" data-player-action="mute">Mute</button>
-                <input class="ov-player-range" type="range" min="0" max="1000" step="1" value="0" data-player-seek aria-label="Seek playback position">
-                <div class="ov-player-time" data-player-time>0:00 / --:--</div>
-                <div style="display:flex;gap:0.6rem;align-items:center;justify-content:flex-end;">
-                    <input class="ov-player-volume" type="range" min="0" max="1" step="0.05" value="1" data-player-volume aria-label="Playback volume">
-                    <button class="ov-player-button" type="button" data-player-action="fullscreen">Full screen</button>
+            <div class="ov-player-overlay" data-player-overlay>
+                <div class="ov-player-center-btn" data-player-center aria-hidden="true"></div>
+                <div class="ov-player-bar">
+                    <div class="ov-player-progress">
+                        <input class="ov-player-range" type="range" min="0" max="1000" step="1" value="0" data-player-seek aria-label="Seek playback position">
+                    </div>
+                    <div class="ov-player-controls-row">
+                        <button class="ov-player-btn" type="button" data-player-action="toggle" aria-label="Play">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                        </button>
+                        <button class="ov-player-btn" type="button" data-player-action="mute" aria-label="Mute">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                        </button>
+                        <div class="ov-player-time" data-player-time>0:00 / --:--</div>
+                        <div class="ov-player-spacer"></div>
+                        <div class="ov-player-volume-group">
+                            <input class="ov-player-volume" type="range" min="0" max="1" step="0.05" value="1" data-player-volume aria-label="Volume">
+                        </div>
+                        <button class="ov-player-btn" type="button" data-player-action="fullscreen" aria-label="Full screen">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="ov-player-status" data-player-status role="status" aria-live="polite">${escapeHtml(statusText || 'Playback ready')}</div>
-            ${mimeType ? `<div class="ov-player-meta" aria-hidden="true">Detected type: ${escapeHtml(mimeType)}</div>` : ''}
+            <div class="ov-player-status" data-player-status role="status" aria-live="polite"></div>
         </div>`;
 }
 
