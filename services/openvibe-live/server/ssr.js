@@ -435,6 +435,55 @@ function _shellStyles() {
             font-weight: 700;
             white-space: nowrap;
         }
+        /* ── nav user dropdown ── */
+        .nav-user-menu { position: relative; }
+        .nav-user-btn {
+            display: inline-flex; align-items: center; gap: 0.45rem;
+            min-height: 2.7rem; padding: 0.65rem 0.95rem; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+            color: var(--muted-strong); font-size: 0.86rem; font-weight: 700;
+            white-space: nowrap; cursor: pointer;
+            transition: border-color 0.18s, background 0.18s;
+        }
+        .nav-user-btn:hover, .nav-user-btn.open {
+            border-color: rgba(34,211,238,0.4); background: rgba(34,211,238,0.08); color: #e2e8f0;
+        }
+        .nav-user-btn .nav-chevron { transition: transform 0.2s ease; opacity: 0.6; }
+        .nav-user-btn.open .nav-chevron { transform: rotate(180deg); }
+        .nav-user-dropdown {
+            position: absolute; top: calc(100% + 6px); right: 0; z-index: 300;
+            min-width: 188px; padding: 0.4rem;
+            background: rgba(5,9,22,0.97);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.55);
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            display: none;
+        }
+        .nav-user-dropdown.open { display: block; animation: navDropIn 0.13s ease; }
+        @keyframes navDropIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+        .nav-user-item {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.58rem 0.8rem; border-radius: 9px;
+            color: rgba(255,255,255,0.82); font-size: 0.86rem; font-weight: 600;
+            text-decoration: none; transition: background 0.13s;
+        }
+        .nav-user-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+        .nav-user-item-danger { color: #f87171; }
+        .nav-user-item-danger:hover { background: rgba(239,68,68,0.12); color: #fca5a5; }
+        .nav-user-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 0.3rem 0.5rem; }
+        /* ── sm floating save bar ── */
+        .sm-save-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 250;
+            display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem;
+            padding: 0.85rem 1.5rem;
+            background: rgba(7,11,28,0.97);
+            border-top: 1px solid rgba(139,92,246,0.4);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            transform: translateY(0); opacity: 1;
+            transition: transform 0.22s ease, opacity 0.22s ease;
+        }
+        .sm-save-bar.sm-save-bar-hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+        #sm-save-status { flex: 1; color: var(--muted); font-size: 0.88rem; font-weight: 600; }
         main.page-shell { padding: 1.35rem 0 3rem; }
         section + section { margin-top: 1.2rem; }
         .glass-card,
@@ -1759,7 +1808,7 @@ function renderFooter() {
                     <div>
                         <div class="eyebrow">OpenVibe Live</div>
                         <p class="footer-copy" style="margin-top:0.5rem;">A free, open source streaming platform with no ads, no algorithms, and no bullshit. Just streams, clips, and community.</p>
-                        <p class="footer-copy" style="margin-top:0.75rem;"><a class="link-inline" href="mailto:hello@openvibe.live">hello@openvibe.live</a></p>
+                        <p class="footer-copy" style="margin-top:0.75rem;"><a class="link-inline" href="mailto:contact@openvibe.live">contact@openvibe.live</a></p>
                     </div>
                     <div class="footer-links-grid">
                         <div>
@@ -1834,7 +1883,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             </main>
             ${renderFooter(baseUrl)}
             <script src="/assets/openvibe.js?v=20260503-1"></script>
-            <script src="/assets/live-dashboard-local.js?v=20260504-1"></script>
+            <script src="/assets/live-dashboard-local.js?v=20260604-1"></script>
             <script src="/js/realtime.js?v=20260507-1"></script>
             ${_shellScript()}
             ${extraScripts ? `<script>${extraScripts}</script>` : ''}
@@ -3101,9 +3150,9 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
                                 History
                             </button>
-                            <button class="sm-tab" role="tab" data-sm-stab="broadcast" id="sm-broadcast-tab" style="display:none;">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
-                                Broadcast
+                            <button class="sm-tab" role="tab" data-sm-stab="restream">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/><path d="M3 5v14"/></svg>
+                                Restream
                             </button>
                         </div>
 
@@ -3187,6 +3236,99 @@ function renderGoLivePage({ baseUrl, session }) {
                                         <div class="sm-autodetect-sub">Your stream will go live automatically when your encoder connects. Configure your software using the Endpoint tab, then just start streaming.</div>
                                     </div>
                                 </div>
+
+                                <!-- Inline browser broadcast (shown only when Browser method selected) -->
+                                <div id="sm-inline-broadcast" style="display:none;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,0.08);">
+                                    <div class="sm-broadcast-setup" id="sm-bcast-setup">
+                                        <div class="sm-bcast-preview-wrap">
+                                            <video id="sm-bcast-preview" class="sm-bcast-preview" autoplay muted playsinline></video>
+                                            <div class="sm-bcast-preview-overlay" id="sm-bcast-pip-overlay" style="display:none;">
+                                                <video id="sm-bcast-pip" class="sm-bcast-pip-video" autoplay muted playsinline></video>
+                                            </div>
+                                            <div class="sm-bcast-preview-label" id="sm-bcast-live-badge" style="display:none;">
+                                                <span class="sm-live-dot"></span> LIVE
+                                            </div>
+                                        </div>
+                                        <div class="sm-bcast-controls">
+                                            <div class="sm-field-group">
+                                                <span class="sm-field-label">SOURCE</span>
+                                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                                                    <button type="button" class="sm-btn-ghost sm-bcast-source-btn active" id="sm-bcast-camera-btn" data-source="camera">
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                        Camera
+                                                    </button>
+                                                    <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-btn" data-source="screen">
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                                        Screen
+                                                    </button>
+                                                    <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-pip-btn" data-source="screen+camera">
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="14" y="11" width="7" height="5" rx="1" fill="currentColor" opacity="0.7"/></svg>
+                                                        Screen + Cam
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="sm-field-group" id="sm-bcast-video-group">
+                                                <span class="sm-field-label">CAMERA</span>
+                                                <select class="sm-input sm-select" id="sm-bcast-video-select">
+                                                    <option value="">Default camera</option>
+                                                </select>
+                                            </div>
+                                            <div class="sm-field-group">
+                                                <span class="sm-field-label">MICROPHONE</span>
+                                                <select class="sm-input sm-select" id="sm-bcast-audio-select">
+                                                    <option value="">Default microphone</option>
+                                                </select>
+                                            </div>
+                                            <div class="sm-field-group">
+                                                <span class="sm-field-label">QUALITY</span>
+                                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                                                    <select class="sm-input sm-select" id="sm-bcast-res" style="flex:1;min-width:110px;">
+                                                        <option value="1280x720">720p</option>
+                                                        <option value="1920x1080">1080p</option>
+                                                        <option value="854x480">480p</option>
+                                                        <option value="640x360">360p</option>
+                                                    </select>
+                                                    <select class="sm-input sm-select" id="sm-bcast-fps" style="width:70px;">
+                                                        <option value="30">30fps</option>
+                                                        <option value="60">60fps</option>
+                                                        <option value="24">24fps</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div id="sm-bcast-idle-controls">
+                                                <button class="sm-btn-primary sm-btn-block" type="button" id="sm-bcast-start-btn">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.35rem;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                                    Start Broadcast
+                                                </button>
+                                                <p class="sm-note" style="margin-top:0.5rem;" id="sm-bcast-prereq-note">Create a stream below first, then start broadcasting.</p>
+                                            </div>
+                                            <div id="sm-bcast-live-controls" style="display:none;">
+                                                <div class="sm-bcast-live-status">
+                                                    <span class="sm-live-dot"></span>
+                                                    <span id="sm-bcast-timer">00:00</span>
+                                                    <span class="sm-bcast-viewers" id="sm-bcast-viewers">0 viewers</span>
+                                                </div>
+                                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+                                                    <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-video-btn">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                        Cam On
+                                                    </button>
+                                                    <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-audio-btn">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                                                        Mic On
+                                                    </button>
+                                                    <button type="button" class="sm-btn-ghost sm-icon-btn-danger" id="sm-bcast-end-btn">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                                                        End Broadcast
+                                                    </button>
+                                                </div>
+                                                <span class="sm-status-text" id="sm-bcast-live-status" style="margin-top:0.4rem;display:block;"></span>
+                                            </div>
+                                            <span class="sm-status-text" id="sm-bcast-status"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="sm-form-actions">
                                     <button class="sm-btn-primary" type="submit" id="sm-create-stream-btn">Create stream</button>
                                     <button class="sm-btn-live" type="button" id="sm-go-live-btn" style="display:none;">
@@ -3268,182 +3410,78 @@ function renderGoLivePage({ baseUrl, session }) {
                             </div>
                         </div>
 
-                        <!-- Broadcast tab -->
-                        <div class="sm-stab-content" data-sm-stab-panel="broadcast" style="display:none;" id="sm-broadcast-panel">
-                            <div class="sm-broadcast-setup" id="sm-bcast-setup">
-                                <div class="sm-bcast-preview-wrap">
-                                    <video id="sm-bcast-preview" class="sm-bcast-preview" autoplay muted playsinline></video>
-                                    <div class="sm-bcast-preview-overlay" id="sm-bcast-pip-overlay" style="display:none;">
-                                        <video id="sm-bcast-pip" class="sm-bcast-pip-video" autoplay muted playsinline></video>
-                                    </div>
-                                    <div class="sm-bcast-preview-label" id="sm-bcast-live-badge" style="display:none;">
-                                        <span class="sm-live-dot"></span> LIVE
-                                    </div>
-                                </div>
-
-                                <div class="sm-bcast-controls">
-                                    <div class="sm-field-group">
-                                        <span class="sm-field-label">SOURCE</span>
-                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn active" id="sm-bcast-camera-btn" data-source="camera">
-                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                                                Camera
-                                            </button>
-                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-btn" data-source="screen">
-                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                                                Screen
-                                            </button>
-                                            <button type="button" class="sm-btn-ghost sm-bcast-source-btn" id="sm-bcast-screen-pip-btn" data-source="screen+camera">
-                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="14" y="11" width="7" height="5" rx="1" fill="currentColor" opacity="0.7"/></svg>
-                                                Screen + Cam
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div class="sm-field-group" id="sm-bcast-video-group">
-                                        <span class="sm-field-label">CAMERA</span>
-                                        <select class="sm-input sm-select" id="sm-bcast-video-select">
-                                            <option value="">Default camera</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="sm-field-group">
-                                        <span class="sm-field-label">MICROPHONE</span>
-                                        <select class="sm-input sm-select" id="sm-bcast-audio-select">
-                                            <option value="">Default microphone</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="sm-field-group">
-                                        <span class="sm-field-label">QUALITY</span>
-                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
-                                            <select class="sm-input sm-select" id="sm-bcast-res" style="flex:1;min-width:110px;">
-                                                <option value="1280x720">720p</option>
-                                                <option value="1920x1080">1080p</option>
-                                                <option value="854x480">480p</option>
-                                                <option value="640x360">360p</option>
-                                            </select>
-                                            <select class="sm-input sm-select" id="sm-bcast-fps" style="width:70px;">
-                                                <option value="30">30fps</option>
-                                                <option value="60">60fps</option>
-                                                <option value="24">24fps</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div id="sm-bcast-idle-controls">
-                                        <button class="sm-btn-primary sm-btn-block" type="button" id="sm-bcast-start-btn">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.35rem;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                            Start Broadcast
-                                        </button>
-                                        <p class="sm-note" style="margin-top:0.5rem;" id="sm-bcast-prereq-note">Create a stream on the Stream tab first, then come here to go live from your browser.</p>
-                                    </div>
-
-                                    <div id="sm-bcast-live-controls" style="display:none;">
-                                        <div class="sm-bcast-live-status">
-                                            <span class="sm-live-dot"></span>
-                                            <span id="sm-bcast-timer">00:00</span>
-                                            <span class="sm-bcast-viewers" id="sm-bcast-viewers">0 viewers</span>
-                                        </div>
-                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
-                                            <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-video-btn">
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                                                Cam On
-                                            </button>
-                                            <button type="button" class="sm-btn-ghost" id="sm-bcast-mute-audio-btn">
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                                                Mic On
-                                            </button>
-                                            <button type="button" class="sm-btn-ghost sm-icon-btn-danger" id="sm-bcast-end-btn">
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                                                End Broadcast
-                                            </button>
-                                        </div>
-                                        <span class="sm-status-text" id="sm-bcast-live-status" style="margin-top:0.4rem;display:block;"></span>
-                                    </div>
-                                    <span class="sm-status-text" id="sm-bcast-status"></span>
+                        <!-- Restream tab -->
+                        <div class="sm-stab-content" data-sm-stab-panel="restream" style="display:none;">
+                            <div class="sm-dest-list-full" data-sm-dest-list-full>
+                                <p class="sm-note">Loading destinations…</p>
+                            </div>
+                            <div class="sm-panel-header" style="margin-top:1.5rem;">
+                                <h4 class="sm-panel-title" style="font-size:0.95rem;">Add destination</h4>
+                            </div>
+                            <div class="sm-dest-presets">
+                                <span class="sm-field-label" style="display:block;margin-bottom:0.5rem;">QUICK ADD</span>
+                                <div class="sm-dest-preset-row">
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="kick" data-preset-label="Kick" data-preset-url="rtmp://fa723fc1b171.global-contribute.live-video.net/app/">Kick</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="twitch" data-preset-label="Twitch" data-preset-url="rtmp://live.twitch.tv/app/">Twitch</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="youtube" data-preset-label="YouTube" data-preset-url="rtmp://a.rtmp.youtube.com/live2">YouTube</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="RobotStreamer" data-preset-url="rtmp://stream.robotstreamer.com/live">RobotStreamer</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="" data-preset-url="">Custom RTMP</button>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Destinations sub-panel (shown from dest sidebar click) -->
-                    <div class="sm-dest-panel" data-sm-dest-panel style="display:none;">
-                        <div class="sm-panel-header">
-                            <div>
-                                <div class="sm-panel-eyebrow">Restream</div>
-                                <h3 class="sm-panel-title">Destinations</h3>
-                            </div>
-                        </div>
-                        <div class="sm-dest-list-full" data-sm-dest-list-full>
-                            <p class="sm-note">Loading destinations…</p>
-                        </div>
-                        <div class="sm-panel-header" style="margin-top:1.5rem;">
-                            <h4 class="sm-panel-title" style="font-size:0.95rem;">Add destination</h4>
-                        </div>
-                        <div class="sm-dest-presets">
-                            <span class="sm-field-label" style="display:block;margin-bottom:0.5rem;">QUICK ADD</span>
-                            <div class="sm-dest-preset-row">
-                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="kick" data-preset-label="Kick" data-preset-url="rtmp://fa723fc1b171.global-contribute.live-video.net/app/">Kick</button>
-                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="twitch" data-preset-label="Twitch" data-preset-url="rtmp://live.twitch.tv/app/">Twitch</button>
-                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="youtube" data-preset-label="YouTube" data-preset-url="rtmp://a.rtmp.youtube.com/live2">YouTube</button>
-                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="RobotStreamer" data-preset-url="rtmp://stream.robotstreamer.com/live">RobotStreamer</button>
-                                <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="" data-preset-url="">Custom RTMP</button>
-                            </div>
-                        </div>
-                        <form class="sm-form" id="sm-dest-form" style="margin-top:0.75rem;">
-                            <div class="sm-field-group">
-                                <span class="sm-field-label">KIND</span>
-                                <select class="sm-input sm-select" name="kind">
-                                    <option value="custom">Custom RTMP</option>
-                                    <option value="youtube">YouTube</option>
-                                    <option value="twitch">Twitch</option>
-                                    <option value="kick">Kick</option>
-                                    <option value="facebook">Facebook</option>
-                                    <option value="robotstreamer">RobotStreamer</option>
-                                </select>
-                            </div>
-                            <label class="sm-field-group">
-                                <span class="sm-field-label">LABEL</span>
-                                <input class="sm-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off" required>
-                            </label>
-                            <label class="sm-field-group">
-                                <span class="sm-field-label">TARGET URL</span>
-                                <input class="sm-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off" required>
-                            </label>
-                            <label class="sm-field-group">
-                                <span class="sm-field-label">STREAM KEY</span>
-                                <input class="sm-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
-                            </label>
-                            <div class="sm-field-group">
-                                <span class="sm-field-label">OUTPUT QUALITY <span class="sm-field-optional">(optional)</span></span>
-                                <div style="display:flex;gap:0.5rem;">
-                                    <select class="sm-input sm-select" name="dest_resolution" style="flex:1;">
-                                        <option value="">Default resolution</option>
-                                        <option value="1080p">1080p</option>
-                                        <option value="720p">720p</option>
-                                        <option value="480p">480p</option>
-                                        <option value="360p">360p</option>
-                                    </select>
-                                    <select class="sm-input sm-select" name="dest_bitrate" style="flex:1;">
-                                        <option value="">Default bitrate</option>
-                                        <option value="6000">6000 kbps</option>
-                                        <option value="4000">4000 kbps</option>
-                                        <option value="2500">2500 kbps</option>
-                                        <option value="1500">1500 kbps</option>
-                                        <option value="800">800 kbps</option>
+                            <form class="sm-form" id="sm-dest-form" style="margin-top:0.75rem;">
+                                <div class="sm-field-group">
+                                    <span class="sm-field-label">KIND</span>
+                                    <select class="sm-input sm-select" name="kind">
+                                        <option value="custom">Custom RTMP</option>
+                                        <option value="youtube">YouTube</option>
+                                        <option value="twitch">Twitch</option>
+                                        <option value="kick">Kick</option>
+                                        <option value="facebook">Facebook</option>
+                                        <option value="robotstreamer">RobotStreamer</option>
                                     </select>
                                 </div>
-                            </div>
-                            <label class="sm-checkbox-row">
-                                <input type="checkbox" name="enabled" value="1" checked>
-                                <span>Enabled</span>
-                            </label>
-                            <div class="sm-form-actions">
-                                <button class="sm-btn-primary" type="submit">Save destination</button>
-                                <span class="sm-status-text" data-sm-status="dest-form"></span>
-                            </div>
-                        </form>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">LABEL</span>
+                                    <input class="sm-input" type="text" name="label" placeholder="Main multistream target" autocomplete="off" required>
+                                </label>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">TARGET URL</span>
+                                    <input class="sm-input" type="url" name="target_url" placeholder="rtmp://example.com/live" autocomplete="off" required>
+                                </label>
+                                <label class="sm-field-group">
+                                    <span class="sm-field-label">STREAM KEY</span>
+                                    <input class="sm-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
+                                </label>
+                                <div class="sm-field-group">
+                                    <span class="sm-field-label">OUTPUT QUALITY <span class="sm-field-optional">(optional)</span></span>
+                                    <div style="display:flex;gap:0.5rem;">
+                                        <select class="sm-input sm-select" name="dest_resolution" style="flex:1;">
+                                            <option value="">Default resolution</option>
+                                            <option value="1080p">1080p</option>
+                                            <option value="720p">720p</option>
+                                            <option value="480p">480p</option>
+                                            <option value="360p">360p</option>
+                                        </select>
+                                        <select class="sm-input sm-select" name="dest_bitrate" style="flex:1;">
+                                            <option value="">Default bitrate</option>
+                                            <option value="6000">6000 kbps</option>
+                                            <option value="4000">4000 kbps</option>
+                                            <option value="2500">2500 kbps</option>
+                                            <option value="1500">1500 kbps</option>
+                                            <option value="800">800 kbps</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <label class="sm-checkbox-row">
+                                    <input type="checkbox" name="enabled" value="1" checked>
+                                    <span>Enabled</span>
+                                </label>
+                                <div class="sm-form-actions">
+                                    <button class="sm-btn-primary" type="submit">Save destination</button>
+                                    <span class="sm-status-text" data-sm-status="dest-form"></span>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3498,7 +3536,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260521-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260604-1"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */

@@ -1,5 +1,5 @@
 /**
- * stream-manager.js — go-live page client v=20260603-1
+ * stream-manager.js — go-live page client v=20260604-1
  *
  * Two-panel stream manager: sidebar channel slots + right editor panel.
  * Includes browser broadcast via WHIP (WebRTC-HTTP Ingestion Protocol).
@@ -74,7 +74,73 @@
         activeStreamId: null,
         activeView: 'none',
         activeProtocol: 'whip',
+        settingsDirty: false,
     };
+
+    // ── floating save bar ────────────────────────────────────────────────────
+    function ensureSaveBar() {
+        if (el('#sm-save-bar')) return;
+        var bar = document.createElement('div');
+        bar.id = 'sm-save-bar';
+        bar.className = 'sm-save-bar sm-save-bar-hidden';
+        bar.innerHTML =
+            '<span id="sm-save-status">Unsaved changes</span>' +
+            '<button class="sm-btn-ghost" id="sm-save-discard-btn" type="button">Discard</button>' +
+            '<button class="sm-btn-primary" id="sm-save-btn" type="button">Save changes</button>';
+        document.body.appendChild(bar);
+        el('#sm-save-btn').addEventListener('click', saveChannelSettings);
+        el('#sm-save-discard-btn').addEventListener('click', discardSettings);
+    }
+    function markSettingsDirty() {
+        state.settingsDirty = true;
+        ensureSaveBar();
+        var bar = el('#sm-save-bar');
+        if (bar) bar.classList.remove('sm-save-bar-hidden');
+        var s = el('#sm-save-status'); if (s) s.textContent = 'Unsaved changes';
+    }
+    function clearSmDirty() {
+        state.settingsDirty = false;
+        var bar = el('#sm-save-bar');
+        if (bar) bar.classList.add('sm-save-bar-hidden');
+    }
+    function saveChannelSettings() {
+        var slug = state.activeChannelSlug;
+        var sf = el('#sm-settings-form');
+        if (!slug || !sf) return;
+        var saveBtn = el('#sm-save-btn');
+        var staticBtn = sf.querySelector('[type="submit"]');
+        if (saveBtn) saveBtn.disabled = true;
+        if (staticBtn) staticBtn.disabled = true;
+        var s = el('#sm-save-status'); if (s) s.textContent = 'Saving…';
+        clearStatus('settings-form');
+        var fd = new FormData(sf);
+        api('PATCH', '/api/v1/go-live/channels/' + encodeURIComponent(slug), {
+            display_name: fd.get('display_name'), description: fd.get('description'),
+            visibility: fd.get('visibility'), nsfw: fd.get('nsfw') === '1',
+            recording_enabled: fd.get('recording_enabled') === '1',
+            chat_enabled: fd.get('chat_enabled') === '1',
+        }).then(function (res) {
+            var ch = res.channel || res;
+            if (ch && ch.slug) {
+                var idx = state.channels.findIndex(function (c) { return c.slug === ch.slug; });
+                if (idx >= 0) state.channels[idx] = Object.assign({}, state.channels[idx], ch);
+                renderSlots();
+            }
+            clearSmDirty();
+            setStatus('settings-form', 'Saved!');
+            if (s) { s.textContent = 'Saved!'; setTimeout(function () { if (!state.settingsDirty && s) s.textContent = 'Unsaved changes'; }, 1500); }
+        }).catch(function (err) {
+            setStatus('settings-form', err.message, true);
+            if (s) s.textContent = 'Error: ' + err.message;
+        }).finally(function () {
+            if (saveBtn) saveBtn.disabled = false;
+            if (staticBtn) staticBtn.disabled = false;
+        });
+    }
+    function discardSettings() {
+        clearSmDirty();
+        if (state.activeChannelSlug) openChannel(state.activeChannelSlug);
+    }
 
     // ── views ────────────────────────────────────────────────────────────────
     function showView(view) {
@@ -82,11 +148,9 @@
         hide(el('[data-sm-no-slot]'));
         hide(el('[data-sm-slot-editor]'));
         hide(el('[data-sm-new-channel]'));
-        hide(el('[data-sm-dest-panel]'));
-        if (view === 'none')              show(el('[data-sm-no-slot]'));
-        else if (view === 'slot')         show(el('[data-sm-slot-editor]'));
-        else if (view === 'new-channel')  show(el('[data-sm-new-channel]'));
-        else if (view === 'destinations') show(el('[data-sm-dest-panel]'));
+        if (view === 'none')             show(el('[data-sm-no-slot]'));
+        else if (view === 'slot')        show(el('[data-sm-slot-editor]'));
+        else if (view === 'new-channel') show(el('[data-sm-new-channel]'));
     }
 
     // ── sidebar slot list ─────────────────────────────────────────────────────
@@ -191,9 +255,22 @@
         renderEndpoint(liveStream || chStreams[0] || null, ch);
         updateStreamButtons(liveStream);
 
-        // Sync broadcast tab visibility
-        var bcastTab = el('#sm-broadcast-tab');
-        if (bcastTab) bcastTab.style.display = state.activeProtocol === 'browser' ? '' : 'none';
+        // Sync inline broadcast visibility
+        var inlineBcast = el('#sm-inline-broadcast');
+        if (inlineBcast) inlineBcast.style.display = state.activeProtocol === 'browser' ? '' : 'none';
+
+        // Wire settings form fields to dirty tracker (once per channel load)
+        clearSmDirty();
+        var sForm = el('#sm-settings-form');
+        if (sForm) {
+            sForm.querySelectorAll('input, textarea, select').forEach(function (inp) {
+                inp.removeEventListener('change', markSettingsDirty);
+                inp.removeEventListener('input', markSettingsDirty);
+                if (inp.type === 'hidden' || inp.name === 'stream_key_display') return;
+                var ev = (inp.type === 'checkbox' || inp.tagName === 'SELECT') ? 'change' : 'input';
+                inp.addEventListener(ev, markSettingsDirty);
+            });
+        }
 
         showView('slot');
         activateStab('stream');
@@ -236,18 +313,12 @@
         if (autoBox) {
             autoBox.style.display = (m === 'whip' || m === 'rtmp' || m === 'cli') ? '' : 'none';
         }
-        // Show broadcast tab only when browser method is selected
-        var bcastTab = el('#sm-broadcast-tab');
-        if (bcastTab) bcastTab.style.display = m === 'browser' ? '' : 'none';
+        // Show inline broadcast when browser method selected
+        var inlineBcast = el('#sm-inline-broadcast');
+        if (inlineBcast) inlineBcast.style.display = m === 'browser' ? '' : 'none';
         if (m === 'browser') {
-            activateStab('broadcast');
             bcast.updatePrereqNote();
-        } else {
-            // If broadcast tab was active, switch to stream tab
-            var activeTabBtn = el('[data-sm-stab-bar] [data-sm-stab].active');
-            if (activeTabBtn && activeTabBtn.getAttribute('data-sm-stab') === 'broadcast') {
-                activateStab('stream');
-            }
+            if (inlineBcast) bcast.enumerateDevices();
         }
         // Refresh endpoint panel if we have an active channel
         if (state.activeChannelSlug) {
@@ -401,7 +472,14 @@
 
         var destItem = e.target.closest('[data-dest-item]');
         if (destItem) {
-            state.activeChannelSlug = null; renderSlots(); renderDestFull(); showView('destinations'); return;
+            renderDestFull();
+            if (state.activeChannelSlug) {
+                activateStab('restream');
+            } else if (state.channels.length) {
+                openChannel(state.channels[0].slug);
+                activateStab('restream');
+            }
+            return;
         }
 
         var btn = e.target.closest('[data-sm-action]');
@@ -511,25 +589,7 @@
     if (settingsForm) {
         settingsForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var fd = new FormData(settingsForm);
-            var slug = fd.get('slug') || state.activeChannelSlug;
-            if (!slug) return;
-            var btn3 = settingsForm.querySelector('[type="submit"]');
-            if (btn3) btn3.disabled = true; clearStatus('settings-form');
-            api('PATCH', '/api/v1/go-live/channels/' + encodeURIComponent(slug), {
-                display_name: fd.get('display_name'), description: fd.get('description'),
-                visibility: fd.get('visibility'), nsfw: fd.get('nsfw') === '1',
-                recording_enabled: fd.get('recording_enabled') === '1',
-                chat_enabled: fd.get('chat_enabled') === '1',
-            }).then(function (res) {
-                var ch = res.channel || res;
-                if (ch && ch.slug) {
-                    var idx = state.channels.findIndex(function (c) { return c.slug === ch.slug; });
-                    if (idx >= 0) state.channels[idx] = Object.assign({}, state.channels[idx], ch);
-                    renderSlots(); setStatus('settings-form', 'Saved!');
-                }
-            }).catch(function (err) { setStatus('settings-form', err.message, true); })
-              .finally(function () { if (btn3) btn3.disabled = false; });
+            saveChannelSettings();
         });
     }
 
@@ -1051,23 +1111,7 @@
             });
         }
 
-        // Init: enumerate devices when broadcast tab is first shown
-        var stabBar2 = el('[data-sm-stab-bar]');
-        if (stabBar2) {
-            stabBar2.addEventListener('click', function (e) {
-                var btn = e.target.closest('[data-sm-stab]');
-                if (btn && btn.getAttribute('data-sm-stab') === 'broadcast') {
-                    enumerateDevices();
-                    updatePrereqNote();
-                    // Start camera preview
-                    if (!localStream && !screenStream) {
-                        acquireMedia('camera').catch(function () {});
-                    }
-                }
-            });
-        }
-
-        return { updatePrereqNote: updatePrereqNote, stopBroadcast: stopBroadcast };
+        return { updatePrereqNote: updatePrereqNote, stopBroadcast: stopBroadcast, enumerateDevices: enumerateDevices };
     })();
 
     // ── boot ──────────────────────────────────────────────────────────────────

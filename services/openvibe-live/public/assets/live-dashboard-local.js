@@ -195,10 +195,47 @@
         if (!mount) return;
         const identity = state && state.identity;
         if (identity && state.session && state.session.authenticated && !identity.anonymous) {
-            mount.innerHTML = '<span class="nav-session-status">@' + escapeInlineHtml(identity.handle || identity.displayName || 'you') + '</span>'
-                + '<a class="button-ghost" href="' + escapeInlineHtml(resolveSurfaceUrl('my')) + '">Account</a>'
-                + '<a class="button-ghost" href="' + escapeInlineHtml(switchAccountHref()) + '">Switch</a>'
-                + '<a class="button-secondary" href="' + escapeInlineHtml(signOutHref()) + '">Sign out</a>';
+            const handle = escapeInlineHtml(identity.handle || identity.displayName || 'you');
+            mount.innerHTML =
+                '<div class="nav-user-menu" id="live-nav-user-menu">' +
+                    '<button class="nav-user-btn" id="live-nav-user-btn" type="button" aria-expanded="false" aria-haspopup="true">' +
+                        '@' + handle +
+                        '<svg class="nav-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+                    '</button>' +
+                    '<div class="nav-user-dropdown" id="live-nav-dropdown" role="menu">' +
+                        '<a class="nav-user-item" href="' + escapeInlineHtml(resolveSurfaceUrl('my')) + '" role="menuitem">' +
+                            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
+                            'Account' +
+                        '</a>' +
+                        '<a class="nav-user-item" href="' + escapeInlineHtml(switchAccountHref()) + '" role="menuitem">' +
+                            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>' +
+                            'Switch account' +
+                        '</a>' +
+                        '<div class="nav-user-divider" role="separator"></div>' +
+                        '<a class="nav-user-item nav-user-item-danger" href="' + escapeInlineHtml(signOutHref()) + '" role="menuitem">' +
+                            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>' +
+                            'Sign out' +
+                        '</a>' +
+                    '</div>' +
+                '</div>';
+            // Wire dropdown toggle
+            const btn = document.getElementById('live-nav-user-btn');
+            const menu = document.getElementById('live-nav-dropdown');
+            if (btn && menu) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const open = menu.classList.toggle('open');
+                    btn.classList.toggle('open', open);
+                    btn.setAttribute('aria-expanded', String(open));
+                });
+                document.addEventListener('click', function closeNav(e) {
+                    if (!e.target.closest('#live-nav-user-menu')) {
+                        menu.classList.remove('open');
+                        btn.classList.remove('open');
+                        btn.setAttribute('aria-expanded', 'false');
+                    }
+                }, { capture: false });
+            }
             return;
         }
         if (identity && identity.anonymous) {
