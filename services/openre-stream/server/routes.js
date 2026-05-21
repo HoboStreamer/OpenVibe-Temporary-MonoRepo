@@ -46,7 +46,16 @@ function buildRouter({ eventBus, config, buildSessionResponse }) {
         const ch = model.upsertChannel(b);
         res.status(201).json({ channel: ch });
     });
-    r.get('/channels', (req, res) => res.json({ items: model.listChannels({ owner_user_id: req.query.owner_user_id, limit: req.query.limit }) }));
+    r.get('/channels', (req, res) => {
+        const items = model.listChannels({ owner_user_id: req.query.owner_user_id, limit: req.query.limit });
+        const rtmpBase = (config.ingest && config.ingest.rtmp) || '';
+        const whipBase = (config.ingest && config.ingest.whip) || '';
+        res.json({ items: items.map(c => Object.assign({}, c, {
+            stream_key: (c.metadata && c.metadata.stream_key) || '',
+            rtmp_url: rtmpBase,
+            whip_url: whipBase ? whipBase.replace(/\/$/, '') + '/' + c.slug : '',
+        })) });
+    });
     r.get('/channels/:slug', (req, res) => {        const ch = model.getChannelBySlug(req.params.slug);
         if (!ch) return res.status(404).json({ error: 'not found' });
         res.json({ channel: ch });

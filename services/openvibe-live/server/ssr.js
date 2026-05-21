@@ -3529,11 +3529,11 @@ function renderGoLivePage({ baseUrl, session }) {
                             <div class="sm-dest-presets">
                                 <span class="sm-field-label" style="display:block;margin-bottom:0.5rem;">QUICK ADD</span>
                                 <div class="sm-dest-preset-row">
-                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="kick" data-preset-label="Kick" data-preset-url="rtmp://fa723fc1b171.global-contribute.live-video.net/app/">Kick</button>
-                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="twitch" data-preset-label="Twitch" data-preset-url="rtmp://live.twitch.tv/app/">Twitch</button>
-                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="youtube" data-preset-label="YouTube" data-preset-url="rtmp://a.rtmp.youtube.com/live2">YouTube</button>
-                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="RobotStreamer" data-preset-url="rtmp://stream.robotstreamer.com/live">RobotStreamer</button>
-                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="" data-preset-url="">Custom RTMP</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="kick" data-preset-label="Kick" data-preset-url="rtmp://fa723fc1b171.global-contribute.live-video.net/app/" data-preset-key-hint="Get your stream key at kick.com → Dashboard → Stream Settings">Kick</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="twitch" data-preset-label="Twitch" data-preset-url="rtmp://live.twitch.tv/app/" data-preset-key-hint="Get your stream key at twitch.tv/dashboard → Settings → Stream">Twitch</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="youtube" data-preset-label="YouTube" data-preset-url="rtmp://a.rtmp.youtube.com/live2" data-preset-key-hint="Get your stream key at studio.youtube.com → Go Live → Stream tab → Copy stream key">YouTube</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="RobotStreamer" data-preset-url="rtmp://stream.robotstreamer.com/live" data-preset-key-hint="Use your RobotStreamer channel ID as the stream key">RobotStreamer</button>
+                                    <button type="button" class="sm-dest-preset-btn" data-preset-kind="custom" data-preset-label="" data-preset-url="" data-preset-key-hint="">Custom RTMP</button>
                                 </div>
                             </div>
                             <form class="sm-form" id="sm-dest-form" style="margin-top:0.75rem;">
@@ -3559,6 +3559,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <label class="sm-field-group">
                                     <span class="sm-field-label">STREAM KEY</span>
                                     <input class="sm-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
+                                    <div class="sm-note" id="sm-dest-key-hint" style="display:none;margin-top:0.35rem;"></div>
                                 </label>
                                 <div class="sm-field-group">
                                     <span class="sm-field-label">OUTPUT QUALITY <span class="sm-field-optional">(optional)</span></span>
@@ -3644,7 +3645,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260604-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260605-1"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */

@@ -357,9 +357,15 @@
         var panel = el('[data-sm-endpoint-panel]');
         if (!panel) return;
         var proto = (stream && stream.protocol) || state.activeProtocol || 'rtmp';
-        var streamKey = (stream && (stream.stream_key || stream.key)) || (channel && channel.stream_key) || '';
-        var rtmpUrl   = (stream && stream.rtmp_url) || (state.restreamUrl && channel ? state.restreamUrl.replace(/\/$/, '') + '/live' : '');
-        var whipUrl   = (stream && stream.whip_url) || '';
+        var streamKey = (stream && (stream.stream_key || stream.key))
+            || (channel && channel.stream_key)
+            || (channel && channel.metadata && channel.metadata.stream_key) || '';
+        var rtmpUrl   = (stream && stream.rtmp_url)
+            || (channel && channel.rtmp_url)
+            || (state.restreamUrl && channel ? state.restreamUrl.replace(/\/$/, '') + '/live' : '');
+        var whipUrl   = (stream && stream.whip_url)
+            || (channel && channel.whip_url)
+            || (state.restreamUrl && channel ? state.restreamUrl.replace(/\/$/, '') + '/whip/' + channel.slug : '');
 
         function row(label, value) {
             if (!value) return '';
@@ -385,10 +391,14 @@
         }
 
         if (proto === 'whip') {
+            var sessionNote = !stream
+                ? '<p class="sm-note" style="margin-top:0.75rem;color:#fbbf24;">No active stream session — go to the Stream tab to create one before broadcasting.</p>'
+                : '';
             panel.innerHTML =
                 row('WHIP ENDPOINT', whipUrl) +
                 row('STREAM KEY', streamKey) +
-                '<p class="sm-note" style="margin-top:0.75rem;">Paste the WHIP endpoint into OBS 30+ → Settings → Stream → Service: WHIP. Use the stream key as the bearer token.</p>';
+                sessionNote +
+                '<p class="sm-note" style="margin-top:0.5rem;">In OBS 30+: Settings → Stream → Service: WHIP → paste the endpoint URL. Use the stream key as the bearer token.</p>';
         } else if (proto === 'cli') {
             panel.innerHTML =
                 row('RTMP SERVER URL', rtmpUrl) +
@@ -669,7 +679,7 @@
     var destForm = el('#sm-dest-form');
     if (destForm) {
         // Preset quick-add buttons pre-fill the form fields
-        var presetContainer = destForm.closest('[data-sm-dest-panel]');
+        var presetContainer = destForm.closest('[data-sm-stab-panel]');
         if (presetContainer) {
             presetContainer.addEventListener('click', function (e) {
                 var btn = e.target.closest('.sm-dest-preset-btn');
@@ -685,6 +695,10 @@
                 if (labelInput) labelInput.value = label;
                 if (urlInput) urlInput.value = url;
                 if (keyInput) { keyInput.value = ''; keyInput.focus(); }
+                var hintEl = document.getElementById('sm-dest-key-hint');
+                var hintText = btn.getAttribute('data-preset-key-hint') || '';
+                if (hintEl) { hintEl.textContent = hintText; hintEl.style.display = hintText ? '' : 'none'; }
+                destForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
         }
         destForm.addEventListener('submit', function (e) {
