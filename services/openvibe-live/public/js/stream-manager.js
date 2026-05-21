@@ -8,7 +8,7 @@
 (function () {
     'use strict';
 
-    if (!document.querySelector('[data-go-live-session]')) return;
+    if (!document.querySelector('[data-stream-manager]')) return;
 
     // ── helpers ──────────────────────────────────────────────────────────────
     function esc(str) {

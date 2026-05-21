@@ -3003,7 +3003,7 @@ function renderGoLivePage({ baseUrl, session }) {
                 </div>
             </div>
 
-            <div class="sm-layout" data-go-live-session>
+            <div class="sm-layout" data-stream-manager>
                 <!-- LEFT SIDEBAR: stream slot list -->
                 <aside class="sm-sidebar">
                     <div class="sm-sidebar-head">
@@ -3044,7 +3044,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                         </div>
-                        <form class="sm-form" id="go-live-channel-form">
+                        <form class="sm-form" id="sm-new-channel-form">
                             <label class="sm-field-group">
                                 <span class="sm-field-label">HANDLE</span>
                                 <input class="sm-input" type="text" name="slug" placeholder="your-handle" autocomplete="off" required>
