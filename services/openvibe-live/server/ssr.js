@@ -3101,7 +3101,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
                                 History
                             </button>
-                            <button class="sm-tab" role="tab" data-sm-stab="broadcast" id="sm-broadcast-tab">
+                            <button class="sm-tab" role="tab" data-sm-stab="broadcast" id="sm-broadcast-tab" style="display:none;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
                                 Broadcast
                             </button>
@@ -3143,7 +3143,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                     <span class="sm-field-label">URL SLUG <span class="sm-field-optional">(optional)</span></span>
                                     <div class="sm-slug-row">
                                         <span class="sm-slug-prefix" data-sm-slug-prefix>openvibe.live/@…/</span>
-                                        <input class="sm-input sm-slug-input" type="text" name="url_slug" placeholder="stream-title">
+                                        <input class="sm-input sm-slug-input" type="text" name="url_slug" placeholder="e.g. tuesday-session">
                                     </div>
                                 </div>
                                 <div class="sm-field-group">
@@ -3415,6 +3415,26 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <span class="sm-field-label">STREAM KEY</span>
                                 <input class="sm-input" type="text" name="target_key" placeholder="Destination stream key" autocomplete="off">
                             </label>
+                            <div class="sm-field-group">
+                                <span class="sm-field-label">OUTPUT QUALITY <span class="sm-field-optional">(optional)</span></span>
+                                <div style="display:flex;gap:0.5rem;">
+                                    <select class="sm-input sm-select" name="dest_resolution" style="flex:1;">
+                                        <option value="">Default resolution</option>
+                                        <option value="1080p">1080p</option>
+                                        <option value="720p">720p</option>
+                                        <option value="480p">480p</option>
+                                        <option value="360p">360p</option>
+                                    </select>
+                                    <select class="sm-input sm-select" name="dest_bitrate" style="flex:1;">
+                                        <option value="">Default bitrate</option>
+                                        <option value="6000">6000 kbps</option>
+                                        <option value="4000">4000 kbps</option>
+                                        <option value="2500">2500 kbps</option>
+                                        <option value="1500">1500 kbps</option>
+                                        <option value="800">800 kbps</option>
+                                    </select>
+                                </div>
+                            </div>
                             <label class="sm-checkbox-row">
                                 <input type="checkbox" name="enabled" value="1" checked>
                                 <span>Enabled</span>
@@ -3478,7 +3498,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260520-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260521-1"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */

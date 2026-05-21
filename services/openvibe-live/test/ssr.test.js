@@ -118,7 +118,7 @@ const signedInGoLiveHtml = ssr.renderGoLivePage({
     },
 });
 assert.ok(/Your stream manager/.test(signedInGoLiveHtml), 'go-live page renders the creator dashboard section for signed-in users');
-assert.ok(/id="go-live-channel-form"/.test(signedInGoLiveHtml), 'go-live page renders channel creation controls for signed-in users');
+assert.ok(/id="sm-new-channel-form"/.test(signedInGoLiveHtml), 'go-live page renders channel creation controls for signed-in users');
 assert.ok(/Open openre\.stream/.test(signedInGoLiveHtml), 'go-live page links into openre.stream');
 
 const vodHtml = ssr.renderMediaDetailPage({ item: vodCard, channel: ch, baseUrl: config.publicBaseUrl });

@@ -554,6 +554,7 @@ function buildApp() {
             label: String(req.body && req.body.label || '').trim() || null,
             target_url: String(req.body && req.body.target_url || '').trim(),
             target_key: String(req.body && req.body.target_key || '').trim() || null,
+            metadata: (req.body && req.body.metadata && typeof req.body.metadata === 'object') ? req.body.metadata : undefined,
         };
         if (!payload.target_url) return res.status(400).json({ error: 'target_url required' });
         try {

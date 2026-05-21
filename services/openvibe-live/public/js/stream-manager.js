@@ -73,6 +73,7 @@
         activeChannelSlug: null,
         activeStreamId: null,
         activeView: 'none',
+        activeProtocol: 'whip',
     };
 
     // ── views ────────────────────────────────────────────────────────────────
@@ -173,8 +174,26 @@
 
         var chStreams = state.streams.filter(function (s) { return s.channel_slug === slug; });
         var liveStream = chStreams.filter(function (s) { return s.is_live; })[0] || null;
+        // Set activeProtocol from the current/latest stream's protocol if available
+        var currentStreamProto = (liveStream || chStreams[0] || null);
+        if (currentStreamProto && currentStreamProto.protocol) {
+            state.activeProtocol = currentStreamProto.protocol;
+            // Reflect method card selection
+            var form = el('#sm-stream-form');
+            if (form) {
+                els('[data-method]').forEach(function (c) { c.classList.remove('active'); });
+                var matchCard = el('[data-method="' + currentStreamProto.protocol + '"]');
+                if (matchCard) matchCard.classList.add('active');
+                var methodInput = form.querySelector('[name="protocol"]');
+                if (methodInput) methodInput.value = currentStreamProto.protocol;
+            }
+        }
         renderEndpoint(liveStream || chStreams[0] || null, ch);
         updateStreamButtons(liveStream);
+
+        // Sync broadcast tab visibility
+        var bcastTab = el('#sm-broadcast-tab');
+        if (bcastTab) bcastTab.style.display = state.activeProtocol === 'browser' ? '' : 'none';
 
         showView('slot');
         activateStab('stream');
@@ -209,17 +228,32 @@
         if (!form || !form.contains(card)) return;
         els('[data-method]').forEach(function (c) { c.classList.remove('active'); });
         card.classList.add('active');
+        var m = card.getAttribute('data-method');
         var methodInput = form.querySelector('[name="protocol"]');
-        if (methodInput) methodInput.value = card.getAttribute('data-method');
+        if (methodInput) methodInput.value = m;
+        state.activeProtocol = m;
         var autoBox = el('[data-sm-autodetect]');
         if (autoBox) {
-            var m = card.getAttribute('data-method');
-            autoBox.style.display = (m === 'whip' || m === 'rtmp') ? '' : 'none';
+            autoBox.style.display = (m === 'whip' || m === 'rtmp' || m === 'cli') ? '' : 'none';
         }
-        // Show broadcast tab when browser method selected
-        if (card.getAttribute('data-method') === 'browser') {
+        // Show broadcast tab only when browser method is selected
+        var bcastTab = el('#sm-broadcast-tab');
+        if (bcastTab) bcastTab.style.display = m === 'browser' ? '' : 'none';
+        if (m === 'browser') {
             activateStab('broadcast');
             bcast.updatePrereqNote();
+        } else {
+            // If broadcast tab was active, switch to stream tab
+            var activeTabBtn = el('[data-sm-stab-bar] [data-sm-stab].active');
+            if (activeTabBtn && activeTabBtn.getAttribute('data-sm-stab') === 'broadcast') {
+                activateStab('stream');
+            }
+        }
+        // Refresh endpoint panel if we have an active channel
+        if (state.activeChannelSlug) {
+            var ch = state.channels.filter(function (c) { return c.slug === state.activeChannelSlug; })[0];
+            var activeStream = state.activeStreamId ? state.streams.filter(function (s) { return String(s.id) === String(state.activeStreamId); })[0] : null;
+            if (ch) renderEndpoint(activeStream || null, ch);
         }
     });
 
@@ -251,14 +285,10 @@
     function renderEndpoint(stream, channel) {
         var panel = el('[data-sm-endpoint-panel]');
         if (!panel) return;
+        var proto = (stream && stream.protocol) || state.activeProtocol || 'rtmp';
         var streamKey = (stream && (stream.stream_key || stream.key)) || (channel && channel.stream_key) || '';
         var rtmpUrl   = (stream && stream.rtmp_url) || (state.restreamUrl && channel ? state.restreamUrl.replace(/\/$/, '') + '/live' : '');
         var whipUrl   = (stream && stream.whip_url) || '';
-
-        if (!rtmpUrl && !whipUrl && !streamKey) {
-            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Create a stream on the Stream tab to reveal ingest details, or check the Settings tab for your persistent stream key.</p></div>';
-            return;
-        }
 
         function row(label, value) {
             if (!value) return '';
@@ -272,11 +302,34 @@
                 '</div>' +
             '</div>';
         }
-        panel.innerHTML =
-            row('RTMP SERVER URL', rtmpUrl) +
-            row('STREAM KEY', streamKey) +
-            row('WHIP ENDPOINT', whipUrl) +
-            '<p class="sm-note" style="margin-top:0.75rem;">Paste RTMP URL + stream key into OBS → Settings → Stream.</p>';
+
+        if (proto === 'browser') {
+            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Browser streaming uses WHIP via the <strong>Broadcast tab</strong> — no external software needed. Switch to the Broadcast tab to go live.</p></div>';
+            return;
+        }
+
+        if (!rtmpUrl && !whipUrl && !streamKey) {
+            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Create a stream on the Stream tab to reveal ingest details, or check the Settings tab for your persistent stream key.</p></div>';
+            return;
+        }
+
+        if (proto === 'whip') {
+            panel.innerHTML =
+                row('WHIP ENDPOINT', whipUrl) +
+                row('STREAM KEY', streamKey) +
+                '<p class="sm-note" style="margin-top:0.75rem;">Paste the WHIP endpoint into OBS 30+ → Settings → Stream → Service: WHIP. Use the stream key as the bearer token.</p>';
+        } else if (proto === 'cli') {
+            panel.innerHTML =
+                row('RTMP SERVER URL', rtmpUrl) +
+                row('STREAM KEY', streamKey) +
+                row('WHIP ENDPOINT', whipUrl) +
+                (rtmpUrl && streamKey ? '<p class="sm-note" style="margin-top:0.75rem;">FFmpeg example: <code>ffmpeg -re -i input.mp4 -c copy -f flv "' + esc(rtmpUrl + '/' + streamKey) + '"</code></p>' : '');
+        } else {
+            panel.innerHTML =
+                row('RTMP SERVER URL', rtmpUrl) +
+                row('STREAM KEY', streamKey) +
+                '<p class="sm-note" style="margin-top:0.75rem;">Paste RTMP URL and stream key into OBS → Settings → Stream.</p>';
+        }
     }
 
     // ── destinations full panel ───────────────────────────────────────────────
@@ -288,12 +341,17 @@
             return;
         }
         listEl.innerHTML = state.destinations.map(function (d) {
+            var meta = d.metadata || {};
+            var qualityParts = [];
+            if (meta.resolution) qualityParts.push(meta.resolution);
+            if (meta.bitrate_kbps) qualityParts.push(meta.bitrate_kbps + ' kbps');
+            var qualityNote = qualityParts.length ? ' · ' + qualityParts.join(', ') : '';
             return '<div class="sm-dest-full-item">' +
                 '<div>' +
                     '<span class="sm-dest-kind-badge">' + esc(d.kind || 'rtmp') + '</span> ' +
                     '<strong>' + esc(d.label || d.kind || 'Destination') + '</strong>' +
                     (d.enabled === false ? ' <span class="pill soft">Disabled</span>' : '') +
-                    (d.target_url ? '<div class="sm-note" style="margin-top:0.15rem;font-size:0.76rem;">' + esc(d.target_url) + '</div>' : '') +
+                    (d.target_url ? '<div class="sm-note" style="margin-top:0.15rem;font-size:0.76rem;">' + esc(d.target_url) + esc(qualityNote) + '</div>' : '') +
                 '</div>' +
                 '<button class="sm-icon-btn sm-icon-btn-danger" data-sm-action="delete-destination" data-dest-id="' + esc(d.id) + '" title="Remove">' +
                     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>' +
@@ -485,6 +543,8 @@
             var fd = new FormData(streamForm);
             var btn4 = streamForm.querySelector('[type="submit"]');
             if (btn4) btn4.disabled = true; clearStatus('stream-form');
+            var proto = fd.get('protocol') || 'whip';
+            state.activeProtocol = proto;
             api('POST', '/api/v1/go-live/streams', {
                 channel_slug: slug, title: fd.get('title'),
                 description: fd.get('description'), category: fd.get('category'),
@@ -576,6 +636,10 @@
                 kind: fd.get('kind'), label: fd.get('label'),
                 target_url: fd.get('target_url'), target_key: fd.get('target_key'),
                 enabled: fd.get('enabled') === '1',
+                metadata: {
+                    resolution: fd.get('dest_resolution') || null,
+                    bitrate_kbps: fd.get('dest_bitrate') ? parseInt(fd.get('dest_bitrate'), 10) : null,
+                },
             }).then(function (res) {
                 var d = res.destination || res;
                 if (d && d.id) {
