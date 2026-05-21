@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chat Overlay — OpenVibe Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#overlay-feed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    /* Messages stack up from the bottom */
+    justify-content: flex-end;
+    max-height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.ov-msg {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    border-radius: 8px;
+    padding: 6px 12px;
+    max-width: 480px;
+    word-break: break-word;
+    animation: ov-msg-in 0.25s ease-out both;
+    font-size: 15px;
+    line-height: 1.4;
+    color: #fff;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    align-self: flex-start;
+}
+
+.ov-msg.fade-out {
+    animation: ov-msg-out 0.4s ease-in both;
+}
+
+.ov-msg-name {
+    font-weight: 700;
+    font-size: 0.88em;
+    color: #a78bfa;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.ov-msg-body {
+    color: #f1f1f1;
+}
+
+/* Badge colors for variety */
+.ov-msg-name.color-1 { color: #a78bfa; }
+.ov-msg-name.color-2 { color: #34d399; }
+.ov-msg-name.color-3 { color: #60a5fa; }
+.ov-msg-name.color-4 { color: #f87171; }
+.ov-msg-name.color-5 { color: #fbbf24; }
+.ov-msg-name.color-6 { color: #f472b6; }
+.ov-msg-name.color-7 { color: #38bdf8; }
+.ov-msg-name.color-8 { color: #a3e635; }
+
+@keyframes ov-msg-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ov-msg-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-6px) scale(0.96); }
+}
+</style>
+</head>
+<body>
+<div id="overlay-feed"></div>
+<script>
+(async function () {
+    'use strict';
+
+    // ── config ────────────────────────────────────────────────────
+    const params  = new URLSearchParams(location.search);
+    const ROOM    = params.get('room') || (location.pathname.split('/').filter(Boolean).pop()) || 'global';
+    const MAX_VISIBLE = parseInt(params.get('max') || '8', 10);
+    const SHOW_SECS   = parseInt(params.get('timeout') || '20', 10);  // seconds before fade-out
+    const POLL        = parseInt(params.get('poll') || '3000', 10);    // ms polling fallback
+
+    const feed = document.getElementById('overlay-feed');
+    const msgQueue = [];  // {id, el, timer}
+    let lastId = null;
+    let wsConnected = false;
+
+    // ── colour hash for usernames ─────────────────────────────────
+    function nameColor(name) {
+        let h = 0;
+        for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+        return `color-${(h % 8) + 1}`;
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ── add message to feed ───────────────────────────────────────
+    function addMessage(m) {
+        if (!m || !m.body) return;
+        const isDupe = msgQueue.some((q) => q.id === m.id);
+        if (isDupe) return;
+
+        const name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+        const body = String(m.body || '').slice(0, 300);
+
+        const el = document.createElement('div');
+        el.className = 'ov-msg';
+        el.innerHTML = `<span class="ov-msg-name ${nameColor(name)}">${esc(name)}</span><span class="ov-msg-body">${esc(body)}</span>`;
+        feed.appendChild(el);
+
+        // Auto-remove after SHOW_SECS
+        const timer = setTimeout(() => removeMessage(m.id), SHOW_SECS * 1000);
+        msgQueue.push({ id: m.id, el, timer });
+
+        // Keep only MAX_VISIBLE messages visible
+        while (msgQueue.length > MAX_VISIBLE) {
+            removeMessage(msgQueue[0].id);
+        }
+    }
+
+    function removeMessage(id) {
+        const idx = msgQueue.findIndex((q) => q.id === id);
+        if (idx === -1) return;
+        const { el, timer } = msgQueue[idx];
+        clearTimeout(timer);
+        msgQueue.splice(idx, 1);
+        el.classList.add('fade-out');
+        el.addEventListener('animationend', () => el.remove(), { once: true });
+    }
+
+    // ── HTTP polling fallback ─────────────────────────────────────
+    async function poll() {
+        try {
+            const url = `/api/chat/rooms/${encodeURIComponent(ROOM)}/messages?limit=20`;
+            const res = await fetch(url, { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const items = (data.items || []).slice().reverse();
+            if (!items.length) return;
+            const newest = items[items.length - 1].id;
+            if (newest === lastId) return;
+            // Only show new messages (after lastId)
+            const newItems = lastId == null ? items.slice(-3) : items.filter((x) => x.id > lastId);
+            for (const m of newItems) addMessage(m);
+            lastId = newest;
+        } catch { /* ignore */ }
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────
+    let pollTimer = null;
+
+    function startPolling() {
+        if (pollTimer) return;
+        poll();
+        pollTimer = setInterval(poll, POLL);
+    }
+
+    function connectWs() {
+        try {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+
+            ws.addEventListener('open', () => {
+                wsConnected = true;
+                ws.send(JSON.stringify({ type: 'join', roomId: ROOM }));
+                // Stop polling when WS is connected
+                if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            });
+
+            ws.addEventListener('message', (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); } catch { return; }
+                if (msg.type === 'message' && msg.roomId === ROOM && msg.message) {
+                    const m = msg.message;
+                    if (lastId == null || m.id > lastId) lastId = m.id;
+                    addMessage(m);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                wsConnected = false;
+                startPolling();
+                setTimeout(connectWs, 3000);
+            });
+
+            ws.addEventListener('error', () => {
+                ws.close();
+            });
+        } catch {
+            startPolling();
+        }
+    }
+
+    // ── init ──────────────────────────────────────────────────────
+    // Initial poll to show recent messages
+    await poll();
+    connectWs();
+    // Backstop polling at 10s even when WS is up
+    setInterval(poll, 10000);
+
+})();
+</script>
+</body>
+</html>

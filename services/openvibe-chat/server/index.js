@@ -121,6 +121,16 @@ function buildApp() {
     // Alias: billing and other services call /api/v1/chat/<path> — route them to chatRouter.
     app.use('/api/v1/chat', chatRouter);
 
+    // OBS chat overlay — transparent page for browser source capture.
+    // /overlay           → overlay.html (uses ?room= query param, defaults to global)
+    // /overlay/:roomId   → overlay.html with room pre-selected via URL path
+    const overlayHtml = path.join(__dirname, '..', 'public', 'overlay.html');
+    app.get('/overlay', (_req, res) => res.sendFile(overlayHtml));
+    app.get('/overlay/:roomId', (req, res) => {
+        // The room id is read by the client JS from the URL path; serve the same file.
+        res.sendFile(overlayHtml);
+    });
+
     app.use((err, _req, res, _next) => {
         console.error('[chat] unhandled:', err.message);
         res.status(500).json({ error: 'internal error' });

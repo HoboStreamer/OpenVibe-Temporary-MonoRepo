@@ -425,11 +425,145 @@ footer a{color:var(--muted)}footer a:hover{color:#fff}
 </body></html>`;
 }
 
+function renderVipSubscribePage(planId) {
+    const plan = safeRead(() => model.getPlan(planId), null);
+    const economy = safeRead(() => model.getEconomyState(), { frozen: false });
+
+    const planHtml = plan
+        ? `<div class="plan-card">
+            <div class="plan-badge">${plan.amount_minor === 0 ? 'FREE' : 'VIP'}</div>
+            <h2>${escapeHtml(plan.name)}</h2>
+            <div class="plan-price">${plan.amount_minor === 0 ? 'Free' : fmtMinor(plan.amount_minor, plan.currency)}<span class="plan-interval">/${escapeHtml(plan.billing_interval)}</span></div>
+            ${plan.description ? `<p class="plan-desc">${escapeHtml(plan.description)}</p>` : ''}
+           </div>`
+        : `<div class="plan-card"><p class="muted">Subscription plan not found or no longer available.</p></div>`;
+
+    const formHtml = plan && !economy.frozen
+        ? `<form id="subscribe-form" class="subscribe-form">
+            <input type="hidden" name="plan_id" value="${escapeHtml(planId)}" />
+            <div class="form-group">
+                <label for="sub-email">Email (optional — for receipt)</label>
+                <input id="sub-email" name="email" type="email" placeholder="you@example.com" autocomplete="email" />
+            </div>
+            <p class="form-note">Payment via <strong>OpenVibe Credits (OVC)</strong>. You need credits in your wallet at <a href="https://my.openvibe.network">my.openvibe.network</a> to complete this subscription.</p>
+            <button class="btn btn-primary" type="submit">Subscribe with OVC</button>
+            <a class="btn btn-outline" href="https://openvibe.vip/">Back to plans</a>
+           </form>
+           <div id="subscribe-result" hidden></div>
+           <script>
+           document.getElementById('subscribe-form').addEventListener('submit', async function(e) {
+               e.preventDefault();
+               const btn = e.target.querySelector('button[type=submit]');
+               btn.disabled = true;
+               btn.textContent = 'Processing…';
+               const result = document.getElementById('subscribe-result');
+               try {
+                   const res = await fetch('/api/vip/subscribe', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       credentials: 'include',
+                       body: JSON.stringify({ plan_id: '${escapeHtml(planId)}' }),
+                   });
+                   const data = await res.json();
+                   result.hidden = false;
+                   if (res.ok) {
+                       result.className = 'result-ok';
+                       result.innerHTML = '<p>✅ Subscribed! Your VIP access is now active.</p><p><a href="https://openvibe.vip/">Back to VIP</a> · <a href="https://my.openvibe.network">My Account</a></p>';
+                       e.target.hidden = true;
+                   } else {
+                       result.className = 'result-err';
+                       result.innerHTML = '<p>⚠️ ' + (data.error || 'Unable to complete subscription. Check your OVC balance.') + '</p>';
+                       btn.disabled = false;
+                       btn.textContent = 'Subscribe with OVC';
+                   }
+               } catch {
+                   result.hidden = false;
+                   result.className = 'result-err';
+                   result.innerHTML = '<p>⚠️ Network error. Please try again.</p>';
+                   btn.disabled = false;
+                   btn.textContent = 'Subscribe with OVC';
+               }
+           });
+           <\/script>`
+        : economy.frozen
+            ? `<div class="banner-warn">⚠️ Economy is paused — subscriptions temporarily unavailable.</div><a class="btn btn-outline" href="https://openvibe.vip/">Back to plans</a>`
+            : `<div class="banner-warn">This plan is no longer available.</div><a class="btn btn-outline" href="https://openvibe.vip/">Browse plans</a>`;
+
+    return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Subscribe — OpenVibe VIP</title>
+<link rel="icon" type="image/svg+xml" href="https://openvibe.network/favicon.svg">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#a78bfa;--accent2:#7c3aed;--bg:#0a0b0f;--bg2:#111318;--text:#e2e8f0;--muted:#94a3b8;--border:rgba(255,255,255,.08)}
+body{font:15px/1.6 system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);background:rgba(10,11,15,.9);backdrop-filter:blur(12px)}
+.nav-brand{font-weight:700;font-size:1.1rem;color:#fff}
+.nav-brand span{margin-right:6px}
+.btn{display:inline-block;padding:10px 22px;border-radius:8px;font-size:.95rem;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:all .15s;margin-top:8px}
+.btn-primary{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff}
+.btn-primary:hover{opacity:.9;text-decoration:none;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-outline{background:transparent;color:var(--accent);border:1px solid var(--accent);margin-left:8px}
+.btn-outline:hover{background:rgba(124,58,237,.1);text-decoration:none}
+.container{max-width:640px;margin:60px auto;padding:0 24px;flex:1}
+.back-link{color:var(--muted);font-size:.9rem;display:inline-block;margin-bottom:24px}
+.back-link:hover{color:#fff}
+h1{font-size:1.8rem;font-weight:800;margin-bottom:6px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.section-sub{color:var(--muted);margin-bottom:32px}
+.plan-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px 28px;margin-bottom:28px;position:relative}
+.plan-badge{position:absolute;top:14px;right:14px;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:700;text-transform:uppercase;background:rgba(124,58,237,.2);color:var(--accent)}
+.plan-price{font-size:1.8rem;font-weight:800;margin:10px 0 10px;color:#fff}
+.plan-interval{font-size:.85rem;font-weight:400;color:var(--muted)}
+.plan-desc{color:var(--muted);font-size:.9rem;margin-top:6px}
+.subscribe-form{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px 28px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:.88rem;color:var(--muted);margin-bottom:6px}
+.form-group input{width:100%;padding:9px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:7px;color:#fff;font-size:.95rem;outline:none}
+.form-group input:focus{border-color:var(--accent)}
+.form-note{font-size:.84rem;color:var(--muted);margin-bottom:16px}
+.form-note a{color:var(--accent)}
+.result-ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#6ee7b7;padding:14px 18px;border-radius:8px;margin-top:16px}
+.result-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:14px 18px;border-radius:8px;margin-top:16px}
+.banner-warn{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:12px 18px;border-radius:8px;margin-bottom:20px}
+.muted{color:var(--muted)}
+footer{border-top:1px solid var(--border);padding:24px 32px;text-align:center;color:var(--muted);font-size:.82rem;margin-top:auto}
+footer a{color:var(--muted)}footer a:hover{color:#fff}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-brand"><span>⭐</span> OpenVibe VIP</div>
+</nav>
+<div class="container">
+  <a class="back-link" href="https://openvibe.vip/">← Back to plans</a>
+  <h1>Subscribe to a plan</h1>
+  <p class="section-sub">Complete your VIP subscription below.</p>
+  ${planHtml}
+  ${formHtml}
+</div>
+<footer><a href="https://openvibe.vip/">OpenVibe VIP</a> · <a href="https://openvibe.network">OpenVibe Network</a> · <a href="https://my.openvibe.network">My Account</a></footer>
+</body></html>`;
+}
+
 function attachBillingHostShell(app) {
     app.use((req, res, next) => {
         if (req.method !== 'GET') return next();
-        if (req.path !== '/' && req.path !== '/index.html') return next();
         const surface = detectBillingSurface(req.headers && req.headers.host);
+
+        // VIP subscribe page — serves before static fallthrough
+        if (surface === 'vip' && req.path.startsWith('/subscribe/')) {
+            const planId = req.path.replace(/^\/subscribe\//, '').split('/')[0];
+            if (planId) {
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                return res.status(200).send(renderVipSubscribePage(planId));
+            }
+        }
+
+        if (req.path !== '/' && req.path !== '/index.html') return next();
         if (surface === 'tips') {
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.setHeader('X-OpenVibe-Surface', 'tips');
@@ -449,6 +583,7 @@ module.exports = {
     detectBillingSurface,
     renderTipsShell,
     renderVipShell,
+    renderVipSubscribePage,
     TIPS_HOSTS,
     VIP_HOSTS,
 };
