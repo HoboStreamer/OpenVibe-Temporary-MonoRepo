@@ -119,6 +119,7 @@
             visibility: fd.get('visibility'), nsfw: fd.get('nsfw') === '1',
             recording_enabled: fd.get('recording_enabled') === '1',
             chat_enabled: fd.get('chat_enabled') === '1',
+            metadata: { default_protocol: fd.get('preferred_protocol') || 'whip' },
         }).then(function (res) {
             var ch = res.channel || res;
             if (ch && ch.slug) {
@@ -238,19 +239,31 @@
 
         var chStreams = state.streams.filter(function (s) { return s.channel_slug === slug; });
         var liveStream = chStreams.filter(function (s) { return s.is_live; })[0] || null;
-        // Set activeProtocol from the current/latest stream's protocol if available
+        // Set activeProtocol from the current/latest stream's protocol if available;
+        // fall back to the channel's saved preferred_protocol / metadata.default_protocol
         var currentStreamProto = (liveStream || chStreams[0] || null);
+        var prefProto = (ch.metadata && (ch.metadata.default_protocol || ch.metadata.protocol)) || ch.preferred_protocol || 'whip';
         if (currentStreamProto && currentStreamProto.protocol) {
             state.activeProtocol = currentStreamProto.protocol;
-            // Reflect method card selection
-            var form = el('#sm-stream-form');
-            if (form) {
-                els('[data-method]').forEach(function (c) { c.classList.remove('active'); });
-                var matchCard = el('[data-method="' + currentStreamProto.protocol + '"]');
-                if (matchCard) matchCard.classList.add('active');
-                var methodInput = form.querySelector('[name="protocol"]');
-                if (methodInput) methodInput.value = currentStreamProto.protocol;
-            }
+        } else {
+            state.activeProtocol = prefProto;
+        }
+        // Reflect method card selection on Stream form
+        var streamForm2 = el('#sm-stream-form');
+        if (streamForm2) {
+            els('[data-method]').forEach(function (c) { c.classList.remove('active'); });
+            var matchCard = el('[data-method="' + state.activeProtocol + '"]');
+            if (matchCard) matchCard.classList.add('active');
+            var methodInput = streamForm2.querySelector('[name="protocol"]');
+            if (methodInput) methodInput.value = state.activeProtocol;
+        }
+        // Populate Settings preferred method
+        if (settingsForm) {
+            var prefInput = settingsForm.querySelector('[name="preferred_protocol"]');
+            if (prefInput) prefInput.value = prefProto;
+            els('#sm-settings-method-grid [data-settings-method]').forEach(function (c) {
+                c.classList.toggle('active', c.getAttribute('data-settings-method') === prefProto);
+            });
         }
         renderEndpoint(liveStream || chStreams[0] || null, ch);
         updateStreamButtons(liveStream);
@@ -296,6 +309,22 @@
             activateStab(btn.getAttribute('data-sm-stab'));
         });
     }
+
+    // ── settings method cards ─────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var sCard = e.target.closest('[data-settings-method]');
+        if (sCard) {
+            var grid = el('#sm-settings-method-grid');
+            if (grid && grid.contains(sCard)) {
+                els('#sm-settings-method-grid [data-settings-method]').forEach(function (c) { c.classList.remove('active'); });
+                sCard.classList.add('active');
+                var prefInput = el('#sm-settings-form [name="preferred_protocol"]');
+                if (prefInput) prefInput.value = sCard.getAttribute('data-settings-method');
+                markSettingsDirty();
+                return;
+            }
+        }
+    });
 
     // ── streaming method cards ────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
@@ -400,11 +429,33 @@
                 sessionNote +
                 '<p class="sm-note" style="margin-top:0.5rem;">In OBS 30+: Settings → Stream → Service: WHIP → paste the endpoint URL. Use the stream key as the bearer token.</p>';
         } else if (proto === 'cli') {
+            var rtmpFull = rtmpUrl && streamKey ? rtmpUrl.replace(/\/$/, '') + '/' + streamKey : '';
+            var rtmpTarget = rtmpFull || (rtmpUrl ? rtmpUrl.replace(/\/$/, '') + '/<stream-key>' : 'rtmp://ingest.openre.stream/live/<stream-key>');
+            var whipTarget = whipUrl || 'https://openre.stream/whip/<channel-slug>';
+            var sessionNote = !streamKey ? '<p class="sm-note" style="color:#fbbf24;margin:0 0 0.75rem;">No stream key — select a channel to load your persistent credentials.</p>' : '';
             panel.innerHTML =
-                row('RTMP SERVER URL', rtmpUrl) +
-                row('STREAM KEY', streamKey) +
-                row('WHIP ENDPOINT', whipUrl) +
-                (rtmpUrl && streamKey ? '<p class="sm-note" style="margin-top:0.75rem;">FFmpeg example: <code>ffmpeg -re -i input.mp4 -c copy -f flv "' + esc(rtmpUrl + '/' + streamKey) + '"</code></p>' : '');
+                sessionNote +
+                '<div class="sm-cli-section">' +
+                    '<div class="sm-cli-section-title">RTMP — OBS / Streamlabs / FFmpeg</div>' +
+                    row('RTMP SERVER', rtmpUrl || 'rtmp://ingest.openre.stream/live') +
+                    row('STREAM KEY', streamKey) +
+                    cliCmd('Webcam + Audio', 'ffmpeg -f v4l2 -i /dev/video0 -f alsa -i default \\\n  -c:v libx264 -preset veryfast -b:v 2500k \\\n  -c:a aac -b:a 128k -f flv ' + rtmpTarget) +
+                    cliCmd('Screen Capture (Linux X11)', 'ffmpeg -f x11grab -s 1920x1080 -r 30 -i :0.0 \\\n  -f pulse -i default \\\n  -c:v libx264 -preset veryfast -b:v 3000k \\\n  -c:a aac -b:a 128k -f flv ' + rtmpTarget) +
+                    cliCmd('Screen Capture (macOS)', 'ffmpeg -f avfoundation -framerate 30 -i "1:0" \\\n  -c:v libx264 -preset veryfast -b:v 3000k \\\n  -c:a aac -b:a 128k -f flv ' + rtmpTarget) +
+                    cliCmd('MP4 / File Loop (24/7)', 'ffmpeg -re -stream_loop -1 -i video.mp4 \\\n  -c:v libx264 -preset veryfast -b:v 2500k \\\n  -c:a aac -b:a 128k -f flv ' + rtmpTarget) +
+                    cliCmd('RTSP / IP Camera', 'ffmpeg -rtsp_transport tcp -i rtsp://user:pass@192.168.1.100:554/stream \\\n  -c:v libx264 -preset veryfast -b:v 2000k \\\n  -c:a aac -b:a 96k -f flv ' + rtmpTarget) +
+                    cliCmd('Raspberry Pi Camera → RTMP', 'rpicam-vid -t 0 --width 1280 --height 720 --framerate 30 \\\n  --codec h264 --bitrate 2000000 -o - | \\\n  ffmpeg -f h264 -i - -c:v copy -an -f flv ' + rtmpTarget) +
+                '</div>' +
+                '<div class="sm-cli-section">' +
+                    '<div class="sm-cli-section-title">WHIP — WebRTC (FFmpeg 7+ / GStreamer)</div>' +
+                    row('WHIP ENDPOINT', whipTarget) +
+                    '<div class="sm-endpoint-row"><div class="sm-endpoint-label">BEARER TOKEN</div><div class="sm-note" style="font-size:0.8rem;padding:0.2rem 0 0;">Use stream key as bearer token — FFmpeg -f whip passes it automatically</div></div>' +
+                    cliCmd('Camera + Audio → WHIP (FFmpeg 7+)', 'ffmpeg -f v4l2 -i /dev/video0 -f alsa -i default \\\n  -c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k \\\n  -c:a libopus -b:a 128k -ar 48000 \\\n  -f whip "' + whipTarget + '"') +
+                    cliCmd('Screen Capture (Linux) → WHIP', 'ffmpeg -f x11grab -s 1920x1080 -r 30 -i :0.0 \\\n  -f pulse -i default \\\n  -c:v libx264 -preset veryfast -tune zerolatency -b:v 3000k \\\n  -c:a libopus -b:a 128k -ar 48000 \\\n  -f whip "' + whipTarget + '"') +
+                    cliCmd('MP4 / File Loop → WHIP', 'ffmpeg -re -stream_loop -1 -i video.mp4 \\\n  -c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k \\\n  -c:a libopus -b:a 128k -ar 48000 \\\n  -f whip "' + whipTarget + '"') +
+                    cliCmd('Raspberry Pi Camera → WHIP', 'rpicam-vid -t 0 --width 1280 --height 720 --framerate 30 \\\n  --codec h264 --bitrate 2000000 -o - | \\\n  ffmpeg -f h264 -i - -c:v copy \\\n  -c:a libopus -b:a 96k -ar 48000 \\\n  -f whip "' + whipTarget + '"') +
+                    cliCmd('GStreamer WHIP', 'gst-launch-1.0 v4l2src ! videoconvert ! \\\n  x264enc tune=zerolatency bitrate=2500 ! video/x-h264,profile=baseline ! \\\n  whipsink whip-endpoint="' + whipTarget + '"') +
+                '</div>';
         } else {
             panel.innerHTML =
                 row('RTMP SERVER URL', rtmpUrl) +

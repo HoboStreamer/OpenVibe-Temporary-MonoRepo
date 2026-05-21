@@ -3480,6 +3480,28 @@ function renderGoLivePage({ baseUrl, session }) {
                                     <input type="checkbox" name="nsfw" value="1">
                                     <span>NSFW channel</span>
                                 </label>
+                                <div class="sm-field-group" style="margin-top:0.9rem;">
+                                    <span class="sm-field-label">PREFERRED STREAMING METHOD</span>
+                                    <div class="sm-method-grid" id="sm-settings-method-grid">
+                                        <button type="button" class="sm-method-card" data-settings-method="browser">
+                                            <div class="sm-method-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                                            <div class="sm-method-name">Browser</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card" data-settings-method="whip">
+                                            <div class="sm-method-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg></div>
+                                            <div class="sm-method-name">WHIP / OBS</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card" data-settings-method="rtmp">
+                                            <div class="sm-method-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
+                                            <div class="sm-method-name">RTMP</div>
+                                        </button>
+                                        <button type="button" class="sm-method-card" data-settings-method="cli">
+                                            <div class="sm-method-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+                                            <div class="sm-method-name">CLI / FFmpeg</div>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="preferred_protocol" value="whip">
+                                </div>
                                 <div class="sm-settings-key-section">
                                     <div class="sm-field-label" style="margin-bottom:0.4rem;">STREAM KEY</div>
                                     <div class="sm-key-row">
@@ -3645,7 +3667,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260605-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260606-1"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */
@@ -3918,6 +3940,14 @@ function renderGoLivePage({ baseUrl, session }) {
                 font-family: ui-monospace, Consolas, monospace; color: #e2e8f0;
                 word-break: break-all; min-width: 0;
             }
+            /* cli sections */
+            .sm-cli-section { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px solid rgba(255,255,255,0.07); }
+            .sm-cli-section:first-child { margin-top: 0; border-top: none; }
+            .sm-cli-section-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; color: #fbbf24; margin-bottom: 0.65rem; }
+            .sm-cli-cmd-label { font-size: 0.78rem; font-weight: 700; color: rgba(255,255,255,0.5); margin: 0.75rem 0 0.3rem; }
+            .sm-cli-pre { background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.65rem 2.5rem 0.65rem 0.85rem; font-family: ui-monospace, Consolas, monospace; font-size: 0.76rem; line-height: 1.55; white-space: pre-wrap; word-break: break-all; color: #e2e8f0; margin: 0; }
+            .sm-cli-pre-wrap { position: relative; margin-bottom: 0; }
+            .sm-cli-copy-btn { position: absolute !important; top: 0.35rem; right: 0.35rem; width: 26px !important; height: 26px !important; }
             /* history items */
             .sm-history-item {
                 display: flex; justify-content: space-between; align-items: center;

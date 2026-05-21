@@ -571,6 +571,7 @@ function buildApp() {
         const allowed = ['display_name', 'description', 'visibility', 'nsfw', 'recording_enabled', 'chat_enabled'];
         const body = {};
         allowed.forEach((k) => { if (req.body && req.body[k] !== undefined) body[k] = req.body[k]; });
+        if (req.body && req.body.metadata && typeof req.body.metadata === 'object') body.metadata = req.body.metadata;
         try {
             const updated = await openreClient.updateChannel(slug, body, req.token);
             const ch = updated && (updated.channel || updated);
