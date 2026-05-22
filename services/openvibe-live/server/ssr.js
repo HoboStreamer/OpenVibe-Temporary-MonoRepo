@@ -2963,12 +2963,14 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
         const imgHtml = paste.image_url
             ? `<a href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}" class="paste-thumb-link"><img class="paste-thumb" src="${escapeHtml(paste.image_url)}" alt="${escapeHtml(paste.title || 'Paste screenshot')}" loading="lazy" onerror="this.closest('.paste-card').classList.add('no-thumb')"></a>`
             : '';
+        const authorId = paste.author_id || paste.created_by_actor_id || '';
+        const authorLabel = authorId ? authorId.replace(/^user:[^:]+:/, '@') : 'Unknown';
         return `<article class="paste-card glass-card${paste.image_url ? '' : ' no-thumb'}" data-reveal>
             ${imgHtml}
             <div class="paste-card-body">
                 <div class="pill-row"><span class="pill soft">${escapeHtml(paste.kind || 'paste')}</span></div>
                 <a class="card-link" href="${escapeHtml(paste.route_url || LIVE_NETWORK_URLS.community)}"><h3 class="card-title">${escapeHtml(paste.title || paste.slug || 'Untitled paste')}</h3></a>
-                <div class="card-kicker">${escapeHtml(paste.created_by_actor_id ? paste.created_by_actor_id.replace(/^user:[^:]+:/, '@') : '')} · ${escapeHtml(timeAgo(paste.created_at))}</div>
+                <div class="card-kicker">${escapeHtml(authorLabel)} · ${escapeHtml(timeAgo(paste.created_at))}</div>
             </div>
         </article>`;
     }).join('');

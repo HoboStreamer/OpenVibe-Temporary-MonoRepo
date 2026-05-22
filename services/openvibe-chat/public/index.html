@@ -280,9 +280,9 @@ body {
 
     const session = await fetch('/account/session').then(r => r.json()).catch(() => null);
 
-    if (session && session.authenticated && session.user) {
+    if (session && session.user) {
         const u = session.user;
-        myName = u.display_name || u.username || u.id || '';
+        myName = u.display_name || u.username || u.id || 'Anonymous';
         const label = session.anonymous ? 'anonymous identity' : `@${esc(u.username || u.id)}`;
         whoEl.innerHTML = `Chatting as <b>${esc(myName)}</b> · <span style="color:var(--ov-text-dim)">${label}</span>`;
     } else {
