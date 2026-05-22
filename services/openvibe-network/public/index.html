@@ -22,7 +22,7 @@
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                             </svg>
                         </button>
-                        <span class="ov-kicker">Community-driven · no profit · open source</span>
+                        <span class="ov-kicker">Favorite any stream/thread/paste/page/tool and press the star!</span>
                     </div>
                     <h1>One account.<br><span class="ov-gradient">Every OpenVibe surface.</span></h1>
                     <p id="hero-copy">Streaming, chat, media, games, billing-without-the-tax, and a pile of weird useful tools — all tied together under one account instead of scattered across a million walled gardens. No investors, no ad surveillance, no startup cosplay. Just an open network that loads.</p>
@@ -154,41 +154,6 @@
         </div>
     </section>
 
-    <section class="ov-section">
-        <div class="ov-section-head">
-            <div>
-                <h2>What the network promises</h2>
-                <p class="ov-section-sub">No investors, no ad surveillance, no premium-tier theatre. The plan is to be useful and to formalize as a not-for-profit once the network can stand on its own.</p>
-            </div>
-        </div>
-        <div class="ov-grid" style="grid-template-columns:repeat(5,1fr)">
-            <article class="ov-card">
-                <div class="ov-kicker">Open source</div>
-                <h3 class="ov-service-title" style="margin-top:.8rem;">Every surface can be inspected, forked, or self-hosted</h3>
-                <p class="ov-muted">No mystery SaaS layer. Registries, auth, chat, live, media, billing, and migration tooling all live in public code with predictable contracts. If we disappeared tomorrow, you could keep running it.</p>
-            </article>
-            <article class="ov-card">
-                <div class="ov-kicker">Portable identity</div>
-                <h3 class="ov-service-title" style="margin-top:.8rem;">Your @username, theme, and launcher state travel with you</h3>
-                <p class="ov-muted">The control plane stores account preferences in explicit user-module namespaces — no vague session magic, no "we lost your settings on the redesign".</p>
-            </article>
-            <article class="ov-card">
-                <div class="ov-kicker">No ads, no tracking</div>
-                <h3 class="ov-service-title" style="margin-top:.8rem;">Anonymous mode is one click away</h3>
-                <p class="ov-muted">No behavioral ads, no surprise beacons, no surveillance glitter. Switch to an anonymous identity any time — your data stays yours by default, not as a premium feature.</p>
-            </article>
-            <article class="ov-card">
-                <div class="ov-kicker">Composable platform</div>
-                <h3 class="ov-service-title" style="margin-top:.8rem;">Contracts, topics, and capabilities are first-class</h3>
-                <p class="ov-muted">It is easier to build on a network when the network can explain itself. The registry pulse above is not just pretty chrome — it is runtime truth.</p>
-            </article>
-            <article class="ov-card">
-                <div class="ov-kicker">Not-for-profit plan</div>
-                <h3 class="ov-service-title" style="margin-top:.8rem;">Built to be sustainable, not extractive</h3>
-                <p class="ov-muted">Tips and VIP exist so creators get paid and servers stay online — not so we can carve features out of the platform and resell them. The long game is a real public-benefit project, not an exit.</p>
-            </article>
-        </div>
-    </section>
 </main>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
@@ -207,12 +172,14 @@
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('home');
 
-    const [session, remoteServices, launcherState, topics, health] = await Promise.all([
+    const [session, remoteServices, launcherState, topics, health, recentPastesData, recentVodsData] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.loadServices(),
         OpenVibe.loadLauncherState(),
         OpenVibe.api('/topics').catch(() => ({ items: [] })),
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, trusted_issuers: [] })),
+        fetch(OpenVibe.resolveSurfaceUrl('community') + '/api/community/pastes?limit=4', { mode: 'cors', credentials: 'include' }).then((r) => r.json()).catch(() => ({ items: [] })),
+        fetch(OpenVibe.resolveSurfaceUrl('live') + '/api/v1/streams/recently-ended?limit=4').then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
 
     const items = OpenVibe.mergedServices(remoteServices);
@@ -304,20 +271,7 @@
         });
     }
 
-    const guestSlideHtml = session.authenticated && session.user
-        ? `<div class="ov-chip-row" style="margin-bottom:.65rem;">
-                <span class="ov-chip ok">@${OpenVibe.escapeHtml(session.user.username || session.user.id)}</span>
-                <span class="ov-chip soft">${OpenVibe.escapeHtml(session.user.role || 'user')}</span>
-           </div>
-           <h3 class="ov-service-title">Welcome back${session.user.display_name ? `, ${OpenVibe.escapeHtml(session.user.display_name)}` : ''}</h3>
-           <p class="ov-muted">Your account is ready to carry theme choices, notification preferences, and launcher favorites across the network.</p>`
-        : (isAnonymous
-            ? `<div class="ov-chip-row" style="margin-bottom:.65rem;"><span class="ov-chip warn">${OpenVibe.escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span></div>
-               <h3 class="ov-service-title">Your numbered anonymous identity is active</h3>
-               <p class="ov-muted">OpenVibe keeps anonymous users on the reserved <code>anon*</code> namespace and shows the migrated number-backed label instead of letting a random display name drift across surfaces.</p>`
-            : `<div class="ov-chip-row" style="margin-bottom:.65rem;"><span class="ov-chip warn">Guest mode</span></div>
-               <h3 class="ov-service-title">Explore first, sign in when ready</h3>
-               <p class="ov-muted">You can browse as a numbered anonymous identity or sign in when you want synced favorites, profile settings, and network-wide theme storage.</p>`);
+
 
     function setupNetworkSlides(slides) {
         const track = document.getElementById('network-slide-track');
@@ -383,32 +337,42 @@
         }
     }
 
-    setupNetworkSlides([
-        {
-            kicker: 'Guest mode',
-            title: session.authenticated && session.user ? 'Signed in and ready' : (isAnonymous ? 'Anonymous identity active' : 'Browse before you commit'),
-            tone: session.authenticated && session.user ? 'ok' : 'warn',
-            body: guestSlideHtml,
-        },
-        {
-            kicker: 'Launcher',
-            title: `${(launcherState.favorites || []).length} favorite${(launcherState.favorites || []).length === 1 ? '' : 's'} pinned`,
+    const activitySlides = [];
+    const _liveBase = OpenVibe.resolveSurfaceUrl('live');
+    const _communityBase = OpenVibe.resolveSurfaceUrl('community');
+    for (const stream of (recentVodsData.items || []).slice(0, 3)) {
+        const tname = OpenVibe.escapeHtml(stream.title || 'Untitled stream');
+        const cname = OpenVibe.escapeHtml(stream.channel_slug || 'creator');
+        const thumb = stream.thumbnail_url ? `<img src="${OpenVibe.escapeHtml(stream.thumbnail_url)}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.6rem;" loading="lazy">` : '';
+        const vodHref = OpenVibe.escapeHtml(stream.route_url || (_liveBase + '/vod/' + (stream.vod_media_id || stream.id)));
+        activitySlides.push({
+            kicker: 'New VOD',
+            title: `@${cname} just finished streaming`,
             tone: 'primary',
-            body: `<p class="ov-muted">Favorites and recents sync when you are signed in, with local storage carrying the launcher while you browse signed out.</p>`,
-        },
-        {
-            kicker: 'Topics',
-            title: `${(topics.items || []).length} topic${(topics.items || []).length === 1 ? '' : 's'} published`,
+            body: `${thumb}<p class="ov-muted">${tname}</p><a class="ov-btn ov-btn-primary" href="${vodHref}" target="_blank" rel="noopener">Watch VOD</a>`,
+        });
+    }
+    for (const paste of (recentPastesData.items || []).slice(0, 3)) {
+        const ptitle = OpenVibe.escapeHtml(paste.title || paste.slug || 'untitled');
+        const pexcerpt = OpenVibe.escapeHtml((paste.body || '').slice(0, 100) + ((paste.body || '').length > 100 ? '…' : ''));
+        const pimg = paste.metadata && paste.metadata.image_url ? `<img src="${OpenVibe.escapeHtml(paste.metadata.image_url)}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.6rem;" loading="lazy">` : '';
+        const phref = OpenVibe.escapeHtml(_communityBase + '/p/' + (paste.slug || paste.id || ''));
+        activitySlides.push({
+            kicker: 'New Paste',
+            title: ptitle,
             tone: 'soft',
-            body: `<p class="ov-muted">Runtime topic definitions expose what the network can publish and consume across services.</p>`,
-        },
-        {
-            kicker: 'Native',
-            title: health.federation && health.federation.hobo_tools ? 'Compat available' : 'Native-only mode',
-            tone: health.federation && health.federation.hobo_tools ? 'warn' : 'ok',
-            body: `<p class="ov-muted">${OpenVibe.escapeHtml(health.federation && health.federation.hobo_tools ? 'Legacy compatibility is available while native services keep taking over the default routes.' : 'The default route is running on native OpenVibe services without needing a live Hobo process.')}</p>`,
-        },
-    ]);
+            body: `${pimg}<p class="ov-muted">${pexcerpt}</p><a class="ov-btn" href="${phref}" target="_blank" rel="noopener">View paste</a>`,
+        });
+    }
+    if (!activitySlides.length) {
+        activitySlides.push({
+            kicker: 'Activity',
+            title: 'Nothing new yet',
+            tone: 'soft',
+            body: `<p class="ov-muted">Recent streams and pastes will appear here as content is posted.</p>`,
+        });
+    }
+    setupNetworkSlides(activitySlides);
 
 })();
 
@@ -595,7 +559,11 @@
                 var expt = body.length > 140 ? body.slice(0, 139) + '…' : body;
                 var lang = paste.language || 'text';
                 var href = communityBase + '/p/' + OpenVibe.escapeHtml(slug);
+                var imgHtml = paste.metadata && paste.metadata.image_url
+                    ? '<img src="' + OpenVibe.escapeHtml(paste.metadata.image_url) + '" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.5rem;" loading="lazy">'
+                    : '';
                 return '<a class="ov-card" href="' + href + '">' +
+                    imgHtml +
                     '<div class="ov-card-top">' +
                         '<div>' +
                             '<div class="ov-service-title">' + OpenVibe.escapeHtml(title) + '</div>' +

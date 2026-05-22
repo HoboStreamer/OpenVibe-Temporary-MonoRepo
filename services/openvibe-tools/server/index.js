@@ -14,10 +14,11 @@ const { attachIconAssets } = require('@openvibe/icons/express');
 
 const config = require('./config');
 const retention = require('./retention');
-const audioRoutes = require('./audio/routes');
-const imageRoutes = require('./image/routes');
-const downloadRoutes = require('./download/routes');
-const textRoutes = require('./text/routes');
+const audioRoutes       = require('./audio/routes');
+const imageRoutes       = require('./image/routes');
+const downloadRoutes    = require('./download/routes');
+const textRoutes        = require('./text/routes');
+const finditfixitRoutes = require('./finditfixit/routes');
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/audio', audioRoutes);
 app.use('/image', imageRoutes);
 app.use('/download', downloadRoutes);
 app.use('/text', textRoutes);
+app.use('/api/finditfixit', finditfixitRoutes);
 
 // ── Runtime health/metrics/ready endpoints ────────────────────────
 const runtime = createServiceRuntime({

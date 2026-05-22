@@ -813,6 +813,7 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                             <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
                         </svg>
+                        <span class="ov-anon-trigger-name">${displayName}</span>
                     </button>
                     <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
                         <div class="ov-anon-dropdown-name">${displayName}</div>
@@ -837,7 +838,7 @@
         }
         if (!session || !session.authenticated || !session.user) {
             target.innerHTML = `
-                <button class="ov-btn" type="button" data-openvibe-anon-session="true">Use anonymous identity</button>
+                <button class="ov-btn" type="button" data-openvibe-anon-session="true">Anonymous</button>
                 <a class="ov-btn ov-btn-primary" href="${signInUrl(global.location.href)}">Sign in</a>`;
             const anonButton = target.querySelector('[data-openvibe-anon-session]');
             if (anonButton) {
@@ -850,17 +851,38 @@
                     } catch (error) {
                         console.warn('[openvibe] failed to start anonymous session:', error.message);
                         anonButton.disabled = false;
-                        anonButton.textContent = 'Use anonymous identity';
+                        anonButton.textContent = 'Anonymous';
                     }
                 });
             }
             return;
         }
+        const displayNameAuth = escapeHtml(session.user.display_name || session.user.username || session.user.id || 'you');
         target.innerHTML = `
-            <span class="ov-chip ok">@${escapeHtml(session.user.username || session.user.id || 'you')}</span>
-            <span class="ov-chip soft">${escapeHtml(session.user.role || 'user')}</span>
-            <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
-            <a class="ov-btn ov-btn-ghost" href="${signOutUrl(global.location.href)}">Sign out</a>`;
+            <div class="ov-anon-menu" id="ov-anon-menu">
+                <button class="ov-anon-trigger" id="ov-anon-trigger" type="button" aria-label="Account menu" aria-expanded="false">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                    </svg>
+                </button>
+                <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
+                    <div class="ov-anon-dropdown-name">@${displayNameAuth}</div>
+                    <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
+                    <a class="ov-anon-dropdown-item ov-anon-dropdown-item--danger" href="${signOutUrl(global.location.href)}">Sign out</a>
+                </div>
+            </div>`;
+        const triggerAuth  = target.querySelector('#ov-anon-trigger');
+        const dropdownAuth = target.querySelector('#ov-anon-dropdown');
+        triggerAuth.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = !dropdownAuth.hidden;
+            dropdownAuth.hidden = open;
+            triggerAuth.setAttribute('aria-expanded', String(!open));
+        });
+        global.document.addEventListener('click', function () {
+            dropdownAuth.hidden = true;
+            triggerAuth.setAttribute('aria-expanded', 'false');
+        });
     }
 
     function initThemePicker() {

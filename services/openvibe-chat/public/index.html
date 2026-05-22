@@ -176,31 +176,6 @@ body {
 .chat-input::placeholder { color: var(--ov-text-dim); }
 .chat-input:disabled { opacity: 0.5; }
 
-/* ── name overlay ── */
-.name-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    backdrop-filter: blur(4px);
-}
-.name-overlay[hidden] { display: none; }
-.name-box {
-    background: color-mix(in srgb, var(--ov-bg) 92%, white);
-    border: 1px solid var(--ov-border);
-    border-radius: 18px;
-    padding: 1.75rem;
-    width: min(360px, 92vw);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    box-shadow: var(--ov-shadow);
-}
-.name-box h2 { margin: 0; font-size: 1.1rem; color: var(--ov-text); }
-.name-box p  { margin: 0; font-size: 0.83rem; color: var(--ov-text-dim); line-height: 1.5; }
 
 @media (max-width: 600px) {
     .chat-sidebar { display: none; }
@@ -240,14 +215,6 @@ body {
     </div>
 </div>
 
-<div class="name-overlay" id="name-overlay" hidden>
-    <div class="name-box">
-        <h2>Pick a name</h2>
-        <p>No account needed — pick a guest name to join the chat. Or <a href="/account/sign-in" id="sign-in-link">sign in</a> to use your OpenVibe identity.</p>
-        <input class="chat-input" id="name-input" type="text" placeholder="Your name…" maxlength="32" autocomplete="off" />
-        <button class="ov-btn ov-btn-primary" id="name-submit" type="button">Join</button>
-    </div>
-</div>
 
 <div id="footer-mount"></div>
 
@@ -262,9 +229,6 @@ body {
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('chat');
 
-    // fix sign-in link to use resolver
-    document.getElementById('sign-in-link').href = OpenVibe.signInUrl(location.href);
-
     function esc(s) {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
@@ -273,47 +237,28 @@ body {
     }
 
     // ── identity ─────────────────────────────────────────────────
+    const whoEl = document.getElementById('composer-who');
+
+    let session = await fetch('/account/session').then(r => r.json()).catch(() => null);
+
+    if (!session || !session.user) {
+        // No session at all — auto-start an anonymous one
+        await OpenVibe.startAnonymousSession().catch(() => {});
+        session = await fetch('/account/session').then(r => r.json()).catch(() => null);
+    }
+
     let myName = '';
-    const whoEl    = document.getElementById('composer-who');
-    const overlay  = document.getElementById('name-overlay');
-    const nameInput = document.getElementById('name-input');
-
-    const session = await fetch('/account/session').then(r => r.json()).catch(() => null);
-
     if (session && session.user) {
         const u = session.user;
         myName = u.display_name || u.username || u.id || 'Anonymous';
-        const label = session.anonymous ? 'anonymous identity' : `@${esc(u.username || u.id)}`;
-        whoEl.innerHTML = `Chatting as <b>${esc(myName)}</b> · <span style="color:var(--ov-text-dim)">${label}</span>`;
-    } else {
-        myName = localStorage.getItem('ov-chat-name') || '';
-        function updateWho() {
-            whoEl.innerHTML = `Guest: <b>${esc(myName)}</b> · <a id="change-name">change name</a>`;
-            document.getElementById('change-name').addEventListener('click', () => {
-                nameInput.value = myName;
-                overlay.hidden = false;
-                nameInput.focus();
-                nameInput.select();
-            });
-        }
-        if (myName) {
-            updateWho();
+        if (session.anonymous) {
+            whoEl.innerHTML = `Chatting anonymously as <b>${esc(myName)}</b>`;
         } else {
-            overlay.hidden = false;
-            nameInput.focus();
+            whoEl.innerHTML = `Chatting as <b>@${esc(u.username || u.id)}</b>`;
         }
-
-        function submitName() {
-            const v = nameInput.value.trim().slice(0, 32);
-            if (!v) return;
-            myName = v;
-            localStorage.setItem('ov-chat-name', v);
-            overlay.hidden = true;
-            updateWho();
-            document.getElementById('chat-input').focus();
-        }
-        document.getElementById('name-submit').addEventListener('click', submitName);
-        nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
+    } else {
+        myName = 'Anonymous';
+        whoEl.textContent = 'Chatting as Anonymous';
     }
 
     // ── messages ─────────────────────────────────────────────────
@@ -400,7 +345,6 @@ body {
     const sendBtn = document.getElementById('chat-send');
 
     async function send() {
-        if (!myName) { overlay.hidden = false; nameInput.focus(); return; }
         const text = input.value.trim();
         if (!text) return;
         input.value = '';

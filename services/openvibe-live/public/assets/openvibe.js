@@ -693,7 +693,7 @@
             return;
         }
         target.innerHTML = `
-            <button class="ov-btn" type="button" data-openvibe-anon-session="true">Use anonymous identity</button>
+            <button class="ov-btn" type="button" data-openvibe-anon-session="true">Anonymous</button>
             <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Sign in</a>`;
         const anonButton = target.querySelector('[data-openvibe-anon-session]');
         if (anonButton) {
@@ -706,7 +706,7 @@
                 } catch (error) {
                     console.warn('[openvibe] failed to start anonymous session:', error.message);
                     anonButton.disabled = false;
-                    anonButton.textContent = 'Use anonymous identity';
+                    anonButton.textContent = 'Anonymous';
                 }
             });
         }

@@ -152,7 +152,7 @@ function ensureThreadForRef(ref_type, ref_id, defaults) {
     if (ex) return ex;
     return createThread(Object.assign({ ref_type, ref_id }, defaults || {}));
 }
-function listThreads({ community_id, category_id, status, ref_type, ref_id, limit }) {
+function listThreads({ community_id, category_id, status, ref_type, ref_id, thread_type, limit }) {
     const where = [];
     const args = [];
     if (community_id) { where.push('community_id = ?'); args.push(String(community_id)); }
@@ -160,6 +160,7 @@ function listThreads({ community_id, category_id, status, ref_type, ref_id, limi
     if (status)       { where.push('status = ?');       args.push(String(status)); }
     if (ref_type)     { where.push('ref_type = ?');     args.push(String(ref_type)); }
     if (ref_id)       { where.push('ref_id = ?');       args.push(String(ref_id)); }
+    if (thread_type)  { where.push('thread_type = ?');  args.push(String(thread_type)); }
     const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
     const sql = `SELECT * FROM community_threads ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY last_activity_at DESC LIMIT ?`;
     return db.get().prepare(sql).all(...args, cap).map(hydrateThread);
@@ -179,6 +180,11 @@ function updateThread(id, patch) {
     );
     return getThread(cur.id);
 }
+function findPasteThread(paste_id) {
+    const threads = listThreads({ ref_type: 'paste', ref_id: String(paste_id), thread_type: 'paste_thread', limit: 1 });
+    return threads[0] || null;
+}
+
 function bumpThreadActivity(threadId) {
     db.get().prepare(`UPDATE community_threads SET last_activity_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(String(threadId));
 }
@@ -682,7 +688,7 @@ module.exports = {
     // categories
     createCategory, getCategory, listCategories,
     // threads
-    createThread, getThread, findThreadByRef, ensureThreadForRef, listThreads, updateThread, bumpThreadActivity,
+    createThread, getThread, findThreadByRef, findPasteThread, ensureThreadForRef, listThreads, updateThread, bumpThreadActivity,
     // posts
     createPost, getPost, listPosts, updatePost, deletePost, findPostBySource,
     // pastes

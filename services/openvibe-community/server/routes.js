@@ -388,6 +388,35 @@ function buildRouter({ eventBus, config }) {
         res.json({ items: messages, limit, offset });
     });
 
+    // ── promote paste → paste_thread ────────────────────
+    r.post('/pastes/:slug/promote', json, (req, res) => {
+        const a = actorMeta(req);
+        const paste = model.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).json({ error: 'paste not found' });
+        let thread = model.findPasteThread(paste.id);
+        let created = false;
+        if (!thread) {
+            thread = model.createThread({
+                title: paste.title || `Paste: ${paste.slug}`,
+                thread_type: 'paste_thread',
+                ref_type: 'paste',
+                ref_id: paste.id,
+                visibility: paste.visibility || 'public',
+                status: 'open',
+                created_by_actor_type: a.actor_type,
+                created_by_actor_id: a.actor_id,
+                metadata: {
+                    paste_slug: paste.slug,
+                    paste_id: paste.id,
+                    paste_language: paste.language || null,
+                    paste_image_url: (paste.metadata && paste.metadata.image_url) || null,
+                },
+            });
+            created = true;
+        }
+        res.status(created ? 201 : 200).json({ thread, created });
+    });
+
     // ── Phase 16: paste versions ─────────────────────────
     r.get('/pastes/:slug/versions', (req, res) => {
         const paste = model.getPasteBySlug(req.params.slug);
@@ -414,7 +443,7 @@ function buildRouter({ eventBus, config }) {
         catch (err) { return denied(res, err); }
         const thread = model.findThreadByRef('paste', paste.id);
         if (!thread) return res.json({ items: [] });
-        res.json({ items: model.listPosts({ thread_id: thread.id, limit: req.query.limit }) });
+        res.json({ items: model.listPosts(thread.id, { limit: req.query.limit }) });
     });
     r.post('/pastes/:slug/comments', json, (req, res) => {
         const paste = model.getPasteBySlug(req.params.slug);
