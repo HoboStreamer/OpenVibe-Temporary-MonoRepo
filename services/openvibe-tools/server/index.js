@@ -68,6 +68,34 @@ app.use('/image', imageRoutes);
 app.use('/download', downloadRoutes);
 app.use('/text', textRoutes);
 
+// ── finditfixit proxy ─────────────────────────────────────────────
+// Forwards requests to the local Python proxy (finditfixits-proxy.py on :7779)
+// so the browser never has to call localhost directly.
+const http = require('http');
+function proxyToFinditfixit(path, res) {
+    const opts = { hostname: '127.0.0.1', port: 7779, path, method: 'GET', headers: { 'User-Agent': 'openvibe-tools/1.0' } };
+    const req2 = http.request(opts, (r2) => {
+        let body = '';
+        r2.on('data', (c) => { body += c; });
+        r2.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            res.status(r2.statusCode || 200).send(body);
+        });
+    });
+    req2.on('error', () => res.status(502).json({ error: 'proxy offline — run finditfixits-proxy.py' }));
+    req2.setTimeout(15000, () => { req2.destroy(); res.status(504).json({ error: 'proxy timeout' }); });
+    req2.end();
+}
+app.get('/api/finditfixit/deals',  (_req, res) => proxyToFinditfixit('/', res));
+app.get('/api/finditfixit/findit', (req, res) => {
+    const q = req.query.q ? '?q=' + encodeURIComponent(req.query.q) : '';
+    proxyToFinditfixit('/findit' + q, res);
+});
+app.get('/api/finditfixit/status', (req, res) => {
+    const lo = req.query.last_online ? '?last_online=' + encodeURIComponent(req.query.last_online) : '';
+    proxyToFinditfixit('/status' + lo, res);
+});
+
 // ── Runtime health/metrics/ready endpoints ────────────────────────
 const runtime = createServiceRuntime({
     name: 'openvibe-tools',

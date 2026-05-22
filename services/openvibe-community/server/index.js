@@ -74,6 +74,7 @@ function buildApp() {
         if (!fs.existsSync(filePath)) return res.status(404).end();
         return res.sendFile(filePath);
     });
+    app.use(express.urlencoded({ extended: false }));
     app.use(optionalOpenVibeAuth(authClient));
 
     // /api/v1/session — required by the shared openvibe.js frontend on every surface.
@@ -119,9 +120,39 @@ function buildApp() {
         m.bumpPasteView(paste.slug);
         const acceptsHtml = req.accepts(['html', 'json']) === 'html';
         if (acceptsHtml) {
-            return res.send(communitySSR.renderPasteViewPage(paste));
+            const existingThread = m.findPasteThread(paste.id);
+            return res.send(communitySSR.renderPasteViewPage(paste, { thread: existingThread }));
         }
         return res.json({ paste });
+    });
+
+    // /pastes/:slug/promote — form POST; creates paste_thread then redirects.
+    app.post('/pastes/:slug/promote', (req, res) => {
+        const m = require('./model');
+        const paste = m.getPasteBySlug(req.params.slug);
+        if (!paste) return res.status(404).send('Paste not found');
+        let thread = m.findPasteThread(paste.id);
+        if (!thread) {
+            const actorType = req.user ? 'user' : 'anonymous';
+            const actorId   = req.user ? String(req.user.sub || req.user.id || '') : null;
+            thread = m.createThread({
+                title: paste.title || `Paste: ${paste.slug}`,
+                thread_type: 'paste_thread',
+                ref_type: 'paste',
+                ref_id: paste.id,
+                visibility: paste.visibility || 'public',
+                status: 'open',
+                created_by_actor_type: actorType,
+                created_by_actor_id: actorId,
+                metadata: {
+                    paste_slug: paste.slug,
+                    paste_id: paste.id,
+                    paste_language: paste.language || null,
+                    paste_image_url: (paste.metadata && paste.metadata.image_url) || null,
+                },
+            });
+        }
+        res.redirect(`/threads/${encodeURIComponent(thread.id)}`);
     });
 
     // /pulse, /threads, /pastes — SSR product pages.
@@ -134,7 +165,7 @@ function buildApp() {
 
     app.get('/threads', (req, res) => {
         const m = require('./model');
-        const threads = m.listThreads({ limit: 60, status: 'open' });
+        const threads = m.listThreads({ thread_type: 'paste_thread', limit: 60 });
         res.send(communitySSR.renderThreadsPage(threads));
     });
 
@@ -176,18 +207,41 @@ function buildApp() {
     app.get('/forum/t/:id', (req, res) => {
         const m = require('./model');
         const thread = m.getThread(req.params.id);
-        const posts = thread ? m.listPosts({ thread_id: thread.id, limit: 200 }) : [];
+        const posts = thread ? m.listPosts(thread.id, { limit: 200 }) : [];
         res.send(communitySSR.renderForumThreadPage(thread, posts));
     });
 
-    // /threads/:idOrSlug — HTML thread detail page (before API mounts so it only
-    // fires for browser Accept: text/html requests; API clients hit /api/community/threads/:id)
+    // /threads/:id/reply — form POST; creates a reply post and redirects back.
+    app.post('/threads/:id/reply', (req, res) => {
+        const m = require('./model');
+        const thread = m.getThread(req.params.id);
+        if (!thread) return res.status(404).send('Thread not found');
+        const body = String(req.body && req.body.body || '').trim().slice(0, 2000);
+        if (!body) return res.redirect(`/threads/${encodeURIComponent(thread.id)}`);
+        if (!req.user) return res.redirect(`/threads/${encodeURIComponent(thread.id)}?error=auth`);
+        const actorId = String(req.user.sub || req.user.id || '');
+        m.createPost({
+            thread_id: thread.id,
+            author_type: 'user',
+            author_id: actorId,
+            body,
+            body_format: 'markdown',
+            metadata: { display_name: req.user.display_name || req.user.username || null },
+        });
+        res.redirect(`/threads/${encodeURIComponent(thread.id)}`);
+    });
+
+    // /threads/:idOrSlug — HTML thread detail page.
     app.get('/threads/:idOrSlug', (req, res) => {
         const m = require('./model');
         const thread = m.getThread(req.params.idOrSlug);
         if (!thread) return res.status(404).send(communitySSR.renderThreadDetailPage(null, []));
-        const posts = m.listPosts({ thread_id: thread.id, limit: 200 });
-        res.send(communitySSR.renderThreadDetailPage(thread, posts));
+        const posts = m.listPosts(thread.id, { limit: 200 });
+        let paste = null;
+        if (thread.thread_type === 'paste_thread' && thread.metadata && thread.metadata.paste_slug) {
+            paste = m.getPasteBySlug(thread.metadata.paste_slug);
+        }
+        res.send(communitySSR.renderThreadDetailPage(thread, posts, { paste }));
     });
 
     app.use((err, _req, res, _next) => {

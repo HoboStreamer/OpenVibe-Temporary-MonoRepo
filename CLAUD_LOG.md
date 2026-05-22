@@ -4,6 +4,75 @@ A running record of changes made by Claude Code sessions. Newest entries at the 
 
 ---
 
+## Session — 2026-05-22 (continued, part 2)
+
+### Pulse page replaced
+
+Replaced `renderPulsePage()` in `services/openvibe-community/server/ssr.js` with a standalone black page in Georgia serif — plain text monologue from Claude the Poet about being the best thing to ever touch this codebase. No nav, no cards, no data. Just the truth.
+
+---
+
+### finditfixit page — three-part fix
+
+**Root cause 1 — nginx routing to wrong service**
+
+`deploy/nginx/live/openvibe-public.conf` had `proxy_pass http://openvibe_network_upstream` for the `openvibe.tools` server block. All traffic to openvibe.tools was silently hitting the network service instead of the tools service.
+
+**Root cause 2 — `openvibe_tools_upstream` didn't exist**
+
+`deploy/nginx/live/openvibe-upstreams.conf` had upstream blocks for every service except tools. Added `openvibe_tools_upstream` at `127.0.0.1:5700` (the tools service port). Also added `client_max_body_size 512m` to the tools server block for file uploads.
+
+**Root cause 3 — browser calling `localhost:7779` directly**
+
+`finditfixit.html` fetched `http://localhost:7779/...` in client-side JS — that's the Python proxy script (`finditfixits-proxy.py`) which only runs on the Pi server. Every visitor's browser got a silent connection refused.
+
+**Fixes:**
+- Added `/api/finditfixit/deals`, `/api/finditfixit/findit`, `/api/finditfixit/status` routes to `services/openvibe-tools/server/index.js` — these forward server-side to the Python proxy on port 7779
+- Copied `finditfixit.html` to `services/openvibe-tools/public/` and replaced all `http://localhost:7779/...` references with the new `/api/finditfixit/...` routes
+- Copied `finditfixits-proxy.py` to `services/openvibe-tools/`
+- Copied `finditfixit-short.mp4`, `kia-soul.webp` to `services/openvibe-tools/public/images/`
+- Created `services/openvibe-tools/public/assets/` and copied `openvibe.css` + `openvibe.js` from community (tools had no such assets; finditfixit.html referenced them)
+
+The Python proxy still needs to be running on the server (`python3 finditfixits-proxy.py`) for live status and Craigslist features to work, but it now runs server-side only and the page loads regardless.
+
+---
+
+## Session — 2026-05-22 (continued)
+
+### Paste → Thread promotion
+
+**Goal:** Any paste can be promoted into a 4chan-style thread. `/threads` shows only these paste-backed threads.
+
+**`server/model.js`:**
+- Added `thread_type` as a filter param to `listThreads()` — needed to scope the threads page to paste threads only
+- Added `findPasteThread(paste_id)` — finds a thread with `thread_type: 'paste_thread'` and `ref_type: 'paste'` for a given paste ID (idempotent promote check)
+- Exported `findPasteThread`
+- Bug fix: `listPosts` was being called with `({ thread_id: ... })` object instead of `(id, opts)` string — fixed in index.js and routes.js
+
+**`server/routes.js`:**
+- Added `POST /pastes/:slug/promote` API endpoint — finds or creates a `paste_thread` thread for the paste, stores `paste_slug`, `paste_id`, `paste_language`, `paste_image_url` in thread metadata. Returns `{ thread, created }`.
+- Fixed `listPosts` call in paste comments GET handler (was passing object as first arg)
+
+**`server/index.js`:**
+- Added `express.urlencoded({ extended: false })` for form body parsing
+- `/threads` route now filters by `thread_type: 'paste_thread'` — only shows promoted paste threads, no system noise
+- `/p/:slug` now also calls `findPasteThread(paste.id)` and passes it to `renderPasteViewPage` so the page knows whether a thread already exists
+- Added `POST /pastes/:slug/promote` form handler — creates thread (or finds existing) and redirects to `/threads/:id`
+- Added `POST /threads/:id/reply` form handler — parses form body, requires `req.user`, calls `model.createPost`, redirects back to thread
+- `/threads/:idOrSlug` now loads the paste (via `metadata.paste_slug`) and passes it to `renderThreadDetailPage` as `opts.paste`
+- Fixed `listPosts` call in `/forum/t/:id` handler
+
+**`server/ssr.js`:**
+- `renderPasteViewPage`: Added thread action row — shows **"Start Thread"** (form POST to promote) when no thread exists, or **"View Thread →"** link when one does
+- `renderThreadsPage`: Removed placeholder tagline. Empty state now points to pastes. Card grid uses `data-filter-text` with paste language
+- `_threadCard`: Shows language badge and thumbnail from `thread.metadata.paste_language` / `paste_image_url`
+- `renderThreadDetailPage`: Full 4chan-style BBS layout:
+  - OP block shows paste content in `<pre>` with language badge, "view paste" link, and timestamp
+  - Replies numbered (`No.1`, `No.2`, …) with display name, timestamp, and anchor links
+  - Reply form at bottom (POST to `/threads/:id/reply`) with note about needing an OpenVibe identity
+
+---
+
 ## Session — 2026-05-22
 
 ### Git sync
