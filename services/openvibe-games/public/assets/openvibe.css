@@ -174,3 +174,75 @@ pre { background: var(--ov-bg-elev); padding: 1rem; border-radius: var(--ov-radi
 .ov-launcher-box { width: min(640px, 92vw); background: var(--ov-bg-elev); border: 1px solid var(--ov-border); border-radius: var(--ov-radius); box-shadow: var(--ov-shadow); padding: 1rem; }
 .ov-launcher-results { max-height: 60vh; overflow-y: auto; margin-top: .75rem; }
 .ov-launcher-results .ov-card { padding: .55rem .8rem; border-radius: var(--ov-radius-sm); }
+
+/* ── Anonymous buddy menu ── */
+.ov-anon-menu {
+    position: relative;
+}
+.ov-anon-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 0.55rem;
+    border-radius: 17px;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--ov-text-dim, #94a3b8);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.ov-anon-trigger:hover {
+    border-color: rgba(99,102,241,0.5);
+    background: rgba(99,102,241,0.1);
+    color: var(--ov-text, #f1f5f9);
+}
+.ov-anon-trigger-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: inherit;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ov-anon-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    background: var(--ov-nav-bg, #0e1018);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    overflow: hidden;
+    z-index: 9999;
+}
+.ov-anon-dropdown-name {
+    padding: 0.65rem 1rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ov-text-dim, #64748b);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ov-anon-dropdown-item {
+    display: block;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    color: var(--ov-text, #f1f5f9);
+    text-decoration: none;
+    transition: background 0.12s;
+}
+.ov-anon-dropdown-item:hover {
+    background: rgba(255,255,255,0.06);
+}
+.ov-anon-dropdown-item--danger {
+    color: #f87171;
+}
+.ov-anon-dropdown-item--danger:hover {
+    background: rgba(248,113,113,0.08);
+}

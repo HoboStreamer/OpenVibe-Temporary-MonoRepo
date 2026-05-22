@@ -530,7 +530,7 @@ function _shellStyles() {
         .feature-grid,
         .surface-grid,
         .story-grid,
-        .stat-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .stat-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
         .paste-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
         .paste-card { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
         .paste-card .paste-thumb-link { display: block; overflow: hidden; }
@@ -2315,7 +2315,7 @@ function renderChannelCard(channel, baseUrl, options) {
             <div class="section-head">
                 <div>
                     <h2 class="section-title">Community pulse</h2>
-                    <p class="section-subtitle">Threads, pastes, rooms, calls, and relay signals that keep each creator’s orbit feeling alive.</p>
+                    <p class="section-subtitle">Threads, pastes, rooms, calls, and relay signals that keep each creator's orbit feeling alive.</p>
                 </div>
                 <div class="inline-actions">
                     <a class="section-link" href="${LIVE_NETWORK_URLS.community}">Open community</a>
@@ -2603,7 +2603,7 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         : `${stream.title || 'Untitled stream'} by ${channelName} on openvibe.live.`;
     const ogImage = absoluteUrl(stream.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
     const moreFromChannelHtml = (moreFromChannel || []).slice(0, 6).map((item) => renderStreamCard(item, channel, baseUrl, { badge: item.is_live ? 'Live' : 'Broadcast', badgeTone: item.is_live ? 'live' : 'soft' })).join('');
-    const mediaStage = stream.embed_url
+    const mediaEmbed = stream.embed_url
         ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
         : renderMediaThumb({
             url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
@@ -2613,65 +2613,197 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             initials: initialsFrom(channelName),
             baseUrl,
         });
+
     const pageContent = `
-        <section class="hero-panel compact">
-            <div class="hero-copy" data-reveal>
-                <div class="eyebrow">${escapeHtml(isLive ? 'Live session' : 'Broadcast record')}</div>
-                <h1 class="hero-heading" style="max-width:12ch"><span class="hero-gradient">${escapeHtml(stream.title || 'Untitled stream')}</span></h1>
-                <p>By ${slug ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)} · ${escapeHtml(stream.category || 'uncategorized')} · ${escapeHtml(isLive ? `${formatCompactNumber(stream.viewer_count || 0)} watching right now` : `Peak ${formatCompactNumber(stream.peak_viewers || 0)} viewers`)}</p>
-                <div class="hero-actions">
-                    <a class="button" href="${slug ? channelPath(slug) : '/channels'}">${slug ? 'Back to channel' : 'Browse creators'}</a>
-                    <a class="button-secondary" href="/vods${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Channel VODs' : 'Browse VODs'}</a>
-                    <a class="button-ghost" href="/clips${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Channel clips' : 'Browse clips'}</a>
+        <div class="sp-layout">
+            <div class="sp-main">
+                <div class="sp-embed">${mediaEmbed}</div>
+                <div class="sp-info">
+                    <div class="sp-title-row">
+                        <div>
+                            <div class="pill-row" style="margin-bottom:.5rem;">
+                                ${renderPill(isLive ? 'Live now' : 'Ended', isLive ? 'live' : 'muted')}
+                                ${stream.category ? renderPill(stream.category, 'primary') : ''}
+                            </div>
+                            <h1 class="sp-title">${escapeHtml(stream.title || 'Untitled stream')}</h1>
+                            <p class="sp-byline">
+                                ${slug ? `<a class="link-inline" href="${channelPath(slug)}">${escapeHtml(channelName)}</a>` : escapeHtml(channelName)}
+                                · ${escapeHtml(isLive ? `${formatCompactNumber(stream.viewer_count || 0)} watching` : `Peak ${formatCompactNumber(stream.peak_viewers || 0)} viewers`)}
+                                ${stream.started_at ? ` · started ${escapeHtml(timeAgo(stream.started_at))}` : ''}
+                            </p>
+                        </div>
+                        <div class="sp-actions">
+                            <a class="button" href="${slug ? channelPath(slug) : '/channels'}">${slug ? 'Channel page' : 'Browse creators'}</a>
+                            <a class="button-secondary" href="/vods${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'VODs' : 'Browse VODs'}</a>
+                            <a class="button-ghost" href="/clips${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Clips' : 'Browse clips'}</a>
+                        </div>
+                    </div>
+                    <div class="sp-stats">
+                        <div class="sp-stat"><span class="sp-stat-label">Viewers</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.viewer_count || 0))}</span></div>
+                        <div class="sp-stat"><span class="sp-stat-label">Peak</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.peak_viewers || 0))}</span></div>
+                        <div class="sp-stat"><span class="sp-stat-label">Category</span><span class="sp-stat-val">${escapeHtml(stream.category || '—')}</span></div>
+                        <div class="sp-stat"><span class="sp-stat-label">Started</span><span class="sp-stat-val">${escapeHtml(stream.started_at ? formatDateTime(stream.started_at) : '—')}</span></div>
+                        ${stream.ended_at ? `<div class="sp-stat"><span class="sp-stat-label">Ended</span><span class="sp-stat-val">${escapeHtml(formatDateTime(stream.ended_at))}</span></div>` : ''}
+                        <div class="sp-stat"><span class="sp-stat-label">Clips</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.clip_count || 0))}</span></div>
+                    </div>
                 </div>
             </div>
-        </section>
 
-        <section class="section-panel">
-            <div class="split-grid">
-                <article class="glass-card media-stage" data-reveal>
-                    ${mediaStage}
-                    <div class="pill-row">
-                        ${renderPill(isLive ? 'Live now' : 'Not live', isLive ? 'live' : 'muted')}
-                        ${stream.category ? renderPill(stream.category, 'primary') : ''}
-                        ${renderPill('Stream session', 'success')}
+            <aside class="sp-chat glass-card" id="sp-chat">
+                <div class="sp-chat-header">
+                    <span class="eyebrow" style="margin:0;">Stream Chat</span>
+                    ${isLive ? renderPill('Live', 'live') : renderPill('Replay', 'muted')}
+                </div>
+                <div class="sp-chat-feed" id="sp-chat-feed"><div class="sp-chat-empty">Connecting…</div></div>
+                <div class="sp-chat-composer" id="sp-chat-composer">
+                    <div class="sp-chat-who" id="sp-chat-who" title="Click to set name"></div>
+                    <div class="sp-chat-row">
+                        <input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
+                        <button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button>
                     </div>
-                    <p class="card-body">${escapeHtml(stream.vod_media_id ? `A VOD attachment is already linked to this broadcast (${stream.vod_media_id}).` : 'This broadcast does not yet expose a VOD attachment in the current runtime graph.')}</p>
-                </article>
-                <aside class="list-stack">
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Stream stats</div>
-                        <div class="data-points">
-                            <div class="data-point"><div class="data-point-label">Current viewers</div><div class="data-point-value">${escapeHtml(formatNumber(stream.viewer_count || 0))}</div></div>
-                            <div class="data-point"><div class="data-point-label">Peak viewers</div><div class="data-point-value">${escapeHtml(formatNumber(stream.peak_viewers || 0))}</div></div>
-                            <div class="data-point"><div class="data-point-label">Clip count</div><div class="data-point-value">${escapeHtml(formatNumber(stream.clip_count || 0))}</div></div>
-                            <div class="data-point"><div class="data-point-label">Status</div><div class="data-point-value">${escapeHtml(isLive ? 'Live' : 'Ended')}</div></div>
-                        </div>
-                    </article>
-                    <article class="glass-card" data-reveal>
-                        <div class="eyebrow">Broadcast details</div>
-                        <ul class="flow-list">
-                            <li>Started: ${escapeHtml(stream.started_at ? formatDateTime(stream.started_at) : 'Unknown')}</li>
-                            <li>Ended: ${escapeHtml(stream.ended_at ? formatDateTime(stream.ended_at) : (isLive ? 'Still live' : 'Unknown'))}</li>
-                            <li>Category: ${escapeHtml(stream.category || 'uncategorized')}</li>
-                            <li>Source: ${escapeHtml(stream.source || 'native')}</li>
-                            <li>Channel binding: ${escapeHtml(stream.channel_binding_mode || 'default')}</li>
-                        </ul>
-                    </article>
-                </aside>
-            </div>
-        </section>
+                </div>
+            </aside>
+        </div>
 
-        ${renderSection({
+        ${moreFromChannelHtml ? renderSection({
             title: `More from ${channelName}`,
-            subtitle: 'Keep moving through the creator’s recent activity without backing out to a generic index.',
-            content: moreFromChannelHtml ? `<div class="card-grid">${moreFromChannelHtml}</div>` : null,
-            emptyTitle: 'No other broadcasts yet',
-            emptyBody: 'Once more sessions exist for this creator, they appear here automatically.',
-            emptyHref: slug ? channelPath(slug) : '/channels',
-            emptyLabel: slug ? 'Open channel page' : 'Browse creators',
-        })}
+            subtitle: null,
+            content: `<div class="card-grid">${moreFromChannelHtml}</div>`,
+        }) : ''}
     `;
+
+    const extraStyles = `
+        .sp-layout { display:grid; grid-template-columns:1fr 320px; gap:1rem; align-items:start; padding:1.25rem 0 2rem; }
+        .sp-main { min-width:0; display:flex; flex-direction:column; gap:.75rem; }
+        .sp-embed { width:100%; border-radius:var(--radius); overflow:hidden; background:#000; }
+        .sp-embed iframe { width:100%; aspect-ratio:16/9; border:0; display:block; }
+        .sp-embed .media-thumb { border-radius:var(--radius); }
+        .sp-info { display:flex; flex-direction:column; gap:.75rem; }
+        .sp-title-row { display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; }
+        .sp-title { font-size:clamp(1.1rem,2.5vw,1.6rem); font-weight:700; margin:0 0 .3rem; letter-spacing:-.02em; line-height:1.2; }
+        .sp-byline { font-size:.88rem; color:var(--muted); margin:0; }
+        .sp-actions { display:flex; gap:.5rem; flex-wrap:wrap; flex-shrink:0; align-items:flex-start; }
+        .sp-stats { display:flex; gap:1.25rem; flex-wrap:wrap; padding:.75rem 0; border-top:1px solid var(--border); }
+        .sp-stat { display:flex; flex-direction:column; gap:.15rem; }
+        .sp-stat-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; }
+        .sp-stat-val { font-size:.88rem; font-weight:600; color:var(--text); }
+        .sp-chat { display:flex; flex-direction:column; height:calc(100vh - 90px); max-height:720px; position:sticky; top:70px; padding:0; overflow:hidden; }
+        .sp-chat-header { display:flex; align-items:center; gap:.6rem; padding:.75rem 1rem; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .sp-chat-feed { flex:1; overflow-y:auto; padding:.6rem .85rem; display:flex; flex-direction:column; gap:.2rem; }
+        .sp-chat-empty { color:var(--muted); font-size:.8rem; text-align:center; padding:1.5rem 0; margin:auto 0; }
+        .sp-chat-msg { padding:.3rem .45rem; border-radius:8px; }
+        .sp-chat-msg:hover { background:rgba(255,255,255,.03); }
+        .sp-chat-msg-meta { display:flex; gap:.4rem; align-items:baseline; margin-bottom:.1rem; }
+        .sp-chat-msg-name { font-size:.74rem; font-weight:700; color:var(--accent); }
+        .sp-chat-msg-time { font-size:.65rem; color:var(--muted); }
+        .sp-chat-msg-body { font-size:.83rem; color:var(--text); line-height:1.45; word-break:break-word; }
+        .sp-chat-composer { flex-shrink:0; padding:.5rem .75rem; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:.3rem; }
+        .sp-chat-who { font-size:.68rem; color:var(--muted); cursor:pointer; }
+        .sp-chat-who:hover { color:var(--accent); }
+        .sp-chat-row { display:flex; gap:.4rem; }
+        .sp-chat-input { flex:1; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:8px; padding:.4rem .65rem; color:var(--text); font-size:.83rem; outline:none; transition:border-color .15s; }
+        .sp-chat-input:focus { border-color:var(--accent); }
+        .sp-chat-input::placeholder { color:var(--muted); }
+        @media(max-width:900px) { .sp-layout { grid-template-columns:1fr; } .sp-chat { height:420px; position:static; } }
+    `;
+
+    const extraScripts = `
+        (function() {
+            var CHAT_BASE = ${JSON.stringify(LIVE_NETWORK_URLS.chat)};
+            var STREAM_ID = ${JSON.stringify(String(stream.id || ''))};
+            var POLL = 3000;
+            var MAX = 60;
+            var feed = document.getElementById('sp-chat-feed');
+            var composer = document.getElementById('sp-chat-composer');
+            var whoEl = document.getElementById('sp-chat-who');
+            var input = document.getElementById('sp-chat-input');
+            var sendBtn = document.getElementById('sp-chat-send');
+            var lastId = null;
+            var msgs = [];
+            var myName = localStorage.getItem('ov-chat-name') || '';
+            var namingMode = false;
+
+            function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+            function timeStr(ts) { return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+
+            function updateWho() {
+                whoEl.textContent = myName ? 'Chatting as ' + myName + ' · click to change' : 'Set a name to chat';
+            }
+            updateWho();
+            whoEl.addEventListener('click', enterNaming);
+
+            function enterNaming() {
+                namingMode = true;
+                composer.innerHTML = '<div style="padding:.5rem .75rem;display:flex;flex-direction:column;gap:.4rem;"><p style="margin:0;font-size:.75rem;color:var(--muted);">Enter your name:</p><div class="sp-chat-row"><input class="sp-chat-input" id="sp-ni" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '"><button class="button" id="sp-nok" type="button" style="flex-shrink:0;padding:.4rem .7rem;font-size:.8rem;">OK</button></div></div>';
+                var ni = document.getElementById('sp-ni');
+                ni.focus(); ni.select();
+                document.getElementById('sp-nok').addEventListener('click', function() { saveName(ni.value); });
+                ni.addEventListener('keydown', function(e) { if(e.key==='Enter') saveName(ni.value); });
+            }
+
+            function saveName(v) {
+                v = (v||'').trim().slice(0,32);
+                if(!v) return;
+                myName = v;
+                localStorage.setItem('ov-chat-name', v);
+                namingMode = false;
+                restoreComposer();
+                document.getElementById('sp-chat-input').focus();
+            }
+
+            function restoreComposer() {
+                composer.innerHTML = '<div class="sp-chat-who" id="sp-chat-who" title="Click to set name"></div><div class="sp-chat-row"><input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button></div>';
+                whoEl = document.getElementById('sp-chat-who');
+                input = document.getElementById('sp-chat-input');
+                sendBtn = document.getElementById('sp-chat-send');
+                whoEl.addEventListener('click', enterNaming);
+                sendBtn.addEventListener('click', send);
+                input.addEventListener('keydown', function(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+                updateWho();
+            }
+
+            function renderMsgs() {
+                var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+                if(!msgs.length) { feed.innerHTML = '<div class="sp-chat-empty">No messages yet.</div>'; return; }
+                feed.innerHTML = msgs.map(function(m) {
+                    var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+                    return '<div class="sp-chat-msg"><div class="sp-chat-msg-meta"><span class="sp-chat-msg-name">'+esc(name)+'</span><span class="sp-chat-msg-time">'+timeStr(m.created_at)+'</span></div><div class="sp-chat-msg-body">'+esc(m.body)+'</div></div>';
+                }).join('');
+                if(atBottom || lastId === null) feed.scrollTop = feed.scrollHeight;
+            }
+
+            function poll() {
+                fetch(CHAT_BASE + '/api/chat/stream/' + encodeURIComponent(STREAM_ID) + '/history?limit=' + MAX, {mode:'cors',credentials:'include'})
+                    .then(function(r){return r.json();})
+                    .then(function(d){
+                        var items = (d.items||[]).slice().reverse();
+                        if(!items.length && lastId===null){renderMsgs();return;}
+                        if(!items.length)return;
+                        var newest = items[items.length-1].id;
+                        if(newest !== lastId){ msgs=items; lastId=newest; renderMsgs(); }
+                    }).catch(function(){});
+            }
+
+            function send() {
+                if(!myName){enterNaming();return;}
+                var text = (input.value||'').trim();
+                if(!text)return;
+                input.value=''; input.disabled=true; sendBtn.disabled=true;
+                fetch(CHAT_BASE + '/api/chat/stream/' + encodeURIComponent(STREAM_ID) + '/send', {
+                    method:'POST', mode:'cors', credentials:'include',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({body:text, metadata:{sender_name:myName}}),
+                }).then(function(){return poll();}).catch(function(){})
+                .finally(function(){input.disabled=false;sendBtn.disabled=false;input.focus();});
+            }
+
+            sendBtn.addEventListener('click', send);
+            input.addEventListener('keydown', function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+            poll();
+            setInterval(poll, POLL);
+        })();
+    `;
+
     return renderPage({
         title,
         description,
@@ -2680,6 +2812,8 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         ogImage,
         activeNav: 'channels',
         bodyHtml: pageContent,
+        extraStyles,
+        extraScripts,
         baseUrl,
     });
 }
@@ -3087,7 +3221,7 @@ function renderHomePage({ channels, featuredChannels, trendingNow, liveNow, rece
                     <a class="section-link" href="/channels">Browse channels</a>
                 </div>
             </div>
-            <div class="story-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+            <div class="story-grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
                 <article class="glass-card" data-reveal>
                     <div class="eyebrow">No algorithm</div>
                     <h3 class="card-title">Your channel, chronologically</h3>

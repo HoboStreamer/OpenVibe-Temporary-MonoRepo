@@ -238,11 +238,13 @@ pre {
     position: relative;
 }
 .ov-anon-trigger {
-    display: grid;
-    place-items: center;
-    width: 34px;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 34px;
     height: 34px;
-    border-radius: 50%;
+    padding: 0 0.55rem;
+    border-radius: 17px;
     border: 1.5px solid rgba(255,255,255,0.12);
     background: rgba(255,255,255,0.05);
     color: var(--ov-text-dim, #94a3b8);
@@ -253,6 +255,15 @@ pre {
     border-color: rgba(99,102,241,0.5);
     background: rgba(99,102,241,0.1);
     color: var(--ov-text, #f1f5f9);
+}
+.ov-anon-trigger-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: inherit;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .ov-anon-dropdown {
     position: absolute;
