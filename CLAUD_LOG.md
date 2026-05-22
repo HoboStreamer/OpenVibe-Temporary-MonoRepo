@@ -35,6 +35,15 @@ Replaced `renderPulsePage()` in `services/openvibe-community/server/ssr.js` with
 
 The Python proxy still needs to be running on the server (`python3 finditfixits-proxy.py`) for live status and Craigslist features to work, but it now runs server-side only and the page loads regardless.
 
+**Follow-up: Python proxy replaced with native Node.js**
+
+Rewrote the entire `finditfixits-proxy.py` logic as a native Express router at `services/openvibe-tools/server/finditfixit/routes.js`. No external process needed anymore. The three endpoints are implemented directly:
+- `GET /api/finditfixit/deals` — scrapes DuckDuckGo HTML for Killeen TX fast food deals
+- `GET /api/finditfixit/findit?q=` — hits Craigslist JSON search API
+- `GET /api/finditfixit/status` — checks RoboStreamer for `stream_time_container` visibility + pings local OpenVibe live API; preserves the in-memory last-seen tracker from the Python version
+
+Removed the forwarding code from `server/index.js` and replaced with a single `app.use('/api/finditfixit', finditfixitRoutes)`. `finditfixits-proxy.py` is kept for reference but is no longer called at runtime.
+
 ---
 
 ## Session — 2026-05-22 (continued)
