@@ -20,6 +20,14 @@ const COMMUNITY_URLS = Object.freeze({
     community: resolvePublicOrigin({ surface: 'community' }),
 });
 
+// Bridge-based sign-in: network validates session then redirects back here with token in hash.
+// Falls back to oauth/authorize page if community URL is not yet resolved.
+const SIGN_IN_URL = COMMUNITY_URLS.network && COMMUNITY_URLS.community
+    ? `${COMMUNITY_URLS.network}/api/v1/session/bridge?return_to=${encodeURIComponent(COMMUNITY_URLS.community)}`
+    : `${COMMUNITY_URLS.network || ''}/oauth/authorize`;
+// Anonymous sessions are created via the OAuth authorize page (which has an anonymous option).
+const ANON_URL = `${COMMUNITY_URLS.network || ''}/oauth/authorize?prompt=anonymous`;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -193,6 +201,7 @@ function _nav(active) {
         { href: '/pulse',   label: 'Pulse',   id: 'pulse',   icon: 'events'    },
         { href: '/threads', label: 'Threads', id: 'threads', icon: 'chat'      },
         { href: '/pastes',  label: 'Pastes',  id: 'pastes',  icon: 'codes'     },
+        { href: '/pages',   label: 'Pages',   id: 'pages',   icon: 'community' },
         { href: '/chat',    label: 'Chat',    id: 'chat',    icon: 'chat'      },
     ];
     return items.map((item) => `<a class="nav-link ov-icon-label${item.id === active ? ' active' : ''}" href="${item.href}">${renderIcon(item.icon, { decorative: true })}<span>${item.label}</span></a>`).join('');
@@ -218,6 +227,7 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
     ${_styles()}
     <link rel="stylesheet" href="/assets/openvibe-icons.css">
     <script src="/assets/openvibe-icons.js" defer></script>
+    <script src="/assets/openvibe.js" defer></script>
 </head>
 <body>
     <header class="topbar">
@@ -229,8 +239,8 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
             <nav class="nav-links" aria-label="Primary">
                 ${_nav(active)}
             </nav>
-            <div>
-                <a class="nav-link" href="${COMMUNITY_URLS.network}/auth/login">Sign in</a>
+            <div id="ov-nav-auth">
+                <a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>
             </div>
         </div>
     </header>
@@ -247,6 +257,21 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
             <a class="link-inline" href="${COMMUNITY_URLS.network}">Account</a>
         </div>
     </footer>
+    <a href="${COMMUNITY_URLS.chat}" target="_blank" rel="noopener" aria-label="Open chat" style="position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;">💬</a>
+    <script>
+    document.addEventListener('openvibe-auth-changed', function(e) {
+        var s = e.detail;
+        var el = document.getElementById('ov-nav-auth');
+        if (!el) return;
+        if (s && s.authenticated && s.user) {
+            el.innerHTML = '<a class="nav-link" href="${COMMUNITY_URLS.network}">' + (s.user.display_name || s.user.username || 'My Account') + '</a>';
+        } else if (s && s.anonymous) {
+            el.innerHTML = '<a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>';
+        } else {
+            el.innerHTML = '<a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>';
+        }
+    });
+    </script>
 </body>
 </html>`;
 }
@@ -635,7 +660,7 @@ function renderThreadDetailPage(thread, posts, opts) {
                     style="width:100%;min-height:90px;resize:vertical;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:.65rem .9rem;color:var(--text);font-family:inherit;font-size:.9rem;outline:none;box-sizing:border-box"></textarea>
                 <div style="margin-top:.6rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
                     <button type="submit" style="background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);color:var(--accent);border-radius:999px;padding:.45rem 1.2rem;font-weight:700;cursor:pointer;font-size:.88rem;font-family:inherit">Post Reply</button>
-                    <span style="color:var(--muted);font-size:.8rem">Requires an OpenVibe identity — <a class="link-inline" href="${COMMUNITY_URLS.network}/auth/login">sign in</a> or <a class="link-inline" href="${COMMUNITY_URLS.network}/auth/anonymous">go anonymous</a>.</span>
+                    <span style="color:var(--muted);font-size:.8rem">Requires an OpenVibe identity — <a class="link-inline" href="${SIGN_IN_URL}">sign in</a> or <a class="link-inline" href="${ANON_URL}">go anonymous</a>.</span>
                 </div>
             </form>
         </div>`;
@@ -682,6 +707,93 @@ function renderThreadDetailPage(thread, posts, opts) {
     });
 }
 
+// ── renderPagesPage ───────────────────────────────────────────────────────────
+function renderPagesPage(registry, opts) {
+    opts = opts || {};
+    const pages = (registry || []);
+    const notFound = opts.notFound || null;
+
+    const pageCards = pages.length
+        ? pages.map((p) => {
+            const views = p.view_count || 0;
+            const tags = (p.tags || []).map((t) => `<span class="pill">${escapeHtml(t)}</span>`).join('');
+            return `<a class="glass-card" href="/pages/${encodeURIComponent(p.slug)}" style="display:block;text-decoration:none;position:relative;">
+                <div class="pill-row">
+                    <span class="pill primary">Community Page</span>
+                    ${tags}
+                </div>
+                <h3 class="card-title" style="margin-top:.5rem;">${escapeHtml(p.title || p.slug)}</h3>
+                <p class="card-body">${escapeHtml(p.description || '')}</p>
+                <div class="card-kicker" style="margin-top:.4rem;">
+                    by ${escapeHtml(p.author || 'unknown')}
+                    ${views ? ` · ${views} view${views === 1 ? '' : 's'}` : ''}
+                </div>
+            </a>`;
+        }).join('')
+        : `<div class="empty-state"><p>No community pages yet.</p><p><a class="link-inline" href="/pages/submit">Submit the first one →</a></p></div>`;
+
+    const bodyHtml = `
+        <section class="hero">
+            <div class="eyebrow">Community</div>
+            <h1 class="page-title">Community Pages</h1>
+            <p class="page-sub">Vibecoded pages built by the community. Personal homepages, tools, and experiments.</p>
+        </section>
+        <div class="section-head">
+            <h2 class="section-title">${pages.length} page${pages.length === 1 ? '' : 's'}</h2>
+            <a class="section-link" href="/pages/submit">Submit your page →</a>
+        </div>
+        ${notFound ? `<div class="empty-state" style="margin-bottom:1rem;"><p>Page <strong>${escapeHtml(notFound)}</strong> not found in the registry.</p></div>` : ''}
+        <div class="card-grid">${pageCards}</div>`;
+
+    return _shell({ title: 'Community Pages — OpenVibe', description: 'User-built pages on OpenVibe Community.', active: 'pages', bodyHtml });
+}
+
+// ── renderSubmitPage ──────────────────────────────────────────────────────────
+function renderSubmitPage() {
+    const bodyHtml = `
+        <section class="hero">
+            <div class="eyebrow">Community</div>
+            <h1 class="page-title">Submit a Community Page</h1>
+            <p class="page-sub">Got a vibecoded page you want hosted here? Here's how to get it in.</p>
+        </section>
+
+        <div class="glass-card" style="margin-bottom:1.2rem;">
+            <div class="pill-row"><span class="pill primary">Step 1</span></div>
+            <h3 class="card-title" style="margin-top:.5rem;">Build your page</h3>
+            <p class="card-body">Write a self-contained HTML file. It can use inline CSS and JS. No build step required. Aim for one file — link to external CDN resources if you need libraries.</p>
+        </div>
+
+        <div class="glass-card" style="margin-bottom:1.2rem;">
+            <div class="pill-row"><span class="pill primary">Step 2</span></div>
+            <h3 class="card-title" style="margin-top:.5rem;">Name your file</h3>
+            <p class="card-body">Use a slug that matches your handle or page name: <code>yourname.html</code>. It'll live at <code>/pages/yourname</code> on openvibe.community.</p>
+        </div>
+
+        <div class="glass-card" style="margin-bottom:1.2rem;">
+            <div class="pill-row"><span class="pill primary">Step 3</span></div>
+            <h3 class="card-title" style="margin-top:.5rem;">Submit it</h3>
+            <p class="card-body">Drop your file in the <strong>OpenVibe Discord</strong> or open a pull request on the monorepo. Add your entry to <code>services/openvibe-community/server/pages-registry.json</code> with a title, author, and description — a maintainer will review and merge it.</p>
+        </div>
+
+        <div class="glass-card">
+            <div class="pill-row"><span class="pill success">Guidelines</span></div>
+            <h3 class="card-title" style="margin-top:.5rem;">Keep it clean</h3>
+            <ul class="card-body" style="padding-left:1.2rem;margin:0.5rem 0 0;">
+                <li>No malicious scripts, trackers, or data exfiltration.</li>
+                <li>Content must comply with the OpenVibe community standards.</li>
+                <li>Keep external requests minimal — no loading 40 third-party SDKs.</li>
+                <li>Your page can link back to openvibe.network, your channel, pastes, etc.</li>
+            </ul>
+        </div>
+
+        <div style="margin-top:1.5rem;display:flex;gap:.75rem;flex-wrap:wrap;">
+            <a class="section-link" href="/pages">← Community Pages</a>
+            <a class="section-link" href="${COMMUNITY_URLS.network}">Join the network</a>
+        </div>`;
+
+    return _shell({ title: 'Submit a Page — OpenVibe Community', description: 'How to contribute a community page to OpenVibe.', active: 'pages', bodyHtml });
+}
+
 module.exports = {
     renderThreadsPage,
     renderPastesPage,
@@ -689,6 +801,8 @@ module.exports = {
     renderPulsePage,
     renderChatPage,
     renderThreadDetailPage,
+    renderPagesPage,
+    renderSubmitPage,
     renderForumHomePage,
     renderForumSpacePage,
     renderForumThreadPage,
@@ -732,7 +846,7 @@ function _forumShell({ title, description, active, bodyHtml }) {
                 ${_forumNav(active)}
             </nav>
             <div>
-                <a class="nav-link" href="${COMMUNITY_URLS.network}/auth/login">Sign in</a>
+                <a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>
             </div>
         </div>
     </header>
@@ -780,7 +894,7 @@ function renderForumHomePage(spaces, recentThreads) {
             <h1 class="page-title">OpenVibe Forum</h1>
             <p style="color:var(--muted);max-width:540px;">Community discussions across the OpenVibe network. Ask questions, share ideas, get help.</p>
             <div class="ov-cta-row" style="margin-top:1rem;">
-                <a class="button" href="${COMMUNITY_URLS.network}/auth/login">Sign in to post</a>
+                <a class="button" href="${SIGN_IN_URL}">Sign in to post</a>
                 <a class="button-secondary" href="/threads">Browse all threads</a>
             </div>
         </section>
@@ -855,7 +969,7 @@ function renderForumThreadPage(thread, posts) {
         <section class="section-panel" style="margin-top:1.5rem;">
             <div class="section-head"><h2 class="section-title">Reply</h2></div>
             <div class="empty-state" style="text-align:left;">
-                <p style="margin:0;"><a class="link-inline" href="${COMMUNITY_URLS.network}/auth/login">Sign in</a> to post a reply.</p>
+                <p style="margin:0;"><a class="link-inline" href="${SIGN_IN_URL}">Sign in</a> to post a reply.</p>
             </div>
         </section>`;
     return _forumShell({ title: `${title} · OpenVibe Forum`, description: thread.body ? String(thread.body).slice(0, 160) : title, active: 'threads', bodyHtml });

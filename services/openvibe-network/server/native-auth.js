@@ -1668,6 +1668,18 @@ function buildNativeAuth({ config, identity }) {
             res.json({ items: listSessionsForUser(user.id) });
         });
 
+        router.delete('/account/sessions/:id', (req, res) => {
+            const user = requireNativeUser(req, res);
+            if (!user) return;
+            const sessionId = req.params.id;
+            const sessions = listSessionsForUser(user.id);
+            if (!sessions.some((s) => s.id === sessionId)) {
+                return res.status(404).json({ error: 'session not found' });
+            }
+            revokeSession(sessionId);
+            res.json({ ok: true });
+        });
+
         router.get('/account/linked', (req, res) => {
             const user = requireNativeUser(req, res);
             if (!user) return;

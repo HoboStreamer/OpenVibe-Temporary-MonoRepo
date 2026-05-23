@@ -12,7 +12,7 @@ const fs = require('fs');
 const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
-const { buildRouter } = require('./routes');
+const { buildRouter, loadPagesRegistry, bumpPageView } = require('./routes');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const communitySSR = require('./ssr');
 
@@ -242,6 +242,33 @@ function buildApp() {
             paste = m.getPasteBySlug(thread.metadata.paste_slug);
         }
         res.send(communitySSR.renderThreadDetailPage(thread, posts, { paste }));
+    });
+
+    // Redirect old root-level finditfixit URL to new canonical location
+    app.get('/finditfixit.html', (_req, res) => res.redirect(301, '/pages/finditfixit'));
+    app.get('/finditfixit',      (_req, res) => res.redirect(301, '/pages/finditfixit'));
+
+    // Community Pages listing
+    app.get('/pages', (_req, res) => {
+        const registry = loadPagesRegistry();
+        res.send(communitySSR.renderPagesPage(registry));
+    });
+
+    // Community Pages submission guide
+    app.get('/pages/submit', (_req, res) => {
+        res.send(communitySSR.renderSubmitPage());
+    });
+
+    // Individual community page — track view, serve file
+    app.get('/pages/:slug', (req, res) => {
+        const registry = loadPagesRegistry();
+        const slug = req.params.slug;
+        const page = registry.find((p) => p.slug === slug);
+        if (!page) return res.status(404).send(communitySSR.renderPagesPage(registry, { notFound: slug }));
+        bumpPageView(slug);
+        const filePath = path.join(__dirname, '..', 'public', 'pages', `${slug}.html`);
+        if (!fs.existsSync(filePath)) return res.status(404).send(communitySSR.renderPagesPage(registry, { notFound: slug }));
+        res.sendFile(filePath);
     });
 
     app.use((err, _req, res, _next) => {

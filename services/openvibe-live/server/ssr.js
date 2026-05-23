@@ -1983,11 +1983,13 @@ function _shellScript() {
 
 */
 
+const VOD_ENABLED = process.env.ENABLE_VOD === 'true';
+
 function renderNav(activeNav) {
     const items = [
         { href: '/', label: 'Home', id: 'home', icon: 'network', pjax: true },
         { href: '/channels', label: 'Channels', id: 'channels', icon: 'community', pjax: true },
-        { href: '/vods', label: 'VODs', id: 'vods', icon: 'media', pjax: true },
+        ...(VOD_ENABLED ? [{ href: '/vods', label: 'VODs', id: 'vods', icon: 'media', pjax: true }] : []),
         { href: '/clips', label: 'Clips', id: 'clips', icon: 'live', pjax: true },
         { href: '/go-live', label: 'Go Live', id: 'go-live', icon: 'launch', pjax: false },
         { href: '/updates', label: 'Updates', id: 'updates', icon: 'content', pjax: true },
@@ -2082,6 +2084,7 @@ function renderPage({ title, description, canonical, ogType, ogImage, activeNav,
             <script src="/assets/live-dashboard-local.js?v=20260604-1"></script>
             <script src="/js/realtime.js?v=20260507-1"></script>
             ${_shellScript()}
+            <a href="${LIVE_NETWORK_URLS.chat}" target="_blank" rel="noopener" aria-label="Open chat" style="position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;">💬</a>
         </body>
         </html>`;
 }

@@ -2,6 +2,226 @@
 
 ---
 
+## Session — 2026-05-23 (part 10) — VOD toggle + floating chat bubble (items 11 + 12)
+
+### Item 11 — VOD feature flag (disabled by default)
+
+VODs are off unless `ENABLE_VOD=true` is set in the environment. When disabled, the routes return 404 and the nav item is hidden.
+
+**Files changed:**
+
+- `services/openvibe-live/server/config.js` — added `features: { vodEnabled: process.env.ENABLE_VOD === 'true' }` to module.exports
+- `services/openvibe-live/server/ssr.js` — added `const VOD_ENABLED = process.env.ENABLE_VOD === 'true';` before `renderNav()`; VODs nav item is now conditional: `...(VOD_ENABLED ? [{ href: '/vods', ... }] : [])`
+- `services/openvibe-live/server/index.js` — three routes gated with `if (!config.features.vodEnabled) return res.status(404)...`:
+  - `GET /vods` → 404 HTML
+  - `GET /vod/:id` → 404 HTML
+  - `GET /api/v1/vods` → 404 JSON `{ error: 'not_found' }`
+
+---
+
+### Item 12 — Floating chat bubble on all services except openvibe.chat
+
+A fixed-position 💬 bubble appears in the bottom-right corner of every service and links to `openvibe.chat`. Clicking opens chat in a new tab.
+
+**Style:** `position:fixed; bottom:1.25rem; right:1.25rem; z-index:9999; width:3rem; height:3rem; border-radius:50%; background:linear-gradient(135deg,#8b5cf6,#22d3ee); box-shadow:0 4px 16px rgba(0,0,0,0.35)`
+
+**Files changed:**
+
+| File | How chat URL is determined |
+|------|---------------------------|
+| `services/openvibe-community/server/ssr.js` | Server-side template literal using `${COMMUNITY_URLS.chat}` (resolved at startup from env/defaults) |
+| `services/openvibe-live/server/ssr.js` | Server-side template literal using `${LIVE_NETWORK_URLS.chat}` |
+| `services/openre-stream/public/index.html` | Inline JS IIFE: `hostname.endsWith('.localhost')` → `http://openvibe.chat.localhost:4800`, else `https://openvibe.chat` |
+| `services/openvibe-tools/public/index.html` | Same inline JS IIFE (appended inside existing `<script>` block) |
+| `services/openvibe-network/public/my.html` | Same inline JS IIFE (My Account page) |
+| `services/openvibe-network/public/themes.html` | Same inline JS IIFE (Themes page) |
+
+The network home (`index.html`) already had a full embedded chat widget — no bubble needed there.
+
+---
+
+## ✅ ALL 14 ITEMS COMPLETE
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Theme selector fixed + rolled out to all 7 services | ✅ |
+| 2 | Cross-service SSO (`.localhost` cookie) | ✅ |
+| 3 | Chat authorize button (relative → absolute URL) | ✅ |
+| 4 | Stream-specific chatrooms in sidebar | ✅ |
+| 5 | Stale live streams fix | ✅ |
+| 6 | Favorite streams + threads (network home) | ✅ |
+| 7 | Community landing page (threads + pastes) | ✅ |
+| 8 | Community pages section (`/pages`) | ✅ |
+| 9 | finditfixit community page | ✅ |
+| 10 | openre.stream overhaul (channel=account, browser quick-start, WHIP) | ✅ |
+| 11 | VOD feature flag (`ENABLE_VOD=true` to enable) | ✅ |
+| 12 | Floating chat bubble on all non-chat services | ✅ |
+| 13 | Auth analysis + fixes (bridge links, openvibe.js in community shell) | ✅ |
+| 14 | Favorites server-side sync (user-modules API for channels + tools) | ✅ |
+
+---
+
+## Session — 2026-05-23 (part 9) — openre.stream overhaul (item 10)
+
+### openre.stream — channel = your account, browser quick-start, credentials panel
+
+**File changed:** `services/openre-stream/public/index.html` (full rewrite)
+
+**What changed:**
+
+1. **No more channel creation.** Your account IS your channel. On first load after sign-in, the service calls `GET /api/v1/channels?owner_user_id=...` — if no channel exists, it auto-creates one with `slug = slugify(username)` via `POST /api/v1/channels`. The channel form and all channel management UI is gone.
+
+2. **Ingest credentials panel** (left column, always visible when signed in):
+   - RTMP Server field with copy button
+   - Stream key field — hidden by default (●●●●), reveal/hide toggle + copy button
+   - "Regenerate key" button (with confirmation) → `POST /api/v1/channels/:slug/regenerate-key`
+   - OBS setup instructions inline
+
+3. **Browser quick-start panel** (right column):
+   - Three source tiles: Camera (webcam + mic), Screen (display capture), Camera + screen
+   - Single "Go live from browser" button — no forms, no extra steps
+   - Browser asks for permissions, then streams immediately via WHIP to `/whip/:channelSlug?key=:streamKey`
+   - Shows live preview video + animated LIVE indicator + elapsed timer
+   - "Stop stream" button cleans up: closes RTCPeerConnection, stops tracks, sends DELETE to WHIP resource URL
+
+4. **Restream destinations** — unchanged functionally. Add form on the right (platform/label/RTMP URL/stream key), saved destinations list on the left with individual delete buttons.
+
+5. **Recent streams** — shows last 6 streams for the user's channel with status pills.
+
+6. **Sign-out hero** — unauthenticated users see a simple hero with sign-in CTA instead of the dashboard.
+
+**WHIP browser streaming flow:**
+```
+selectSource('camera'|'screen'|'both') → handleGoLive()
+  → getMediaStream() → getUserMedia / getDisplayMedia
+  → startWhip(channelSlug, streamKey, mediaStream)
+      → new RTCPeerConnection()
+      → addTrack() for each media track
+      → createOffer() → setLocalDescription()
+      → wait for ICE gathering complete (or 4s timeout)
+      → POST /whip/:slug?key=:key with SDP
+      → setRemoteDescription(answer SDP)
+  → show live preview + timer
+  → on connectionState disconnected/failed: auto-stop
+stopBrowserStream() → pc.close() → DELETE /whip resource URL → stop tracks
+```
+
+**Test updated:** `services/openre-stream/test/lifecycle.test.js` — replaced stale assertions (hero copy, "Creator dashboard") with check for `/whip/` reference in the shell.
+
+---
+
+## Session — 2026-05-23 (part 8) — Auth analysis + fixes (item 13)
+
+### Auth system analysis
+
+Traced the full auth architecture across all services. See `AUTH_CLAUDE.md` for the complete developer reference.
+
+**Two auth patterns found:**
+- Pattern A (live, restream, tips): own `/auth/login` → bridge → `/auth/callback` → local session cookie
+- Pattern B (community, tools): `.localhost` domain cookie SSO + client-side sessionStorage via bridge
+
+**Bugs found and fixed:**
+
+#### 1. Community SSR: broken sign-in links (`/auth/login` doesn't exist on network)
+**File:** `services/openvibe-community/server/ssr.js`
+
+All 5 occurrences of `${COMMUNITY_URLS.network}/auth/login` replaced with `${SIGN_IN_URL}`.
+The `/auth/anonymous` link replaced with `${ANON_URL}` (points to `/oauth/authorize?prompt=anonymous`).
+
+Added two constants at the top of ssr.js:
+```js
+const SIGN_IN_URL = `${COMMUNITY_URLS.network}/api/v1/session/bridge?return_to=${encodeURIComponent(COMMUNITY_URLS.community)}`;
+const ANON_URL = `${COMMUNITY_URLS.network}/oauth/authorize?prompt=anonymous`;
+```
+
+#### 2. Network tools.html: broken `/auth/login` and `/auth/register` links
+**File:** `services/openvibe-network/public/tools.html`
+
+Neither route exists on the network service. Changed to `/oauth/authorize` (the actual login page).
+
+#### 3. Community SSR shell: missing openvibe.js script tag
+**File:** `services/openvibe-community/server/ssr.js`
+
+SSR pages (/pulse, /threads, /pastes, /p/:slug, /threads/:id, etc.) were not loading `openvibe.js`. Added:
+```html
+<script src="/assets/openvibe.js" defer></script>
+```
+
+Without this, thread favorite stars did nothing, session exchange never ran, and the auth-changed event was never fired on SSR pages.
+
+#### 4. Community SSR shell: nav doesn't update after sign-in
+Added `id="ov-nav-auth"` to the nav auth div and an inline script that listens for `openvibe-auth-changed`:
+- Authenticated: shows display_name/username linking to My Account
+- Anonymous/guest: shows "Sign in" bridge link
+
+### AUTH_CLAUDE.md
+Created `AUTH_CLAUDE.md` at monorepo root — full developer reference covering both auth patterns, the bridge endpoint, session exchange, cookie setup, token verification, and a "known broken patterns" section with the 2026-05-23 fixes.
+
+---
+
+## Session — 2026-05-23 (part 7) — Community Pages section (items 7, 8, 9)
+
+### Community Pages — /pages section on openvibe.community
+
+**Files changed:**
+- `services/openvibe-community/server/db.js` — added `community_page_views` table to `SCHEMA_SQL` (tracks slug, view_count, last_viewed_at; uses UPSERT on each page visit).
+- `services/openvibe-community/server/pages-registry.json` — new file; JSON array of page metadata entries (`slug`, `title`, `author`, `description`, `tags`, `created_at`). First entry: `finditfixit`.
+- `services/openvibe-community/server/routes.js` — added `loadPagesRegistry()`, `bumpPageView(slug)`, `getPageViews(slug)` helpers; added `GET /api/community/pages` endpoint (returns registry + view counts, sorted by views desc); exported helpers for use in `index.js`.
+- `services/openvibe-community/server/index.js` — added routes:
+  - `GET /pages` — SSR pages listing
+  - `GET /pages/submit` — SSR submission guide
+  - `GET /pages/:slug` — bumps view count, serves `public/pages/:slug.html`; 404s with listing page if not in registry or file missing
+  - `GET /finditfixit` and `GET /finditfixit.html` — 301 redirects to `/pages/finditfixit`
+- `services/openvibe-community/server/ssr.js` — added "Pages" to `_nav()` between Pastes and Chat; added `renderPagesPage(registry, opts)` and `renderSubmitPage()`; both exported.
+- `services/openvibe-community/public/pages/finditfixit.html` — finditfixit's personal page now lives here (migrated from community root).
+- `services/openvibe-community/public/index.html` — added "Community Pages" section between Threads and Pastes; fetches from `/api/community/pages`; renders as `ov-card` grid with view counts and author; includes "+ Submit your page" link.
+- `services/openvibe-tools/public/finditfixit.html` — replaced with a redirect page (`<meta http-equiv="refresh">` + `window.location.replace`) pointing to `openvibe.community/pages/finditfixit`. Keeps existing links working.
+
+### How to add a new community page
+1. Drop `yourname.html` in `services/openvibe-community/public/pages/`
+2. Add an entry to `server/pages-registry.json` with slug, title, author, description
+3. The page is immediately live at `/pages/yourname` and shows up in the listing + highlight reel
+
+---
+
+## Session — 2026-05-23 (part 6) — My Account scrollable layout, community landing threads + pastes, one-thread-per-paste DB enforcement
+
+### My Account — scrollable sections (no tabs)
+
+**File changed:** `services/openvibe-network/public/my.html`
+
+Replaced the tab-based layout with a single scrollable page. All eight sections (Profile, Security, Stream, Chat, Bookmarks, Notifications, Linked accounts, Theme) are stacked vertically and always visible. A sticky sidebar nav (`<nav class="my-sidenav">`) provides anchor links so users can jump to any section without hiding content. On mobile the sidebar collapses to a horizontal chip row. All section content and interactivity (token reveal/copy, session revoke, credential rows, banned words save, bookmark remove, theme apply) is identical to the previous tab version.
+
+Key CSS classes: `.my-layout` (2-col grid), `.my-sidenav` (sticky, collapses on mobile), `.my-sections`, `.my-section`, `.my-section-title`, `.my-section-sub`.
+
+---
+
+### Community landing page — shows both threads and pastes
+
+**File changed:** `services/openvibe-community/public/index.html`
+
+- Title changed from "Pastes — OpenVibe" to "Community — OpenVibe".
+- Page now has two sections: **Threads** (top, loads from `GET /api/community/threads?limit=8`) and **Pastes** (below, loads from `GET /api/community/pastes?limit=12`).
+- Each thread renders as a `.community-thread-card` link to `/threads/:id` with a favorite star button (saves to `ov-fav-threads` localStorage and syncs to user-modules for signed-in users).
+- "Browse all →" links for both sections point to the SSR pages (`/threads`, `/pastes`).
+- Thread filter: only `paste_thread` and `discussion` types are shown (excludes `discord_relay`, etc.).
+- Paste composer modal and auth check logic unchanged.
+
+---
+
+### One thread per paste — DB-level unique index
+
+**File changed:** `services/openvibe-community/server/db.js`
+
+Added a partial UNIQUE index in `applyLegacyBootstrap()`:
+```sql
+CREATE UNIQUE INDEX idx_paste_thread_unique_ref ON community_threads(ref_type, ref_id)
+WHERE thread_type = 'paste_thread' AND ref_type IS NOT NULL AND ref_id IS NOT NULL
+```
+Applied idempotently (checks `sqlite_master` before creating). Catches the error and logs a warning if existing data has duplicates, so it doesn't crash the server on startup. The application-level guard in `routes.js` (`findPasteThread` check before `createThread`) was already in place — this is the DB safety net.
+
+---
+
 ## Session — 2026-05-23 (continued, part 5) — Community nav link, tool favorites, channel favorites
 
 ### Community link in network header

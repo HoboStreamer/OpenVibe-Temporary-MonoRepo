@@ -194,13 +194,19 @@
 
     <!-- Recent Pastes -->
     <section class="ov-section" id="recent-pastes-section">
-        <div class="ov-panel" id="recent-pastes-panel">
-            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
-                <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
-            </div>
-            <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1.2rem;">
+            <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
+            <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
         </div>
+        <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:0 1.2rem;"></div>
+    </section>
+
+    <!-- Services directory row -->
+    <section class="ov-section" id="services-row-section" style="display:none">
+        <div style="padding:0 1.2rem;margin-bottom:.75rem;">
+            <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">OpenVibe Services</span>
+        </div>
+        <div id="services-row" style="display:flex;flex-wrap:wrap;gap:.5rem;padding:0 1.2rem;"></div>
     </section>
 
 </main>
@@ -225,7 +231,7 @@
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('home');
 
-    const [session, remoteServices, launcherState, topics, health, recentPastesData, recentVodsData] = await Promise.all([
+    const [session, remoteServices, launcherState, topics, health, recentPastesData, recentVodsData, recentThreadsData] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.loadServices(),
         OpenVibe.loadLauncherState(),
@@ -233,6 +239,7 @@
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, trusted_issuers: [] })),
         fetch(OpenVibe.resolveSurfaceUrl('community') + '/api/community/pastes?limit=4', { mode: 'cors', credentials: 'include' }).then((r) => r.json()).catch(() => ({ items: [] })),
         fetch(OpenVibe.resolveSurfaceUrl('live') + '/api/v1/streams/recently-ended?limit=4').then((r) => r.json()).catch(() => ({ items: [] })),
+        fetch(OpenVibe.resolveSurfaceUrl('community') + '/api/community/threads?limit=4', { mode: 'cors', credentials: 'include' }).then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
 
     const items = OpenVibe.mergedServices(remoteServices);
@@ -557,15 +564,38 @@
             body: `${pimg}<p class="ov-muted">${pexcerpt}</p><a class="ov-btn" href="${phref}" target="_blank" rel="noopener">View paste</a>`,
         });
     }
+    for (const thread of (recentThreadsData.items || []).slice(0, 3)) {
+        const ttitle = OpenVibe.escapeHtml(thread.title || 'Untitled thread');
+        const texcerpt = OpenVibe.escapeHtml((thread.body || thread.excerpt || '').slice(0, 100) + ((thread.body || thread.excerpt || '').length > 100 ? '…' : ''));
+        const thref = OpenVibe.escapeHtml(_communityBase + '/t/' + (thread.slug || thread.id || ''));
+        activitySlides.push({
+            kicker: 'New Thread',
+            title: ttitle,
+            tone: 'warn',
+            body: `${texcerpt ? `<p class="ov-muted">${texcerpt}</p>` : ''}<a class="ov-btn" href="${thref}" target="_blank" rel="noopener">Join discussion</a>`,
+        });
+    }
     if (!activitySlides.length) {
         activitySlides.push({
             kicker: 'Activity',
             title: 'Nothing new yet',
             tone: 'soft',
-            body: `<p class="ov-muted">Recent streams and pastes will appear here as content is posted.</p>`,
+            body: `<p class="ov-muted">Recent streams, pastes, and threads will appear here as content is posted.</p>`,
         });
     }
     setupNetworkSlides(activitySlides);
+
+    // ── Services directory row ────────────────────────────────────────
+    const servicesRowEl = document.getElementById('services-row');
+    const servicesRowSection = document.getElementById('services-row-section');
+    if (servicesRowEl && items.length) {
+        servicesRowSection.style.display = '';
+        servicesRowEl.innerHTML = items
+            .filter(function(s) { return s.public_url && s.public_url !== '#'; })
+            .map(function(s) {
+                return `<a href="${OpenVibe.escapeHtml(s.public_url)}" target="_blank" rel="noopener" class="ov-chip soft" style="text-decoration:none;">${OpenVibe.escapeHtml(s.display_name || s.service_id)}</a>`;
+            }).join('');
+    }
 
 })();
 

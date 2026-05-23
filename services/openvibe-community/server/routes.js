@@ -1,9 +1,39 @@
 'use strict';
 
 const express = require('express');
+const path = require('path');
 const model = require('./model');
 const policy = require('./policy');
 const { COMMUNITY_EVENT_TYPES } = require('@openvibe/contracts');
+
+function loadPagesRegistry() {
+    try {
+        return require(path.join(__dirname, 'pages-registry.json'));
+    } catch {
+        return [];
+    }
+}
+
+function bumpPageView(slug) {
+    try {
+        const db = require('./db').get();
+        db.prepare(`
+            INSERT INTO community_page_views (slug, view_count, last_viewed_at)
+            VALUES (?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(slug) DO UPDATE SET
+                view_count = view_count + 1,
+                last_viewed_at = CURRENT_TIMESTAMP
+        `).run(String(slug));
+    } catch {}
+}
+
+function getPageViews(slug) {
+    try {
+        const db = require('./db').get();
+        const row = db.prepare(`SELECT view_count, last_viewed_at FROM community_page_views WHERE slug = ?`).get(String(slug));
+        return row ? { view_count: row.view_count, last_viewed_at: row.last_viewed_at } : { view_count: 0, last_viewed_at: null };
+    } catch { return { view_count: 0, last_viewed_at: null }; }
+}
 
 function injectPasteImageUrl(paste) {
     // image_url is already injected by model.hydratePaste; this is a no-op passthrough
@@ -541,6 +571,16 @@ function buildRouter({ eventBus, config }) {
         res.status(201).json({ ok: true, outcome, discord_message_id: synthMessageId });
     });
 
+    // ── community pages ──────────────────────────────────────────────────────
+    r.get('/pages', (_req, res) => {
+        const registry = loadPagesRegistry();
+        const items = registry.map((page) => {
+            const views = getPageViews(page.slug);
+            return Object.assign({}, page, views);
+        }).sort((a, b) => b.view_count - a.view_count);
+        res.json({ items });
+    });
+
     // Phase 16 — minimum-viable product/status surface for community workflow.
     r.get('/product/status', (_req, res) => {
         try {
@@ -553,4 +593,4 @@ function buildRouter({ eventBus, config }) {
     return r;
 }
 
-module.exports = { buildRouter };
+module.exports = { buildRouter, loadPagesRegistry, bumpPageView };

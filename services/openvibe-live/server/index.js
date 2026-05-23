@@ -458,6 +458,7 @@ function buildApp() {
     });
 
     app.get('/vods', asyncRoute(async (req, res) => {
+        if (!config.features.vodEnabled) return res.status(404).type('html').send('<h1>Not found</h1>');
         const channelSlug = req.query.channel ? String(req.query.channel) : null;
         res.type('html').send(ssr.renderCollectionPage({
             kind: 'vods',
@@ -482,6 +483,7 @@ function buildApp() {
     }));
 
     app.get('/vod/:id', asyncRoute(async (req, res) => {
+        if (!config.features.vodEnabled) return res.status(404).type('html').send('<h1>Not found</h1>');
         await renderMediaDetailRoute(req, res, 'vod', req.params.id);
     }));
 
@@ -737,7 +739,10 @@ function buildApp() {
         const releases = await fetchGithubReleases();
         res.json({ items: releases || [], cached_at: _githubCache.expires ? _githubCache.expires - config.github.releaseCacheTtlMs : 0 });
     }));
-    app.get('/api/v1/vods', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalVods({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
+    app.get('/api/v1/vods', asyncRoute(async (req, res) => {
+        if (!config.features.vodEnabled) return res.status(404).json({ error: 'not_found' });
+        return res.json({ items: await feedBridge.listCanonicalVods({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) });
+    }));
     app.get('/api/v1/clips', asyncRoute(async (req, res) => res.json({ items: await feedBridge.listCanonicalClips({ channelSlug: req.query.channel_slug, limit: req.query.limit || 100 }) })));
     app.get('/api/v1/pastes', asyncRoute(async (_req, res) => {
         const community = await feedBridge.buildCommunityViewModel();
