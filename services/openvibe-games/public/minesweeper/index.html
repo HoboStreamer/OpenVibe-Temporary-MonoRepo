@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Minesweeper — OpenVibe Games</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+<link rel="stylesheet" href="game.css" />
+</head>
+<body>
+<div id="nav-mount"></div>
+
+<div class="ms-wrap">
+    <div class="ms-header">
+        <h1 class="ms-title">Minesweeper</h1>
+        <div class="ms-controls">
+            <button class="ms-diff-btn active" data-diff="easy">Easy</button>
+            <button class="ms-diff-btn" data-diff="medium">Medium</button>
+            <button class="ms-diff-btn" data-diff="hard">Hard</button>
+        </div>
+    </div>
+
+    <div class="ms-status-bar">
+        <div class="ms-stat">
+            <span>💣</span>
+            <span id="ms-mines-left">0</span>
+            <span class="ms-stat-label">mines</span>
+        </div>
+        <button class="ms-reset-btn" id="ms-reset" title="New game">🙂</button>
+        <div class="ms-stat">
+            <span>⏱</span>
+            <span id="ms-time">0</span>
+            <span class="ms-stat-label">sec</span>
+        </div>
+    </div>
+
+    <div class="ms-board-wrap">
+        <div class="ms-board" id="ms-board"></div>
+    </div>
+</div>
+
+<div class="ms-overlay" id="ms-overlay">
+    <div class="ms-modal">
+        <div class="ms-modal-emoji" id="ms-modal-emoji"></div>
+        <p class="ms-modal-title" id="ms-modal-title"></p>
+        <p class="ms-modal-sub" id="ms-modal-sub"></p>
+        <button class="ms-modal-btn" id="ms-modal-btn">Play again</button>
+    </div>
+</div>
+
+<div id="footer-mount"></div>
+
+<script src="/assets/openvibe-icons.js"></script>
+<script src="/assets/openvibe.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
