@@ -2,6 +2,45 @@
 
 ---
 
+## Session — 2026-05-23 (part 11) — HoboStreamer theme + Custom Palette
+
+### HoboStreamer theme
+
+Added a new built-in theme based on the HoboStreamer.com design system (campfire amber on near-black).
+
+**Colors sourced from:** `https://github.com/HoboStreamer/HoboStreamer.com` CSS files (`style.css`, `cosmetics.css`)
+
+| Field | Value | Source |
+|---|---|---|
+| `accent` | `#c0965c` | `--accent` campfire amber |
+| `accent2` | `#dbb077` | `--accent-light` |
+| `bg` | `#0d0d0f` | `--bg-primary` |
+| `text` | `#e8e6e3` | `--text-primary` cream |
+| `textDim` | `#9a9a9a` | `--text-secondary` |
+
+The theme uses dark, near-black backgrounds with warm amber accents. It sits at position 7 in `BUILTIN_THEMES` — off the popup picker's `slice(0, 6)` limit — so it only appears on the themes page.
+
+**Files changed:** All 7 `services/*/public/assets/openvibe.js`
+
+---
+
+### Custom Palette theme
+
+Added a `custom` theme (position 8) that lets users pick their own 5 colors on the themes page.
+
+**How it works:**
+- `themes.html` renders a color picker panel (5 `<input type="color">` swatches) below the grid when the Custom Palette tile is selected
+- Picking a color saves to `localStorage['openvibe.theme.custom']` as `{ bg, accent, accent2, text, textDim }` and calls `applyTheme('custom')` immediately (live preview)
+- `applyTheme` in all 7 openvibe.js files has a new `if (themeId === 'custom')` block that reads saved colors from localStorage and overrides CSS variables, including deriving `bgSoft`/`bgElev`/`bgElev2` from `bg` and `border` from `accent` at 0.18 opacity
+- Custom palette colors are browser-local only (not synced to user-modules API)
+
+**Files changed:**
+- All 7 `services/*/public/assets/openvibe.js` — added `custom` to `BUILTIN_THEMES`, added custom override block in `applyTheme`
+- `services/openvibe-network/public/themes.html` — color picker panel HTML + CSS + JS
+- `THEMES_CLAUDE.md` — full rewrite documenting both schemas, all 8 themes, custom palette system
+
+---
+
 ## Session — 2026-05-23 (part 10) — VOD toggle + floating chat bubble (items 11 + 12)
 
 ### Item 11 — VOD feature flag (disabled by default)

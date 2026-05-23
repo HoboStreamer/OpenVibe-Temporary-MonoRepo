@@ -6,7 +6,7 @@ How themes work, how to add one, and what each field means. Written by Claude Co
 
 ## How Themes Work
 
-1. `BUILTIN_THEMES` in each service's `openvibe.js` holds the 6 built-in themes
+1. `BUILTIN_THEMES` in each service's `openvibe.js` holds all built-in themes
 2. On page load, `applySavedTheme()` reads `localStorage['openvibe.theme']` and applies it immediately (no flash)
 3. After login, `loadSyncedThemePreference()` fetches the saved theme from the network service's user-modules API and re-applies it — this is how themes sync across domains for logged-in users
 4. When a user clicks a swatch, `syncThemePreference(themeId)` applies the theme locally and saves it to both localStorage and the server
@@ -17,126 +17,142 @@ Themes sync across all OpenVibe services for **logged-in users** via the user-mo
 
 ---
 
-## The `BUILTIN_THEMES` Array
+## Two Theme Schemas
 
-Defined at the top of `openvibe.js` in every service (they should be kept in sync). Each theme is an object:
+There are two variants of `BUILTIN_THEMES` across the 7 services:
+
+### Schema 1 — Network + Chat (`bgSoft`, `preview`)
+
+Used by: `openvibe-network`, `openvibe-chat`
 
 ```js
 {
-    id: 'my-theme',           // unique slug, used as localStorage key value
-    name: 'My Theme',         // display name shown in the picker
-    description: 'A sentence explaining the vibe of this theme.',
-    accent: '#hex',           // primary accent (links, active states, highlights)
-    accent2: '#hex',          // secondary accent (gradients, hover accents)
-    bg: '#hex',               // main background color (opaque)
-    bgSoft: 'rgba(...)',      // soft/panel background (usually semi-transparent)
-    text: '#hex',             // primary text color
-    textDim: '#hex',          // secondary/muted text color
-    preview: 'linear-gradient(135deg, ...)',  // CSS gradient shown in the swatch
+    id: 'my-theme',
+    name: 'My Theme',
+    description: 'One sentence about this theme.',
+    accent: '#hex',
+    accent2: '#hex',
+    bg: '#hex',
+    bgSoft: 'rgba(...)',       // panel/card background
+    text: '#hex',
+    textDim: '#hex',
+    preview: 'linear-gradient(135deg, ...)',  // swatch preview gradient
 }
 ```
 
-### What each field controls
-
-| Field | Applied as CSS variable |
+| Field | CSS Variable |
 |---|---|
 | `accent` | `--ov-accent` |
 | `accent2` | `--ov-accent-2` |
-| `bg` | `--ov-bg` and `--ov-nav-bg` |
+| `bg` | `--ov-bg`, `--ov-nav-bg` |
 | `bgSoft` | `--ov-bg-soft` |
 | `text` | `--ov-text` |
 | `textDim` | `--ov-text-dim` |
 
-The `preview` gradient is only used in the theme picker swatch — it doesn't affect the live page. Make it representative of the theme's palette.
+### Schema 2 — Community / Live / Games / Media / Tools (`bgElev`, `border`, `shadow`)
+
+Used by: `openvibe-community`, `openvibe-live`, `openvibe-games`, `openvibe-media`, `openvibe-tools`
+
+```js
+{
+    id: 'my-theme',
+    name: 'My Theme',
+    description: 'One sentence about this theme.',
+    accent: '#hex',
+    accent2: '#hex',
+    bg: '#hex',
+    bgElev: 'rgba(...)',       // elevated surface (cards, modals)
+    bgElev2: 'rgba(...)',      // double-elevated surface
+    text: '#hex',
+    textDim: '#hex',
+    textFaint: '#hex',         // very muted text (captions, placeholders)
+    border: 'rgba(...)',       // border/divider color
+    shadow: '0 28px 90px ...', // card/modal shadow
+}
+```
+
+| Field | CSS Variable |
+|---|---|
+| `accent` | `--ov-accent` |
+| `accent2` | `--ov-accent-2` |
+| `bg` | `--ov-bg`, `--ov-nav-bg` |
+| `bgElev` | `--ov-bg-elev` |
+| `bgElev2` | `--ov-bg-elev-2` |
+| `text` | `--ov-text` |
+| `textDim` | `--ov-text-dim` |
+| `textFaint` | `--ov-text-faint` |
+| `border` | `--ov-border` |
+| `shadow` | `--ov-shadow` |
+
+The `openvibe-live` schema also sets legacy aliases: `--accent`, `--accent-2`, `--bg`, `--panel`, `--panel-strong`, `--border`, `--text`, `--muted`, `--muted-strong`.
 
 ---
 
 ## Built-in Themes (as of 2026-05-23)
 
-| ID | Name | Primary Accent | Secondary Accent | Character |
+| ID | Name | Accent | Accent 2 | Notes |
 |---|---|---|---|---|
-| `openvibe-dark` | OpenVibe Dark | `#8b5cf6` (violet) | `#22d3ee` (cyan) | Default neon night |
-| `openvibe-dim` | OpenVibe Dim | `#2dd4bf` (teal) | `#60a5fa` (blue) | Softer, cooler contrast |
-| `openvibe-light` | OpenVibe Light | `#5b3df0` (indigo) | `#0ea5e9` (sky) | Bright daytime mode |
-| `sunset` | Sunset Broadcast | `#f97316` (orange) | `#fb7185` (pink) | Creator/warm vibes |
-| `forest` | Forest Signal | `#22c55e` (green) | `#2dd4bf` (teal) | Calm operator feel |
-| `cyberpunk` | Cyberpunk Relay | `#ec4899` (magenta) | `#22d3ee` (cyan) | Arcade energy |
+| `openvibe-dark` | OpenVibe Dark | `#8b5cf6` violet | `#22d3ee` cyan | Default — shown first in popup |
+| `openvibe-dim` | OpenVibe Dim | `#2dd4bf` teal | `#60a5fa` blue | Softer, cooler |
+| `openvibe-light` | OpenVibe Light | `#5b3df0` indigo | `#0ea5e9` sky | Light mode |
+| `sunset` | Sunset Broadcast | `#f97316` orange | `#fb7185` pink | Creator/warm |
+| `forest` | Forest Signal | `#22c55e` green | `#2dd4bf` teal | Calm operator |
+| `cyberpunk` | Cyberpunk Relay | `#ec4899` magenta | `#22d3ee` cyan | Arcade energy |
+| `hobostreamer` | HoboStreamer | `#c0965c` amber | `#dbb077` gold | Campfire on near-black; themes page only |
+| `custom` | Custom Palette | user-set | user-set | Configured on themes page; colors in localStorage |
+
+**Popup picker shows first 6** (`BUILTIN_THEMES.slice(0, 6)`). HoboStreamer and Custom are themes-page only.
 
 ---
 
-## How to Add a Custom Theme
+## Custom Palette
 
-### Step 1 — Add the theme object
+The `custom` theme allows users to pick their own 5 colors on the themes page. Colors are stored in `localStorage['openvibe.theme.custom']` as:
 
-Open each `services/*/public/assets/openvibe.js` and add your theme to the `BUILTIN_THEMES` array. It must be added to **all 7 files** (the array is duplicated, not shared).
-
-```js
-const BUILTIN_THEMES = [
-    // ... existing themes ...
-    {
-        id: 'my-theme',
-        name: 'My Theme',
-        description: 'One sentence about this theme.',
-        accent: '#e11d48',
-        accent2: '#f59e0b',
-        bg: '#1a0a0a',
-        bgSoft: 'rgba(38, 10, 10, 0.9)',
-        text: '#fef2f2',
-        textDim: '#fca5a5',
-        preview: 'linear-gradient(135deg, #1a0a0a 0%, #3b0f1f 55%, #7c1d2a 100%)',
-    },
-];
+```json
+{ "bg": "#060917", "accent": "#8b5cf6", "accent2": "#22d3ee", "text": "#eef4ff", "textDim": "#a7b5d2" }
 ```
 
-### Step 2 — Test your theme
+### How `applyTheme('custom')` works
 
-The theme picker shows up to 6 themes (`BUILTIN_THEMES.slice(0, 6)`). If you add a 7th, it will be hidden from the popup but still accessible via the themes page. To show it in the popup, either replace one of the existing six or increase the slice limit in `initThemePicker()`.
+1. The base theme object from `BUILTIN_THEMES` is applied first (provides sensible defaults)
+2. `applyTheme` then checks `themeId === 'custom'` and reads `localStorage['openvibe.theme.custom']`
+3. Any saved colors override the CSS variables directly
+4. Derived values are computed on the fly:
+   - `bgSoft` / `bgElev` / `bgElev2` — derived from `bg` with added opacity
+   - `border` — derived from `accent` at 0.18 opacity
+   - `textFaint` — same as `textDim` (no separate field in custom)
 
-### Step 3 — Check accessibility
+### Themes page editor
 
-For each theme, verify:
-- Text contrast ratio ≥ 4.5:1 (use a contrast checker: `bg` vs `text`)
-- Links (accent color) readable against background
-- The `textDim` color is still readable (aim for ≥ 3:1)
-
-### Step 4 — Update all 7 service files
-
-Services that need updating when you change `BUILTIN_THEMES`:
-```
-services/openvibe-network/public/assets/openvibe.js
-services/openvibe-chat/public/assets/openvibe.js
-services/openvibe-community/public/assets/openvibe.js
-services/openvibe-live/public/assets/openvibe.js
-services/openvibe-media/public/assets/openvibe.js
-services/openvibe-games/public/assets/openvibe.js
-services/openvibe-tools/public/assets/openvibe.js
-```
+`services/openvibe-network/public/themes.html` renders a color picker panel below the grid when the Custom Palette tile is selected. Five `<input type="color">` swatches update the page live on every `input` event and save to localStorage immediately.
 
 ---
 
 ## Theme Picker UI
 
-The picker renders as a 2×3 swatch grid in a popup:
+The popup shows up to 6 themes:
 
 ```
 [ Dark  ] [ Dim    ]
 [ Light ] [ Sunset ]
 [ Forest] [Cyberpunk]
-[ Explore more themes! ]
+[ Explore more themes! ]  ← links to themes.openvibe.network
 ```
 
-Each swatch shows:
-- A gradient preview strip (`.ov-theme-swatch-preview` with the `preview` gradient as background)
-- Two accent dots at the bottom-left corner (`.ov-theme-swatch-accent` — one for `accent`, one for `accent2`)
-- The theme name below
+The themes page (`/themes` on openvibe.network) shows all themes including HoboStreamer and Custom Palette, plus the custom color editor when Custom is selected.
 
-The picker button (paint bucket icon) lives in `.ov-nav-end` on every service's nav bar.
+---
+
+## How to Add a Theme
+
+1. Add the theme object to `BUILTIN_THEMES` in **all 7** `services/*/public/assets/openvibe.js` files using the correct schema for each group (Schema 1 for network/chat, Schema 2 for the other 5)
+2. Themes after position 6 are automatically hidden from the popup — no code change needed
+3. Check contrast: `bg` vs `text` ≥ 4.5:1, `bg` vs `textDim` ≥ 3:1
 
 ---
 
 ## `applyTheme()` API
-
-Available as `OpenVibe.applyTheme(themeId)` from any page:
 
 ```js
 // Apply a theme by ID (also saves to localStorage)
@@ -153,21 +169,10 @@ OpenVibe.syncThemePreference('forest');
 
 ## Persistence
 
-| Store | What it holds | Scope |
+| Store | Key | Scope |
 |---|---|---|
-| `localStorage['openvibe.theme']` | Last chosen theme ID | Per browser origin |
-| Network user-modules API | `{ theme_id, updated_at, source }` | Per user account, cross-domain |
+| localStorage | `openvibe.theme` | Per browser origin — the chosen theme ID |
+| localStorage | `openvibe.theme.custom` | Per browser origin — custom palette colors JSON |
+| Network user-modules API | `openvibe.theme` namespace | Per user account, cross-domain |
 
-On page load, localStorage is read first (instant, no flash). The server value is fetched after session loads and re-applied if different. For logged-in users, this means the theme propagates across all OpenVibe domains within one page load.
-
----
-
-## Future: Community Theme Submissions
-
-The architecture is ready for community themes — they just need to be added to `BUILTIN_THEMES` and the themes page (`/themes` on openvibe.network). A community contribution workflow could look like:
-
-1. Author submits a PR adding a theme object to `BUILTIN_THEMES` in all 7 `openvibe.js` files
-2. Theme is reviewed for contrast and aesthetic
-3. It ships as a built-in or gets a dedicated entry on the themes page
-
-The `description` field is your elevator pitch for the theme. Make it evocative, not technical.
+On page load, localStorage is read first (instant, no flash). The server value is fetched after session loads and re-applied if different. For logged-in users, this means the theme propagates across all OpenVibe domains within one page load. Custom palette colors are not synced to the server — they are browser-local only.
