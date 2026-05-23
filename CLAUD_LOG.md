@@ -2,6 +2,89 @@
 
 ---
 
+## Session — 2026-05-23 (part 13) — Community theme submission
+
+### Goal
+
+Let users design a theme on the themes page and submit it so it appears in a community gallery others can browse and apply — no JSON, no GitHub PR, just a button.
+
+### What was done
+
+**Backend:**
+- Added `community_themes` table to `db.js` (migration-safe `CREATE TABLE IF NOT EXISTS`) with: `id`, `user_id`, `author_name`, `name`, `description`, `accent`, `accent2`, `preview`, `vars_json`, `created_at`
+- Created `services/openvibe-network/server/api/community-themes.js` — builds the full `vars` object server-side from the 5 palette colors, generates the preview gradient, stores and returns the theme
+- `GET /api/v1/themes/community` — public, newest-first, supports `limit`/`offset`
+- `POST /api/v1/themes/community` — requires auth; body: `{ name, description, palette: { bg, accent, accent2, text, textDim } }`; validates all 5 colors are valid hex; 400 on bad input, 401 if not signed in
+- Mounted in `index.js` via `communityThemes.buildRouter({ requireAuth: requireOpenVibeAuth(authClient) })`
+
+**Frontend (`themes.html`):**
+- Custom palette panel now has a **Name** input (required for submission) and **Description** textarea (optional) below the color pickers
+- Split save/submit into two buttons:
+  - **"Apply to me"** — saves palette to `localStorage['openvibe.theme.custom']`, calls `applyTheme('custom')` and `syncThemePreference('custom')` (syncs to user account), no public sharing
+  - **"Submit Theme"** — POSTs to `POST /api/v1/themes/community`; shows inline status ("submitted!", error, or "Sign in to submit themes." on 401)
+- Added **Community Themes** section below built-ins — hidden when empty, shows when themes exist; each tile renders name + author, clicking applies immediately via `Object.entries(vars)`
+- Status message clears after 2.5s on success
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `services/openvibe-network/server/db.js` | Added `community_themes` table + indexes to `SCHEMA_SQL` |
+| `services/openvibe-network/server/api/community-themes.js` | NEW — GET + POST handlers |
+| `services/openvibe-network/server/index.js` | Require + mount `communityThemes` router |
+| `services/openvibe-network/public/themes.html` | Name/desc inputs, two action buttons, community section, inline status |
+
+---
+
+## Session — 2026-05-23 (part 12) — Theme architecture extraction (Phase 1)
+
+### Goal
+
+Themes were scattered across 7 openvibe.js files in two slightly different schemas. The goal was to establish a single source of truth and eliminate the schema split so themes can be edited in one place.
+
+### What was done
+
+**Single source of truth:**
+- Created `packages/openvibe-themes/themes.json` — all 8 themes in a unified schema
+- Each theme has a `vars` object containing every CSS variable for every service (both `--ov-*` and the legacy `--panel`/`--muted`/etc. aliases for live)
+- This eliminates the two-schema split that existed before (Schema 1 for network/chat, Schema 2 for community/games/live/media/tools)
+
+**Sync script:**
+- Created `scripts/sync-themes.js` — reads `themes.json`, generates a JS `BUILTIN_THEMES` constant, and stamps it into all 7 openvibe.js files between `// <openvibe-themes-generated>` … `// </openvibe-themes-generated>` markers
+- Usage: `node scripts/sync-themes.js`
+- From now on, editing a theme means editing `themes.json` and running the sync script — no manual edits to any openvibe.js needed
+
+**Schema-agnostic `applyTheme`:**
+- Updated `applyTheme` in all 7 openvibe.js files to replace ~10 individual `root.style.setProperty(k, theme.field)` calls with:
+  ```js
+  Object.entries(theme.vars || {}).forEach(function(e) { root.style.setProperty(e[0], e[1]); });
+  ```
+- The custom palette override block is unchanged (still reads localStorage and derives vars on the fly)
+- Color-scheme is still set separately: `theme.colorScheme || (theme.id === 'openvibe-light' ? 'light' : 'dark')`
+
+**API endpoint:**
+- Added `GET /api/v1/themes` to openvibe-network — returns `{ items: [...] }` from themes.json
+- Foundation for the future no-code theme builder UI
+
+**Documentation:**
+- Rewrote `THEMES_CLAUDE.md` to reflect the new architecture: single JSON, sync script, unified vars schema, API endpoint, Phase 1/2 roadmap
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `packages/openvibe-themes/themes.json` | NEW — unified source of truth for all 8 themes |
+| `scripts/sync-themes.js` | NEW — stamps themes.json into all 7 service files |
+| All 7 `services/*/public/assets/openvibe.js` | Added `// <openvibe-themes-generated>` markers; `applyTheme` now uses `Object.entries(theme.vars)` loop |
+| `services/openvibe-network/server/index.js` | Added `GET /api/v1/themes` endpoint |
+| `THEMES_CLAUDE.md` | Full rewrite for new architecture |
+
+### Phase 2 (not done yet)
+
+Full no-code theme builder: pick colors, backgrounds, fonts, border radius on the themes page, generate a submittable theme JSON. The `vars` flat object schema and the `/api/v1/themes` endpoint are the building blocks.
+
+---
+
 ## Session — 2026-05-23 (part 11) — HoboStreamer theme + Custom Palette
 
 ### HoboStreamer theme

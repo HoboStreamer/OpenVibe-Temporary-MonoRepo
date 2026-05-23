@@ -8,33 +8,45 @@ How the shared CSS system works across all OpenVibe services. Written by Claude 
 
 Every surface applies its visual identity through CSS custom properties (variables) set on `<html>`. The JavaScript `applyTheme()` function in each service's `openvibe.js` sets these at runtime.
 
-### Core variables
+### Theme variables (set by `applyTheme()` from `theme.vars`)
+
+All of these are stamped into every theme's `vars` object in `packages/openvibe-themes/themes.json` and applied wholesale by `applyTheme()` via `Object.entries(theme.vars || {}).forEach(([k, v]) => root.style.setProperty(k, v))`. Every theme sets every variable — there is no longer a split between "network vars" and "community vars".
 
 | Variable | Purpose | Example (dark) |
 |---|---|---|
-| `--ov-bg` | Page background | `#060917` |
-| `--ov-bg-soft` | Soft/elevated background (panels, cards) | `rgba(11, 16, 33, 0.84)` |
-| `--ov-nav-bg` | Nav bar background | same as `--ov-bg` |
-| `--ov-text` | Primary text | `#eef4ff` |
-| `--ov-text-dim` | Secondary/muted text | `#a7b5d2` |
 | `--ov-accent` | Primary accent (links, buttons, highlights) | `#8b5cf6` |
 | `--ov-accent-2` | Secondary accent (gradients, hover states) | `#22d3ee` |
+| `--ov-bg` | Page background | `#060917` |
+| `--ov-nav-bg` | Nav bar background | `#060917` |
+| `--ov-bg-soft` | Soft panel background (network/chat) | `rgba(11, 16, 33, 0.84)` |
+| `--ov-bg-elev` | Elevated surface (cards, modals) | `rgba(15, 23, 45, 0.88)` |
+| `--ov-bg-elev-2` | Double-elevated surface | `rgba(21, 31, 60, 0.94)` |
+| `--ov-text` | Primary text | `#eef4ff` |
+| `--ov-text-dim` | Secondary/muted text | `#a7b5d2` |
+| `--ov-text-faint` | Very muted text (captions, placeholders) | `#6d7c98` |
+| `--ov-border` | Border/divider color | `rgba(148, 163, 184, 0.14)` |
+| `--ov-shadow` | Card/modal shadow | `0 28px 90px rgba(2, 8, 23, 0.42)` |
+| `--accent` | Legacy alias → `--ov-accent` (live SSR) | same |
+| `--accent-2` | Legacy alias → `--ov-accent-2` (live SSR) | same |
+| `--bg` | Legacy alias → `--ov-bg` (live SSR) | same |
+| `--panel` | Legacy alias → `--ov-bg-elev` (live SSR) | same |
+| `--panel-strong` | Legacy alias → `--ov-bg-elev-2` (live SSR) | same |
+| `--border` | Legacy alias → `--ov-border` (live SSR) | same |
+| `--text` | Legacy alias → `--ov-text` (live SSR) | same |
+| `--muted` | Legacy alias → `--ov-text-faint` (live SSR) | same |
+| `--muted-strong` | Legacy alias → `--ov-text-dim` (live SSR) | same |
 
-These are set by each theme and are the only variables you should change to theme a surface.
+The legacy aliases (`--accent`, `--bg`, `--panel`, etc.) exist because the openvibe-live SSR templates reference them directly. All other services use the `--ov-*` names.
 
-### Additional variables (set in CSS `:root`, not by themes)
+### Static variables (set in CSS `:root`, not by themes)
 
 | Variable | Purpose |
 |---|---|
-| `--ov-bg-elev` | Elevated background for cards |
-| `--ov-bg-elev-2` | Double-elevated background |
-| `--ov-border` | Default border color |
 | `--ov-warn` | Warning color |
 | `--ov-danger` | Destructive/error color |
 | `--ov-ok` | Success color |
 | `--ov-radius` | Card/panel border radius |
 | `--ov-radius-sm` | Small border radius (buttons, chips) |
-| `--ov-shadow` | Default box shadow |
 | `--ov-font` | Body font stack |
 | `--ov-mono` | Monospace font stack |
 | `--ov-max` | Max content width |
@@ -87,6 +99,35 @@ These classes are present across all services:
 - `.ov-grid` — CSS grid for cards (auto-fill with minmax)
 - `.ov-panel` — card/panel with padding and border
 
+### Themes Page (`themes.html` only)
+
+**Built-in grid:**
+- `.theme-grid` — auto-fill grid of built-in theme tiles
+- `.theme-tile` — individual tile (button, all: unset)
+- `.theme-tile--active` — selected state (accent border + glow)
+- `.theme-tile-preview` — 130px gradient preview strip
+- `.theme-tile-accents` — two small accent-color dots (bottom-right of preview)
+- `.theme-tile-dot` — individual dot
+- `.theme-tile-name` — name label below preview
+
+**Custom palette editor:**
+- `.cp-header` / `.cp-sub` — section title and subtitle
+- `.cp-grid` — auto-fill grid of color swatches
+- `.cp-field` / `.cp-label` / `.cp-swatch` — color picker field
+- `.cp-meta` — column flex wrapper for Name input + Description textarea
+- `.cp-actions` — row flex wrapper for action buttons
+- `.cp-btn` — base button style
+- `.cp-btn--apply` — "Apply to me" (solid accent background)
+- `.cp-btn--submit` — "Submit Theme" (accent → accent-2 gradient)
+- `.cp-status` — inline status message below buttons
+- `.cp-status--ok` — success state (green)
+- `.cp-status--err` — error state (red)
+
+**Community themes section:**
+- `.community-section` — wrapper (hidden when no themes exist)
+- `.community-grid` — same auto-fill grid as `.theme-grid`
+- `.theme-tile-author` — small author byline below `.theme-tile-name` (community tiles only)
+
 ### Theme Picker (all services after 2026-05-23)
 - `.ov-theme-btn-wrap` — `position: relative` wrapper
 - `.ov-theme-btn` — circular icon button (34×34px)
@@ -113,10 +154,10 @@ These classes are present across all services:
 
 Themes declare a color scheme via `applyTheme()`:
 ```js
-root.style.setProperty('color-scheme', theme.id === 'openvibe-light' ? 'light' : 'dark');
+root.style.setProperty('color-scheme', theme.colorScheme || (theme.id === 'openvibe-light' ? 'light' : 'dark'));
 ```
 
-The `color-scheme` property tells the browser to use light or dark system UI colors for scrollbars, form elements, etc. Only the `openvibe-light` theme sets `light`; all others use `dark`.
+The `color-scheme` property tells the browser to use light or dark system UI colors for scrollbars, form elements, etc. Themes declare this via the `colorScheme` field in `themes.json` (`"light"` or `"dark"`). The fallback `theme.id === 'openvibe-light'` check handles any theme object that predates the field.
 
 ---
 

@@ -19,6 +19,7 @@ const { serviceActorMiddleware } = require('./middleware/service-actor');
 const { OpenVibeAuthClient, optionalOpenVibeAuth, requireOpenVibeAuth, EventsClient } = require('@openvibe/sdk');
 
 const userModules = require('./api/user-modules');
+const communityThemes = require('./api/community-themes');
 const serviceRegistry = require('./api/service-registry');
 const capabilityRegistry = require('./api/capability-registry');
 const capabilityInvoke = require('./api/capability-invoke');
@@ -103,6 +104,7 @@ function buildApp() {
     // ── /api/v1 — Phase 1 kernel APIs ────────────────────────
     const apiRouter = express.Router();
     apiRouter.use(userModules.buildRouter({ events }));
+    apiRouter.use(communityThemes.buildRouter({ requireAuth: requireOpenVibeAuth(authClient) }));
     apiRouter.use(serviceRegistry.buildRouter({ events }));
     apiRouter.use(capabilityRegistry.buildRouter({ events }));
     apiRouter.use(capabilityInvoke.buildRouter({ events, config }));
@@ -125,6 +127,9 @@ function buildApp() {
     });
     apiRouter.get('/namespaces', (_req, res) => {
         res.json({ items: require('@openvibe/contracts/namespaces').NAMESPACES });
+    });
+    apiRouter.get('/themes', (_req, res) => {
+        res.json({ items: require('../../../packages/openvibe-themes/themes.json') });
     });
 
     app.use('/api/v1', apiRouter);

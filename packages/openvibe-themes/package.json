@@ -1,0 +1,7 @@
+{
+  "name": "@openvibe/themes",
+  "version": "0.1.0",
+  "description": "Single source of truth for all OpenVibe built-in themes. Edit themes here, run scripts/sync-themes.js to stamp into all services.",
+  "main": "index.js",
+  "license": "MIT"
+}

@@ -470,6 +470,21 @@ const SCHEMA_SQL = `
         );
         CREATE INDEX IF NOT EXISTS idx_social_follows_follower ON social_follows(follower_user_id, scope, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_social_follows_followed ON social_follows(followed_user_id, scope, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS community_themes (
+            id           TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            author_name  TEXT NOT NULL,
+            name         TEXT NOT NULL,
+            description  TEXT,
+            accent       TEXT NOT NULL,
+            accent2      TEXT NOT NULL,
+            preview      TEXT NOT NULL,
+            vars_json    TEXT NOT NULL,
+            created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_community_themes_user ON community_themes(user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_community_themes_date ON community_themes(created_at DESC);
     `;
 
 function defaultSqlitePath() {
