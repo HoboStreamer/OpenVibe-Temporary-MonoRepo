@@ -308,16 +308,19 @@ function getPasteBySlug(slug) {
 function getPasteById(id) {
     return hydratePaste(db.get().prepare(`SELECT * FROM community_pastes WHERE id = ? AND deleted_at IS NULL`).get(String(id)));
 }
-function listPastes({ visibility, created_by_actor_type, created_by_actor_id, limit }) {
+function listPastes({ visibility, created_by_actor_type, created_by_actor_id, limit, sort, offset, excludeId } = {}) {
     const where = ['deleted_at IS NULL'];
     const args = [];
     if (visibility) { where.push('visibility = ?'); args.push(String(visibility)); }
     if (created_by_actor_type) { where.push('created_by_actor_type = ?'); args.push(String(created_by_actor_type)); }
     if (created_by_actor_id)   { where.push('created_by_actor_id = ?');   args.push(String(created_by_actor_id)); }
+    if (excludeId)             { where.push('id != ?');                    args.push(String(excludeId)); }
     const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const off = Math.max(parseInt(offset, 10) || 0, 0);
+    const orderBy = sort === 'views' ? 'view_count DESC, rowid DESC' : 'rowid DESC';
     return db.get().prepare(
-        `SELECT * FROM community_pastes WHERE ${where.join(' AND ')} ORDER BY rowid DESC LIMIT ?`
-    ).all(...args, cap).map(hydratePaste);
+        `SELECT * FROM community_pastes WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
+    ).all(...args, cap, off).map(hydratePaste);
 }
 function updatePaste(slug, patch) {
     const cur = getPasteBySlug(slug);

@@ -306,8 +306,8 @@ function _pasteCard(paste) {
     const href  = `/p/${encodeURIComponent(paste.slug || paste.id || '')}`;
     const lang  = paste.language || 'txt';
     const imageUrl = paste.metadata && paste.metadata.image_url ? paste.metadata.image_url : null;
-    const preview = !imageUrl && paste.content
-        ? escapeHtml(String(paste.content).split('\n').slice(0, 4).join('\n')).replace(/\n/g, '<br>') + (paste.content.split('\n').length > 4 ? '\n…' : '')
+    const preview = !imageUrl && paste.body
+        ? escapeHtml(String(paste.body).split('\n').slice(0, 4).join('\n')).replace(/\n/g, '<br>') + (paste.body.split('\n').length > 4 ? '\n…' : '')
         : '';
     return `<article class="glass-card">
         <div class="pill-row">
@@ -401,6 +401,7 @@ function renderThreadsPage(threads, opts) {
 function renderPastesPage(pastes, opts) {
     opts = opts || {};
     const limit = opts.limit || 60;
+    const sort = opts.sort || 'recent';
     const items = (pastes || []).slice(0, limit);
     const bodyHtml = `
         <section class="hero">
@@ -410,8 +411,10 @@ function renderPastesPage(pastes, opts) {
         </section>
         <div class="section-head">
             <h2 class="section-title">${items.length} paste${items.length === 1 ? '' : 's'}</h2>
-            <div style="display:flex;gap:.5rem">
-                <a class="section-link" href="/pulse">View pulse</a>
+            <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                <a class="section-link${sort === 'recent' ? ' active' : ''}" href="/pastes?sort=recent" style="${sort === 'recent' ? 'border-color:rgba(34,211,238,.5);color:var(--accent);background:rgba(34,211,238,.08);' : ''}">Most recent</a>
+                <a class="section-link${sort === 'views' ? ' active' : ''}" href="/pastes?sort=views" style="${sort === 'views' ? 'border-color:rgba(34,211,238,.5);color:var(--accent);background:rgba(34,211,238,.08);' : ''}">Most viewed</a>
+                <a class="section-link" href="/pulse">Pulse</a>
                 <a class="section-link" href="/threads">Threads</a>
             </div>
         </div>
@@ -446,12 +449,37 @@ function renderPasteViewPage(paste, opts) {
     }
     const title = paste.title || 'Untitled paste';
     const lang  = paste.language || 'txt';
-    const content = paste.content || '';
+    const content = paste.body || '';
+    const imageUrl = paste.metadata && paste.metadata.image_url ? paste.metadata.image_url : null;
     const contentHtml = escapeHtml(content);
     const copyId = 'paste-content-pre';
     const expiresHtml = paste.expires_at
         ? `<div class="data-point"><div class="data-point-label">Expires</div><div class="data-point-value">${escapeHtml(new Date(paste.expires_at).toLocaleString())}</div></div>`
         : '';
+    const morePastes = (opts && opts.morePastes) || [];
+    const pasteStripHtml = morePastes.length ? `
+        <div style="margin-top:2rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                <span style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">More pastes</span>
+                <a class="section-link" href="/pastes" style="font-size:.8rem;">Browse all →</a>
+            </div>
+            <div style="display:flex;gap:.75rem;overflow-x:auto;padding-bottom:.75rem;scrollbar-width:thin;">
+                ${morePastes.map((p) => {
+                    const pTitle = escapeHtml(p.title || 'Untitled paste');
+                    const pLang  = escapeHtml(pasteLanguageLabel(p.language || 'txt'));
+                    const pImg   = p.metadata && p.metadata.image_url ? escapeHtml(p.metadata.image_url) : null;
+                    const pHref  = `/p/${encodeURIComponent(p.slug || p.id || '')}`;
+                    const pViews = p.view_count ? `${p.view_count} view${p.view_count === 1 ? '' : 's'} · ` : '';
+                    const pTime  = timeAgo(p.created_at);
+                    return `<a href="${escapeHtml(pHref)}" style="flex:0 0 220px;border-radius:16px;background:rgba(15,23,42,.9);border:1px solid rgba(255,255,255,.09);padding:.85rem;text-decoration:none;display:flex;flex-direction:column;gap:.4rem;transition:border-color .15s;" onmouseover="this.style.borderColor='rgba(34,211,238,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.09)'">
+                        ${pImg ? `<img src="${pImg}" alt="" loading="lazy" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:.2rem;">` : ''}
+                        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);opacity:.8;">${pLang}</span>
+                        <span style="font-size:.88rem;font-weight:700;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${pTitle}</span>
+                        <span style="font-size:.75rem;color:var(--muted);margin-top:auto;">${pViews}${pTime}</span>
+                    </a>`;
+                }).join('')}
+            </div>
+        </div>` : '';
     const bodyHtml = `
         <section class="hero" style="margin-bottom:1rem">
             <div class="pill-row" style="margin-bottom:.5rem">
@@ -465,6 +493,7 @@ function renderPasteViewPage(paste, opts) {
                 ${paste.view_count ? ` · ${paste.view_count} view${paste.view_count === 1 ? '' : 's'}` : ''}
             </p>
         </section>
+        ${imageUrl ? `<div style="margin-bottom:1.25rem;"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" style="width:100%;max-height:420px;object-fit:contain;border-radius:16px;border:1px solid rgba(255,255,255,.09);background:rgba(0,0,0,.4);"></div>` : ''}
         <div class="data-points">
             <div class="data-point"><div class="data-point-label">Language</div><div class="data-point-value">${escapeHtml(pasteLanguageLabel(lang))}</div></div>
             <div class="data-point"><div class="data-point-label">Lines</div><div class="data-point-value">${content.split('\n').length}</div></div>
@@ -488,6 +517,7 @@ function renderPasteViewPage(paste, opts) {
                    </form>`}
             <a class="section-link" href="/pulse">Community pulse</a>
         </div>
+        ${pasteStripHtml}
         <script>
         (function(){
             var btn = document.getElementById('copy-btn');

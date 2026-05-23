@@ -121,7 +121,8 @@ function buildApp() {
         const acceptsHtml = req.accepts(['html', 'json']) === 'html';
         if (acceptsHtml) {
             const existingThread = m.findPasteThread(paste.id);
-            return res.send(communitySSR.renderPasteViewPage(paste, { thread: existingThread }));
+            const morePastes = m.listPastes({ visibility: 'public', limit: 16, excludeId: paste.id });
+            return res.send(communitySSR.renderPasteViewPage(paste, { thread: existingThread, morePastes }));
         }
         return res.json({ paste });
     });
@@ -171,8 +172,9 @@ function buildApp() {
 
     app.get('/pastes', (req, res) => {
         const m = require('./model');
-        const pastes = m.listPastes({ visibility: 'public', limit: 80 });
-        res.send(communitySSR.renderPastesPage(pastes));
+        const sort = req.query.sort === 'views' ? 'views' : 'recent';
+        const pastes = m.listPastes({ visibility: 'public', limit: 80, sort });
+        res.send(communitySSR.renderPastesPage(pastes, { sort }));
     });
 
     app.get('/chat', (_req, res) => {

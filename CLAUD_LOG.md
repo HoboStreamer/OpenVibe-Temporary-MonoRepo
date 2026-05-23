@@ -2,6 +2,42 @@
 
 ---
 
+## Session — 2026-05-23 (part 15) — Paste sorting, image fix, paste strip, wallet nav button
+
+### What was done
+
+**Paste sorting (`/pastes`):**
+- `listPastes` in `model.js` now accepts `sort` (`'recent'` default → `ORDER BY rowid DESC`, `'views'` → `ORDER BY view_count DESC, rowid DESC`) and `offset` params. Also accepts `excludeId` to filter one paste out.
+- `/pastes` SSR route reads `?sort=views|recent` and passes it through
+- `renderPastesPage` in `ssr.js` renders two sort buttons ("Most recent" / "Most viewed") — active state highlighted with accent border/color
+
+**Paste image fix (`/p/:slug`):**
+- `renderPasteViewPage` was using `paste.content` which doesn't exist — the model returns `paste.body`. Fixed to `paste.body` everywhere in `ssr.js`
+- `_pasteCard` had the same bug (preview never showed for text pastes) — fixed
+- `renderPasteViewPage` now renders `paste.metadata.image_url` as a full-width image above the data points (object-fit: contain, max-height 420px)
+
+**Paste strip below view:**
+- `/p/:slug` route now also fetches `listPastes({ visibility: 'public', limit: 16, excludeId: paste.id })` and passes as `opts.morePastes`
+- `renderPasteViewPage` renders a horizontally scrollable strip of cards at the bottom: thumbnail (if any), language label, title (2-line clamp), views + time
+- Hover border highlight on each card, scrollbar-width: thin
+
+**Wallet copy in nav dropdown:**
+- Auth dropdown in `openvibe-network/public/assets/openvibe.js` now has a "Copy wallet address" button (hidden by default)
+- After render, fetches `openvibe.wallet` user module — shows button only if `solana_address` is set
+- Only applies to openvibe-network (other services use inline buttons for auth, not a dropdown)
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `services/openvibe-community/server/model.js` | `listPastes` — added `sort`, `offset`, `excludeId` params |
+| `services/openvibe-community/server/index.js` | `/pastes` passes sort; `/p/:slug` fetches morePastes |
+| `services/openvibe-community/server/ssr.js` | Sort buttons on pastes page; image + body fix + paste strip on view page |
+| `services/openvibe-network/public/my.html` | Wallet section with legal disclaimer, address save/remove |
+| `services/openvibe-network/public/assets/openvibe.js` | Wallet copy button in auth dropdown |
+
+---
+
 ## Session — 2026-05-23 (part 14) — Games page, Minesweeper, Wallet section
 
 ### What was done
