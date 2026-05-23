@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const db = require('./db');
+const config = require('./config');
 
 function newId(prefix) { return `${prefix}_${crypto.randomBytes(12).toString('hex')}`; }
 function safeJson(s, fb) { try { return JSON.parse(s); } catch { return fb; } }
@@ -257,7 +258,8 @@ function hydratePaste(r) {
     // Inject image_url from screenshot_path (legacy hobostreamer migration)
     if (metadata.screenshot_path && !metadata.image_url) {
         const fileName = path.basename(String(metadata.screenshot_path));
-        if (fileName) metadata.image_url = `/api/paste-screenshots/${encodeURIComponent(fileName)}`;
+        const base = (config.publicBaseUrl || '').replace(/\/$/, '');
+        if (fileName) metadata.image_url = `${base}/api/paste-screenshots/${encodeURIComponent(fileName)}`;
     }
     return {
         id: r.id, slug: r.slug, title: r.title, body: r.body, language: r.language,
