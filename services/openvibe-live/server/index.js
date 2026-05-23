@@ -743,7 +743,12 @@ function buildApp() {
         const community = await feedBridge.buildCommunityViewModel();
         res.json({ items: community.recentPastes || [] });
     }));
-    app.get('/api/v1/streams', (req, res) => res.json({ items: model.listStreams({ channel_slug: req.query.channel_slug, status: req.query.status, limit: req.query.limit }) }));
+    app.get('/api/v1/streams', (req, res) => {
+        if (req.query.status === 'live') {
+            return res.json({ items: model.listLiveNow({ limit: req.query.limit || 6 }) });
+        }
+        res.json({ items: model.listStreams({ channel_slug: req.query.channel_slug, status: req.query.status, limit: req.query.limit }) });
+    });
     app.get('/api/v1/streams/recently-ended', (req, res) => res.json({ items: model.listRecentlyEnded({ limit: req.query.limit || 4 }) }));
     app.get('/api/v1/streams/:id', (req, res) => {
         const stream = model.getStreamById(req.params.id);

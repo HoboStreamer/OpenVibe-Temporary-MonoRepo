@@ -59,6 +59,15 @@ nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0
 /* Section headers */
 .section-label { padding: 0.5rem 1.5rem 0; max-width: 1100px; margin: 0 auto; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text2); }
 
+/* Tool card wrapper + fav button */
+.tool-card-wrap { position: relative; }
+.tool-card-wrap .tool-card { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; color: inherit; text-decoration: none; }
+.tool-fav-btn { position: absolute; top: 0.6rem; right: 0.6rem; background: rgba(0,0,0,0.5); border: none; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: transform 0.15s, background 0.15s; z-index: 1; line-height: 1; }
+.tool-fav-btn:hover { background: rgba(0,0,0,0.8); transform: scale(1.15); }
+.tool-fav-btn[data-fav="true"] { color: #facc15; }
+.tool-fav-btn[data-fav="false"] { color: rgba(255,255,255,0.4); }
+.fav-section-label { padding: 1.5rem 1.5rem 0; max-width: 1100px; margin: 0 auto; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent2); }
+
 @media (max-width: 480px) { .hero h1 { font-size: 1.75rem; } .tools-grid { padding: 1.25rem 1rem 3rem; } }
 </style>
 </head>
@@ -77,6 +86,11 @@ nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0
 <div class="hero">
   <h1>Free Online Tools</h1>
   <p>Audio, image, text, and media tools. Fast, private, no sign-up required.</p>
+</div>
+
+<div id="fav-section" style="display:none">
+  <p class="fav-section-label">Favorited Tools</p>
+  <div class="tools-grid" id="fav-tools-grid"></div>
 </div>
 
 <p class="section-label">Audio Tools</p>
@@ -124,23 +138,102 @@ const TOOLS = {
   ],
 };
 
-function renderTools(containerId, category, tools) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = tools.map(t => `
-    <a href="${t.href}" class="tool-card cat-${category}">
-      <div class="tool-card-icon">${t.icon}</div>
-      <h3>${t.title}</h3>
-      <p>${t.desc}</p>
-      <span class="tool-card-tag">${t.tag}</span>
-    </a>
-  `).join('');
+// ── Tool favorites (stored in a .localhost cookie for cross-domain access) ──
+var FAV_TOOLS_COOKIE = 'ov-tool-favs';
+function _favCookieDomain() {
+  var h = location.hostname;
+  if (h === 'localhost' || h.endsWith('.localhost')) return '.localhost';
+  var p = h.split('.');
+  return p.length > 1 ? '.' + p.slice(-2).join('.') : h;
 }
+function loadFavTools() {
+  try {
+    var m = document.cookie.match(/(?:^|;\s*)ov-tool-favs=([^;]*)/);
+    return m ? JSON.parse(decodeURIComponent(m[1])) : [];
+  } catch { return []; }
+}
+function saveFavTools(arr) {
+  try {
+    document.cookie = FAV_TOOLS_COOKIE + '=' + encodeURIComponent(JSON.stringify(arr)) +
+      '; domain=' + _favCookieDomain() + '; path=/; max-age=31536000; SameSite=Lax';
+  } catch {}
+}
+function isFavTool(href) {
+  return loadFavTools().some(function(t) { return t.id === href; });
+}
+function toggleFavTool(toolData) {
+  var favs = loadFavTools();
+  var idx = favs.findIndex(function(t) { return t.id === toolData.id; });
+  if (idx >= 0) { favs.splice(idx, 1); } else { favs.unshift({ id: toolData.id, title: toolData.title, icon: toolData.icon, category: toolData.category, savedAt: new Date().toISOString() }); }
+  saveFavTools(favs);
+  return idx < 0;
+}
+
+function buildCard(t, category) {
+  var fav = isFavTool(t.href);
+  return '<div class="tool-card-wrap cat-' + category + '">' +
+    '<a href="' + t.href + '" class="tool-card">' +
+      '<div class="tool-card-icon">' + t.icon + '</div>' +
+      '<h3>' + t.title + '</h3>' +
+      '<p>' + t.desc + '</p>' +
+      '<span class="tool-card-tag">' + t.tag + '</span>' +
+    '</a>' +
+    '<button class="tool-fav-btn" type="button"' +
+      ' data-tool-href="' + t.href + '" data-tool-title="' + t.title.replace(/"/g,'&quot;') + '"' +
+      ' data-tool-icon="' + t.icon + '" data-tool-category="' + category + '"' +
+      ' data-fav="' + fav + '" aria-label="' + (fav ? 'Remove from favorites' : 'Add to favorites') + '">' +
+      (fav ? '★' : '☆') +
+    '</button>' +
+  '</div>';
+}
+
+function renderTools(containerId, category, tools) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = tools.map(function(t) { return buildCard(t, category); }).join('');
+}
+
+function renderFavSection() {
+  var section = document.getElementById('fav-section');
+  var grid = document.getElementById('fav-tools-grid');
+  if (!section || !grid) return;
+  var favs = loadFavTools();
+  if (!favs.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  grid.innerHTML = favs.map(function(t) {
+    return '<div class="tool-card-wrap cat-' + (t.category || 'audio') + '">' +
+      '<a href="' + t.id + '" class="tool-card">' +
+        '<div class="tool-card-icon">' + t.icon + '</div>' +
+        '<h3>' + t.title + '</h3>' +
+      '</a>' +
+      '<button class="tool-fav-btn" type="button"' +
+        ' data-tool-href="' + t.id + '" data-tool-title="' + t.title.replace(/"/g,'&quot;') + '"' +
+        ' data-tool-icon="' + t.icon + '" data-tool-category="' + (t.category || '') + '"' +
+        ' data-fav="true" aria-label="Remove from favorites">★</button>' +
+    '</div>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.tool-fav-btn');
+  if (!btn) return;
+  e.preventDefault();
+  var toolData = { id: btn.dataset.toolHref, title: btn.dataset.toolTitle, icon: btn.dataset.toolIcon, category: btn.dataset.toolCategory };
+  var nowFav = toggleFavTool(toolData);
+  // update all matching buttons
+  document.querySelectorAll('.tool-fav-btn[data-tool-href="' + toolData.id + '"]').forEach(function(b) {
+    b.dataset.fav = nowFav ? 'true' : 'false';
+    b.textContent = nowFav ? '★' : '☆';
+    b.setAttribute('aria-label', nowFav ? 'Remove from favorites' : 'Add to favorites');
+  });
+  renderFavSection();
+});
 
 renderTools('audio-tools',    'audio',    TOOLS.audio);
 renderTools('image-tools',    'image',    TOOLS.image);
 renderTools('text-tools',     'text',     TOOLS.text);
 renderTools('download-tools', 'download', TOOLS.download);
+renderFavSection();
 </script>
 </body>
 </html>

@@ -462,6 +462,67 @@
         return loadSyncedThemePreference();
     }
 
+    async function syncThemePreference(themeId) {
+        applyTheme(themeId);
+        const session = await loadSession().catch(() => null);
+        if (!session || !session.authenticated) return;
+        networkRequestJson('/api/v1/user-modules/me/openvibe.theme', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: { theme_id: themeId, updated_at: new Date().toISOString() } }),
+        }).catch(() => {});
+    }
+
+    function initThemePicker() {
+        const wrap = global.document && global.document.getElementById('ov-theme-btn-wrap');
+        if (!wrap) return;
+        const triggerBtn = wrap.querySelector('#ov-theme-btn');
+        const popup = wrap.querySelector('#ov-theme-popup');
+        const swatchContainer = wrap.querySelector('#ov-theme-swatches');
+        if (!triggerBtn || !popup || !swatchContainer) return;
+
+        swatchContainer.innerHTML = BUILTIN_THEMES.slice(0, 6).map((t) =>
+            `<button class="ov-theme-swatch" data-theme-id="${escapeHtml(t.id)}" type="button" title="${escapeHtml(t.name)}">
+                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}">
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent)}"></span>
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent2)}"></span>
+                </span>
+                <span class="ov-theme-swatch-name">${escapeHtml(t.name)}</span>
+            </button>`
+        ).join('');
+
+        try {
+            const saved = localStorage.getItem(LOCAL_THEME_KEY);
+            if (saved) {
+                const activeEl = swatchContainer.querySelector(`[data-theme-id="${CSS.escape(saved)}"]`);
+                if (activeEl) activeEl.classList.add('ov-theme-swatch--active');
+            }
+        } catch { /* ignore */ }
+
+        swatchContainer.querySelectorAll('[data-theme-id]').forEach((swatchBtn) => {
+            swatchBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                syncThemePreference(swatchBtn.dataset.themeId);
+                swatchContainer.querySelectorAll('[data-theme-id]').forEach((s) => s.classList.remove('ov-theme-swatch--active'));
+                swatchBtn.classList.add('ov-theme-swatch--active');
+                popup.hidden = true;
+                triggerBtn.setAttribute('aria-expanded', 'false');
+            });
+        });
+
+        triggerBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = !popup.hidden;
+            popup.hidden = open;
+            triggerBtn.setAttribute('aria-expanded', String(!open));
+        });
+
+        global.document.addEventListener('click', function () {
+            popup.hidden = true;
+            triggerBtn.setAttribute('aria-expanded', 'false');
+        });
+    }
+
     async function primeEnvironment(force) {
         applySavedTheme();
         await loadSession(force);
@@ -606,7 +667,6 @@
             { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
             { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
             { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
             { key: 'docs', href: resolveRegistryUrl(), label: 'Registry API', icon: 'docs' },
         ];
@@ -616,7 +676,16 @@
                 <nav class="ov-nav-links">
                     ${links.map((link) => `<a href="${escapeHtml(link.href)}"${link.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
                 </nav>
-                <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+                <div class="ov-nav-end">
+                    <div class="ov-theme-btn-wrap" id="ov-theme-btn-wrap">
+                        <button class="ov-theme-btn" id="ov-theme-btn" type="button" aria-label="Change theme" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></button>
+                        <div class="ov-theme-popup" id="ov-theme-popup" hidden>
+                            <div class="ov-theme-swatches" id="ov-theme-swatches"></div>
+                            <a class="ov-theme-explore" href="${escapeHtml(resolveSurfaceUrl('themes'))}">Explore more themes!</a>
+                        </div>
+                    </div>
+                    <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+                </div>
             </div></header>`;
     }
 
@@ -692,6 +761,7 @@
         const footerMount = global.document.getElementById('footer-mount');
         if (navMount) navMount.innerHTML = navbar(activeKey);
         if (footerMount) footerMount.innerHTML = footer();
+        initThemePicker();
         await Promise.all([
             hydrateNavSession(),
             loadSyncedThemePreference(),
@@ -761,5 +831,7 @@
         startAnonymousSession,
         switchAccountUrl,
         switchAnonymousIdentity,
+        syncThemePreference,
+        initThemePicker,
     };
 }(window));

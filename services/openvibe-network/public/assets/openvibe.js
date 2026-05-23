@@ -611,21 +611,15 @@
     }
 
     async function syncThemePreference(themeId) {
-        const payload = {
-            theme_id: themeId,
-            updated_at: new Date().toISOString(),
-            source: 'openvibe-network-ui',
-        };
-        const result = await putUserModule('openvibe.theme', payload);
         applyTheme(themeId);
-        if (accountProfilePromise) {
-            const cached = await accountProfilePromise.catch(() => null);
-            if (cached) {
-                cached.theme = Object.assign({}, result);
-                accountProfilePromise = Promise.resolve(cached);
-            }
-        }
-        return result;
+        try {
+            const payload = {
+                theme_id: themeId,
+                updated_at: new Date().toISOString(),
+                source: 'openvibe-network-ui',
+            };
+            await putUserModule('openvibe.theme', payload);
+        } catch { /* ignore — theme is already applied locally */ }
     }
 
     async function primeEnvironment(force) {
@@ -751,7 +745,7 @@
         const links = [
             { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
             { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
+            { key: 'community', href: resolveSurfaceUrl('community'), label: 'Community', icon: 'community' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
             { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
@@ -895,7 +889,10 @@
 
         swatchContainer.innerHTML = BUILTIN_THEMES.slice(0, 6).map((t) =>
             `<button class="ov-theme-swatch" data-theme-id="${escapeHtml(t.id)}" type="button" title="${escapeHtml(t.name)}">
-                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}"></span>
+                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}">
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent)}"></span>
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent2)}"></span>
+                </span>
                 <span class="ov-theme-swatch-name">${escapeHtml(t.name)}</span>
             </button>`
         ).join('');

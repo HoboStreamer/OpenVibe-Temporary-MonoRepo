@@ -46,7 +46,11 @@ function decideSend({ req, room, model }) {
     if (req && req.serviceActor) return { allow: true, reason: 'service actor' };
     const actor = actorOfReq(req);
     if (actor.type === 'anonymous') {
-        return { allow: false, reason: 'anonymous send not allowed' };
+        // Allow anonymous sends to public rooms — identity is carried via metadata.sender_name
+        if (room.visibility === 'public' && !ROOM_TYPES_REQUIRING_MEMBERSHIP.has(room.room_type)) {
+            return { allow: true, reason: 'anonymous public room' };
+        }
+        return { allow: false, reason: 'anonymous send not allowed in non-public rooms' };
     }
 
     if (ROOM_TYPES_REQUIRING_MEMBERSHIP.has(room.room_type) || room.visibility === 'private' || room.visibility === 'restricted') {

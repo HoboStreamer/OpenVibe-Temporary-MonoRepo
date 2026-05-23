@@ -86,6 +86,12 @@ function archiveRoom(id) {
     return getRoom(id);
 }
 
+function setRoomTitle(id, title) {
+    if (!title) return getRoom(id);
+    db.get().prepare(`UPDATE chat_rooms SET title=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(String(title), String(id));
+    return getRoom(id);
+}
+
 // ── participants ─────────────────────────────────────────
 function upsertParticipant({ room_id, actor_type, actor_id, role, metadata }) {
     db.get().prepare(`
@@ -735,7 +741,7 @@ module.exports = {
     summarizeProduct,
     newId,
     // rooms
-    createRoom, getRoom, findRoomByExternal, ensureRoomForExternal, listRooms, archiveRoom,
+    createRoom, getRoom, findRoomByExternal, ensureRoomForExternal, listRooms, archiveRoom, setRoomTitle,
     // participants
     upsertParticipant, getParticipant, removeParticipant, listParticipants, markRoomRead,
     // messages

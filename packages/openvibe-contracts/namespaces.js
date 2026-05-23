@@ -18,6 +18,7 @@ const NAMESPACES = Object.freeze({
     'openvibe.theme':                  { owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
     'control.notification_preferences':{ owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
     'control.launcher':                { owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
+    'openvibe.favorites':              { owner: 'openvibe-network', read_scope: 'self',   user_writable: true  },
 
     // openvibe-live (HoboStreamer in the meantime)
     'live.profile':       { owner: 'openvibe-live',      read_scope: 'public',  user_writable: true  },

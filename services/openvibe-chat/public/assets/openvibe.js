@@ -531,11 +531,11 @@
     }
 
     function signInUrl(returnTo) {
-        return `/oauth/authorize?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
+        return `${resolveSurfaceUrl('network')}/oauth/authorize?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
     }
 
     function signOutUrl(returnTo) {
-        return `/oauth/logout?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
+        return `${resolveSurfaceUrl('network')}/oauth/logout?return_to=${encodeURIComponent(returnTo || global.location.href)}`;
     }
 
     function themeById(themeId) {
@@ -611,21 +611,16 @@
     }
 
     async function syncThemePreference(themeId) {
-        const payload = {
-            theme_id: themeId,
-            updated_at: new Date().toISOString(),
-            source: 'openvibe-network-ui',
-        };
-        const result = await putUserModule('openvibe.theme', payload);
         applyTheme(themeId);
-        if (accountProfilePromise) {
-            const cached = await accountProfilePromise.catch(() => null);
-            if (cached) {
-                cached.theme = Object.assign({}, result);
-                accountProfilePromise = Promise.resolve(cached);
-            }
-        }
-        return result;
+        const session = await loadSession().catch(() => null);
+        if (!session || !session.authenticated) return;
+        const networkBase = resolveSurfaceUrl('network');
+        fetch(networkBase + '/api/v1/user-modules/me/openvibe.theme', {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ data: { theme_id: themeId, updated_at: new Date().toISOString() } }),
+        }).catch(() => {});
     }
 
     async function primeEnvironment(force) {
@@ -751,7 +746,6 @@
         const links = [
             { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
             { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
             { key: 'docs', href: '/api/v1/services', label: 'Registry API', icon: 'docs' },
         ];
@@ -860,7 +854,10 @@
 
         swatchContainer.innerHTML = BUILTIN_THEMES.slice(0, 6).map((t) =>
             `<button class="ov-theme-swatch" data-theme-id="${escapeHtml(t.id)}" type="button" title="${escapeHtml(t.name)}">
-                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}"></span>
+                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}">
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent)}"></span>
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent2)}"></span>
+                </span>
                 <span class="ov-theme-swatch-name">${escapeHtml(t.name)}</span>
             </button>`
         ).join('');

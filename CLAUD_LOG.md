@@ -1,5 +1,284 @@
 # Claud Log
 
+---
+
+## Session — 2026-05-23 (continued, part 5) — Community nav link, tool favorites, channel favorites
+
+### Community link in network header
+
+Added `{ key: 'community', href: resolveSurfaceUrl('community'), label: 'Community', icon: 'community' }` to the nav link array in `services/openvibe-network/public/assets/openvibe.js`, inserted between Tools and Admin.
+
+---
+
+### Tool favorites — openvibe.tools
+
+**Files changed:** `services/openvibe-tools/public/index.html`
+
+- Each tool card is now a `div.tool-card-wrap` (with `position:relative`) containing an `<a>` for the card body and a `.tool-fav-btn` star button positioned absolutely in the top-right corner.
+- Favorites are stored in a `ov-tool-favs` cookie with `domain=.localhost` so the value is readable across all `*.localhost` subdomains (the cross-domain bridge without a backend).
+- `loadFavTools()` / `saveFavTools()` / `toggleFavTool()` functions manage the cookie (JSON-encoded array of `{ id, title, icon, category, savedAt }`). `id` is the href path (e.g. `/audio/convert`).
+- A "Favorited Tools" section (`#fav-section`) is shown at the top of the page when at least one tool is starred; hidden when the list is empty.
+- `buildCard()` replaces the previous template string inside `renderTools()`.
+- A delegated click listener on `document` handles all `.tool-fav-btn` clicks, updates all matching buttons, and re-renders the favorites section.
+
+---
+
+### Tool favorites — openvibe.network favorites panel
+
+**Files changed:** `services/openvibe-network/public/index.html`
+
+- Added `.ov-fav-tool-card`, `.ov-fav-tool-icon`, `.ov-fav-tool-title`, `.ov-fav-tool-remove` CSS.
+- Added `loadFavToolsCookie()` — parses `ov-tool-favs` from `document.cookie`.
+- Added `removeFavToolCookie(id)` — filters the cookie, re-saves with the same `.localhost` domain.
+- Added `renderFavToolsSection()` — reads the cookie, renders a "Tools" subsection in `#favorites-grid`. Each item links to `resolveSurfaceUrl('tools') + tool.id`. ✕ button calls `removeFavToolCookie` and re-renders.
+- `renderFavToolsSection()` is called from `renderLauncherSections()` alongside `renderFavStreamsSection()` and `renderFavThreadsSection()`.
+
+---
+
+### Channel favorites — favorite the streamer, not the session
+
+**Problem:** The existing stream favorite system saved `stream.id` (ephemeral per session) and stored stream-level data (title, thumbnail, live URL). Favoriting a streamer meant losing the favorite the moment the stream ended because the ID changed.
+
+**Fix:** Changed favorites to key on `channel_slug` instead.
+
+**Files changed:** `services/openvibe-network/public/index.html`
+
+| What changed | Detail |
+|---|---|
+| `toggleFavStream(channelData)` | Now stores `{ id: slug, name: channelName, url: channelPageUrl, savedAt }` |
+| `renderCard(stream)` | Star button now uses `data-stream-id=slug`, `data-stream-name=channelName`, `data-channel-url=channelUrl` |
+| Star click handler | Calls `toggleFavStream({ id: slug, name, url: channelUrl })` |
+| `renderFavStreamsSection()` | Section title changed from "Streams" → "Channels"; links point to channel page; green **LIVE** badge appears next to any channel currently live (cross-referenced via `window._ovLiveCache`) |
+| `window._ovLiveCache` | Set by `render()` inside the live widget IIFE (both live and empty cases) so `renderFavStreamsSection()` can check live status without an extra API call |
+| Poll lifecycle | `renderFavStreamsSection()` is called after every 60 s live poll so the LIVE badge updates automatically |
+
+---
+
+## Session — 2026-05-23 (continued, part 4) — Chat auth + stream rooms
+
+### Authorize button broken on openvibe.chat
+
+**Root cause:** `signInUrl()` and `signOutUrl()` in `services/openvibe-chat/public/assets/openvibe.js` generated relative URLs (`/oauth/authorize`, `/oauth/logout`). On `openvibe.chat` those paths hit the chat server (port 4800) which has no OAuth endpoint. The auth service lives on the network service (port 4100).
+
+**Fix:** Both functions now prepend `resolveSurfaceUrl('network')` to produce absolute URLs. Community, live, media, games, and tools already used `buildBridgeUrl`/`resolveSurfaceUrl('auth')` for their sign-in flows — only chat had the old relative pattern.
+
+**File changed:** `services/openvibe-chat/public/assets/openvibe.js`
+
+---
+
+### Cross-service SSO broken (login on one page didn't log in on others)
+
+**Root cause:** `setSessionCookie` in `services/openvibe-network/server/native-auth.js` was written as a migration helper. It sets the `openvibe_token` cookie on `.network.localhost` (the primary domain) but then **clears** the `.localhost` domain cookie as cleanup from an older cookie regime. The `.localhost` domain is the only one shared across all `*.localhost` services. The result: `openvibe.chat.localhost`, `openvibe.live.localhost`, etc. never received the auth token — they always saw an anonymous actor.
+
+**Fix:** `setSessionCookie` now sets the cookie on **both** `.network.localhost` and `.localhost`. The no-domain cookie is still cleared as migration cleanup; the legacy domain is cleared only if it differs from both.
+
+**File changed:** `services/openvibe-network/server/native-auth.js`
+
+---
+
+### Stream-specific chatrooms in chat page sidebar
+
+**Feature:** The `openvibe.chat` page sidebar now shows a "Live Streams" section listing any stream chatrooms that correspond to a currently-live stream.
+
+**How it works:**
+1. Chat page fetches `GET /api/v1/streams?status=live` from the live service (CORS, every 30s)
+2. Fetches `GET /api/chat/rooms?room_type=stream` from the chat service
+3. Cross-references by `external_ref_id` (stream UUID) — only shows rooms with an active live stream
+4. Renders each as a room button with a 🔴 dot; clicking switches the main pane to that stream's history
+5. The section hides automatically when no streams are live
+
+**Stream room display names (was `stream:UUID`):**
+- `model.js` — added `setRoomTitle(id, title)` function
+- `routes.js wrappedSend` — accepts `room_title` body param; calls `setRoomTitle` to overwrite the UUID default even if the room was already created by `wrappedHistory`
+- `ssr.js` — stream page now sends `room_title: channelName` (e.g. "Peter") with every message; first send renames the room from `stream:abc123` to the readable channel name
+
+**Multi-room support in chat page:**
+- `ROOM` and `ROOM_IS_STREAM` are now `let` (not `const`) — switched when a room button is clicked
+- `poll()` routes to `/api/chat/stream/:id/history` for stream rooms, `/api/chat/rooms/:id/messages` for others
+- `send()` routes to `/api/chat/stream/:id/send` or `/api/chat/rooms/:id/messages` accordingly
+- Room button click updates topbar, input placeholder, and active button state
+
+**Files changed:**
+
+| File | Change |
+|------|--------|
+| `services/openvibe-chat/public/index.html` | Multi-room switching, stream rooms sidebar, refreshStreamRooms() |
+| `services/openvibe-chat/server/model.js` | Added `setRoomTitle(id, title)` |
+| `services/openvibe-chat/server/routes.js` | `wrappedSend` accepts `room_title`; calls `setRoomTitle` |
+| `services/openvibe-live/server/ssr.js` | Stream page sends `room_title: channelName` with messages; exposes `ROOM_TITLE` var |
+
+**Also updated:** `CHAT_CLAUDE.md` — all sections revised to reflect current state.
+
+---
+
+## Session — 2026-05-23 (continued, part 3) — Chat overhaul
+
+### Bugs diagnosed and fixed
+
+**Bug 1 — Anonymous users blocked from sending (root cause of "can't send messages")**
+
+`services/openvibe-chat/server/policy.js` had a blanket `actor.type === 'anonymous' → deny` in `decideSend`. Both chat widgets send without auth credentials when the user isn't logged in, so the server always returned 403. Both widgets also used `.catch(() => {})` swallowing the error silently — users had no idea why their message vanished.
+
+Fix: anonymous sends now allowed for public rooms (`visibility === 'public'` and not a membership-required room type). Identity travels via `metadata.sender_name` in the request body.
+
+**Bug 2 — Sender name dropped for stream/channel chat**
+
+`wrappedSend` in `routes.js` (the compatibility handler used by stream page chat) was not passing `metadata: b.metadata` to `model.createMessage`. So `sender_name` sent by the client was silently discarded — messages rendered as blank name or sender UUID.
+
+Fix: added `metadata: b.metadata` to the `createMessage` call in `wrappedSend`.
+
+**Bug 3 — Stream chat empty on first page load**
+
+`wrappedHistory` used `findRoomByExternal` which returns `null` if no room exists yet (i.e. nobody has sent a message in that stream yet). This caused a silent no-op — history returned 404-equivalent. Fixed by switching to `ensureRoomForExternal`, which creates the room on first poll so history cleanly returns `[]`.
+
+**Bug 4 — Name prompt blocking chat on widget open**
+
+`open()` in the network home chat widget called `enterNamingMode()` if `myName` was empty. First-time users were immediately hit with a name form before seeing any chat.
+
+**Bug 5 — Errors swallowed on send failure**
+
+On failed sends, both widgets cleared the input and did nothing. Users lost their typed message with no feedback.
+
+Fix: on send failure, message text is restored to the input so the user can retry.
+
+---
+
+### New features
+
+**Anonymous ID auto-assignment**
+
+Both the global widget and stream page chat no longer prompt for a name. On first use, `Anon_XXXX` is generated (`Math.random().toString(36).slice(2,6).toUpperCase()`) and stored in `localStorage['ov-chat-name']`. After that, `/api/v1/session` is checked async — if logged in, `display_name || username` replaces the anon ID. Clicking "Chatting as X · click to change" still allows renaming.
+
+Files changed:
+- `services/openvibe-network/public/index.html` — global widget identity block
+- `services/openvibe-live/server/ssr.js` — stream page widget identity block
+
+**Stream messages fan out to global chat**
+
+`wrappedSend` in `routes.js` now copies every non-global message into the global room with `metadata.from_room_type`, `from_room_ref`, and `from_room_title` set. This is how global chat shows stream activity without any client-side aggregation.
+
+The global chat widget renders fan-out messages with a dim `[stream-title]` room label using the new `.ov-cw-msg-room` CSS class.
+
+**"🌐 Global" toggle on stream page chat**
+
+A toggle button added to the stream chat header (off by default). When enabled:
+- Also polls `GET /api/chat/rooms/global/messages`
+- Merges global messages with stream messages (sorted by `created_at`)
+- Excludes fan-out copies originating from the current stream to avoid duplicates
+- Global messages rendered dim with `[Global]` label via `.sp-chat-msg-global` / `.sp-chat-msg-room` CSS
+
+---
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `services/openvibe-chat/server/policy.js` | Allow anonymous sends to public rooms |
+| `services/openvibe-chat/server/routes.js` | Fix `wrappedSend` metadata; fix `wrappedHistory` room creation; add fan-out to global |
+| `services/openvibe-network/public/index.html` | Auto-assign anon ID; remove name-prompt-on-open; restore input on send failure; room label on fan-out messages |
+| `services/openvibe-live/server/ssr.js` | Auto-assign anon ID; add 🌐 Global toggle; global message merge with dedup; restore input on failure |
+
+**New file:**
+- `CHAT_CLAUDE.md` — full developer reference for the chat system (architecture, API, wire protocol, room hierarchy, data flows, common issues)
+
+---
+
+## Session — 2026-05-23 (continued, part 2)
+
+### "My Account" removed from nav (all 7 services)
+
+**Problem:** "My Account" link appeared in the nav bar for all users regardless of login state — makes no sense for anonymous/logged-out users.
+
+**Fix:** Removed `{ key: 'my', ... }` from the `links` array in `navbar()` in all 7 `openvibe.js` files. The link still appears in the buddy icon dropdown for logged-in users (already existed there as "Account").
+
+Files changed:
+- `services/openvibe-network/public/assets/openvibe.js`
+- `services/openvibe-chat/public/assets/openvibe.js`
+- `services/openvibe-community/public/assets/openvibe.js`
+- `services/openvibe-live/public/assets/openvibe.js`
+- `services/openvibe-media/public/assets/openvibe.js`
+- `services/openvibe-games/public/assets/openvibe.js`
+- `services/openvibe-tools/public/assets/openvibe.js`
+
+---
+
+### Stale live streams fix (`openvibe-live`)
+
+**Problem:** The "Live on OpenVibe" widget on the network home page showed streams as live even when openvibe.live showed nobody streaming. Streams that started but never received an end event stayed in `status = 'started'` indefinitely.
+
+**Root cause:** `GET /api/v1/streams?status=live` called `listStreams()` which had no stale check. `listLiveNow()` already existed with an 8-hour freshness filter (`COALESCE(started_at, created_at) > datetime('now', '-8 hours')`) but wasn't used by this route.
+
+**Fix:** Changed `services/openvibe-live/server/index.js` — when `?status=live`, the route now calls `model.listLiveNow({ limit })` instead of `model.listStreams({ status: 'live', ... })`. Stale orphaned streams are now excluded automatically.
+
+---
+
+### Favorite streams + threads (network home page + community)
+
+**New feature:** Star button (☆/★) on every live stream card and every community thread card. Starred items show up in the favorites panel on the network home page.
+
+**Stream favorites:**
+- Star buttons added to each card in the "Live on OpenVibe" widget on `services/openvibe-network/public/index.html`
+- Stored in `localStorage['ov-fav-streams']` as `[{ id, title, channel, url, thumb, savedAt }]`
+- Favorites panel now renders a "Streams" subsection (`#fav-streams-section`) below service favorites
+- Removing from the panel (✕ button) also resets the star on the live card if visible
+- `renderFavStreamsSection` exposed on `window` before the first `await` so the live widget IIFE can call it after its fetch returns
+
+**Thread favorites:**
+- Star buttons added to every thread card in `services/openvibe-community/server/ssr.js` (`_threadCard`)
+- CSS for `.ov-thread-star` added to `_styles()`
+- JavaScript injected into the threads page at render time — handles toggle, persists to `localStorage['ov-fav-threads']` on community domain, and fire-and-forget syncs to `openvibe.network/api/v1/user-modules/me/openvibe.favorites` for logged-in users
+- Network home favorites panel renders a "Threads" subsection (`#fav-threads-section`) — reads from user-modules API for logged-in users, falls back to community localStorage
+- Removing a thread from the favorites panel calls `removeFavThread()` which updates both localStorage and the user-modules API
+
+**Namespace registration:**
+- `openvibe.favorites` registered in `packages/openvibe-contracts/namespaces.js` with `owner: 'openvibe-network'`, `read_scope: 'self'`, `user_writable: true` — required for the PUT to pass `assertKnownNamespace`
+
+**Cross-domain behavior:**
+- Logged-in users: thread favorites sync cross-domain via user-modules API (same pattern as themes)
+- Anonymous users: thread favorites are per-origin (community localStorage only); streams work fine since they're starred on the network page
+
+---
+
+## Session — 2026-05-23
+
+### Theme selector — fixed + rolled out to all services
+
+**Root causes:**
+
+1. **`syncThemePreference` on network applied theme AFTER the API call** — if `putUserModule` failed (network error, auth issue), `applyTheme` never ran. Fixed: apply theme immediately, then try server save with silent catch.
+
+2. **Chat's `syncThemePreference` called the wrong endpoint** — it used `putUserModule` → `api()` (relative URL) → `openvibe.chat/api/v1/user-modules/me/openvibe.theme`, which doesn't exist on the chat backend. Theme never applied when swatch was clicked. Fixed: apply theme immediately, then fire-and-forget `fetch` to the network service URL using `resolveSurfaceUrl('network')`.
+
+3. **5 services had no theme picker at all** (community, live, media, games, tools):
+   - No theme button in `navbar()`
+   - No `initThemePicker()` function
+   - No `syncThemePreference()` function
+   - No CSS for the picker
+
+**Fixes applied to community, live, media, games, tools:**
+- Added `syncThemePreference(themeId)` — applies locally, saves to network API via `networkRequestJson` (which always points to openvibe.network)
+- Added `initThemePicker()` — populates swatches, toggles popup, wires click handlers
+- Updated `navbar()` to include `<div class="ov-nav-end">` with theme button + popup HTML
+- Updated `renderChrome()` to call `initThemePicker()` after injecting navbar HTML
+- Added `syncThemePreference` and `initThemePicker` to `global.OpenVibe` exports
+- Appended theme picker CSS block + `.ov-nav-end` to each service's `openvibe.css`
+
+**Cross-domain sync** (how it works for logged-in users):
+- Pick a theme on any service → `syncThemePreference` → PUT to `openvibe.network/api/v1/user-modules/me/openvibe.theme`
+- Load any other service → `renderChrome` → `loadSyncedThemePreference` → GET from same API → applies theme
+- Anonymous users: localStorage only (per-origin, no cross-domain sync)
+
+### Swatch UI improvement
+
+Updated the swatch preview in all 7 services: `.ov-theme-swatch-preview` changed from `display: block` to `display: flex; align-items: flex-end; gap: 3px; padding: 0 4px 4px` — now shows two small colored dots (`.ov-theme-swatch-accent`) in the lower-left corner representing each theme's `accent` and `accent2` colors. Both network and chat CSS updated to add `.ov-theme-swatch-accent` rule.
+
+### Documentation files created
+
+- **`STYLES_CLAUDE.md`** — Documents the CSS variable system, all shared component classes, service-specific CSS rules, responsive breakpoints, and dark/light CSS pitfalls.
+- **`THEMES_CLAUDE.md`** — Documents the `BUILTIN_THEMES` format, what each field means, how to add a custom theme, cross-domain persistence, and a roadmap for community theme submissions.
+
+---
+
 A running record of changes made by Claude Code sessions. Newest entries at the top.
 
 ---

@@ -246,3 +246,109 @@ pre { background: var(--ov-bg-elev); padding: 1rem; border-radius: var(--ov-radi
 .ov-anon-dropdown-item--danger:hover {
     background: rgba(248,113,113,0.08);
 }
+
+/* ── Nav end wrapper ── */
+.ov-nav-end {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* ── Theme picker button + popup ── */
+.ov-theme-btn-wrap { position: relative; }
+.ov-theme-btn {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--ov-text-dim, #94a3b8);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.ov-theme-btn:hover,
+.ov-theme-btn[aria-expanded="true"] {
+    border-color: var(--ov-accent, rgba(99,102,241,0.5));
+    background: rgba(99,102,241,0.1);
+    color: var(--ov-text, #f1f5f9);
+}
+.ov-theme-popup {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 260px;
+    background: var(--ov-bg, #0b0d12);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    padding: 0.75rem;
+    z-index: 9999;
+}
+.ov-theme-swatches {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+}
+.ov-theme-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem;
+    background: transparent;
+    border: 1.5px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.ov-theme-swatch:hover {
+    border-color: var(--ov-accent, #7c5cff);
+    background: rgba(255,255,255,0.04);
+}
+.ov-theme-swatch--active {
+    border-color: var(--ov-accent, #7c5cff);
+    background: rgba(124,92,255,0.1);
+}
+.ov-theme-swatch-preview {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    padding: 0 4px 4px;
+    width: 100%;
+    height: 44px;
+    border-radius: 5px;
+}
+.ov-theme-swatch-accent {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1.5px solid rgba(255,255,255,0.25);
+}
+.ov-theme-swatch-name {
+    font-size: 0.72rem;
+    color: var(--ov-text-dim, #9aa3b2);
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.ov-theme-swatch--active .ov-theme-swatch-name { color: var(--ov-text, #e7e9ee); }
+.ov-theme-explore {
+    display: block;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--ov-accent, #7c5cff);
+    text-decoration: none;
+    padding: 0.3rem 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    transition: color 0.12s;
+}
+.ov-theme-explore:hover { color: var(--ov-accent-2, #2dd4bf); text-decoration: underline; }

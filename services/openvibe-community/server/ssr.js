@@ -138,6 +138,15 @@ function _styles() {
         .pill.warn    { background: rgba(251,191,36,0.12); border-color: rgba(251,191,36,0.28); }
         .pill-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
         .card-kicker { color: var(--muted); font-size: 0.82rem; }
+        .ov-thread-star {
+            position: absolute; top: .65rem; right: .65rem;
+            background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
+            width: 28px; height: 28px; cursor: pointer; font-size: 1rem;
+            color: rgba(255,255,255,0.45); display: flex; align-items: center;
+            justify-content: center; transition: background .15s, color .15s, transform .1s; z-index: 2;
+        }
+        .ov-thread-star:hover { background: rgba(0,0,0,0.8); transform: scale(1.15); }
+        .ov-thread-star.is-fav { color: #facc15; }
         .link-inline { color: var(--accent); text-decoration: underline; text-underline-offset: 0.2em; }
         .empty-state {
             border-radius: var(--radius);
@@ -250,7 +259,12 @@ function _threadCard(thread) {
     const lang = meta.paste_language || null;
     const imgUrl = meta.paste_image_url || null;
     const isPasteThread = thread.thread_type === 'paste_thread';
-    return `<article class="glass-card">
+    const threadId = escapeHtml(thread.id || thread.slug || '');
+    const threadTitle = escapeHtml(title);
+    const communityBase = COMMUNITY_URLS.community || '';
+    const threadUrl = escapeHtml(communityBase + href);
+    return `<article class="glass-card" style="position:relative;">
+        <button class="ov-thread-star" type="button" data-thread-id="${threadId}" data-thread-title="${threadTitle}" data-thread-url="${threadUrl}" aria-label="Add to favorites">☆</button>
         <div class="pill-row">
             <span class="pill primary">Thread</span>
             ${isPasteThread && lang ? `<span class="pill success">${escapeHtml(pasteLanguageLabel(lang))}</span>` : ''}
@@ -320,6 +334,38 @@ function renderThreadsPage(threads, opts) {
             input.addEventListener('input', function() {
                 var q = input.value.trim().toLowerCase();
                 items.forEach(function(el) { el.hidden = q && !el.dataset.filterText.toLowerCase().includes(q); });
+            });
+        })();
+        (function(){
+            var NETWORK_URL = '${escapeHtml(COMMUNITY_URLS.network)}';
+            var LOCAL_KEY = 'ov-fav-threads';
+            function loadLocal() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); } catch { return []; } }
+            function saveLocal(arr) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(arr)); } catch {} }
+            function isFav(id) { return loadLocal().some(function(t){ return t.id === id; }); }
+            function syncToNetwork(threads) {
+                fetch(NETWORK_URL + '/api/v1/user-modules/me/openvibe.favorites', {
+                    method: 'PUT', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ data: { threads: threads } }),
+                }).catch(function(){});
+            }
+            function toggle(btn) {
+                var id = btn.dataset.threadId;
+                var title = btn.dataset.threadTitle;
+                var url = btn.dataset.threadUrl;
+                var favs = loadLocal();
+                var idx = favs.findIndex(function(t){ return t.id === id; });
+                if (idx >= 0) { favs.splice(idx, 1); } else { favs.unshift({ id: id, title: title, url: url, savedAt: new Date().toISOString() }); }
+                saveLocal(favs);
+                syncToNetwork(favs);
+                var nowFav = idx < 0;
+                btn.textContent = nowFav ? '\\u2605' : '\\u2606';
+                btn.classList.toggle('is-fav', nowFav);
+                btn.setAttribute('aria-label', nowFav ? 'Remove from favorites' : 'Add to favorites');
+            }
+            document.querySelectorAll('.ov-thread-star').forEach(function(btn) {
+                if (isFav(btn.dataset.threadId)) { btn.textContent = '\\u2605'; btn.classList.add('is-fav'); btn.setAttribute('aria-label', 'Remove from favorites'); }
+                btn.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); toggle(btn); });
             });
         })();
         </script>`;

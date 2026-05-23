@@ -2653,10 +2653,11 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                 <div class="sp-chat-header">
                     <span class="eyebrow" style="margin:0;">Stream Chat</span>
                     ${isLive ? renderPill('Live', 'live') : renderPill('Replay', 'muted')}
+                    <button class="sp-global-toggle" id="sp-global-toggle" title="Also show Global Chat" aria-pressed="false">🌐 Global</button>
                 </div>
                 <div class="sp-chat-feed" id="sp-chat-feed"><div class="sp-chat-empty">Connecting…</div></div>
                 <div class="sp-chat-composer" id="sp-chat-composer">
-                    <div class="sp-chat-who" id="sp-chat-who" title="Click to set name"></div>
+                    <div class="sp-chat-who" id="sp-chat-who" title="Click to change name"></div>
                     <div class="sp-chat-row">
                         <input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
                         <button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button>
@@ -2688,7 +2689,12 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         .sp-stat-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; }
         .sp-stat-val { font-size:.88rem; font-weight:600; color:var(--text); }
         .sp-chat { display:flex; flex-direction:column; height:calc(100vh - 90px); max-height:720px; position:sticky; top:70px; padding:0; overflow:hidden; }
-        .sp-chat-header { display:flex; align-items:center; gap:.6rem; padding:.75rem 1rem; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .sp-chat-header { display:flex; align-items:center; gap:.6rem; padding:.75rem 1rem; border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap; }
+        .sp-global-toggle { margin-left:auto; font-size:.68rem; padding:.25rem .55rem; border-radius:999px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:background .15s,color .15s; white-space:nowrap; }
+        .sp-global-toggle:hover { background:rgba(255,255,255,.07); color:var(--text); }
+        .sp-global-toggle.active { background:var(--accent,#8b5cf6); border-color:transparent; color:#fff; }
+        .sp-chat-msg-global { opacity:.6; }
+        .sp-chat-msg-room { font-size:.65rem; font-weight:600; color:var(--muted); margin-right:.2rem; }
         .sp-chat-feed { flex:1; overflow-y:auto; padding:.6rem .85rem; display:flex; flex-direction:column; gap:.2rem; }
         .sp-chat-empty { color:var(--muted); font-size:.8rem; text-align:center; padding:1.5rem 0; margin:auto 0; }
         .sp-chat-msg { padding:.3rem .45rem; border-radius:8px; }
@@ -2711,6 +2717,7 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         (function() {
             var CHAT_BASE = ${JSON.stringify(LIVE_NETWORK_URLS.chat)};
             var STREAM_ID = ${JSON.stringify(String(stream.id || ''))};
+            var ROOM_TITLE = ${JSON.stringify(String(channel.display_name || channel.slug || stream.id || ''))};
             var POLL = 3000;
             var MAX = 60;
             var feed = document.getElementById('sp-chat-feed');
@@ -2718,23 +2725,42 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             var whoEl = document.getElementById('sp-chat-who');
             var input = document.getElementById('sp-chat-input');
             var sendBtn = document.getElementById('sp-chat-send');
-            var lastId = null;
-            var msgs = [];
-            var myName = localStorage.getItem('ov-chat-name') || '';
-            var namingMode = false;
+            var toggleBtn = document.getElementById('sp-global-toggle');
+            var lastStreamId = null;
+            var lastGlobalId = null;
+            var streamMsgs = [];
+            var globalMsgs = [];
+            var showGlobal = false;
+
+            // Auto-assign anonymous ID; replaced async with logged-in username
+            var myName = (function() {
+                var saved = localStorage.getItem('ov-chat-name');
+                if (saved) return saved;
+                var id = 'Anon_' + Math.random().toString(36).slice(2,6).toUpperCase();
+                localStorage.setItem('ov-chat-name', id);
+                return id;
+            })();
+
+            fetch(CHAT_BASE + '/api/v1/session', {mode:'cors',credentials:'include'})
+                .then(function(r){return r.json();})
+                .then(function(d){
+                    if(d.authenticated && d.user && (d.user.display_name || d.user.username)){
+                        myName = d.user.display_name || d.user.username;
+                    }
+                    updateWho();
+                }).catch(function(){});
 
             function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
             function timeStr(ts) { return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 
             function updateWho() {
-                whoEl.textContent = myName ? 'Chatting as ' + myName + ' · click to change' : 'Set a name to chat';
+                whoEl.textContent = 'Chatting as ' + myName + ' \xb7 click to change';
             }
             updateWho();
             whoEl.addEventListener('click', enterNaming);
 
             function enterNaming() {
-                namingMode = true;
-                composer.innerHTML = '<div style="padding:.5rem .75rem;display:flex;flex-direction:column;gap:.4rem;"><p style="margin:0;font-size:.75rem;color:var(--muted);">Enter your name:</p><div class="sp-chat-row"><input class="sp-chat-input" id="sp-ni" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '"><button class="button" id="sp-nok" type="button" style="flex-shrink:0;padding:.4rem .7rem;font-size:.8rem;">OK</button></div></div>';
+                composer.innerHTML = '<div style="padding:.5rem .75rem;display:flex;flex-direction:column;gap:.4rem;"><p style="margin:0;font-size:.75rem;color:var(--muted);">Change your name:</p><div class="sp-chat-row"><input class="sp-chat-input" id="sp-ni" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '"><button class="button" id="sp-nok" type="button" style="flex-shrink:0;padding:.4rem .7rem;font-size:.8rem;">OK</button></div></div>';
                 var ni = document.getElementById('sp-ni');
                 ni.focus(); ni.select();
                 document.getElementById('sp-nok').addEventListener('click', function() { saveName(ni.value); });
@@ -2746,13 +2772,12 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                 if(!v) return;
                 myName = v;
                 localStorage.setItem('ov-chat-name', v);
-                namingMode = false;
                 restoreComposer();
                 document.getElementById('sp-chat-input').focus();
             }
 
             function restoreComposer() {
-                composer.innerHTML = '<div class="sp-chat-who" id="sp-chat-who" title="Click to set name"></div><div class="sp-chat-row"><input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button></div>';
+                composer.innerHTML = '<div class="sp-chat-who" id="sp-chat-who" title="Click to change name"></div><div class="sp-chat-row"><input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button></div>';
                 whoEl = document.getElementById('sp-chat-who');
                 input = document.getElementById('sp-chat-input');
                 sendBtn = document.getElementById('sp-chat-send');
@@ -2764,36 +2789,73 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
 
             function renderMsgs() {
                 var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
-                if(!msgs.length) { feed.innerHTML = '<div class="sp-chat-empty">No messages yet.</div>'; return; }
-                feed.innerHTML = msgs.map(function(m) {
+                var combined = streamMsgs.slice();
+                if (showGlobal) {
+                    // Merge global messages, excluding fan-out copies that originated from this stream
+                    var streamRef = STREAM_ID;
+                    var globalOnly = globalMsgs.filter(function(m) {
+                        return !(m.metadata && m.metadata.from_room_ref === streamRef);
+                    });
+                    combined = combined.concat(globalOnly.map(function(m) {
+                        return Object.assign({}, m, { _isGlobal: true });
+                    }));
+                    combined.sort(function(a,b){ return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0; });
+                }
+                if(!combined.length) { feed.innerHTML = '<div class="sp-chat-empty">No messages yet.</div>'; return; }
+                feed.innerHTML = combined.map(function(m) {
                     var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
-                    return '<div class="sp-chat-msg"><div class="sp-chat-msg-meta"><span class="sp-chat-msg-name">'+esc(name)+'</span><span class="sp-chat-msg-time">'+timeStr(m.created_at)+'</span></div><div class="sp-chat-msg-body">'+esc(m.body)+'</div></div>';
+                    var roomTag = m._isGlobal ? '<span class="sp-chat-msg-room">[Global]</span>' : '';
+                    var cls = 'sp-chat-msg' + (m._isGlobal ? ' sp-chat-msg-global' : '');
+                    return '<div class="'+cls+'"><div class="sp-chat-msg-meta">'+roomTag+'<span class="sp-chat-msg-name">'+esc(name)+'</span><span class="sp-chat-msg-time">'+timeStr(m.created_at)+'</span></div><div class="sp-chat-msg-body">'+esc(m.body)+'</div></div>';
                 }).join('');
-                if(atBottom || lastId === null) feed.scrollTop = feed.scrollHeight;
+                if(atBottom || lastStreamId === null) feed.scrollTop = feed.scrollHeight;
             }
 
-            function poll() {
+            function pollStream() {
                 fetch(CHAT_BASE + '/api/chat/stream/' + encodeURIComponent(STREAM_ID) + '/history?limit=' + MAX, {mode:'cors',credentials:'include'})
                     .then(function(r){return r.json();})
                     .then(function(d){
                         var items = (d.items||[]).slice().reverse();
-                        if(!items.length && lastId===null){renderMsgs();return;}
-                        if(!items.length)return;
-                        var newest = items[items.length-1].id;
-                        if(newest !== lastId){ msgs=items; lastId=newest; renderMsgs(); }
+                        var newest = items.length ? items[items.length-1].id : null;
+                        if(newest !== lastStreamId){ streamMsgs=items; lastStreamId=newest; renderMsgs(); }
+                        else if(!items.length && lastStreamId===null){ renderMsgs(); }
                     }).catch(function(){});
             }
 
+            function pollGlobal() {
+                if (!showGlobal) return;
+                fetch(CHAT_BASE + '/api/chat/rooms/global/messages?limit=' + MAX, {mode:'cors',credentials:'include'})
+                    .then(function(r){return r.json();})
+                    .then(function(d){
+                        var items = (d.items||[]).slice().reverse();
+                        var newest = items.length ? items[items.length-1].id : null;
+                        if(newest !== lastGlobalId){ globalMsgs=items; lastGlobalId=newest; renderMsgs(); }
+                    }).catch(function(){});
+            }
+
+            function poll() { pollStream(); pollGlobal(); }
+
+            // Global chat toggle
+            toggleBtn.addEventListener('click', function() {
+                showGlobal = !showGlobal;
+                toggleBtn.classList.toggle('active', showGlobal);
+                toggleBtn.setAttribute('aria-pressed', String(showGlobal));
+                if (showGlobal) { pollGlobal(); } else { renderMsgs(); }
+            });
+
             function send() {
-                if(!myName){enterNaming();return;}
                 var text = (input.value||'').trim();
                 if(!text)return;
+                var savedText = text;
                 input.value=''; input.disabled=true; sendBtn.disabled=true;
                 fetch(CHAT_BASE + '/api/chat/stream/' + encodeURIComponent(STREAM_ID) + '/send', {
                     method:'POST', mode:'cors', credentials:'include',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({body:text, metadata:{sender_name:myName}}),
-                }).then(function(){return poll();}).catch(function(){})
+                    body:JSON.stringify({body:text, room_title:ROOM_TITLE, metadata:{sender_name:myName}}),
+                }).then(function(r){
+                    if(!r.ok) throw new Error('send failed '+r.status);
+                    return pollStream();
+                }).catch(function(){input.value = savedText;})
                 .finally(function(){input.disabled=false;sendBtn.disabled=false;input.focus();});
             }
 

@@ -402,13 +402,18 @@ function buildNativeAuth({ config, identity }) {
     }
 
     function setSessionCookie(res, token, maxAgeSeconds = ACCESS_TOKEN_TTL_SECONDS) {
+        // Primary domain (e.g. .network.localhost in dev, .openvibe.network in prod)
         res.append('Set-Cookie', cookieParts(token, maxAgeSeconds, cookieDomain));
-        for (const domain of Array.from(new Set([legacyCookieDomain, localhostCookieDomain]))) {
-            if (domain && domain !== cookieDomain) {
-                res.append('Set-Cookie', cookieParts('', 0, domain));
-            }
+        // Also set on .localhost in dev so all *.localhost services share the cookie (cross-service SSO)
+        if (localhostCookieDomain && localhostCookieDomain !== cookieDomain) {
+            res.append('Set-Cookie', cookieParts(token, maxAgeSeconds, localhostCookieDomain));
         }
+        // Clear no-domain cookie (migration cleanup from older sessions)
         res.append('Set-Cookie', cookieParts('', 0, null));
+        // Clear legacy domain if it differs from both domains above
+        if (legacyCookieDomain && legacyCookieDomain !== cookieDomain && legacyCookieDomain !== localhostCookieDomain) {
+            res.append('Set-Cookie', cookieParts('', 0, legacyCookieDomain));
+        }
     }
 
     function clearSessionCookie(res) {
