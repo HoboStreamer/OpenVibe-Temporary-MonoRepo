@@ -244,10 +244,6 @@ function buildApp() {
         res.send(communitySSR.renderThreadDetailPage(thread, posts, { paste }));
     });
 
-    // Redirect old root-level finditfixit URL to new canonical location
-    app.get('/finditfixit.html', (_req, res) => res.redirect(301, '/pages/finditfixit'));
-    app.get('/finditfixit',      (_req, res) => res.redirect(301, '/pages/finditfixit'));
-
     // Community Pages listing
     app.get('/pages', (_req, res) => {
         const registry = loadPagesRegistry();
