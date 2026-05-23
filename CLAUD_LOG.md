@@ -2,6 +2,50 @@
 
 ---
 
+## Session — 2026-05-23 (part 14) — Games page, Minesweeper, Wallet section
+
+### What was done
+
+**openvibe-games homepage rewrite (`services/openvibe-games/public/index.html`):**
+- Stripped all SourceVibe-branded markup and replaced with standard OpenVibe chrome (`openvibe.css`, `openvibe-icons.js`, `openvibe.js`, `renderChrome('games')`)
+- Clean game grid: cards with 16:9 thumbnail (img or emoji fallback), name, description, accent-colored tag pills
+- GAMES array in JS — add one object per game, no other changes needed
+- Currently two entries: 2D World and Minesweeper
+
+**Minesweeper (`services/openvibe-games/public/minesweeper/`):**
+- `index.html` — HTML shell only, links to `game.css` and `game.js`
+- `game.css` — all styles (board, cells, modal, number colors, responsive)
+- `game.js` — full game logic: Easy/Medium/Hard difficulties, first-click safety, flood-fill, right-click flags, timer, win/lose modal
+- Pattern established: each game lives in its own folder with separate HTML/CSS/JS files
+
+**Wallet section (`services/openvibe-network/public/my.html`):**
+- Added **Wallet** section to My Account (sidenav + section block), between Linked accounts and Theme
+- Prominent legal disclaimer card (orange border): OpenVibe cannot store keyphrases, cannot recover wallets, cannot guarantee safety of funds, peer-to-peer only, tax implications noted
+- No wallet set → paste field with base58 validation (32–44 chars, base58 regex) + Save button
+- Wallet set → shows address with Copy button + Remove option
+- Address stored in `openvibe.wallet` user module (`{ solana_address: "..." }`)
+- Wallet generation is **opt-in only** — nothing triggers on signup or page load; user must visit My Account → Wallet to set up
+- Hidden from unauthenticated users (added to the hidden sections list)
+
+**Wallet copy in nav dropdown (`services/openvibe-network/public/assets/openvibe.js`):**
+- Auth dropdown now includes a "Copy wallet address" button between Account and Sign out
+- Button is hidden by default; after dropdown renders, fetches `openvibe.wallet` module — only shows if address is set
+- Clicking copies address to clipboard, shows "Copied!" for 2s, then reverts
+- Only applies to openvibe-network (other services use inline buttons for auth users, not a dropdown)
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `services/openvibe-games/public/index.html` | Rewritten — OpenVibe chrome + game grid |
+| `services/openvibe-games/public/minesweeper/index.html` | NEW — HTML shell |
+| `services/openvibe-games/public/minesweeper/game.css` | NEW — Minesweeper styles |
+| `services/openvibe-games/public/minesweeper/game.js` | NEW — Minesweeper game logic |
+| `services/openvibe-network/public/my.html` | Added Wallet section with disclaimer + address management |
+| `services/openvibe-network/public/assets/openvibe.js` | Auth dropdown — wallet copy button (hidden when no address set) |
+
+---
+
 ## Session — 2026-05-23 (part 13) — Community theme submission
 
 ### Goal

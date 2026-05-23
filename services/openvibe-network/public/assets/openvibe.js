@@ -1053,6 +1053,7 @@
                 <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
                     <div class="ov-anon-dropdown-name">@${displayNameAuth}</div>
                     <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
+                    <button class="ov-anon-dropdown-item" id="ov-wallet-copy-btn" type="button" style="display:none;width:100%;text-align:left;background:none;border:none;cursor:pointer;">Copy wallet address</button>
                     <a class="ov-anon-dropdown-item ov-anon-dropdown-item--danger" href="${signOutUrl(global.location.href)}">Sign out</a>
                 </div>
             </div>`;
@@ -1068,6 +1069,21 @@
             dropdownAuth.hidden = true;
             triggerAuth.setAttribute('aria-expanded', 'false');
         });
+        getUserModule('openvibe.wallet').then(function (mod) {
+            const addr = mod && mod.data && mod.data.solana_address;
+            if (!addr) return;
+            const btn = target.querySelector('#ov-wallet-copy-btn');
+            if (!btn) return;
+            btn.style.display = '';
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                try {
+                    await global.navigator.clipboard.writeText(addr);
+                    btn.textContent = 'Copied!';
+                    setTimeout(function () { btn.textContent = 'Copy wallet address'; }, 2000);
+                } catch {}
+            });
+        }).catch(function () {});
     }
 
     function initThemePicker() {
