@@ -63,11 +63,67 @@
 .theme-tile--active .theme-tile-name {
     color: var(--ov-text);
 }
+#custom-palette {
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 0 1.25rem 3rem;
+}
+.cp-header {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ov-text);
+    margin-bottom: 0.25rem;
+}
+.cp-sub {
+    font-size: 0.82rem;
+    color: var(--ov-text-dim);
+    margin-bottom: 1.25rem;
+}
+.cp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+}
+.cp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.cp-label {
+    font-size: 0.78rem;
+    color: var(--ov-text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.cp-swatch {
+    width: 100%;
+    height: 44px;
+    border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+    padding: 2px;
+    background: none;
+}
+.cp-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.cp-swatch::-webkit-color-swatch { border-radius: 7px; border: none; }
+.cp-swatch::-moz-color-swatch { border-radius: 7px; border: none; }
 </style>
 </head>
 <body>
 <div id="nav-mount"></div>
 <div class="theme-grid" id="theme-grid"></div>
+<div id="custom-palette" style="display:none">
+    <p class="cp-header">Custom Palette</p>
+    <p class="cp-sub">Pick your colors below — changes apply instantly across all services.</p>
+    <div class="cp-grid">
+        <div class="cp-field"><label class="cp-label" for="cp-bg">Background</label><input class="cp-swatch" type="color" id="cp-bg" value="#060917"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-accent">Accent</label><input class="cp-swatch" type="color" id="cp-accent" value="#8b5cf6"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-accent2">Accent 2</label><input class="cp-swatch" type="color" id="cp-accent2" value="#22d3ee"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-text">Text</label><input class="cp-swatch" type="color" id="cp-text" value="#eef4ff"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-textDim">Dim Text</label><input class="cp-swatch" type="color" id="cp-textDim" value="#a7b5d2"></div>
+    </div>
+</div>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js"></script>
@@ -95,13 +151,42 @@
         ).join('');
     }
 
+    const customPanel = document.getElementById('custom-palette');
+    const cpInputs = { bg: document.getElementById('cp-bg'), accent: document.getElementById('cp-accent'), accent2: document.getElementById('cp-accent2'), text: document.getElementById('cp-text'), textDim: document.getElementById('cp-textDim') };
+
+    function loadCustomColors() {
+        try {
+            const cc = JSON.parse(localStorage.getItem('openvibe.theme.custom') || '{}');
+            if (cc.bg)      cpInputs.bg.value      = cc.bg;
+            if (cc.accent)  cpInputs.accent.value  = cc.accent;
+            if (cc.accent2) cpInputs.accent2.value = cc.accent2;
+            if (cc.text)    cpInputs.text.value    = cc.text;
+            if (cc.textDim) cpInputs.textDim.value = cc.textDim;
+        } catch {}
+    }
+
+    function saveAndApplyCustom() {
+        const cc = { bg: cpInputs.bg.value, accent: cpInputs.accent.value, accent2: cpInputs.accent2.value, text: cpInputs.text.value, textDim: cpInputs.textDim.value };
+        try { localStorage.setItem('openvibe.theme.custom', JSON.stringify(cc)); } catch {}
+        OpenVibe.applyTheme('custom');
+    }
+
+    Object.values(cpInputs).forEach((inp) => inp.addEventListener('input', saveAndApplyCustom));
+
+    function showCustomPanel(show) {
+        customPanel.style.display = show ? 'block' : 'none';
+        if (show) loadCustomColors();
+    }
+
     render();
+    showCustomPanel(currentThemeId === 'custom');
 
     grid.addEventListener('click', function (e) {
         const tile = e.target.closest('[data-theme-id]');
         if (!tile) return;
         currentThemeId = tile.dataset.themeId;
         OpenVibe.applyTheme(currentThemeId);
+        showCustomPanel(currentThemeId === 'custom');
         render();
     });
 })();

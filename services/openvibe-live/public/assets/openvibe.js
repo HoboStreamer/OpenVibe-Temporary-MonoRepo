@@ -91,6 +91,36 @@
             border: 'rgba(236, 72, 153, 0.18)',
             shadow: '0 28px 90px rgba(15, 6, 32, 0.5)',
         },
+        {
+            id: 'hobostreamer',
+            name: 'HoboStreamer',
+            description: 'Campfire amber on near-black. The original hobo aesthetic.',
+            accent: '#c0965c',
+            accent2: '#dbb077',
+            bg: '#0d0d0f',
+            bgElev: 'rgba(22, 22, 26, 0.88)',
+            bgElev2: 'rgba(30, 28, 22, 0.94)',
+            text: '#e8e6e3',
+            textDim: '#9a9a9a',
+            textFaint: '#666666',
+            border: 'rgba(192, 150, 92, 0.18)',
+            shadow: '0 28px 90px rgba(0, 0, 0, 0.6)',
+        },
+        {
+            id: 'custom',
+            name: 'Custom Palette',
+            description: 'Your own colors. Configure on the themes page.',
+            accent: '#8b5cf6',
+            accent2: '#22d3ee',
+            bg: '#060917',
+            bgElev: 'rgba(11, 16, 33, 0.88)',
+            bgElev2: 'rgba(21, 31, 60, 0.94)',
+            text: '#eef4ff',
+            textDim: '#a7b5d2',
+            textFaint: '#6d7c98',
+            border: 'rgba(139, 92, 246, 0.18)',
+            shadow: '0 28px 90px rgba(3, 5, 15, 0.5)',
+        },
     ];
 
     const SURFACES = {
@@ -190,6 +220,17 @@
         root.style.setProperty('--text', theme.text);
         root.style.setProperty('--muted', theme.textFaint);
         root.style.setProperty('--muted-strong', theme.textDim);
+        if (themeId === 'custom') {
+            try {
+                const cc = JSON.parse(localStorage.getItem('openvibe.theme.custom') || '{}');
+                const hp = (h) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null; };
+                if (cc.bg) { const p = hp(cc.bg); root.style.setProperty('--ov-bg', cc.bg); root.style.setProperty('--bg', cc.bg); root.style.setProperty('--ov-nav-bg', cc.bg); if (p) { root.style.setProperty('--ov-bg-elev', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); root.style.setProperty('--ov-bg-elev-2', `rgba(${Math.min(p[0]+8,255)},${Math.min(p[1]+8,255)},${Math.min(p[2]+8,255)},0.94)`); root.style.setProperty('--panel', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); } }
+                if (cc.accent) { root.style.setProperty('--ov-accent', cc.accent); root.style.setProperty('--accent', cc.accent); const p = hp(cc.accent); if (p) root.style.setProperty('--ov-border', `rgba(${p[0]},${p[1]},${p[2]},0.18)`); }
+                if (cc.accent2) { root.style.setProperty('--ov-accent-2', cc.accent2); root.style.setProperty('--accent-2', cc.accent2); }
+                if (cc.text) { root.style.setProperty('--ov-text', cc.text); root.style.setProperty('--text', cc.text); }
+                if (cc.textDim) { root.style.setProperty('--ov-text-dim', cc.textDim); root.style.setProperty('--ov-text-faint', cc.textDim); root.style.setProperty('--muted', cc.textDim); }
+            } catch { /* ignore */ }
+        }
         if (!options || options.persistLocal !== false) {
             try {
                 global.localStorage.setItem(LOCAL_THEME_KEY, theme.id);

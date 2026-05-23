@@ -183,6 +183,30 @@
             textDim: '#d8b4fe',
             preview: 'linear-gradient(135deg, #12091f 0%, #2b0f58 50%, #0e7490 100%)',
         },
+        {
+            id: 'hobostreamer',
+            name: 'HoboStreamer',
+            description: 'Campfire amber on near-black. The original hobo aesthetic.',
+            accent: '#c0965c',
+            accent2: '#dbb077',
+            bg: '#0d0d0f',
+            bgSoft: 'rgba(22, 22, 26, 0.88)',
+            text: '#e8e6e3',
+            textDim: '#9a9a9a',
+            preview: 'linear-gradient(135deg, #0d0d0f 0%, #1e1810 50%, #2e2010 100%)',
+        },
+        {
+            id: 'custom',
+            name: 'Custom Palette',
+            description: 'Your own colors. Configure on the themes page.',
+            accent: '#8b5cf6',
+            accent2: '#22d3ee',
+            bg: '#060917',
+            bgSoft: 'rgba(11, 16, 33, 0.84)',
+            text: '#eef4ff',
+            textDim: '#a7b5d2',
+            preview: 'linear-gradient(135deg, #ff0066 0%, #fb923c 22%, #facc15 40%, #4ade80 55%, #22d3ee 72%, #818cf8 100%)',
+        },
     ];
 
     const FALLBACK_SERVICES = [
@@ -555,6 +579,17 @@
         root.style.setProperty('--ov-nav-bg', theme.bg);
         root.style.setProperty('--ov-text', theme.text);
         root.style.setProperty('--ov-text-dim', theme.textDim);
+        if (themeId === 'custom') {
+            try {
+                const cc = JSON.parse(localStorage.getItem('openvibe.theme.custom') || '{}');
+                const hp = (h) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null; };
+                if (cc.bg) { const p = hp(cc.bg); root.style.setProperty('--ov-bg', cc.bg); root.style.setProperty('--ov-nav-bg', cc.bg); if (p) root.style.setProperty('--ov-bg-soft', `rgba(${p[0]},${p[1]},${p[2]},0.85)`); }
+                if (cc.accent) { root.style.setProperty('--ov-accent', cc.accent); const p = hp(cc.accent); if (p) root.style.setProperty('--ov-border', `rgba(${p[0]},${p[1]},${p[2]},0.18)`); }
+                if (cc.accent2) root.style.setProperty('--ov-accent-2', cc.accent2);
+                if (cc.text) root.style.setProperty('--ov-text', cc.text);
+                if (cc.textDim) root.style.setProperty('--ov-text-dim', cc.textDim);
+            } catch { /* ignore */ }
+        }
         if (!options || options.persistLocal !== false) {
             try { localStorage.setItem(LOCAL_THEME_KEY, theme.id); } catch { /* ignore */ }
         }
