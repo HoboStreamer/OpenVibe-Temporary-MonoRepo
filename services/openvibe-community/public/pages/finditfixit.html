@@ -1071,6 +1071,9 @@
         if (!autoplayDisabled) {
             audio.play().catch(() => {});
             startDisco();
+            shortVideo.muted = true;
+            shortVideo.play().catch(() => {});
+            setActive(btnPlay);
         } else {
             setActive(btnStop);
         }
