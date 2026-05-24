@@ -98,28 +98,74 @@ else
   nginx -t  # print the error
 fi
 
-# ── 4. Restart services ────────────────────────────────────────────────────────
-log "Restarting ${#SERVICES[@]} services..."
-echo
+# ── 4. Restart services in parallel groups ────────────────────────────────────
+# Group 1: event bus — everything depends on it, must be up first
+TIER1=(openvibe-events)
+
+# Group 2: core platform — start together once events is up
+TIER2=(
+  openvibe-network
+  openvibe-media
+  openvibe-realtime
+  openvibe-workers
+)
+
+# Group 3: product surfaces — start together once core is up
+TIER3=(
+  openvibe-content
+  openre-stream
+  openvibe-live
+  openvibe-chat
+  openvibe-community
+  openvibe-billing
+  openvibe-ai
+  openvibe-games
+  openvibe-tips
+  openvibe-tools
+  openvibe-api
+  openvibe-control
+)
+
+restart_group() {
+  local label="$1"; shift
+  local group=("$@")
+  local pids=()
+  local names=()
+
+  log "Starting tier: $label (${#group[@]} services in parallel)..."
+  for svc in "${group[@]}"; do
+    if ! systemctl is-enabled "$svc" &>/dev/null; then
+      warn "SKIP $svc (not installed)"
+      continue
+    fi
+    systemctl restart "$svc" &
+    pids+=("$!")
+    names+=("$svc")
+  done
+
+  local i=0
+  for pid in "${pids[@]}"; do
+    if wait "$pid"; then
+      ok "${names[$i]}"
+    else
+      warn "FAILED ${names[$i]}"
+      FAILED+=("${names[$i]}")
+    fi
+    i=$((i + 1))
+  done
+}
 
 FAILED=()
-for svc in "${SERVICES[@]}"; do
-  if ! systemctl is-enabled "$svc" &>/dev/null; then
-    warn "SKIP $svc (not installed)"
-    continue
-  fi
-  if systemctl restart "$svc" 2>/dev/null; then
-    ok "$svc"
-  else
-    warn "FAILED $svc"
-    FAILED+=("$svc")
-  fi
-done
+restart_group "tier-1 (events)"   "${TIER1[@]}"
+sleep 2
+restart_group "tier-2 (core)"     "${TIER2[@]}"
+sleep 2
+restart_group "tier-3 (surfaces)" "${TIER3[@]}"
 
 # ── 5. Status summary ──────────────────────────────────────────────────────────
 echo
-log "Waiting 3s for services to settle..."
-sleep 3
+log "Waiting 4s for services to settle..."
+sleep 4
 echo
 echo "── Status ────────────────────────────────────"
 printf "%-30s %s\n" "SERVICE" "STATE"

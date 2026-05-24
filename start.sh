@@ -55,25 +55,11 @@ if is_prod; then
   OPENVIBE_ROOT="/opt/openvibe"
   SERVICE_USER="jackewl"
 
-  # Services in dependency order
-  SERVICES=(
-    openvibe-events       # event bus — everything depends on it
-    openvibe-network      # identity / auth — most services need this first
-    openvibe-media        # media storage
-    openvibe-realtime     # socket.io bridge
-    openvibe-workers      # background jobs
-    openvibe-content      # content surfaces (9 domains)
-    openre-stream         # HoboStreamer bridge
-    openvibe-live         # streaming surface
-    openvibe-chat         # chat
-    openvibe-community    # threads, pastes, forum
-    openvibe-billing      # billing
-    openvibe-ai           # AI gateway
-    openvibe-games        # games
-    openvibe-tips         # tipping
-    openvibe-tools        # tools surface
-    openvibe-api          # public API gateway
-    openvibe-control      # internal admin
+  ALL_SERVICES=(
+    openvibe-events openvibe-network openvibe-media openvibe-realtime
+    openvibe-workers openvibe-content openre-stream openvibe-live
+    openvibe-chat openvibe-community openvibe-billing openvibe-ai
+    openvibe-games openvibe-tips openvibe-tools openvibe-api openvibe-control
   )
 
   echo
@@ -113,23 +99,39 @@ if is_prod; then
     warn "nginx config invalid — skipping reload (check: nginx -t)"
   fi
 
-  # ── 4. Restart services ──────────────────────────────────────────────────────
-  log "Restarting ${#SERVICES[@]} services..."
-  echo
+  # ── 4. Restart services in parallel groups ──────────────────────────────────
+  # Tier 1: event bus first
+  # Tier 2: core platform in parallel
+  # Tier 3: all product surfaces in parallel
+  declare -a TIER1=(openvibe-events)
+  declare -a TIER2=(openvibe-network openvibe-media openvibe-realtime openvibe-workers)
+  declare -a TIER3=(openvibe-content openre-stream openvibe-live openvibe-chat
+                    openvibe-community openvibe-billing openvibe-ai openvibe-games
+                    openvibe-tips openvibe-tools openvibe-api openvibe-control)
 
   FAILED=()
-  for svc in "${SERVICES[@]}"; do
-    if ! systemctl is-enabled "$svc" &>/dev/null; then
-      warn "SKIP $svc (unit not installed — run: sudo bash scripts/deploy/install-services.sh)"
-      continue
-    fi
-    if systemctl restart "$svc" 2>/dev/null; then
-      ok "$svc"
-    else
-      warn "FAILED $svc"
-      FAILED+=("$svc")
-    fi
-  done
+  restart_group() {
+    local label="$1"; shift; local grp=("$@"); local pids=(); local names=()
+    log "Restarting: $label (${#grp[@]} in parallel)..."
+    for svc in "${grp[@]}"; do
+      if ! systemctl is-enabled "$svc" &>/dev/null; then
+        warn "SKIP $svc (not installed — run: sudo bash scripts/deploy/install-services.sh)"
+        continue
+      fi
+      systemctl restart "$svc" & pids+=("$!"); names+=("$svc")
+    done
+    local i=0
+    for pid in "${pids[@]}"; do
+      if wait "$pid"; then ok "${names[$i]}"; else warn "FAILED ${names[$i]}"; FAILED+=("${names[$i]}"); fi
+      i=$((i+1))
+    done
+  }
+
+  restart_group "tier-1 (events)"   "${TIER1[@]}"
+  sleep 2
+  restart_group "tier-2 (core)"     "${TIER2[@]}"
+  sleep 2
+  restart_group "tier-3 (surfaces)" "${TIER3[@]}"
 
   # ── 5. Status summary ────────────────────────────────────────────────────────
   echo
@@ -139,7 +141,7 @@ if is_prod; then
   hr
   printf "  %-28s %s\n" "SERVICE" "STATUS"
   hr
-  for svc in "${SERVICES[@]}"; do
+  for svc in "${ALL_SERVICES[@]}"; do
     systemctl is-enabled "$svc" &>/dev/null || continue
     state=$(systemctl is-active "$svc" 2>/dev/null || echo "unknown")
     if [[ "$state" == "active" ]]; then
