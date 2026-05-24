@@ -938,7 +938,7 @@
     async function loadDeals() {
         const list = document.getElementById('deal-list');
         try {
-            const res = await fetch('http://localhost:7779');
+            const res = await fetch('/api/community/finditfixit/deals');
             const deals = await res.json();
             if (!deals.length) { list.innerHTML = '<div class="deal-empty">No deals found.</div>'; return; }
             list.innerHTML = deals.map(d => `
@@ -1071,6 +1071,9 @@
         if (!autoplayDisabled) {
             audio.play().catch(() => {});
             startDisco();
+            shortVideo.muted = true;
+            shortVideo.play().catch(() => {});
+            setActive(btnPlay);
         } else {
             setActive(btnStop);
         }
@@ -1159,12 +1162,12 @@
 
     function search(q) {
         resultsEl.innerHTML = '<div class="findit-empty">Searching Craigslist Killeen…</div>';
-        var url = 'http://localhost:7779/findit' + (q ? '?q=' + encodeURIComponent(q) : '');
+        var url = '/api/community/finditfixit/findit' + (q ? '?q=' + encodeURIComponent(q) : '');
         fetch(url)
             .then(function(r) { return r.json(); })
             .then(renderResults)
             .catch(function() {
-                resultsEl.innerHTML = '<div class="findit-empty">Proxy offline — run finditfixits-proxy.py to load results.</div>';
+                resultsEl.innerHTML = '<div class="findit-empty">Couldn\'t load listings right now. Try again later.</div>';
             });
     }
 
@@ -1245,7 +1248,7 @@
                                     : 'Last online ' + Math.round(diffMin/1440) + ' days ago';
                             textEl.textContent = '● ' + txt;
                             // also send timestamp back to proxy to seed in-memory tracker
-                            fetch('http://localhost:7779/status?last_online=' + encodeURIComponent(last.toISOString())).catch(function(){});
+                            fetch('/api/community/finditfixit/status?last_online=' + encodeURIComponent(last.toISOString())).catch(function(){});
                         }
                     }
                 }).catch(function(){});
@@ -1253,7 +1256,7 @@
     }
 
     function pollStatus() {
-        fetch('http://localhost:7779/status')
+        fetch('/api/community/finditfixit/status')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 updateStatus(data);

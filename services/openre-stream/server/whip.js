@@ -263,7 +263,7 @@ async function handleOffer(req, res) {
     catch (err) { return sendError(res, 400, `SDP parse error: ${err.message}`); }
 
     const resourceId = genResourceId();
-    const roomId = `channel-${channel.id}`;
+    const roomId = `channel-${channelSlug}`;
     const peerId = `whip-${resourceId}`;
 
     try {
@@ -370,4 +370,164 @@ function getSessionForChannel(channelSlug) {
     return null;
 }
 
-module.exports = { handleOffer, handleTrickle, handleDelete, getSessionForChannel };
+// ── WHEP (viewer egress) ─────────────────────────────────────────────────────
+
+const viewerSessions = new Map();
+
+function buildWhepSdpAnswer(transportParams, consumerInfos, offerSdpObj) {
+    const { iceParameters, iceCandidates, dtlsParameters } = transportParams;
+
+    const candidateLines = (iceCandidates || []).map(c =>
+        `a=candidate:${c.foundation} ${c.component} ${c.protocol} ${c.priority} ${c.ip} ${c.port} typ ${c.type}${c.relatedAddress ? ` raddr ${c.relatedAddress} rport ${c.relatedPort}` : ''}`
+    ).join('\r\n');
+
+    const mediaSections = [];
+    const bundleMids = [];
+
+    for (const { consumer, offerMedia } of consumerInfos) {
+        const { kind, rtpParameters } = consumer;
+        const mainCodec = rtpParameters.codecs && rtpParameters.codecs[0];
+        if (!mainCodec) continue;
+
+        const mid = offerMedia && offerMedia.mid !== undefined ? String(offerMedia.mid) : kind;
+        bundleMids.push(mid);
+
+        const pt = mainCodec.payloadType;
+        const mimeType = mainCodec.mimeType || '';
+        const codecName = mimeType.split('/')[1] || 'unknown';
+        const clockRate = mainCodec.clockRate;
+        const channels = kind === 'audio' && mainCodec.channels > 1 ? `/${mainCodec.channels}` : '';
+
+        const fmtpParams = mainCodec.parameters
+            ? Object.entries(mainCodec.parameters).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${v}`).join(';')
+            : '';
+
+        const rtcpFbLines = (mainCodec.rtcpFeedback || [])
+            .map(fb => `a=rtcp-fb:${pt} ${fb.type}${fb.parameter ? ' ' + fb.parameter : ''}`)
+            .join('\r\n');
+
+        const extLines = (rtpParameters.headerExtensions || [])
+            .map(ext => `a=extmap:${ext.id} ${ext.uri}`)
+            .join('\r\n');
+
+        const ssrc = rtpParameters.encodings && rtpParameters.encodings[0] && rtpParameters.encodings[0].ssrc;
+        const cname = (rtpParameters.rtcp && rtpParameters.rtcp.cname) || 'openre';
+
+        const section = [
+            `m=${kind} 9 UDP/TLS/RTP/SAVPF ${pt}`,
+            'c=IN IP4 0.0.0.0',
+            'a=rtcp:9 IN IP4 0.0.0.0',
+            candidateLines,
+            `a=ice-ufrag:${iceParameters.usernameFragment}`,
+            `a=ice-pwd:${iceParameters.password}`,
+            'a=ice-options:trickle',
+            `a=fingerprint:${dtlsParameters.fingerprints[0].algorithm} ${dtlsParameters.fingerprints[0].value}`,
+            'a=setup:active',
+            `a=mid:${mid}`,
+            extLines,
+            'a=sendonly',
+            'a=rtcp-mux',
+            `a=rtpmap:${pt} ${codecName}/${clockRate}${channels}`,
+            fmtpParams ? `a=fmtp:${pt} ${fmtpParams}` : '',
+            rtcpFbLines,
+            ssrc ? `a=ssrc:${ssrc} cname:${cname}` : '',
+            ssrc ? `a=ssrc:${ssrc} msid:openre-${kind} openre-${kind}` : '',
+        ].filter(Boolean).join('\r\n');
+
+        mediaSections.push(section);
+    }
+
+    const bundleGroup = bundleMids.length ? `a=group:BUNDLE ${bundleMids.join(' ')}` : '';
+
+    return [
+        'v=0',
+        'o=openre-stream 0 0 IN IP4 0.0.0.0',
+        's=openre-stream',
+        't=0 0',
+        bundleGroup,
+        'a=msid-semantic: WMS',
+        ...mediaSections,
+    ].filter(Boolean).join('\r\n') + '\r\n';
+}
+
+/**
+ * POST /whep/:channelSlug
+ * Body: SDP offer from viewer (recvonly) — returns SDP answer with consumer RTP params
+ */
+async function handleWhepOffer(req, res) {
+    if (!sdpTransform) return sendError(res, 503, 'WHEP not available');
+    if (!sfu.ready) return sendError(res, 503, 'SFU not ready');
+
+    const { channelSlug } = req.params;
+    const roomId = `channel-${channelSlug}`;
+
+    const producers = sfu.getProducers(roomId);
+    if (producers.length === 0) return sendError(res, 404, 'No active stream for this channel');
+
+    const offerSdp = typeof req.body === 'string' ? req.body : (req.body && req.body.toString ? req.body.toString() : '');
+    if (!offerSdp.includes('v=0')) return sendError(res, 400, 'Invalid SDP offer');
+
+    let offerObj;
+    try { offerObj = sdpTransform.parse(offerSdp); }
+    catch (err) { return sendError(res, 400, `SDP parse error: ${err.message}`); }
+
+    const resourceId = genResourceId();
+    const peerId = `whep-${resourceId}`;
+
+    try {
+        const transportParams = await sfu.createTransport(roomId, peerId);
+        const dtlsParameters = extractDtlsParameters(offerObj);
+        await sfu.connectTransport(roomId, peerId, transportParams.id, dtlsParameters);
+
+        // Use viewer's RTP capabilities (extracted from offer) for consume()
+        const viewerCaps = extractRtpCapabilities(offerObj);
+
+        const consumerInfos = [];
+        for (const producer of producers) {
+            const offerMedia = (offerObj.media || []).find(m => m.type === producer.kind) || { mid: producer.kind, type: producer.kind };
+            try {
+                const consumer = await sfu.consume(roomId, peerId, transportParams.id, producer.id, viewerCaps);
+                consumerInfos.push({ consumer, offerMedia });
+            } catch (err) {
+                console.warn(`[WHEP] Failed to create ${producer.kind} consumer:`, err.message);
+            }
+        }
+
+        if (consumerInfos.length === 0) return sendError(res, 503, 'No consumable producers');
+
+        const answerSdp = buildWhepSdpAnswer(transportParams, consumerInfos, offerObj);
+
+        viewerSessions.set(resourceId, {
+            resourceId, channelSlug, roomId, peerId,
+            transportId: transportParams.id,
+            consumerIds: consumerInfos.map(c => c.consumer.id),
+        });
+
+        console.log(`[WHEP] Viewer session ${resourceId} created for channel ${channelSlug}`);
+
+        const loc = `${req.protocol}://${req.get('host')}/whep/${channelSlug}/${resourceId}`;
+        res.status(201)
+            .set('Location', loc)
+            .set('Access-Control-Allow-Origin', '*')
+            .set('Access-Control-Expose-Headers', 'Location')
+            .set('Content-Type', 'application/sdp')
+            .send(answerSdp);
+
+    } catch (err) {
+        console.error('[WHEP] handleWhepOffer error:', err.message);
+        return sendError(res, 500, err.message);
+    }
+}
+
+/**
+ * DELETE /whep/:channelSlug/:resourceId
+ * End a viewer session
+ */
+function handleWhepDelete(req, res) {
+    const { resourceId } = req.params;
+    if (!viewerSessions.has(resourceId)) return res.status(404).json({ error: 'Session not found' });
+    viewerSessions.delete(resourceId);
+    res.status(200).end();
+}
+
+module.exports = { handleOffer, handleTrickle, handleDelete, getSessionForChannel, handleWhepOffer, handleWhepDelete };

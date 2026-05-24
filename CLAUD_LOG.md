@@ -2,6 +2,71 @@
 
 ---
 
+## Session — 2026-05-24 (part 17) — Streaming: WHEP viewer, live tab, chat fixes, openre.stream cleanup
+
+### What was done
+
+**Added WHEP viewer endpoint to openre-stream (`services/openre-stream/server/whip.js` + `index.js`):**
+- New `POST /whep/:channelSlug` — validates producers exist, creates mediasoup consumer transport, connects DTLS, calls `sfu.consume()` for each producer (video + audio), returns 201 with `sendonly` SDP answer + `Location` header
+- New `DELETE /whep/:channelSlug/:resourceId` — cleans up viewer session
+- `buildWhepSdpAnswer()` — assembles SDP using consumer's `rtpParameters` (payload type, SSRC, CNAME) and transport ICE/DTLS credentials
+- CORS headers on all WHEP routes (`Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: Location`)
+- `viewerSessions` Map for tracking active viewer connections
+
+**Fixed stream watch page — live streams now play video (`services/openvibe-live/server/ssr.js`):**
+- `renderStreamPage` now renders `<video id="sp-live-video">` instead of CSS play-button overlay when `isLive && !embed_url`
+- Injected WHEP viewer JS in `extraScripts` — creates `RTCPeerConnection`, adds recvonly transceivers, POSTs SDP offer to `{restreamUrl}/whep/{slug}`, sets remote description, auto-retries on failure after 3s
+- Previously: `embed_url` was never set for go-live streams; `renderMediaThumb` was purely a CSS decoration — no actual player
+
+**Fixed live tab in stream manager — direct WHEP preview (`services/openvibe-live/public/js/stream-manager.js`):**
+- `activateLiveTab()` now creates `<video>` element + calls `startWhepPreview(video, whepBase, slug)` instead of embedding an iframe pointing to `/@slug?embed=1`
+- `startWhepPreview()` — async WHEP viewer, muted (no echo), auto-retries on ICE failure
+- `stopChatPoll()` — closes WHEP peer connection and DELETEs resource URL on stream end
+
+**Fixed chat in stream manager (`services/openvibe-live/public/js/stream-manager.js`):**
+- Added `state.chatUrl` populated from dashboard API `chat_url` field; all chat fetches now use it as base with `mode: 'cors'`
+- `pollChat` response key: `data.messages` → `data.items` (matches openvibe-chat `wrappedHistory` response)
+- Chat send body field: `{ content: text }` → `{ body: text }` (matches chat service `b.body`)
+- Previously: all chat URLs were relative (`/api/chat/...`) — openvibe-live has no such routes; chat is a separate service
+
+**Added `chat_url` to config + dashboard API (`services/openvibe-live/server/config.js` + `index.js`):**
+- `config.chat = { url: process.env.OPENVIBE_CHAT_URL || resolvePublicOrigin({ surface: 'chat' }) }`
+- `buildGoLiveDashboardState` now includes `chat_url: config.chat.url` in its return
+
+**Cleaned up openre.stream landing page (`services/openre-stream/public/index.html`):**
+- Removed all browser streaming code: `getMediaStream`, `startWhip`, `stopWhip`, `stopBrowserStream`, `handleGoLive`, `selectSource`, plus all related state vars, CSS, and window exports
+- `renderBrowserPanel()` now shows a redirect notice + "Go to Stream Manager →" link pointing to `{openvibe.live}/go-live`
+- openre.stream scope: restream destinations only; all streaming management belongs on openvibe.live
+
+**Created `STREAMING_CLAUDE.md` at repo root:**
+- Full architecture overview (3 services, ports, roles)
+- Complete browser broadcast flow (WHIP, 5 steps)
+- OBS/RTMP broadcast flow
+- Viewer flow (WHEP) with SDP answer construction details
+- Live tab preview details
+- Chat flow for both watch page and live tab
+- Infrastructure requirements (mediasoup binary, UDP ports, MEDIASOUP_ANNOUNCED_IP, TURN)
+- Table of all fixes made in this session
+- Known remaining gaps (TURN wiring, viewer count polling, RTMP sync verification)
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `services/openre-stream/server/whip.js` | Added WHEP endpoint implementation (`handleWhepOffer`, `handleWhepDelete`, `buildWhepSdpAnswer`, `viewerSessions`) |
+| `services/openre-stream/server/index.js` | Registered WHEP routes (`POST /whep/:slug`, `DELETE /whep/:slug/:id`, CORS preflight OPTIONS) |
+| `services/openvibe-live/server/ssr.js` | Live stream watch page: renders `<video>` + WHEP viewer JS instead of broken CSS play-button |
+| `services/openvibe-live/public/js/stream-manager.js` | Chat URL fix, response key fix, send body fix, live tab WHEP preview, WHEP cleanup on stream end; bumped to `v=20260524-2` |
+| `services/openvibe-live/server/config.js` | Added `chat.url` |
+| `services/openvibe-live/server/index.js` | Added `chat_url` to dashboard API response |
+| `services/openre-stream/public/index.html` | Removed browser streaming UI; added redirect to openvibe.live/go-live |
+| `STREAMING_CLAUDE.md` | New — full streaming architecture + fix log + known gaps |
+| `services/openre-stream/server/whip.js` | **Critical:** WHIP room key `channel-${channel.id}` → `channel-${channelSlug}` — broadcast-ws and WHEP both use slug-keyed rooms; WHIP was creating a mismatched room so all viewers and the WS bridge saw zero producers |
+| `services/openvibe-live/server/ssr.js` | Watch page WHEP viewer: `iceServers: []` → STUN server — viewers behind NAT were silently failing ICE |
+| `CHAT_CLAUDE.md` | Added stream manager live tab chat integration section |
+
+---
+
 ## Session — 2026-05-23 (part 16) — CI test fixes
 
 ### What was done
@@ -954,3 +1019,344 @@ To:
 2. If no session exists, call `OpenVibe.startAnonymousSession()` silently to auto-assign an anonymous identity, then re-fetch the session
 3. Composer "who" line shows `Chatting as @username` (logged-in) or `Chatting anonymously as Anon#XXXX` (anonymous)
 4. Removed all name overlay HTML, CSS, and JS — no manual name entry anywhere
+
+---
+
+## Session — 2026-05-24 (part 18) — Chat bubble refactor: standalone widget
+
+### Problem
+Every service had its own chat bubble implementation. Six of them (`openvibe-tools`, `openvibe-network/themes.html`, `openvibe-network/my.html`, `openre-stream`, `openvibe-live` SSR, `openvibe-community` SSR) used a simple `<a href="https://openvibe.chat">💬</a>` redirect button — no inline chat panel. The network home page (`openvibe-network/index.html`) had the full inline widget but it was ~400 lines of duplicated HTML/CSS/JS.
+
+### Fix
+Created `services/openvibe-network/public/assets/chat-bubble.js` — a fully self-contained widget that:
+- Injects its own CSS into `<head>` and creates the button + panel DOM on load
+- Polls `GET /api/chat/rooms/global/messages` every 3s; shows unread badge when closed
+- Sends to `POST /api/chat/rooms/global/messages`
+- Resolves chat base URL via `OpenVibe.resolveSurfaceUrl('chat')` with hostname fallback
+- Guards against double-mount with an early return if the button already exists
+
+Copied the file identically to all 5 other services' `public/assets/` directories (creating `openre-stream/public/assets/` which didn't exist).
+
+Replaced all 7 old bubble implementations (6 redirect `<a>` tags + 1 inline network home widget) with a single tag:
+```html
+<script src="/assets/chat-bubble.js" defer></script>
+```
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-network/public/assets/chat-bubble.js` | **Created** — the canonical widget |
+| `services/openvibe-tools/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openre-stream/public/assets/chat-bubble.js` | **Created** — copy (also created `public/assets/` dir) |
+| `services/openvibe-live/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openvibe-community/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openvibe-network/public/index.html` | Removed ~400-line inline widget; replaced with script tag |
+| `services/openvibe-network/public/themes.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openvibe-network/public/my.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openvibe-tools/public/index.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openre-stream/public/index.html` | Removed redirect `<script>` block; replaced with script tag |
+| `services/openvibe-live/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
+| `services/openvibe-community/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
+| `CHAT_CLAUDE.md` | Updated Global chat widget section to reflect standalone file |
+
+---
+
+## Session — 2026-05-24 (part 19) — Games cards fix, community pages routing, finditfixit proxy integration
+
+### openvibe.games — game cards not rendering
+
+**Problem:** The games homepage (`/`) showed a blank grid. The IIFE awaited `OpenVibe.primeEnvironment()` and `OpenVibe.renderChrome('games')` before building `grid.innerHTML`, so any chrome error crashed the whole script before the cards rendered.
+
+**Fix (`services/openvibe-games/public/index.html`):**
+- Moved `grid.innerHTML = GAMES.map(...)` to execute first, unconditionally
+- Added inline `esc()` helper so the grid doesn't depend on `OpenVibe.escapeHtml` being available
+- Wrapped both chrome calls in `try/catch` — nav failures no longer block the game cards
+
+---
+
+### openvibe.community — pages not showing / routing broken
+
+**Problems:**
+1. Community home showed "No community pages yet" even though `pages-registry.json` had entries — `loadPagesRegistry()` used `require()` which caches JSON forever; pages added after server start were invisible
+2. `Cannot GET /pages/` and `Cannot GET /pages/finditfixit` — routes registered as `/pages` and `/pages/:slug` with no trailing-slash variants
+3. `/pages/finditfixit.html` worked (static serve) but `/pages/finditfixit` (clean URL) didn't — `express.static` doesn't resolve `.html` extensions by default
+4. Two identical copies of `finditfixit.html` (`public/finditfixit.html` and `public/pages/finditfixit.html`)
+5. `finditfixits-proxy.py` — a separate Python HTTP server on `localhost:7779` that had to be run manually; page would silently break without it
+
+**Fixes:**
+
+**`server/routes.js`** — `loadPagesRegistry`:
+- Replaced `require('pages-registry.json')` with `JSON.parse(fs.readFileSync(...))` — reads fresh from disk on every request, no restart needed when adding pages
+
+**`server/index.js`:**
+- `express.static(..., { extensions: ['html'] })` — clean URLs like `/pages/finditfixit` now resolve to `public/pages/finditfixit.html` automatically
+- Routes changed to array form for trailing slash support: `['/pages', '/pages/']`, `['/pages/submit', '/pages/submit/']`, `['/pages/:slug', '/pages/:slug/']`
+- Imported and mounted `buildFinditfixitRouter()` at `/api/community/finditfixit` (browser-facing, no internal key required)
+
+**`server/routes-finditfixit.js`** (new file):
+- Pure Node.js proxy — no Python, no external dependencies beyond Node built-ins
+- `GET /api/community/finditfixit/status[?last_online=ISO]` — checks RoboStreamer live status + OpenVibe Live channel; in-memory last-seen tracker
+- `GET /api/community/finditfixit/deals` — scrapes DuckDuckGo HTML for fast food deals near Killeen TX
+- `GET /api/community/finditfixit/findit[?q=query]` — queries Craigslist Killeen JSON search API for free/broken items
+
+**`public/pages/finditfixit.html`:**
+- All three `fetch('http://localhost:7779/...')` calls replaced with `/api/community/finditfixit/...`
+- Error message no longer mentions the Python proxy
+
+**Deleted:**
+- `public/finditfixit.html` — duplicate (keep only `public/pages/finditfixit.html`)
+- `public/finditfixits-proxy.py` — replaced by Node routes above
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-games/public/index.html` | Render cards before chrome calls; guard chrome with try/catch |
+| `services/openvibe-community/server/routes.js` | `loadPagesRegistry`: `require()` → `fs.readFileSync` |
+| `services/openvibe-community/server/index.js` | Static extensions; trailing slash routes; mount finditfixit router |
+| `services/openvibe-community/server/routes-finditfixit.js` | **Created** — Node proxy for status/deals/findit endpoints |
+| `services/openvibe-community/public/pages/finditfixit.html` | Fetch URLs → `/api/community/finditfixit/*` |
+| `services/openvibe-community/public/finditfixit.html` | **Deleted** — was duplicate of pages/ version |
+| `services/openvibe-community/public/finditfixits-proxy.py` | **Deleted** — replaced by Node routes |
+
+---
+
+## Session — 2026-05-24 (part 20) — openvibe.network services directory: missing surfaces added
+
+### Problem
+The services directory row on `openvibe.network` was missing many planned and built surfaces — `openvibe.trade`, `openvibe.tips`, `openvibe.blog`, `openvibe.wiki`, `openvibe.codes`, `openvibe.news`, `openvibe.deals`, `openvibe.coupons`, `workers.openvibe.network`, `realtime.openvibe.network`. The `openvibe-community` entry was also mislabeled "Pastes".
+
+Root cause: `openvibe.js` (frontend) had manually-maintained copies of the surface lookup tables that were out of sync with the authoritative `packages/openvibe-sdk/url-defaults.js` which had all surfaces defined.
+
+### Fix (`services/openvibe-network/public/assets/openvibe.js`)
+
+Added 13 missing surfaces to all four lookup tables — `SURFACE_URL_KEYS`, `SURFACE_FALLBACKS`, `LOCAL_SURFACE_HOSTS`, `LOCAL_SURFACE_PORTS` — matching `url-defaults.js` exactly:
+
+| Surface | Production URL | Local port |
+|---------|---------------|------------|
+| workers | workers.openvibe.network | 5300 |
+| realtime | realtime.openvibe.network | 5400 |
+| codes / blog / wiki / news / reviews / deals / coupons / trade | openvibe.{surface} | 5500 |
+| tips | openvibe.tips | 5600 |
+| vip | openvibe.vip | 5000 |
+
+Added new service IDs to `SERVICE_SURFACE_MAP`:
+`openvibe-workers`, `openvibe-realtime`, `openvibe-tips`, `openvibe-trade`, `openvibe-codes`, `openvibe-blog`, `openvibe-wiki`, `openvibe-news`, `openvibe-reviews`, `openvibe-deals`, `openvibe-coupons`, `openvibe-content`
+
+Updated `FALLBACK_SERVICES`:
+- Fixed `openvibe-community`: display_name "Pastes" → "OpenVibe Community", updated description
+- Added 10 new service entries: Trade, Tips, Blog, Wiki, Codes, News, Deals, Coupons, Workers, Realtime
+- `spotlight: true` on Trade (it's a primary product surface)
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-network/public/assets/openvibe.js` | Added 13 surfaces to all lookup tables; updated FALLBACK_SERVICES with 10 new entries + community rename |
+
+---
+
+## Session — 2026-05-24 (part 21) — Community SSR auth, paste image URLs, network cross-origin images
+
+### Problems
+1. Thread/paste/pulse pages on openvibe.community showed user as logged out and had no buddy icon dropdown, despite being signed in
+2. Paste thumbnail images showed on openvibe.community homepage but not on openvibe.network
+3. `paste.metadata.image_url` was a relative URL (`/api/paste-screenshots/...`) when `config.publicBaseUrl` was empty — works same-origin on community, silently broken cross-domain on network
+
+### Fixes
+
+**Community SSR shell auth (`services/openvibe-community/server/ssr.js`):**
+- `_styles()`: Added full CSS block for `.ov-nav-session`, `.ov-anon-menu`, `.ov-anon-trigger`, `.ov-anon-dropdown`, `.ov-anon-dropdown-item` and `.ov-btn` variants — previously these styles only existed in openvibe-chat and openvibe-media service assets
+- `_shell()`: Replaced `<div id="ov-nav-auth"><a>Sign in</a></div>` with `<div id="ov-nav-session"></div>` — `hydrateNavSession()` inside `renderChrome` looks for `id="ov-nav-session"`; old id was never found
+- Removed stale `openvibe-auth-changed` event listener (replaced by renderChrome's hydrateNavSession)
+- Added `<script defer>` after openvibe.js that calls `primeEnvironment()` then `renderChrome('community')` — deferred scripts run in order so OpenVibe is available
+
+**Paste image URLs (`services/openvibe-community/server/model.js`):**
+- `hydratePaste()`: Changed `config.publicBaseUrl || ''` → `config.publicBaseUrl || 'https://openvibe.community'` as fallback — ensures `image_url` is always an absolute URL even if env var not configured
+
+**Network cross-origin images (`services/openvibe-network/public/index.html`):**
+- Recent pastes grid: Check `image_url.startsWith('http')` — if relative, prefix with `communityBase` before rendering `<img src>`
+- Activity feed paste cards: Same fix applied to the `_communityBase + rawImg` case
+
+### Root cause
+`renderChrome()` fills `id="nav-mount"` (full chrome nav) and `id="ov-nav-session"` (buddy icon). Community SSR had its own custom topbar and used `id="ov-nav-auth"` — so `renderChrome` couldn't hydrate it. No `primeEnvironment()` call meant session was never loaded, so user appeared unauthenticated on all SSR-rendered community pages (threads, pastes, pulse, forum).
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr.js` | Added buddy icon CSS; `ov-nav-auth` → `ov-nav-session`; replaced auth listener with deferred `renderChrome` call |
+| `services/openvibe-community/server/model.js` | `publicBaseUrl` fallback to production URL |
+| `services/openvibe-network/public/index.html` | Prefix relative image_url with communityBase in 2 places |
+
+---
+
+## Session — 2026-05-24 (part 22) — Theme system: CSS variable fixes across SSR pages
+
+### Problem
+Themes were not visually changing pages even when applied. Root cause: community and live SSR pages had **hardcoded color values** in their CSS that did not reference CSS variables — so even when the theme system wrote `--bg`, `--panel`, `--border` etc. via `root.style.setProperty(...)`, the body background, topbar, cards, and other elements never updated because they used literal `rgba()` / hex values.
+
+### Fixes
+
+**`services/openvibe-community/server/ssr.js` — `_styles()`:**
+- `body { background: radial-gradient(hardcoded...) }` → `background: var(--bg, #050916)` 
+- `.topbar { background: rgba(5,9,22,0.72) }` → `color-mix(in srgb, var(--bg) 72%, transparent)`
+- `.glass-card { background: linear-gradient(hardcoded) }` → `background: var(--panel, ...)`
+- `.nav-link`, `.section-link`, `.filter-input`, `.pill`, `.empty-state`, `.data-point`, `.paste-content` — all hardcoded rgba replaced with CSS variable equivalents using `color-mix()` for opacity variants
+- `.footer-row`, `.topbar` borders updated to `var(--border)`
+
+**`services/openvibe-live/server/ssr.js` — `_shellStyles()`:**
+- Same body, topbar, card background treatment
+- `.stack-item, .data-point, .media-thumb` glass card backgrounds → `var(--panel)`
+- `.nav-user-dropdown` background → `color-mix(in srgb, var(--bg) 97%, transparent)`
+- Media iframe/video backgrounds → `var(--bg)`
+
+### How the theme system works (for reference)
+1. `openvibe.js` top-level calls `applySavedTheme()` immediately on load → reads `localStorage['openvibe.theme']` → calls `applyTheme()` which sets ALL theme vars via `root.style.setProperty('--bg', ...)`, `--panel`, `--text`, etc. as **inline styles**, overriding any stylesheet `:root` defaults
+2. `renderChrome()` → `loadSyncedThemePreference()` → fetches saved theme from network user-modules API → applies it (for authenticated cross-domain sync)
+3. Pages that use `var(--bg)`, `var(--panel)` etc. in CSS react to inline style changes immediately
+
+### What does NOT participate in the theme system
+- `openvibe-tools/public/index.html` — standalone page with own CSS vars, no `openvibe.js`
+- `openvibe-tips/public/index.html` + `tip-page.html` — same, standalone
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr.js` | All hardcoded SSR styles → CSS variables |
+| `services/openvibe-live/server/ssr.js` | Body/topbar/card hardcoded backgrounds → CSS variables |
+
+---
+
+## Session — 2026-05-24 (part 23) — SSR reference doc + openvibe-content SSR split into 9
+
+### Work done
+
+**SSR_CLAUDE.md created** — new reference document at repo root cataloguing every SSR file in the monorepo:
+- 5 SSR files documented: openvibe-community (1051 lines / 64 KB), openvibe-live (4503 lines / 252 KB), openvibe-content (1062 lines / 76 KB), openre-stream (608 lines / 48 KB), openvibe-control (349 lines / 16 KB)
+- Each entry lists every exported render function, its route, what page it produces, and notes on auth/theme behaviour
+- Also lists 9 services with no ssr.js and how they serve pages
+
+**openvibe-content SSR split into 9 standalone surface files:**
+
+The original monolithic `ssr.js` (1062 lines, 76 KB) was restructured into 11 files:
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 15 KB | All rendering/utility functions shared by all 9 surfaces |
+| `ssr-codes.js` | 6.6 KB | openvibe.codes — platform docs, API reference |
+| `ssr-blog.js` | 5.3 KB | openvibe.blog — platform blog posts |
+| `ssr-wiki.js` | 9.5 KB | openvibe.wiki — streaming technology reference |
+| `ssr-news.js` | 6.2 KB | openvibe.news — streaming & creator economy news |
+| `ssr-reviews.js` | 6.1 KB | openvibe.reviews — gear and software reviews |
+| `ssr-deals.js` | 5.6 KB | openvibe.deals — curated deals for streamers |
+| `ssr-coupons.js` | 4.5 KB | openvibe.coupons — promo codes |
+| `ssr-trade.js` | 6.2 KB | openvibe.trade — gear classifieds |
+| `ssr-host.js` | 9.3 KB | openvibe.host — hosting guides and reviews |
+| `ssr.js` (rewritten) | 1.8 KB | Thin aggregator — dispatches by surfaceId, same public API |
+
+### Architecture
+
+- `ssr-shared.js` exports: `escapeHtml`, `formatBytes`, `toIsoDate`, `navItems`, `surfaceStatusNote`, `surfaceKicker`, `pageForPath`, `buildJsonLd`, `renderLayout`, `renderHome`, `renderEntry`, `renderNotFound`, `buildFeedXml`, `buildAtomXml`, `buildSitemapXml`, `buildRobotsTxt`, `renderRequest({ config, surface, routePath })`
+- Each surface file exports: `buildSurface(config)` → surface object, `renderRequest({ config, routePath })` → calls shared renderRequest with its own surface
+- `ssr.js` aggregator: `SURFACE_MODULES` map → `buildSurfaceCatalog(config)`, `hostStatuses(config)`, `renderRequest({ config, surfaceId, routePath })`
+- `routes.js` is **untouched** — still calls `renderRequest({ config, surfaceId, routePath })` and `hostStatuses(config)` from `./ssr`
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-content/server/ssr-shared.js` | New — shared rendering engine |
+| `services/openvibe-content/server/ssr-codes.js` | New — openvibe.codes surface |
+| `services/openvibe-content/server/ssr-blog.js` | New — openvibe.blog surface |
+| `services/openvibe-content/server/ssr-wiki.js` | New — openvibe.wiki surface |
+| `services/openvibe-content/server/ssr-news.js` | New — openvibe.news surface |
+| `services/openvibe-content/server/ssr-reviews.js` | New — openvibe.reviews surface |
+| `services/openvibe-content/server/ssr-deals.js` | New — openvibe.deals surface |
+| `services/openvibe-content/server/ssr-coupons.js` | New — openvibe.coupons surface |
+| `services/openvibe-content/server/ssr-trade.js` | New — openvibe.trade surface |
+| `services/openvibe-content/server/ssr-host.js` | New — openvibe.host surface |
+| `services/openvibe-content/server/ssr.js` | Rewritten as thin aggregator (1062 → 55 lines) |
+| `SSR_CLAUDE.md` | New — SSR reference document |
+
+---
+
+## Session — 2026-05-24 (part 24) — openvibe-community SSR split into feature files
+
+### Work done
+
+Same pattern as openvibe-content (session 23) applied to the community SSR.
+
+The original `ssr.js` (1051 lines, 64 KB) was split into 8 files:
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 22 KB | COMMUNITY_URLS, SIGN_IN_URL, ANON_URL, utilities, `_styles()`, `_shell()`, `_threadCard()`, `_pasteCard()`, `_forumShell()` |
+| `ssr-threads.js` | 12 KB | `renderThreadsPage` + `renderThreadDetailPage` |
+| `ssr-pastes.js` | 12 KB | `renderPastesPage` + `renderPasteViewPage` |
+| `ssr-pulse.js` | 1.5 KB | `renderPulsePage` |
+| `ssr-chat.js` | 1.9 KB | `renderChatPage` |
+| `ssr-pages.js` | 5.1 KB | `renderPagesPage` + `renderSubmitPage` |
+| `ssr-forum.js` | 7.0 KB | `renderForumHomePage` + `renderForumSpacePage` + `renderForumThreadPage` |
+| `ssr.js` (rewritten) | 0.8 KB | Thin aggregator — re-exports all 11 functions, same public API |
+
+### Architecture
+
+- `ssr-shared.js` owns all constants (`COMMUNITY_URLS`, `SIGN_IN_URL`, `ANON_URL`), utility functions (`escapeHtml`, `timeAgo`, `pasteLanguageLabel`), shared CSS (`_styles()`), HTML shells (`_shell()`, `_forumShell()`), and card partials (`_threadCard()`, `_pasteCard()`)
+- Each feature file requires only what it needs from `ssr-shared`
+- `ssr.js` aggregator simply re-exports all functions from the 6 feature files — `index.js` is untouched
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr-shared.js` | New — shared constants, utilities, shells, card partials |
+| `services/openvibe-community/server/ssr-threads.js` | New — threads list + thread detail |
+| `services/openvibe-community/server/ssr-pastes.js` | New — pastes list + paste view |
+| `services/openvibe-community/server/ssr-pulse.js` | New — community pulse |
+| `services/openvibe-community/server/ssr-chat.js` | New — Discord relay chat |
+| `services/openvibe-community/server/ssr-pages.js` | New — community pages + submit |
+| `services/openvibe-community/server/ssr-forum.js` | New — forum home, space, thread |
+| `services/openvibe-community/server/ssr.js` | Rewritten as thin aggregator (1051 → 17 lines) |
+| `SSR_CLAUDE.md` | Updated — section 1 rewritten to reflect new file structure |
+
+---
+
+## Session 25 — openvibe-live SSR split
+
+**Date:** 2026-05-24
+
+### Summary
+
+Split `services/openvibe-live/server/ssr.js` (4503 lines, 252 KB — largest SSR in the repo) into 7 focused files using the same aggregator pattern as sessions 23–24.
+
+### File structure after split
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 107 KB | Constants, utilities, CSS, scripts, nav/footer/renderPage, all UI partials |
+| `ssr-golive.js` | 71 KB | `renderGoLivePage` — 934 lines, inline styles + script |
+| `ssr-media.js` | 38 KB | `renderStreamPage`, `renderMediaDetailPage`, `renderCustomMediaPlayer`, `renderCollectionPage`, `renderMissingMediaPage` |
+| `ssr-channel.js` | 14 KB | `renderChannelPage`, `renderChannelsPage`, `renderOfflinePage` |
+| `ssr-home.js` | 11 KB | `renderHomePage` |
+| `ssr-updates.js` | 1.9 KB | `renderUpdatesPage` |
+| `ssr.js` (rewritten) | 1.1 KB | Thin aggregator — re-exports all 11 functions, same public API |
+
+### Architecture
+
+- `ssr-shared.js` owns everything layout/utility: constants (`LIVE_NETWORK_URLS`, `BUILD_UPDATES`, `GO_LIVE_TRACKS`), 13 utility functions, `_meta()`, `_shellStyles()`, live `_shellScript()`, `VOD_ENABLED`, `renderNav`, `renderFooter`, `renderPage`, and all UI partials (`renderPill`, `renderMediaThumb`, `renderVideoCard`, `renderStreamerGroupCard`, `renderStreamCard`, `renderChannelCard`, `renderSection`, `renderSignalCard`)
+- Dead code block (lines 2244–2457 of original) — a duplicate `renderChannelCard` that was never active — excluded from the split
+- Each feature file requires only what it uses from `ssr-shared`
+- `ssr.js` aggregator re-exports all 11 public functions
+
+### Smoke test
+
+All 11 exports pass with correct HTML output lengths. Public API identical to original.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `services/openvibe-live/server/ssr-shared.js` | New — 107 KB, all constants/utilities/layout/partials |
+| `services/openvibe-live/server/ssr-home.js` | New — renderHomePage |
+| `services/openvibe-live/server/ssr-channel.js` | New — renderChannelPage, renderChannelsPage, renderOfflinePage |
+| `services/openvibe-live/server/ssr-media.js` | New — renderStreamPage, renderMediaDetailPage, renderCustomMediaPlayer, renderCollectionPage, renderMissingMediaPage |
+| `services/openvibe-live/server/ssr-golive.js` | New — renderGoLivePage |
+| `services/openvibe-live/server/ssr-updates.js` | New — renderUpdatesPage |
+| `services/openvibe-live/server/ssr.js` | Rewritten as thin aggregator (4503 → 22 lines) |
+| `SSR_CLAUDE.md` | Updated — section 2 rewritten to reflect new file structure |

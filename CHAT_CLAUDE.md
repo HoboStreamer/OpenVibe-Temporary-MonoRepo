@@ -3,7 +3,7 @@
 ## Architecture Overview
 
 Chat is implemented in `services/openvibe-chat/` and surfaces in three places:
-- **Global chat widget** — floating bubble on `openvibe.network` (`services/openvibe-network/public/index.html`)
+- **Global chat widget** — floating bubble on all surfaces via `services/*/public/assets/chat-bubble.js` (standalone, drop-in)
 - **Stream page chat panel** — sidebar on each stream page, rendered by `services/openvibe-live/server/ssr.js`
 - **Full chat page** — `services/openvibe-chat/public/index.html` (room sidebar, DMs, TTS, etc.)
 
@@ -219,14 +219,42 @@ WebSocket subscriptions are in-memory only — lost on server restart. Chat widg
 
 ## Chat Widgets
 
-### Global chat widget — network home
+### Stream manager live tab (go-live page)
 
-**File:** `services/openvibe-network/public/index.html` (bottom of `<body>`)
+**File:** `services/openvibe-live/public/js/stream-manager.js` — `pollChat()` / `chatSendForm`
 
-- Polls `GET /api/chat/rooms/global/messages?limit=60` every 3 seconds
-- Sends via `POST /api/chat/rooms/global/messages`
-- Shows stream-room messages that have been fanned out into global, with a `[stream-title]` room label
-- Identity: auto-assigned `Anon_XXXX` from localStorage, overwritten async with logged-in username
+- **Base URL:** `state.chatUrl` — populated from `data.chat_url` in `GET /api/v1/go-live/dashboard`
+  - Server-side: `config.chat.url` = `process.env.OPENVIBE_CHAT_URL || resolvePublicOrigin({ surface: 'chat' })`
+  - This is a cross-origin fetch; `mode: 'cors'` + `credentials: 'include'` required
+- Polls `GET {chatUrl}/api/chat/stream/:streamId/history?limit=40` every 4 seconds
+- Sends via `POST {chatUrl}/api/chat/stream/:streamId/send` with `{ body: text }`
+- Response key from history: `data.items` (not `data.messages`)
+- Response key from send: `data.message` (singular)
+- Identity: anonymous; sender name shown from `m.sender_name || m.actor_display_name || 'Anon'`
+
+### Global chat widget (standalone, all surfaces)
+
+**File:** `services/*/public/assets/chat-bubble.js`
+
+Add to any page with one tag: `<script src="/assets/chat-bubble.js" defer></script>`
+
+Deployed on:
+- `openvibe-network`: `index.html`, `my.html`, `themes.html`
+- `openvibe-tools`: `index.html`
+- `openre-stream`: `index.html`
+- `openvibe-live`: all SSR pages (via `ssr.js`)
+- `openvibe-community`: all SSR pages (via `ssr.js`)
+
+Behaviour:
+- Self-contained: injects its own CSS and DOM on load — no HTML changes needed in the host page
+- Polls `GET /api/chat/rooms/global/messages?limit=60` every 3 seconds (only while open, plus a 2s background poll for the unread badge)
+- Sends via `POST /api/chat/rooms/global/messages` with `{ body, metadata: { sender_name } }`
+- Shows stream-room messages fanned out into global, labelled `[stream-title]`
+- Identity: auto-assigned `Anon_XXXX` from `localStorage`, overwritten async with logged-in username via `GET /api/v1/session`
+- URL resolution: `OpenVibe.resolveSurfaceUrl('chat')` if available, otherwise hostname-based fallback (`openvibe.chat.localhost:4800` / `openvibe.chat`)
+- Guard: `if (document.getElementById('ov-chatbubble-btn')) return` prevents double-mounting
+
+**To update the widget across all surfaces:** edit `chat-bubble.js` in any one service then copy to the others (all copies are identical).
 
 ### Stream page chat panel
 

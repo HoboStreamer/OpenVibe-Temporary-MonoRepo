@@ -101,22 +101,6 @@
 <body>
 <div id="nav-mount"></div>
 <main class="ov-shell">
-    <section class="ov-hero">
-        <div class="ov-hero-grid">
-            <div class="ov-hero-copy">
-                <span class="ov-kicker">My OpenVibe</span>
-                <h1>Your account,<br><span class="ov-gradient">all in one place.</span></h1>
-                <p>Profile, security, stream keys, chat settings, and bookmarks — scroll through everything without hunting across tabs.</p>
-                <div class="ov-chip-row">
-                    <span class="ov-chip soft" id="account-session-chip">Checking session…</span>
-                    <span class="ov-chip primary" id="account-theme-chip">Loading theme…</span>
-                </div>
-                <div class="ov-cta-row" id="account-actions"></div>
-            </div>
-            <aside class="ov-panel" id="account-overview"></aside>
-        </div>
-    </section>
-
     <div class="my-layout">
         <nav class="my-sidenav" id="my-sidenav">
             <a href="#section-profile">Profile</a>
@@ -208,33 +192,12 @@
     await OpenVibe.renderChrome('my');
 
     const session = await OpenVibe.loadSession();
-    const overview = document.getElementById('account-overview');
-    const actions = document.getElementById('account-actions');
     const isAnonymous = !!(session && session.anonymous && session.user);
     const anonymousIdentities = isAnonymous
         ? await OpenVibe.loadAnonymousIdentities().catch(() => ({ items: [session.user] }))
         : { items: [] };
 
     if (!session.authenticated || !session.user) {
-        document.getElementById('account-session-chip').className = 'ov-chip warn';
-        document.getElementById('account-session-chip').textContent = isAnonymous
-            ? `${session.user.display_name || session.user.username || 'Anonymous'} active`
-            : 'Not signed in';
-        document.getElementById('account-theme-chip').textContent = 'Local preview theme only';
-        actions.innerHTML = isAnonymous
-            ? `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Create or sign in to a full account</a>
-                <button class="ov-btn" type="button" id="anon-create-new">New anonymous identity</button>
-                <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('tools')}">Browse tools</a>
-                <a class="ov-btn ov-btn-ghost" href="${OpenVibe.signOutUrl(OpenVibe.resolveSurfaceUrl('network'))}">Leave anonymous</a>`
-            : `<a class="ov-btn ov-btn-primary" href="${OpenVibe.signInUrl(OpenVibe.resolveSurfaceUrl('my'))}">Sign in to OpenVibe</a>
-                <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('themes')}">Preview themes</a>`;
-        overview.innerHTML = isAnonymous
-            ? `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">${OpenVibe.escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span><span class="ov-chip soft">${OpenVibe.escapeHtml(String((anonymousIdentities.items || []).length))} linked to this IP / fingerprint</span></div>
-                <h2>Anonymous mode stays numbered</h2>
-                <p class="ov-muted">This session is intentionally limited to the migrated anonymous identity namespace. The label comes from your anon number, not from an editable profile field, and the identity list below is sourced from the imported legacy IP/fingerprint continuity tables.</p>`
-            : `<div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip warn">Guest mode</span></div>
-                <h2>Account sync starts after sign-in</h2>
-                <p class="ov-muted">Once authenticated, this page becomes your native account dashboard for profile data, linked services, themes, notifications, sessions, and launcher state.</p>`;
 
         // Hide the sidenav and all non-profile sections for unauthenticated users
         document.getElementById('my-sidenav').hidden = true;
@@ -339,25 +302,6 @@
         || OpenVibe.BUILTIN_THEMES[0].id;
 
     OpenVibe.applyTheme(currentThemeId);
-    document.getElementById('account-session-chip').className = 'ov-chip ok';
-    document.getElementById('account-session-chip').textContent = `Signed in as @${user.username || user.id}`;
-    document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
-    actions.innerHTML = `<a class="ov-btn ov-btn-primary" href="${OpenVibe.resolveSurfaceUrl('themes')}">Browse full theme catalog</a>
-        <a class="ov-btn" href="${OpenVibe.resolveSurfaceUrl('tools')}">Open launcher</a>
-        <a class="ov-btn ov-btn-ghost" href="${OpenVibe.signOutUrl(OpenVibe.resolveSurfaceUrl('network'))}">Sign out</a>`;
-
-    overview.innerHTML = `
-        <div class="ov-chip-row" style="margin-bottom:.8rem;">
-            <span class="ov-chip ok">@${OpenVibe.escapeHtml(user.username || user.id)}</span>
-            <span class="ov-chip soft">${OpenVibe.escapeHtml(user.role || 'user')}</span>
-            ${user.email ? `<span class="ov-chip primary">${OpenVibe.escapeHtml(user.email)}</span>` : ''}
-        </div>
-        <h2>${OpenVibe.escapeHtml(user.display_name || user.username || 'OpenVibe user')}</h2>
-        <p class="ov-muted">Profile, security, stream keys, chat settings, and bookmarks — all from one place.</p>
-        <div class="ov-grid" style="margin-top:1rem;">
-            <article class="ov-card"><span class="ov-chip primary">sessions</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((accountSessions.items || []).length))}</h3><p class="ov-muted">active session${(accountSessions.items || []).length === 1 ? '' : 's'}</p></article>
-            <article class="ov-card"><span class="ov-chip primary">linked</span><h3 class="ov-service-title" style="margin-top:.8rem;">${OpenVibe.escapeHtml(String((linkedAccounts.items || []).length))}</h3><p class="ov-muted">linked provider${(linkedAccounts.items || []).length === 1 ? '' : 's'}</p></article>
-        </div>`;
 
     // ── Profile ──────────────────────────────────────────────────────────────
     document.getElementById('section-profile').innerHTML = `
@@ -715,93 +659,245 @@
         const walletMod = await OpenVibe.getUserModule('openvibe.wallet').catch(() => null);
         const savedAddress = (walletMod && walletMod.data && walletMod.data.solana_address) || '';
 
-        function renderWallet(address) {
+        function base58Encode(bytes) {
+            const ABC = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+            let n = 0n;
+            for (const b of bytes) n = n * 256n + BigInt(b);
+            let s = '';
+            while (n > 0n) { const r = n % 58n; n /= 58n; s = ABC[Number(r)] + s; }
+            for (const b of bytes) { if (b !== 0) break; s = '1' + s; }
+            return s;
+        }
+
+        async function generateKeypair() {
+            const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+            const pubRaw  = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+            const pkcs8   = new Uint8Array(await crypto.subtle.exportKey('pkcs8', kp.privateKey));
+            // Ed25519 PKCS8: seed occupies bytes 16–48
+            const seed    = pkcs8.slice(16, 48);
+            const privKey = new Uint8Array(64);
+            privKey.set(seed); privKey.set(pubRaw, 32);
+            return { address: base58Encode(pubRaw), privateKey: base58Encode(privKey) };
+        }
+
+        const DISCLAIMER = `<p class="ov-muted" style="font-size:.79rem;line-height:1.6;margin:0;">
+            OpenVibe is not a financial institution. We never store your private key — it is generated in your browser and shown once.
+            All transactions are peer-to-peer on Solana. You are solely responsible for securing your wallet.
+            Receiving crypto may have tax implications in your jurisdiction.
+        </p>`;
+
+        function renderConnected(address) {
             section.innerHTML = `
                 <h2 class="my-section-title">Wallet</h2>
-                <p class="my-section-sub">Your Solana address for receiving crypto tips and donations.</p>
-
-                <div class="ov-card" style="margin-bottom:1.25rem;border-color:rgba(251,146,60,0.35);background:rgba(251,146,60,0.06);">
-                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip warn">Legal notice</span></div>
-                    <p class="ov-muted" style="font-size:.82rem;line-height:1.6;margin:0;">
-                        OpenVibe is not a financial institution and does not provide custody, escrow, or payment processing services.
-                        We are legally prohibited from storing your seed phrase or private key — these are never sent to or held by our servers.
-                        OpenVibe cannot recover your wallet, reverse transactions, or guarantee the safety of any funds received.
-                        All donations are peer-to-peer on the Solana blockchain. You are solely responsible for securing your wallet.
-                        Receiving and cashing out cryptocurrency may have tax implications in your jurisdiction.
-                    </p>
-                </div>
-
-                ${address ? `
+                <p class="my-section-sub">Your Solana address for receiving tips and donations.</p>
                 <div class="ov-card" style="margin-bottom:1rem;">
                     <div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip ok">Solana</span><span class="ov-chip soft">receive only</span></div>
-                    <p class="ov-muted" style="font-size:.78rem;margin:0 0 .75rem;">Share this address to receive SOL or USDC. Do not send NFTs or unknown tokens.</p>
+                    <p class="ov-muted" style="font-size:.78rem;margin:0 0 .75rem;">Share this address to receive SOL or USDC.</p>
                     <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                         <input class="ov-input" id="wallet-address-display" value="${OpenVibe.escapeHtml(address)}" readonly style="flex:1;min-width:0;font-family:monospace;font-size:.78rem;" />
                         <button class="ov-btn" type="button" id="wallet-copy-btn">Copy</button>
                     </div>
                 </div>
-                <div class="ov-action-row" style="justify-content:space-between;margin-top:.5rem;">
+                <div class="ov-action-row" style="justify-content:space-between;margin-bottom:1.5rem;">
                     <span class="ov-muted" id="wallet-status" style="font-size:.82rem;"></span>
                     <button class="ov-btn ov-btn-ghost" type="button" id="wallet-remove-btn">Remove wallet</button>
-                </div>` : `
-                <div class="ov-card" style="margin-bottom:1rem;">
-                    <div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip soft">No wallet set</span></div>
-                    <p class="ov-muted" style="font-size:.82rem;margin:0 0 1rem;">Paste your Solana wallet address below. This is your <strong>public address only</strong> — never paste your seed phrase or private key here.</p>
-                    <div class="ov-field" style="margin:0;">
-                        <label for="wallet-address-input">Solana address</label>
-                        <input class="ov-input" id="wallet-address-input" placeholder="e.g. 7xKX…" maxlength="88" style="font-family:monospace;font-size:.82rem;" />
-                        <small>Must be a valid base58 Solana public key (32–44 characters).</small>
-                    </div>
-                    <div class="ov-action-row" style="justify-content:space-between;margin-top:1rem;">
-                        <span class="ov-muted" id="wallet-status" style="font-size:.82rem;"></span>
-                        <button class="ov-btn ov-btn-primary" type="button" id="wallet-save-btn">Save address</button>
-                    </div>
-                </div>`}`;
+                </div>
 
-            if (address) {
-                document.getElementById('wallet-copy-btn').addEventListener('click', async function () {
-                    try {
-                        await navigator.clipboard.writeText(address);
-                        this.textContent = 'Copied!';
-                        setTimeout(() => { this.textContent = 'Copy'; }, 2000);
-                    } catch {}
-                });
-                document.getElementById('wallet-remove-btn').addEventListener('click', async function () {
-                    const btn = this;
-                    const status = document.getElementById('wallet-status');
-                    btn.disabled = true;
-                    status.textContent = 'Removing…';
-                    try {
-                        await OpenVibe.putUserModule('openvibe.wallet', { solana_address: '' });
-                        renderWallet('');
-                    } catch (err) {
-                        status.textContent = `Could not remove (${err.status || 'error'}).`;
-                        btn.disabled = false;
-                    }
-                });
-            } else {
-                document.getElementById('wallet-save-btn').addEventListener('click', async function () {
-                    const input = document.getElementById('wallet-address-input');
-                    const status = document.getElementById('wallet-status');
-                    const addr = input.value.trim();
-                    if (!addr || addr.length < 32 || addr.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(addr)) {
-                        status.textContent = 'Please enter a valid Solana base58 address.';
-                        return;
-                    }
-                    this.disabled = true;
-                    status.textContent = 'Saving…';
-                    try {
-                        await OpenVibe.putUserModule('openvibe.wallet', { solana_address: addr });
-                        renderWallet(addr);
-                    } catch (err) {
-                        status.textContent = `Could not save (${err.status || 'error'}).`;
-                        this.disabled = false;
-                    }
-                });
-            }
+                <details style="border:1px solid var(--ov-border,rgba(255,255,255,.09));border-radius:14px;overflow:hidden;">
+                    <summary style="padding:.85rem 1.1rem;cursor:pointer;font-size:.84rem;font-weight:700;color:var(--ov-text,#f1f5f9);list-style:none;display:flex;align-items:center;gap:.5rem;user-select:none;">
+                        <span style="font-size:1rem;">📖</span> How to access your wallet &amp; withdraw donations
+                    </summary>
+                    <div style="padding:0 1.1rem 1.1rem;display:flex;flex-direction:column;gap:1.1rem;">
+
+                        <div>
+                            <p style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ov-text-dim,#94a3b8);margin:0 0 .5rem;">Step 1 — Install a Solana wallet app</p>
+                            <p class="ov-muted" style="font-size:.83rem;margin:0 0 .5rem;">We recommend <strong>Phantom</strong> — it's the most popular Solana wallet and works on desktop (browser extension) and mobile.</p>
+                            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                                <a class="ov-btn" href="https://phantom.app/download" target="_blank" rel="noopener noreferrer" style="font-size:.78rem;">Get Phantom</a>
+                                <a class="ov-btn ov-btn-ghost" href="https://solflare.com" target="_blank" rel="noopener noreferrer" style="font-size:.78rem;">Solflare (alternative)</a>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ov-text-dim,#94a3b8);margin:0 0 .5rem;">Step 2 — Import your wallet using your private key</p>
+                            <ol style="font-size:.83rem;color:var(--ov-text-dim,#94a3b8);margin:0;padding-left:1.25rem;line-height:1.9;">
+                                <li>Open Phantom and choose <strong>"I already have a wallet"</strong></li>
+                                <li>Select <strong>"Import private key"</strong></li>
+                                <li>Paste the private key you saved when you created your wallet here</li>
+                                <li>Give it a name (e.g. "OpenVibe donations") and set a password</li>
+                                <li>Your wallet is now imported — the address shown in Phantom should match the one above</li>
+                            </ol>
+                            <p class="ov-muted" style="font-size:.79rem;margin:.6rem 0 0;"><strong>Lost your private key?</strong> Remove the wallet above and create a new one — the old address is gone forever.</p>
+                        </div>
+
+                        <div>
+                            <p style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ov-text-dim,#94a3b8);margin:0 0 .5rem;">Step 3 — Receiving donations</p>
+                            <p class="ov-muted" style="font-size:.83rem;margin:0;">When a viewer sends you a tip, it goes directly to this address on the Solana blockchain. Open Phantom and check your balance — no action needed on your end to receive funds.</p>
+                        </div>
+
+                        <div>
+                            <p style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ov-text-dim,#94a3b8);margin:0 0 .5rem;">Step 4 — Withdrawing to cash</p>
+                            <ol style="font-size:.83rem;color:var(--ov-text-dim,#94a3b8);margin:0;padding-left:1.25rem;line-height:1.9;">
+                                <li>Create an account on an exchange that supports Solana — <strong>Coinbase</strong>, <strong>Kraken</strong>, or <strong>Binance</strong> are common choices</li>
+                                <li>Complete their identity verification (required by law)</li>
+                                <li>In the exchange, go to <strong>Deposit → Solana (SOL)</strong> and copy your deposit address</li>
+                                <li>In Phantom, tap <strong>Send</strong>, paste the exchange deposit address, and enter the amount</li>
+                                <li>Once it arrives on the exchange, sell SOL for your local currency and withdraw to your bank</li>
+                            </ol>
+                            <p class="ov-muted" style="font-size:.79rem;margin:.6rem 0 0;">USDC (stablecoin) works the same way — just select USDC instead of SOL in both Phantom and the exchange.</p>
+                        </div>
+
+                        <div style="border-top:1px solid var(--ov-border,rgba(255,255,255,.07));padding-top:.85rem;">
+                            <p class="ov-muted" style="font-size:.79rem;margin:0;line-height:1.6;">
+                                <strong>OpenVibe is not a financial service.</strong> We do not custody funds, process transactions, or provide financial advice.
+                                All transactions are peer-to-peer on the Solana blockchain. Tax treatment of crypto income varies by jurisdiction — consult a tax professional if needed.
+                            </p>
+                        </div>
+
+                    </div>
+                </details>`;
+            document.getElementById('wallet-copy-btn').addEventListener('click', async function () {
+                try { await navigator.clipboard.writeText(address); this.textContent = 'Copied!'; setTimeout(() => { this.textContent = 'Copy'; }, 2000); } catch {}
+            });
+            document.getElementById('wallet-remove-btn').addEventListener('click', async function () {
+                this.disabled = true;
+                document.getElementById('wallet-status').textContent = 'Removing…';
+                try {
+                    await OpenVibe.putUserModule('openvibe.wallet', { solana_address: '' });
+                    renderLanding();
+                } catch (err) {
+                    document.getElementById('wallet-status').textContent = `Could not remove (${err.status || 'error'}).`;
+                    this.disabled = false;
+                }
+            });
         }
 
-        renderWallet(savedAddress);
+        function renderLanding() {
+            section.innerHTML = `
+                <h2 class="my-section-title">Wallet</h2>
+                <p class="my-section-sub">Connect a Solana wallet to receive tips and donations from viewers.</p>
+                <div class="ov-card" style="margin-bottom:1rem;">
+                    <div class="ov-chip-row" style="margin-bottom:.8rem;"><span class="ov-chip soft">No wallet connected</span></div>
+                    <p class="ov-muted" style="font-size:.82rem;margin:0 0 1.25rem;">Generate a new Solana wallet in one click, or connect one you already own.</p>
+                    <div class="ov-action-row" style="gap:.6rem;flex-wrap:wrap;">
+                        <button class="ov-btn ov-btn-primary" type="button" id="wallet-create-btn">Create wallet</button>
+                        <button class="ov-btn" type="button" id="wallet-connect-btn">I already have one</button>
+                    </div>
+                </div>
+                <div style="border-top:1px solid var(--ov-border,rgba(255,255,255,.07));padding-top:.85rem;margin-top:.25rem;">${DISCLAIMER}</div>`;
+            document.getElementById('wallet-create-btn').addEventListener('click', async function () {
+                this.disabled = true;
+                this.textContent = 'Generating…';
+                try {
+                    const kp = await generateKeypair();
+                    renderGenerated(kp);
+                } catch (err) {
+                    this.disabled = false;
+                    this.textContent = 'Create wallet';
+                    renderConnectForm(`Browser does not support Ed25519 key generation. Please paste your existing address instead. (${err.message})`);
+                }
+            });
+            document.getElementById('wallet-connect-btn').addEventListener('click', function () { renderConnectForm(); });
+        }
+
+        function renderGenerated({ address, privateKey }) {
+            section.innerHTML = `
+                <h2 class="my-section-title">Save your private key</h2>
+                <p class="my-section-sub">Your wallet has been generated. <strong>This is the only time your private key will be shown.</strong></p>
+                <div class="ov-card" style="margin-bottom:1rem;border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.06);">
+                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip" style="background:rgba(239,68,68,.18);color:#fca5a5;">Private key — save this now</span></div>
+                    <p class="ov-muted" style="font-size:.79rem;margin:0 0 .75rem;">Copy this and store it in a password manager or cold storage. <strong>We cannot recover it.</strong></p>
+                    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                        <input class="ov-input" id="wallet-privkey-display" type="password" value="${OpenVibe.escapeHtml(privateKey)}" readonly style="flex:1;min-width:0;font-family:monospace;font-size:.72rem;" />
+                        <button class="ov-btn" type="button" id="wallet-privkey-reveal">Reveal</button>
+                        <button class="ov-btn" type="button" id="wallet-privkey-copy">Copy</button>
+                    </div>
+                </div>
+                <div class="ov-card" style="margin-bottom:1rem;">
+                    <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip ok">Public address</span></div>
+                    <input class="ov-input" value="${OpenVibe.escapeHtml(address)}" readonly style="width:100%;font-family:monospace;font-size:.78rem;" />
+                </div>
+                <label style="display:flex;gap:.6rem;align-items:center;font-size:.83rem;cursor:pointer;margin-bottom:1rem;">
+                    <input type="checkbox" id="wallet-saved-confirm" />
+                    <span>I have saved my private key in a secure place</span>
+                </label>
+                <div class="ov-action-row" style="justify-content:space-between;">
+                    <span class="ov-muted" id="wallet-status" style="font-size:.82rem;"></span>
+                    <button class="ov-btn ov-btn-primary" type="button" id="wallet-confirm-save-btn" disabled>Save wallet</button>
+                </div>`;
+
+            const revealBtn = document.getElementById('wallet-privkey-reveal');
+            const privInput = document.getElementById('wallet-privkey-display');
+            revealBtn.addEventListener('click', function () {
+                const hidden = privInput.type === 'password';
+                privInput.type = hidden ? 'text' : 'password';
+                revealBtn.textContent = hidden ? 'Hide' : 'Reveal';
+            });
+            document.getElementById('wallet-privkey-copy').addEventListener('click', async function () {
+                try { await navigator.clipboard.writeText(privateKey); this.textContent = 'Copied!'; setTimeout(() => { this.textContent = 'Copy'; }, 2000); } catch {}
+            });
+            document.getElementById('wallet-saved-confirm').addEventListener('change', function () {
+                document.getElementById('wallet-confirm-save-btn').disabled = !this.checked;
+            });
+            document.getElementById('wallet-confirm-save-btn').addEventListener('click', async function () {
+                this.disabled = true;
+                document.getElementById('wallet-status').textContent = 'Saving…';
+                try {
+                    await OpenVibe.putUserModule('openvibe.wallet', { solana_address: address });
+                    renderConnected(address);
+                } catch (err) {
+                    document.getElementById('wallet-status').textContent = `Could not save (${err.status || 'error'}).`;
+                    this.disabled = false;
+                    document.getElementById('wallet-saved-confirm').checked = false;
+                }
+            });
+        }
+
+        function renderConnectForm(errorMsg) {
+            section.innerHTML = `
+                <h2 class="my-section-title">Connect existing wallet</h2>
+                <p class="my-section-sub">Paste your Solana public address. Never paste your private key or seed phrase here.</p>
+                ${errorMsg ? `<p class="ov-muted" style="font-size:.8rem;color:#fca5a5;margin-bottom:.75rem;">${OpenVibe.escapeHtml(errorMsg)}</p>` : ''}
+                <div class="ov-card" style="margin-bottom:1rem;">
+                    <div class="ov-field" style="margin:0;">
+                        <label for="wallet-address-input">Solana address (public key only)</label>
+                        <input class="ov-input" id="wallet-address-input" placeholder="e.g. 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" maxlength="88" style="font-family:monospace;font-size:.82rem;" />
+                        <small>32–44 character base58 public key.</small>
+                    </div>
+                    <div class="ov-action-row" style="justify-content:space-between;margin-top:1rem;">
+                        <button class="ov-btn ov-btn-ghost" type="button" id="wallet-back-btn">← Back</button>
+                        <div style="display:flex;gap:.5rem;align-items:center;">
+                            <span class="ov-muted" id="wallet-status" style="font-size:.82rem;"></span>
+                            <button class="ov-btn ov-btn-primary" type="button" id="wallet-save-btn">Save address</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('wallet-back-btn').addEventListener('click', renderLanding);
+            document.getElementById('wallet-save-btn').addEventListener('click', async function () {
+                const input = document.getElementById('wallet-address-input');
+                const status = document.getElementById('wallet-status');
+                const addr = input.value.trim();
+                if (!addr || addr.length < 32 || addr.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(addr)) {
+                    status.textContent = 'Please enter a valid Solana base58 address.';
+                    return;
+                }
+                this.disabled = true;
+                status.textContent = 'Saving…';
+                try {
+                    await OpenVibe.putUserModule('openvibe.wallet', { solana_address: addr });
+                    renderConnected(addr);
+                } catch (err) {
+                    status.textContent = `Could not save (${err.status || 'error'}).`;
+                    this.disabled = false;
+                }
+            });
+        }
+
+        if (savedAddress) {
+            renderConnected(savedAddress);
+        } else {
+            renderLanding();
+        }
     })();
 
     // ── Theme ────────────────────────────────────────────────────────────────
@@ -832,7 +928,6 @@
                 },
             });
             status.textContent = 'Profile saved.';
-            document.getElementById('account-session-chip').textContent = `Signed in as @${form.username.value}`;
         } catch (error) {
             status.textContent = `Could not save profile (${error.status || 'error'}).`;
         }
@@ -859,7 +954,6 @@
         if (previewButton) {
             currentThemeId = previewButton.dataset.previewTheme;
             OpenVibe.applyTheme(currentThemeId);
-            document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
             document.getElementById('theme-current-id').textContent = currentThemeId;
             document.getElementById('theme-status').textContent = OpenVibe.themeById(currentThemeId).description;
             document.getElementById('theme-grid').innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => themeCardMarkup(theme, currentThemeId)).join('');
@@ -870,7 +964,6 @@
         currentThemeId = applyButton.dataset.applyTheme;
         try {
             await OpenVibe.syncThemePreference(currentThemeId);
-            document.getElementById('account-theme-chip').textContent = `Theme: ${OpenVibe.themeById(currentThemeId).name}`;
             document.getElementById('theme-current-id').textContent = currentThemeId;
             document.getElementById('theme-status').textContent = 'Theme saved to your account and applied locally.';
             document.getElementById('theme-grid').innerHTML = OpenVibe.BUILTIN_THEMES.map((theme) => themeCardMarkup(theme, currentThemeId)).join('');
@@ -879,20 +972,7 @@
         }
     });
 })();
-(function() {
-    var h = location.hostname;
-    var chatUrl = (h === 'localhost' || h.endsWith('.localhost'))
-        ? 'http://openvibe.chat.localhost:4800'
-        : 'https://openvibe.chat';
-    var btn = document.createElement('a');
-    btn.href = chatUrl;
-    btn.target = '_blank';
-    btn.rel = 'noopener';
-    btn.setAttribute('aria-label', 'Open chat');
-    btn.textContent = '💬';
-    btn.style.cssText = 'position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;';
-    document.body.appendChild(btn);
-})();
 </script>
+<script src="/assets/chat-bubble.js" defer></script>
 </body>
 </html>

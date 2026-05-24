@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <title>openre.stream — stream control</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="openre.stream — OBS ingest credentials, browser live streaming, and restream destinations for OpenVibe.">
+    <meta name="description" content="openre.stream — OBS ingest credentials and restream destinations for OpenVibe.">
     <style>
         :root {
             color-scheme: dark;
@@ -128,17 +128,6 @@
             font-size: 0.75rem; font-family: inherit; transition: background 0.15s ease;
         }
         .icon-btn:hover { background: rgba(255,255,255,0.12); color: var(--text); }
-        .source-card {
-            border-radius: 16px; border: 2px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.04); padding: 1rem;
-            cursor: pointer; text-align: center;
-            transition: border-color 0.2s ease, background 0.2s ease, transform 0.18s ease;
-        }
-        .source-card:hover { border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.08); transform: translateY(-2px); }
-        .source-card.selected { border-color: var(--primary); background: rgba(139,92,246,0.14); }
-        .source-card .icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
-        .source-card .label { font-weight: 700; font-size: 0.9rem; }
-        .source-card .sub { color: var(--muted); font-size: 0.78rem; margin-top: 0.2rem; }
         .form-stack { display: grid; gap: 0.7rem; }
         .form-stack label { display: grid; gap: 0.3rem; }
         .field-label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
@@ -155,20 +144,6 @@
             background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
         }
         .note { color: var(--muted); font-size: 0.88rem; margin: 0; line-height: 1.55; }
-        .live-preview {
-            width: 100%; aspect-ratio: 16/9; border-radius: 14px;
-            background: #000; object-fit: cover; display: none;
-        }
-        .live-status {
-            display: flex; align-items: center; gap: 0.6rem;
-            padding: 0.75rem 1rem; border-radius: 12px;
-            background: rgba(251,113,133,0.1); border: 1px solid rgba(251,113,133,0.24);
-            margin-top: 0.75rem; display: none;
-        }
-        .live-dot {
-            width: 0.55rem; height: 0.55rem; border-radius: 50%;
-            background: var(--danger); animation: pulse 1.4s ease infinite;
-        }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
         .hero-signin {
             text-align: center; padding: 3.5rem 1rem;
@@ -266,12 +241,6 @@
         // ── State ─────────────────────────────────────────────────────────────
         let _session = null;
         let _channel = null;
-        let _whipPc  = null;
-        let _whipResourceUrl = null;
-        let _liveMediaStream = null;
-        let _selectedSource = null; // 'camera' | 'screen' | 'both'
-        let _liveTimer = null;
-        let _liveStart = null;
 
         // ── Session ───────────────────────────────────────────────────────────
         async function loadSession() {
@@ -349,83 +318,6 @@
             return Array.isArray(payload && payload.items) ? payload.items : [];
         }
 
-        // ── WHIP browser streaming ────────────────────────────────────────────
-        async function getMediaStream(sourceType) {
-            const constraints = { audio: true };
-            if (sourceType === 'camera') {
-                return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true });
-            }
-            if (sourceType === 'screen') {
-                const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                return screen;
-            }
-            // both: camera video + mic audio (screen share is secondary)
-            const cam = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true });
-            return cam;
-        }
-
-        async function startWhip(channelSlug, streamKey, mediaStream) {
-            const pc = new RTCPeerConnection({ iceServers: [] });
-            mediaStream.getTracks().forEach(t => pc.addTrack(t, mediaStream));
-
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            // Wait for ICE gathering
-            if (pc.iceGatheringState !== 'complete') {
-                await new Promise((resolve) => {
-                    const check = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', check); resolve(); } };
-                    pc.addEventListener('icegatheringstatechange', check);
-                    setTimeout(resolve, 4000); // fallback timeout
-                });
-            }
-
-            const res = await fetch(`/whip/${encodeURIComponent(channelSlug)}?key=${encodeURIComponent(streamKey)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/sdp' },
-                body: pc.localDescription.sdp,
-            });
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`WHIP ${res.status}: ${errText}`);
-            }
-
-            const resourceUrl = res.headers.get('Location') || null;
-            const answerSdp = await res.text();
-            await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
-
-            pc.onconnectionstatechange = () => {
-                if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                    stopBrowserStream();
-                }
-            };
-
-            return { pc, resourceUrl };
-        }
-
-        async function stopWhip() {
-            if (_whipPc) {
-                _whipPc.close();
-                _whipPc = null;
-            }
-            if (_whipResourceUrl) {
-                try { await fetch(_whipResourceUrl, { method: 'DELETE' }); } catch {}
-                _whipResourceUrl = null;
-            }
-            if (_liveMediaStream) {
-                _liveMediaStream.getTracks().forEach(t => t.stop());
-                _liveMediaStream = null;
-            }
-        }
-
-        async function stopBrowserStream() {
-            await stopWhip();
-            clearInterval(_liveTimer);
-            _liveTimer = null;
-            _liveStart = null;
-            renderBrowserPanel();
-        }
-
         // ── Render helpers ────────────────────────────────────────────────────
         function renderNavAuth() {
             const el = document.getElementById('nav-auth');
@@ -483,55 +375,14 @@
         function renderBrowserPanel() {
             const panel = document.getElementById('browser-panel');
             if (!panel) return;
-
-            const isLive = !!_whipPc;
             const ch = _channel;
-
-            if (isLive) {
-                panel.innerHTML = `
-                    <div class="eyebrow">Browser stream — live</div>
-                    <video class="live-preview" id="live-preview" autoplay muted playsinline style="display:block"></video>
-                    <div class="live-status" style="display:flex">
-                        <span class="live-dot"></span>
-                        <span style="font-weight:700;color:var(--danger)">LIVE</span>
-                        <span class="note" id="live-timer">0:00</span>
-                        <span style="flex:1"></span>
-                        <button class="button-danger" onclick="stopBrowserStream()">Stop stream</button>
-                    </div>`;
-                if (_liveMediaStream) {
-                    const video = document.getElementById('live-preview');
-                    if (video) video.srcObject = _liveMediaStream;
-                }
-                return;
-            }
-
-            const canStream = !!(ch && ch.stream_key);
-            const src = _selectedSource || 'camera';
-
+            const goLiveUrl = surfaceUrl('live') + '/go-live';
+            const channelUrl = ch ? (surfaceUrl('live') + '/@' + esc(ch.slug)) : surfaceUrl('live');
             panel.innerHTML = `
-                <div class="eyebrow">Browser quick-start</div>
-                <p class="note" style="margin-bottom:0.9rem">Pick your source, then click <strong>Go Live</strong>. That's it.</p>
-                <div class="three-col" style="margin-bottom:1rem">
-                    <div class="source-card${src==='camera'?' selected':''}" onclick="selectSource('camera')">
-                        <div class="icon">📷</div>
-                        <div class="label">Camera</div>
-                        <div class="sub">Webcam + mic</div>
-                    </div>
-                    <div class="source-card${src==='screen'?' selected':''}" onclick="selectSource('screen')">
-                        <div class="icon">🖥</div>
-                        <div class="label">Screen</div>
-                        <div class="sub">Share your display</div>
-                    </div>
-                    <div class="source-card${src==='both'?' selected':''}" onclick="selectSource('both')">
-                        <div class="icon">🎙</div>
-                        <div class="label">Camera + screen</div>
-                        <div class="sub">Camera video, mic audio</div>
-                    </div>
-                </div>
-                ${canStream
-                    ? `<button class="button" id="go-live-btn" onclick="handleGoLive()">Go live from browser</button>`
-                    : `<p class="note">Finish signing in to enable browser streaming.</p>`}
-                <p class="note" style="margin-top:0.6rem;font-size:0.8rem">Your browser will ask for permission when you click Go Live.</p>`;
+                <div class="eyebrow">Browser streaming</div>
+                <p class="note" style="margin-bottom:1rem">Browser-based streaming is managed from the Stream Manager on openvibe.live. Your channel, chat, and stream controls are all there.</p>
+                <a class="button" href="${esc(goLiveUrl)}" style="display:inline-flex">Go to Stream Manager →</a>
+                ${ch ? `<p class="note" style="margin-top:0.75rem;font-size:0.8rem">Your channel: <a href="${esc(channelUrl)}" style="color:var(--accent)">openvibe.live/@${esc(ch.slug)}</a></p>` : ''}`;
         }
 
         function renderDestinations(destinations) {
@@ -558,7 +409,7 @@
             const el = document.getElementById('streams-list');
             if (!el) return;
             if (!streams.length) {
-                el.innerHTML = '<p class="note">No streams yet. Go live with OBS or the browser quick-start above.</p>';
+                el.innerHTML = '<p class="note">No streams yet. Start one from the Stream Manager on openvibe.live or via OBS with your ingest credentials above.</p>';
                 return;
             }
             el.innerHTML = streams.map(s => `
@@ -579,7 +430,7 @@
                 <div class="panel hero-signin">
                     <div class="eyebrow">Restream control room</div>
                     <h1>Your stream.<br>Every platform.</h1>
-                    <p>One account. OBS ingest credentials, browser live streaming, and restream to YouTube, Twitch, Kick, or any RTMP destination.</p>
+                    <p>OBS ingest credentials and restream to YouTube, Twitch, Kick, or any RTMP destination simultaneously.</p>
                     <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
                         <a class="button" href="${esc(signInUrl())}">Sign in to get started</a>
                         <a class="button-secondary" href="${esc(surfaceUrl('live'))}">openvibe.live</a>
@@ -669,50 +520,6 @@
         }
 
         // ── Actions ───────────────────────────────────────────────────────────
-        window.selectSource = function(source) {
-            _selectedSource = source;
-            renderBrowserPanel();
-        };
-
-        window.handleGoLive = async function() {
-            const btn = document.getElementById('go-live-btn');
-            if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
-            try {
-                const source = _selectedSource || 'camera';
-                const stream = await getMediaStream(source);
-                _liveMediaStream = stream;
-
-                const ch = _channel;
-                if (!ch || !ch.stream_key) throw new Error('No stream key — refresh the page and try again.');
-
-                const { pc, resourceUrl } = await startWhip(ch.slug, ch.stream_key, stream);
-                _whipPc = pc;
-                _whipResourceUrl = resourceUrl;
-
-                _liveStart = Date.now();
-                renderBrowserPanel();
-
-                const video = document.getElementById('live-preview');
-                if (video) video.srcObject = stream;
-
-                _liveTimer = setInterval(() => {
-                    const timerEl = document.getElementById('live-timer');
-                    if (!timerEl) return;
-                    const elapsed = Math.round((Date.now() - _liveStart) / 1000);
-                    const m = Math.floor(elapsed / 60);
-                    const s = elapsed % 60;
-                    timerEl.textContent = `${m}:${String(s).padStart(2,'0')}`;
-                }, 1000);
-
-            } catch (err) {
-                if (btn) { btn.disabled = false; btn.textContent = 'Go live from browser'; }
-                if (_liveMediaStream) { _liveMediaStream.getTracks().forEach(t => t.stop()); _liveMediaStream = null; }
-                alert('Could not start stream: ' + (err.message || 'Unknown error'));
-            }
-        };
-
-        window.stopBrowserStream = stopBrowserStream;
-
         window.toggleKeyReveal = function() {
             const hidden = document.getElementById('cred-key');
             const visible = document.getElementById('cred-key-value');
@@ -805,21 +612,6 @@
 
     })();
     </script>
-    <script>
-    (function() {
-        var h = location.hostname;
-        var chatUrl = (h === 'localhost' || h.endsWith('.localhost'))
-            ? 'http://openvibe.chat.localhost:4800'
-            : 'https://openvibe.chat';
-        var btn = document.createElement('a');
-        btn.href = chatUrl;
-        btn.target = '_blank';
-        btn.rel = 'noopener';
-        btn.setAttribute('aria-label', 'Open chat');
-        btn.textContent = '💬';
-        btn.style.cssText = 'position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;';
-        document.body.appendChild(btn);
-    })();
-    </script>
+    <script src="/assets/chat-bubble.js" defer></script>
 </body>
 </html>

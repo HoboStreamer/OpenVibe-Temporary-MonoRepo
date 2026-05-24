@@ -234,20 +234,7 @@ renderTools('image-tools',    'image',    TOOLS.image);
 renderTools('text-tools',     'text',     TOOLS.text);
 renderTools('download-tools', 'download', TOOLS.download);
 renderFavSection();
-(function() {
-    var h = location.hostname;
-    var chatUrl = (h === 'localhost' || h.endsWith('.localhost'))
-        ? 'http://openvibe.chat.localhost:4800'
-        : 'https://openvibe.chat';
-    var btn = document.createElement('a');
-    btn.href = chatUrl;
-    btn.target = '_blank';
-    btn.rel = 'noopener';
-    btn.setAttribute('aria-label', 'Open chat');
-    btn.textContent = '💬';
-    btn.style.cssText = 'position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;';
-    document.body.appendChild(btn);
-})();
 </script>
+<script src="/assets/chat-bubble.js" defer></script>
 </body>
 </html>
