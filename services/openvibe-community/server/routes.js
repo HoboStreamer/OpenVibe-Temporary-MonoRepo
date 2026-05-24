@@ -8,7 +8,7 @@ const { COMMUNITY_EVENT_TYPES } = require('@openvibe/contracts');
 
 function loadPagesRegistry() {
     try {
-        return require(path.join(__dirname, 'pages-registry.json'));
+        return JSON.parse(require('fs').readFileSync(path.join(__dirname, 'pages-registry.json'), 'utf8'));
     } catch {
         return [];
     }

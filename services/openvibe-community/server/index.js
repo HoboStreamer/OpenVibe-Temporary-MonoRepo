@@ -13,6 +13,7 @@ const config = require('./config');
 const db = require('./db');
 const { buildEventBus } = require('./events');
 const { buildRouter, loadPagesRegistry, bumpPageView } = require('./routes');
+const { buildFinditfixitRouter } = require('./routes-finditfixit');
 const { buildAuthClient, optionalOpenVibeAuth, serviceActorMiddleware } = require('./middleware');
 const communitySSR = require('./ssr');
 
@@ -62,7 +63,7 @@ function buildApp() {
     runtime.attach(app);
 
     attachIconAssets(app, { routePrefix: '/assets' });
-    app.use(express.static(path.join(__dirname, '..', 'public')));
+    app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
     // Serve legacy paste screenshots from hobostreamer migration
     app.get('/api/paste-screenshots/:filename', (req, res) => {
@@ -98,6 +99,9 @@ function buildApp() {
 
     // Canonical API surface.
     app.use('/api/community', serviceActorMiddleware(config.internalKey), apiRouter);
+
+    // FindItFixIt proxy — browser-facing, no internal key required.
+    app.use('/api/community/finditfixit', buildFinditfixitRouter());
 
     // Legacy paste compatibility — `/api/pastes/*` reroutes into community pastes.
     app.use('/api/pastes', serviceActorMiddleware(config.internalKey), (req, _res, next) => {
@@ -247,18 +251,18 @@ function buildApp() {
     });
 
     // Community Pages listing
-    app.get('/pages', (_req, res) => {
+    app.get(['/pages', '/pages/'], (_req, res) => {
         const registry = loadPagesRegistry();
         res.send(communitySSR.renderPagesPage(registry));
     });
 
     // Community Pages submission guide
-    app.get('/pages/submit', (_req, res) => {
+    app.get(['/pages/submit', '/pages/submit/'], (_req, res) => {
         res.send(communitySSR.renderSubmitPage());
     });
 
     // Individual community page — track view, serve file
-    app.get('/pages/:slug', (req, res) => {
+    app.get(['/pages/:slug', '/pages/:slug/'], (req, res) => {
         const registry = loadPagesRegistry();
         const slug = req.params.slug;
         const page = registry.find((p) => p.slug === slug);
