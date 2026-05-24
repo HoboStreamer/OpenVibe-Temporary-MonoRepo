@@ -50,6 +50,10 @@ module.exports = {
         ai:      process.env.OPENVIBE_AI_URL      || null,
     },
 
+    features: {
+        vodEnabled: process.env.ENABLE_VOD === 'true',
+    },
+
     subscription: {
         enabled: process.env.LIVE_SUBSCRIBE_STREAM_EVENTS !== 'false',
         callbackUrl: process.env.LIVE_SUBSCRIBE_CALLBACK_URL || null,

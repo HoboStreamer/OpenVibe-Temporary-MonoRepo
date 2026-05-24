@@ -173,6 +173,7 @@ function request(server, requestPath, host) {
     process.env.OPENVIBE_DATABASE_URL = '';
     process.env.OPENVIBE_STAGING_DATABASE_URL = '';
     process.env.OPENVIBE_OPENVIBE_LIVE_DATABASE_URL = '';
+    process.env.ENABLE_VOD = 'true';
 
     const { buildApp } = require('../server/index');
     const model = require('../server/model');

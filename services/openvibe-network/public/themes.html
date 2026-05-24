@@ -63,11 +63,141 @@
 .theme-tile--active .theme-tile-name {
     color: var(--ov-text);
 }
+#custom-palette {
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 0 1.25rem 3rem;
+}
+.cp-header {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ov-text);
+    margin-bottom: 0.25rem;
+}
+.cp-sub {
+    font-size: 0.82rem;
+    color: var(--ov-text-dim);
+    margin-bottom: 1.25rem;
+}
+.cp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+}
+.cp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.cp-label {
+    font-size: 0.78rem;
+    color: var(--ov-text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.cp-swatch {
+    width: 100%;
+    height: 44px;
+    border-radius: 10px;
+    border: 2px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+    padding: 2px;
+    background: none;
+}
+.cp-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.cp-swatch::-webkit-color-swatch { border-radius: 7px; border: none; }
+.cp-swatch::-moz-color-swatch { border-radius: 7px; border: none; }
+.cp-meta { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.25rem; }
+.cp-meta input, .cp-meta textarea {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--ov-bg-elev, rgba(15,23,45,0.88));
+    border: 1.5px solid var(--ov-border, rgba(148,163,184,0.14));
+    border-radius: 8px;
+    color: var(--ov-text);
+    font-size: 0.88rem;
+    font-family: inherit;
+    box-sizing: border-box;
+    outline: none;
+    resize: none;
+}
+.cp-meta input:focus, .cp-meta textarea:focus { border-color: var(--ov-accent); }
+.cp-actions { display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap; }
+.cp-btn {
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.01em;
+    transition: opacity 0.15s;
+}
+.cp-btn:hover { opacity: 0.82; }
+.cp-btn--apply { background: var(--ov-accent); color: #fff; }
+.cp-btn--submit { background: linear-gradient(135deg, var(--ov-accent), var(--ov-accent-2)); color: #fff; }
+.cp-status { font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2em; }
+.cp-status--ok { color: #4ade80; }
+.cp-status--err { color: #f87171; }
+.community-section {
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 0 1.25rem 4rem;
+}
+.community-section h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ov-text);
+    margin-bottom: 0.25rem;
+}
+.community-section p {
+    font-size: 0.82rem;
+    color: var(--ov-text-dim);
+    margin-bottom: 1.25rem;
+}
+.community-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+.theme-tile-author {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--ov-text-faint, #6d7c98);
+    padding: 0 0.75rem 0.5rem;
+    background: color-mix(in srgb, var(--ov-bg) 90%, white);
+}
 </style>
 </head>
 <body>
 <div id="nav-mount"></div>
 <div class="theme-grid" id="theme-grid"></div>
+<div id="custom-palette" style="display:none">
+    <p class="cp-header">Custom Palette</p>
+    <p class="cp-sub">Pick your colors — the page previews as you go. Apply saves to your account. Submit shares it with everyone.</p>
+    <div class="cp-grid">
+        <div class="cp-field"><label class="cp-label" for="cp-bg">Background</label><input class="cp-swatch" type="color" id="cp-bg" value="#060917"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-accent">Accent</label><input class="cp-swatch" type="color" id="cp-accent" value="#8b5cf6"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-accent2">Accent 2</label><input class="cp-swatch" type="color" id="cp-accent2" value="#22d3ee"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-text">Text</label><input class="cp-swatch" type="color" id="cp-text" value="#eef4ff"></div>
+        <div class="cp-field"><label class="cp-label" for="cp-textDim">Dim Text</label><input class="cp-swatch" type="color" id="cp-textDim" value="#a7b5d2"></div>
+    </div>
+    <div class="cp-meta">
+        <input id="cp-name" type="text" placeholder="Theme name (required to submit)" maxlength="80" />
+        <textarea id="cp-desc" rows="2" placeholder="Short description (optional)"></textarea>
+    </div>
+    <div class="cp-actions">
+        <button id="cp-apply" class="cp-btn cp-btn--apply" type="button">Apply to me</button>
+        <button id="cp-submit" class="cp-btn cp-btn--submit" type="button">Submit Theme</button>
+    </div>
+    <p id="cp-status" class="cp-status"></p>
+</div>
+<div class="community-section" id="community-section" style="display:none">
+    <h2>Community Themes</h2>
+    <p>Themes made and shared by OpenVibe users.</p>
+    <div class="community-grid" id="community-grid"></div>
+</div>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
 <script src="/assets/openvibe.js"></script>
@@ -95,15 +225,137 @@
         ).join('');
     }
 
+    const customPanel = document.getElementById('custom-palette');
+    const cpInputs = { bg: document.getElementById('cp-bg'), accent: document.getElementById('cp-accent'), accent2: document.getElementById('cp-accent2'), text: document.getElementById('cp-text'), textDim: document.getElementById('cp-textDim') };
+    const cpName   = document.getElementById('cp-name');
+    const cpDesc   = document.getElementById('cp-desc');
+    const cpStatus = document.getElementById('cp-status');
+
+    function loadCustomColors() {
+        try {
+            const cc = JSON.parse(localStorage.getItem('openvibe.theme.custom') || '{}');
+            if (cc.bg)      cpInputs.bg.value      = cc.bg;
+            if (cc.accent)  cpInputs.accent.value  = cc.accent;
+            if (cc.accent2) cpInputs.accent2.value = cc.accent2;
+            if (cc.text)    cpInputs.text.value    = cc.text;
+            if (cc.textDim) cpInputs.textDim.value = cc.textDim;
+        } catch {}
+    }
+
+    function previewCustom() {
+        const root = document.documentElement;
+        const hp = (h) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h); return m ? [parseInt(m[1],16),parseInt(m[2],16),parseInt(m[3],16)] : null; };
+        const bg = cpInputs.bg.value, accent = cpInputs.accent.value, accent2 = cpInputs.accent2.value, text = cpInputs.text.value, textDim = cpInputs.textDim.value;
+        if (bg) { const p = hp(bg); root.style.setProperty('--ov-bg', bg); root.style.setProperty('--ov-nav-bg', bg); root.style.setProperty('--bg', bg); if (p) { root.style.setProperty('--ov-bg-soft', `rgba(${p[0]},${p[1]},${p[2]},0.85)`); root.style.setProperty('--ov-bg-elev', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); root.style.setProperty('--ov-bg-elev-2', `rgba(${Math.min(p[0]+8,255)},${Math.min(p[1]+8,255)},${Math.min(p[2]+8,255)},0.94)`); root.style.setProperty('--panel', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); } }
+        if (accent) { root.style.setProperty('--ov-accent', accent); root.style.setProperty('--accent', accent); const p = hp(accent); if (p) { root.style.setProperty('--ov-border', `rgba(${p[0]},${p[1]},${p[2]},0.18)`); root.style.setProperty('--border', `rgba(${p[0]},${p[1]},${p[2]},0.18)`); } }
+        if (accent2) { root.style.setProperty('--ov-accent-2', accent2); root.style.setProperty('--accent-2', accent2); }
+        if (text) { root.style.setProperty('--ov-text', text); root.style.setProperty('--text', text); }
+        if (textDim) { root.style.setProperty('--ov-text-dim', textDim); root.style.setProperty('--ov-text-faint', textDim); root.style.setProperty('--muted-strong', textDim); }
+    }
+
+    function applyAndSaveCustom() {
+        const cc = { bg: cpInputs.bg.value, accent: cpInputs.accent.value, accent2: cpInputs.accent2.value, text: cpInputs.text.value, textDim: cpInputs.textDim.value };
+        try { localStorage.setItem('openvibe.theme.custom', JSON.stringify(cc)); } catch {}
+        OpenVibe.applyTheme('custom');
+        OpenVibe.syncThemePreference('custom').catch(() => {});
+        cpStatus.textContent = 'Applied!';
+        cpStatus.className = 'cp-status cp-status--ok';
+        setTimeout(() => { cpStatus.textContent = ''; }, 2500);
+    }
+
+    async function submitTheme() {
+        const name = cpName.value.trim();
+        if (!name) { cpStatus.textContent = 'Give your theme a name first.'; cpStatus.className = 'cp-status cp-status--err'; return; }
+        const palette = { bg: cpInputs.bg.value, accent: cpInputs.accent.value, accent2: cpInputs.accent2.value, text: cpInputs.text.value, textDim: cpInputs.textDim.value };
+        cpStatus.textContent = 'Submitting…';
+        cpStatus.className = 'cp-status';
+        try {
+            const res = await OpenVibe.api('/themes/community', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: cpDesc.value.trim(), palette }) });
+            if (res && res.id) {
+                cpStatus.textContent = `"${res.name}" is live! Others can apply it now.`;
+                cpStatus.className = 'cp-status cp-status--ok';
+                cpName.value = '';
+                cpDesc.value = '';
+                loadCommunityThemes();
+            } else {
+                cpStatus.textContent = res && res.error ? res.error : 'Submission failed.';
+                cpStatus.className = 'cp-status cp-status--err';
+            }
+        } catch (err) {
+            cpStatus.textContent = err && err.status === 401 ? 'Sign in to submit themes.' : 'Submission failed — try again.';
+            cpStatus.className = 'cp-status cp-status--err';
+        }
+    }
+
+    Object.values(cpInputs).forEach((inp) => inp.addEventListener('input', previewCustom));
+    document.getElementById('cp-apply').addEventListener('click', applyAndSaveCustom);
+    document.getElementById('cp-submit').addEventListener('click', submitTheme);
+
+    function showCustomPanel(show) {
+        customPanel.style.display = show ? 'block' : 'none';
+        if (show) loadCustomColors();
+    }
+
     render();
+    showCustomPanel(currentThemeId === 'custom');
 
     grid.addEventListener('click', function (e) {
         const tile = e.target.closest('[data-theme-id]');
         if (!tile) return;
         currentThemeId = tile.dataset.themeId;
         OpenVibe.applyTheme(currentThemeId);
+        showCustomPanel(currentThemeId === 'custom');
         render();
     });
+
+    const communitySection = document.getElementById('community-section');
+    const communityGrid    = document.getElementById('community-grid');
+
+    async function loadCommunityThemes() {
+        try {
+            const data = await OpenVibe.api('/themes/community');
+            const items = data && Array.isArray(data.items) ? data.items : [];
+            communitySection.style.display = items.length ? 'block' : 'none';
+            communityGrid.innerHTML = items.map((t) => `
+                <button class="theme-tile" data-community-id="${OpenVibe.escapeHtml(t.id)}" data-vars="${OpenVibe.escapeHtml(JSON.stringify(t.vars))}" type="button" title="${OpenVibe.escapeHtml(t.name)}">
+                    <div class="theme-tile-preview" style="background:${OpenVibe.escapeHtml(t.preview)}">
+                        <div class="theme-tile-accents">
+                            <span class="theme-tile-dot" style="background:${OpenVibe.escapeHtml(t.accent)}"></span>
+                            <span class="theme-tile-dot" style="background:${OpenVibe.escapeHtml(t.accent2)}"></span>
+                        </div>
+                    </div>
+                    <span class="theme-tile-name">${OpenVibe.escapeHtml(t.name)}</span>
+                    <span class="theme-tile-author">by ${OpenVibe.escapeHtml(t.author_name)}</span>
+                </button>`
+            ).join('');
+        } catch { communitySection.style.display = 'none'; }
+    }
+
+    communityGrid.addEventListener('click', function (e) {
+        const tile = e.target.closest('[data-community-id]');
+        if (!tile) return;
+        try {
+            const vars = JSON.parse(tile.dataset.vars);
+            const root = document.documentElement;
+            Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+        } catch {}
+    });
+
+    loadCommunityThemes();
+})();
+(function() {
+    var h = location.hostname;
+    var chatUrl = (h === 'localhost' || h.endsWith('.localhost'))
+        ? 'http://openvibe.chat.localhost:4800'
+        : 'https://openvibe.chat';
+    var btn = document.createElement('a');
+    btn.href = chatUrl;
+    btn.target = '_blank';
+    btn.rel = 'noopener';
+    btn.setAttribute('aria-label', 'Open chat');
+    btn.textContent = '💬';
+    btn.style.cssText = 'position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;';
+    document.body.appendChild(btn);
 })();
 </script>
 </body>

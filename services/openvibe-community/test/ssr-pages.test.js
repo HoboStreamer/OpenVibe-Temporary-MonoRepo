@@ -47,7 +47,7 @@ assert.ok(pastesHtml.includes('<!doctype html'), 'pastesPage has doctype');
 const pasteViewHtml = communitySSR.renderPasteViewPage(
     {
         id: 'p_2', title: 'Code paste', slug: 'code-paste',
-        language: 'javascript', content: 'console.log("hello")',
+        language: 'javascript', body: 'console.log("hello")',
         view_count: 5, created_by_actor_id: '99', created_at: '2026-01-03T00:00:00Z',
     },
     {}

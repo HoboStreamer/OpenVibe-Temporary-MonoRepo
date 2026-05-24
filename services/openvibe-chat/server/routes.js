@@ -144,8 +144,12 @@ function buildRouter({ eventBus, chatWs }) {
     function wrappedHistory(refType) {
         return (req, res) => {
             const refId = req.params.streamId || req.params.channelId || 'global';
-            const room = model.findRoomByExternal(refType, refId);
-            if (!room) return res.json({ items: [] });
+            // Use ensureRoomForExternal so the room exists before any message is sent
+            const room = model.ensureRoomForExternal(refType, refId, {
+                room_type: refType,
+                title: refId === 'global' ? 'Global Chat' : `${refType}:${refId}`,
+                visibility: 'public',
+            });
             try { policy.assert(policy.decideRead({ req, room, model }), actorMeta(req)); }
             catch (err) { return denied(res, err); }
             const items = model.listMessages({ room_id: room.id, limit: req.query.limit });
@@ -157,9 +161,11 @@ function buildRouter({ eventBus, chatWs }) {
             const refId = req.params.streamId || req.params.channelId || 'global';
             const room = model.ensureRoomForExternal(refType, refId, {
                 room_type: defaultRoomType,
-                title: refId === 'global' ? 'Global Chat' : `${defaultRoomType}:${refId}`,
+                title: (req.body && req.body.room_title) || (refId === 'global' ? 'Global Chat' : `${defaultRoomType}:${refId}`),
                 visibility: 'public',
             });
+            // Update title if caller supplied one (overwrites the UUID default set by wrappedHistory)
+            if (req.body && req.body.room_title) model.setRoomTitle(room.id, req.body.room_title);
             try { policy.assert(policy.decideSend({ req, room, model }), actorMeta(req)); }
             catch (err) { return denied(res, err); }
             const a = actorMeta(req);
@@ -169,8 +175,29 @@ function buildRouter({ eventBus, chatWs }) {
                 sender_type: a.actor_type, sender_id: a.actor_id,
                 message_type: b.message_type || 'text',
                 body: b.body, rich_payload: b.rich_payload,
+                metadata: b.metadata,
                 legacy_source: b.legacy_source || 'hobostreamer', legacy_id: b.legacy_id,
             });
+            // Fan-out stream/channel messages into the global room so global chat shows all activity
+            if (refType !== 'global') {
+                try {
+                    const globalRoom = model.getRoom('global');
+                    if (globalRoom) {
+                        model.createMessage({
+                            room_id: globalRoom.id,
+                            sender_type: a.actor_type, sender_id: a.actor_id,
+                            message_type: b.message_type || 'text',
+                            body: b.body,
+                            metadata: Object.assign({}, b.metadata, {
+                                from_room_type: refType,
+                                from_room_ref: refId,
+                                from_room_title: room.title || refId,
+                            }),
+                            legacy_source: b.legacy_source || 'hobostreamer',
+                        });
+                    }
+                } catch (_) { /* fan-out is best-effort */ }
+            }
             eventBus.publishChatEvent(CHAT_EVENT_TYPES.MESSAGE_CREATED,
                 { room_id: room.id, message_id: msg.id, room_type: room.room_type, external_ref_type: refType, external_ref_id: refId }, a);
             res.status(201).json({ message: msg, room });

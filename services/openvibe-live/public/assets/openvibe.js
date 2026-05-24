@@ -12,86 +12,266 @@
 
     let sessionPromise = null;
 
+    // <openvibe-themes-generated>
     const BUILTIN_THEMES = [
         {
-            id: 'openvibe-dark',
-            accent: '#8b5cf6',
-            accent2: '#22d3ee',
-            bg: '#060917',
-            bgElev: 'rgba(15, 23, 45, 0.88)',
-            bgElev2: 'rgba(21, 31, 60, 0.94)',
-            text: '#eef4ff',
-            textDim: '#a7b5d2',
-            textFaint: '#6d7c98',
-            border: 'rgba(148, 163, 184, 0.14)',
-            shadow: '0 28px 90px rgba(2, 8, 23, 0.42)',
+            id: "openvibe-dark",
+            name: "OpenVibe Dark",
+            description: "The default neon-night palette for the network.",
+            colorScheme: "dark",
+            accent: "#8b5cf6",
+            accent2: "#22d3ee",
+            preview: "linear-gradient(135deg, #080d1b 0%, #151d39 55%, #102b46 100%)",
+            vars: {
+                "--ov-accent": "#8b5cf6",
+                "--ov-accent-2": "#22d3ee",
+                "--ov-bg": "#060917",
+                "--ov-nav-bg": "#060917",
+                "--ov-bg-soft": "rgba(11, 16, 33, 0.84)",
+                "--ov-bg-elev": "rgba(15, 23, 45, 0.88)",
+                "--ov-bg-elev-2": "rgba(21, 31, 60, 0.94)",
+                "--ov-text": "#eef4ff",
+                "--ov-text-dim": "#a7b5d2",
+                "--ov-text-faint": "#6d7c98",
+                "--ov-border": "rgba(148, 163, 184, 0.14)",
+                "--ov-shadow": "0 28px 90px rgba(2, 8, 23, 0.42)",
+                "--accent": "#8b5cf6",
+                "--accent-2": "#22d3ee",
+                "--bg": "#060917",
+                "--panel": "rgba(15, 23, 45, 0.88)",
+                "--panel-strong": "rgba(21, 31, 60, 0.94)",
+                "--border": "rgba(148, 163, 184, 0.14)",
+                "--text": "#eef4ff",
+                "--muted": "#6d7c98",
+                "--muted-strong": "#a7b5d2"
+            },
         },
         {
-            id: 'openvibe-dim',
-            accent: '#2dd4bf',
-            accent2: '#60a5fa',
-            bg: '#0b1323',
-            bgElev: 'rgba(21, 33, 54, 0.88)',
-            bgElev2: 'rgba(28, 42, 66, 0.94)',
-            text: '#edf6ff',
-            textDim: '#b4c7dd',
-            textFaint: '#7f94b0',
-            border: 'rgba(96, 165, 250, 0.16)',
-            shadow: '0 28px 90px rgba(5, 16, 32, 0.42)',
+            id: "openvibe-dim",
+            name: "OpenVibe Dim",
+            description: "Cooler blues and seafoam with softer contrast.",
+            colorScheme: "dark",
+            accent: "#2dd4bf",
+            accent2: "#60a5fa",
+            preview: "linear-gradient(135deg, #0c1528 0%, #18304d 50%, #0e3b44 100%)",
+            vars: {
+                "--ov-accent": "#2dd4bf",
+                "--ov-accent-2": "#60a5fa",
+                "--ov-bg": "#0b1323",
+                "--ov-nav-bg": "#0b1323",
+                "--ov-bg-soft": "rgba(17, 24, 39, 0.88)",
+                "--ov-bg-elev": "rgba(21, 33, 54, 0.88)",
+                "--ov-bg-elev-2": "rgba(28, 42, 66, 0.94)",
+                "--ov-text": "#edf6ff",
+                "--ov-text-dim": "#b4c7dd",
+                "--ov-text-faint": "#7f94b0",
+                "--ov-border": "rgba(96, 165, 250, 0.16)",
+                "--ov-shadow": "0 28px 90px rgba(5, 16, 32, 0.42)",
+                "--accent": "#2dd4bf",
+                "--accent-2": "#60a5fa",
+                "--bg": "#0b1323",
+                "--panel": "rgba(21, 33, 54, 0.88)",
+                "--panel-strong": "rgba(28, 42, 66, 0.94)",
+                "--border": "rgba(96, 165, 250, 0.16)",
+                "--text": "#edf6ff",
+                "--muted": "#7f94b0",
+                "--muted-strong": "#b4c7dd"
+            },
         },
         {
-            id: 'openvibe-light',
-            accent: '#5b3df0',
-            accent2: '#0ea5e9',
-            bg: '#eef4ff',
-            bgElev: 'rgba(255, 255, 255, 0.92)',
-            bgElev2: 'rgba(235, 243, 255, 0.96)',
-            text: '#0f172a',
-            textDim: '#475569',
-            textFaint: '#64748b',
-            border: 'rgba(71, 85, 105, 0.18)',
-            shadow: '0 18px 48px rgba(15, 23, 42, 0.12)',
+            id: "openvibe-light",
+            name: "OpenVibe Light",
+            description: "Bright, crisp, and still unmistakably OpenVibe.",
+            colorScheme: "light",
+            accent: "#5b3df0",
+            accent2: "#0ea5e9",
+            preview: "linear-gradient(135deg, #ffffff 0%, #e8f0ff 55%, #dff7ff 100%)",
+            vars: {
+                "--ov-accent": "#5b3df0",
+                "--ov-accent-2": "#0ea5e9",
+                "--ov-bg": "#eef4ff",
+                "--ov-nav-bg": "#eef4ff",
+                "--ov-bg-soft": "rgba(255, 255, 255, 0.92)",
+                "--ov-bg-elev": "rgba(255, 255, 255, 0.92)",
+                "--ov-bg-elev-2": "rgba(235, 243, 255, 0.96)",
+                "--ov-text": "#0f172a",
+                "--ov-text-dim": "#475569",
+                "--ov-text-faint": "#64748b",
+                "--ov-border": "rgba(71, 85, 105, 0.18)",
+                "--ov-shadow": "0 18px 48px rgba(15, 23, 42, 0.12)",
+                "--accent": "#5b3df0",
+                "--accent-2": "#0ea5e9",
+                "--bg": "#eef4ff",
+                "--panel": "rgba(255, 255, 255, 0.92)",
+                "--panel-strong": "rgba(235, 243, 255, 0.96)",
+                "--border": "rgba(71, 85, 105, 0.18)",
+                "--text": "#0f172a",
+                "--muted": "#64748b",
+                "--muted-strong": "#475569"
+            },
         },
         {
-            id: 'sunset',
-            accent: '#f97316',
-            accent2: '#fb7185',
-            bg: '#1a1118',
-            bgElev: 'rgba(56, 26, 36, 0.88)',
-            bgElev2: 'rgba(79, 33, 49, 0.94)',
-            text: '#fff1f2',
-            textDim: '#fecdd3',
-            textFaint: '#fda4af',
-            border: 'rgba(251, 113, 133, 0.18)',
-            shadow: '0 28px 90px rgba(42, 16, 24, 0.45)',
+            id: "sunset",
+            name: "Sunset Broadcast",
+            description: "Orange/pink glow built for creator dashboards.",
+            colorScheme: "dark",
+            accent: "#f97316",
+            accent2: "#fb7185",
+            preview: "linear-gradient(135deg, #241018 0%, #52203c 55%, #9a3412 100%)",
+            vars: {
+                "--ov-accent": "#f97316",
+                "--ov-accent-2": "#fb7185",
+                "--ov-bg": "#1a1118",
+                "--ov-nav-bg": "#1a1118",
+                "--ov-bg-soft": "rgba(38, 20, 28, 0.9)",
+                "--ov-bg-elev": "rgba(56, 26, 36, 0.88)",
+                "--ov-bg-elev-2": "rgba(79, 33, 49, 0.94)",
+                "--ov-text": "#fff1f2",
+                "--ov-text-dim": "#fecdd3",
+                "--ov-text-faint": "#fda4af",
+                "--ov-border": "rgba(251, 113, 133, 0.18)",
+                "--ov-shadow": "0 28px 90px rgba(42, 16, 24, 0.45)",
+                "--accent": "#f97316",
+                "--accent-2": "#fb7185",
+                "--bg": "#1a1118",
+                "--panel": "rgba(56, 26, 36, 0.88)",
+                "--panel-strong": "rgba(79, 33, 49, 0.94)",
+                "--border": "rgba(251, 113, 133, 0.18)",
+                "--text": "#fff1f2",
+                "--muted": "#fda4af",
+                "--muted-strong": "#fecdd3"
+            },
         },
         {
-            id: 'forest',
-            accent: '#22c55e',
-            accent2: '#2dd4bf',
-            bg: '#0d1410',
-            bgElev: 'rgba(18, 36, 29, 0.88)',
-            bgElev2: 'rgba(24, 51, 40, 0.94)',
-            text: '#ecfdf5',
-            textDim: '#a7f3d0',
-            textFaint: '#6ee7b7',
-            border: 'rgba(45, 212, 191, 0.16)',
-            shadow: '0 28px 90px rgba(8, 24, 18, 0.45)',
+            id: "forest",
+            name: "Forest Signal",
+            description: "Deep green tones for a calmer operator feel.",
+            colorScheme: "dark",
+            accent: "#22c55e",
+            accent2: "#2dd4bf",
+            preview: "linear-gradient(135deg, #07130d 0%, #0f3a22 50%, #0d5f46 100%)",
+            vars: {
+                "--ov-accent": "#22c55e",
+                "--ov-accent-2": "#2dd4bf",
+                "--ov-bg": "#0d1410",
+                "--ov-nav-bg": "#0d1410",
+                "--ov-bg-soft": "rgba(16, 28, 23, 0.9)",
+                "--ov-bg-elev": "rgba(18, 36, 29, 0.88)",
+                "--ov-bg-elev-2": "rgba(24, 51, 40, 0.94)",
+                "--ov-text": "#ecfdf5",
+                "--ov-text-dim": "#a7f3d0",
+                "--ov-text-faint": "#6ee7b7",
+                "--ov-border": "rgba(45, 212, 191, 0.16)",
+                "--ov-shadow": "0 28px 90px rgba(8, 24, 18, 0.45)",
+                "--accent": "#22c55e",
+                "--accent-2": "#2dd4bf",
+                "--bg": "#0d1410",
+                "--panel": "rgba(18, 36, 29, 0.88)",
+                "--panel-strong": "rgba(24, 51, 40, 0.94)",
+                "--border": "rgba(45, 212, 191, 0.16)",
+                "--text": "#ecfdf5",
+                "--muted": "#6ee7b7",
+                "--muted-strong": "#a7f3d0"
+            },
         },
         {
-            id: 'cyberpunk',
-            accent: '#ec4899',
-            accent2: '#22d3ee',
-            bg: '#0c0a18',
-            bgElev: 'rgba(30, 18, 48, 0.9)',
-            bgElev2: 'rgba(43, 23, 69, 0.94)',
-            text: '#faf5ff',
-            textDim: '#d8b4fe',
-            textFaint: '#c084fc',
-            border: 'rgba(236, 72, 153, 0.18)',
-            shadow: '0 28px 90px rgba(15, 6, 32, 0.5)',
+            id: "cyberpunk",
+            name: "Cyberpunk Relay",
+            description: "Hot magenta + cyan for maximal arcade energy.",
+            colorScheme: "dark",
+            accent: "#ec4899",
+            accent2: "#22d3ee",
+            preview: "linear-gradient(135deg, #12091f 0%, #2b0f58 50%, #0e7490 100%)",
+            vars: {
+                "--ov-accent": "#ec4899",
+                "--ov-accent-2": "#22d3ee",
+                "--ov-bg": "#0c0a18",
+                "--ov-nav-bg": "#0c0a18",
+                "--ov-bg-soft": "rgba(21, 14, 38, 0.9)",
+                "--ov-bg-elev": "rgba(30, 18, 48, 0.9)",
+                "--ov-bg-elev-2": "rgba(43, 23, 69, 0.94)",
+                "--ov-text": "#faf5ff",
+                "--ov-text-dim": "#d8b4fe",
+                "--ov-text-faint": "#c084fc",
+                "--ov-border": "rgba(236, 72, 153, 0.18)",
+                "--ov-shadow": "0 28px 90px rgba(15, 6, 32, 0.5)",
+                "--accent": "#ec4899",
+                "--accent-2": "#22d3ee",
+                "--bg": "#0c0a18",
+                "--panel": "rgba(30, 18, 48, 0.9)",
+                "--panel-strong": "rgba(43, 23, 69, 0.94)",
+                "--border": "rgba(236, 72, 153, 0.18)",
+                "--text": "#faf5ff",
+                "--muted": "#c084fc",
+                "--muted-strong": "#d8b4fe"
+            },
+        },
+        {
+            id: "hobostreamer",
+            name: "HoboStreamer",
+            description: "Campfire amber on near-black. The original hobo aesthetic.",
+            colorScheme: "dark",
+            accent: "#c0965c",
+            accent2: "#dbb077",
+            preview: "linear-gradient(135deg, #0d0d0f 0%, #1e1810 50%, #2e2010 100%)",
+            vars: {
+                "--ov-accent": "#c0965c",
+                "--ov-accent-2": "#dbb077",
+                "--ov-bg": "#0d0d0f",
+                "--ov-nav-bg": "#0d0d0f",
+                "--ov-bg-soft": "rgba(22, 22, 26, 0.88)",
+                "--ov-bg-elev": "rgba(22, 22, 26, 0.88)",
+                "--ov-bg-elev-2": "rgba(30, 28, 22, 0.94)",
+                "--ov-text": "#e8e6e3",
+                "--ov-text-dim": "#9a9a9a",
+                "--ov-text-faint": "#666666",
+                "--ov-border": "rgba(192, 150, 92, 0.18)",
+                "--ov-shadow": "0 28px 90px rgba(0, 0, 0, 0.6)",
+                "--accent": "#c0965c",
+                "--accent-2": "#dbb077",
+                "--bg": "#0d0d0f",
+                "--panel": "rgba(22, 22, 26, 0.88)",
+                "--panel-strong": "rgba(30, 28, 22, 0.94)",
+                "--border": "rgba(192, 150, 92, 0.18)",
+                "--text": "#e8e6e3",
+                "--muted": "#666666",
+                "--muted-strong": "#9a9a9a"
+            },
+        },
+        {
+            id: "custom",
+            name: "Custom Palette",
+            description: "Your own colors. Configure on the themes page.",
+            colorScheme: "dark",
+            accent: "#8b5cf6",
+            accent2: "#22d3ee",
+            preview: "linear-gradient(135deg, #ff0066 0%, #fb923c 22%, #facc15 40%, #4ade80 55%, #22d3ee 72%, #818cf8 100%)",
+            vars: {
+                "--ov-accent": "#8b5cf6",
+                "--ov-accent-2": "#22d3ee",
+                "--ov-bg": "#060917",
+                "--ov-nav-bg": "#060917",
+                "--ov-bg-soft": "rgba(11, 16, 33, 0.84)",
+                "--ov-bg-elev": "rgba(15, 23, 45, 0.88)",
+                "--ov-bg-elev-2": "rgba(21, 31, 60, 0.94)",
+                "--ov-text": "#eef4ff",
+                "--ov-text-dim": "#a7b5d2",
+                "--ov-text-faint": "#6d7c98",
+                "--ov-border": "rgba(148, 163, 184, 0.14)",
+                "--ov-shadow": "0 28px 90px rgba(2, 8, 23, 0.42)",
+                "--accent": "#8b5cf6",
+                "--accent-2": "#22d3ee",
+                "--bg": "#060917",
+                "--panel": "rgba(15, 23, 45, 0.88)",
+                "--panel-strong": "rgba(21, 31, 60, 0.94)",
+                "--border": "rgba(148, 163, 184, 0.14)",
+                "--text": "#eef4ff",
+                "--muted": "#6d7c98",
+                "--muted-strong": "#a7b5d2"
+            },
         },
     ];
+    // </openvibe-themes-generated>
 
     const SURFACES = {
         network:   { origin: 'https://openvibe.network', localHost: 'openvibe.network.localhost', port: 4100 },
@@ -169,27 +349,19 @@
         const root = global.document && global.document.documentElement;
         if (!root) return theme;
         root.dataset.openvibeTheme = theme.id;
-        root.style.setProperty('color-scheme', theme.id === 'openvibe-light' ? 'light' : 'dark');
-        root.style.setProperty('--ov-accent', theme.accent);
-        root.style.setProperty('--ov-accent-2', theme.accent2);
-        root.style.setProperty('--ov-bg', theme.bg);
-        root.style.setProperty('--ov-bg-elev', theme.bgElev);
-        root.style.setProperty('--ov-bg-elev-2', theme.bgElev2);
-        root.style.setProperty('--ov-text', theme.text);
-        root.style.setProperty('--ov-text-dim', theme.textDim);
-        root.style.setProperty('--ov-text-faint', theme.textFaint);
-        root.style.setProperty('--ov-border', theme.border);
-        root.style.setProperty('--ov-shadow', theme.shadow);
-        // Legacy aliases for SSR services (openvibe-live etc.) that use --bg/--accent/--text/--panel/--border
-        root.style.setProperty('--accent', theme.accent);
-        root.style.setProperty('--accent-2', theme.accent2);
-        root.style.setProperty('--bg', theme.bg);
-        root.style.setProperty('--panel', theme.bgElev);
-        root.style.setProperty('--panel-strong', theme.bgElev2);
-        root.style.setProperty('--border', theme.border);
-        root.style.setProperty('--text', theme.text);
-        root.style.setProperty('--muted', theme.textFaint);
-        root.style.setProperty('--muted-strong', theme.textDim);
+        root.style.setProperty('color-scheme', theme.colorScheme || (theme.id === 'openvibe-light' ? 'light' : 'dark'));
+        Object.entries(theme.vars || {}).forEach(function(e) { root.style.setProperty(e[0], e[1]); });
+        if (themeId === 'custom') {
+            try {
+                const cc = JSON.parse(localStorage.getItem('openvibe.theme.custom') || '{}');
+                const hp = (h) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null; };
+                if (cc.bg) { const p = hp(cc.bg); root.style.setProperty('--ov-bg', cc.bg); root.style.setProperty('--bg', cc.bg); root.style.setProperty('--ov-nav-bg', cc.bg); if (p) { root.style.setProperty('--ov-bg-elev', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); root.style.setProperty('--ov-bg-elev-2', `rgba(${Math.min(p[0]+8,255)},${Math.min(p[1]+8,255)},${Math.min(p[2]+8,255)},0.94)`); root.style.setProperty('--panel', `rgba(${p[0]},${p[1]},${p[2]},0.88)`); } }
+                if (cc.accent) { root.style.setProperty('--ov-accent', cc.accent); root.style.setProperty('--accent', cc.accent); const p = hp(cc.accent); if (p) root.style.setProperty('--ov-border', `rgba(${p[0]},${p[1]},${p[2]},0.18)`); }
+                if (cc.accent2) { root.style.setProperty('--ov-accent-2', cc.accent2); root.style.setProperty('--accent-2', cc.accent2); }
+                if (cc.text) { root.style.setProperty('--ov-text', cc.text); root.style.setProperty('--text', cc.text); }
+                if (cc.textDim) { root.style.setProperty('--ov-text-dim', cc.textDim); root.style.setProperty('--ov-text-faint', cc.textDim); root.style.setProperty('--muted', cc.textDim); }
+            } catch { /* ignore */ }
+        }
         if (!options || options.persistLocal !== false) {
             try {
                 global.localStorage.setItem(LOCAL_THEME_KEY, theme.id);
@@ -486,6 +658,67 @@
         return loadSyncedThemePreference();
     }
 
+    async function syncThemePreference(themeId) {
+        applyTheme(themeId);
+        const session = await loadSession().catch(() => null);
+        if (!session || !session.authenticated) return;
+        networkRequestJson('/api/v1/user-modules/me/openvibe.theme', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: { theme_id: themeId, updated_at: new Date().toISOString() } }),
+        }).catch(() => {});
+    }
+
+    function initThemePicker() {
+        const wrap = global.document && global.document.getElementById('ov-theme-btn-wrap');
+        if (!wrap) return;
+        const triggerBtn = wrap.querySelector('#ov-theme-btn');
+        const popup = wrap.querySelector('#ov-theme-popup');
+        const swatchContainer = wrap.querySelector('#ov-theme-swatches');
+        if (!triggerBtn || !popup || !swatchContainer) return;
+
+        swatchContainer.innerHTML = BUILTIN_THEMES.slice(0, 6).map((t) =>
+            `<button class="ov-theme-swatch" data-theme-id="${escapeHtml(t.id)}" type="button" title="${escapeHtml(t.name)}">
+                <span class="ov-theme-swatch-preview" style="background:${escapeHtml(t.preview)}">
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent)}"></span>
+                    <span class="ov-theme-swatch-accent" style="background:${escapeHtml(t.accent2)}"></span>
+                </span>
+                <span class="ov-theme-swatch-name">${escapeHtml(t.name)}</span>
+            </button>`
+        ).join('');
+
+        try {
+            const saved = localStorage.getItem(LOCAL_THEME_KEY);
+            if (saved) {
+                const activeEl = swatchContainer.querySelector(`[data-theme-id="${CSS.escape(saved)}"]`);
+                if (activeEl) activeEl.classList.add('ov-theme-swatch--active');
+            }
+        } catch { /* ignore */ }
+
+        swatchContainer.querySelectorAll('[data-theme-id]').forEach((swatchBtn) => {
+            swatchBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                syncThemePreference(swatchBtn.dataset.themeId);
+                swatchContainer.querySelectorAll('[data-theme-id]').forEach((s) => s.classList.remove('ov-theme-swatch--active'));
+                swatchBtn.classList.add('ov-theme-swatch--active');
+                popup.hidden = true;
+                triggerBtn.setAttribute('aria-expanded', 'false');
+            });
+        });
+
+        triggerBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const open = !popup.hidden;
+            popup.hidden = open;
+            triggerBtn.setAttribute('aria-expanded', String(!open));
+        });
+
+        global.document.addEventListener('click', function () {
+            popup.hidden = true;
+            triggerBtn.setAttribute('aria-expanded', 'false');
+        });
+    }
+
     async function startAnonymousSession(options) {
         await networkRequestJson('/api/v1/session/anonymous', {
             method: 'POST',
@@ -631,7 +864,6 @@
             { key: 'home', href: resolveSurfaceUrl('network'), label: 'Home', icon: 'network' },
             { key: 'tools', href: resolveSurfaceUrl('tools'), label: 'Tools', icon: 'tools' },
             { key: 'themes', href: resolveSurfaceUrl('themes'), label: 'Themes', icon: 'themes' },
-            { key: 'my', href: resolveSurfaceUrl('my'), label: 'My Account', icon: 'my' },
             { key: 'admin', href: resolveSurfaceUrl('admin'), label: 'Admin', icon: 'admin' },
             { key: 'docs', href: resolveRegistryUrl(), label: 'Registry API', icon: 'docs' },
         ];
@@ -641,7 +873,16 @@
                 <nav class="ov-nav-links">
                     ${links.map((link) => `<a href="${escapeHtml(link.href)}"${link.key === activeKey ? ' style="color:var(--ov-text)"' : ''}>${iconLabel(link.icon, link.label)}</a>`).join('')}
                 </nav>
-                <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+                <div class="ov-nav-end">
+                    <div class="ov-theme-btn-wrap" id="ov-theme-btn-wrap">
+                        <button class="ov-theme-btn" id="ov-theme-btn" type="button" aria-label="Change theme" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></button>
+                        <div class="ov-theme-popup" id="ov-theme-popup" hidden>
+                            <div class="ov-theme-swatches" id="ov-theme-swatches"></div>
+                            <a class="ov-theme-explore" href="${escapeHtml(resolveSurfaceUrl('themes'))}">Explore more themes!</a>
+                        </div>
+                    </div>
+                    <div class="ov-nav-session" id="ov-nav-session"><span class="ov-chip soft">Checking session…</span></div>
+                </div>
             </div></header>`;
     }
 
@@ -717,6 +958,7 @@
         const footerMount = global.document.getElementById('footer-mount');
         if (navMount) navMount.innerHTML = navbar(activeKey);
         if (footerMount) footerMount.innerHTML = footer();
+        initThemePicker();
         await Promise.all([
             hydrateNavSession(),
             loadSyncedThemePreference(),
@@ -799,5 +1041,7 @@
         startAnonymousSession,
         switchAccountUrl,
         switchAnonymousIdentity,
+        syncThemePreference,
+        initThemePicker,
     };
 }(window));

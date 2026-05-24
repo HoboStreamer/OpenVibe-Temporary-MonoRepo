@@ -58,6 +58,8 @@ body {
 .chat-room-btn:hover { background: rgba(255,255,255,0.05); color: var(--ov-text); }
 .chat-room-btn.active { background: rgba(139,92,246,0.12); color: var(--ov-accent); font-weight: 600; }
 .chat-room-hash { font-size: 1rem; opacity: 0.6; }
+.chat-room-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; flex-shrink: 0; margin-left: auto; }
+.chat-sidebar-section { margin-top: .5rem; }
 
 /* ── main pane ── */
 .chat-main {
@@ -186,11 +188,15 @@ body {
 <div id="nav-mount"></div>
 <div id="phase16-chip" class="ov-chip" style="display:none" aria-hidden="true"></div>
 <div class="chat-shell">
-    <nav class="chat-sidebar">
+    <nav class="chat-sidebar" id="chat-sidebar">
         <div class="chat-sidebar-label">Rooms</div>
         <button class="chat-room-btn active" data-room="global" type="button">
             <span class="chat-room-hash">#</span>global
         </button>
+        <div class="chat-sidebar-section" id="stream-rooms-section" hidden>
+            <div class="chat-sidebar-label" style="margin-top:.5rem;">Live Streams</div>
+            <div id="stream-rooms-list"></div>
+        </div>
     </nav>
 
     <div class="chat-main">
@@ -222,7 +228,8 @@ body {
 <script src="/assets/openvibe.js"></script>
 <script>
 (async function () {
-    const ROOM = 'global';
+    let ROOM = 'global';
+    let ROOM_IS_STREAM = false;
     const POLL = 2000;
     const MAX  = 150;
 
@@ -284,9 +291,38 @@ body {
         if (atBottom || lastId === null) feed.scrollTop = feed.scrollHeight;
     }
 
+    // ── room switching ────────────────────────────────────────────
+    const topbarName = document.getElementById('topbar-name');
+    const topbarDesc = document.querySelector('.chat-topbar-desc');
+    const inputEl    = document.getElementById('chat-input');
+
+    function switchRoom(roomId, label, isStream) {
+        if (ROOM === roomId) return;
+        ROOM = roomId;
+        ROOM_IS_STREAM = !!isStream;
+        lastId = null;
+        msgs = [];
+        render();
+        topbarName.textContent = label || roomId;
+        topbarDesc.textContent = isStream ? 'Stream chat' : 'OpenVibe global chat';
+        inputEl.placeholder = `Message #${label || roomId}…`;
+        document.querySelectorAll('.chat-room-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.room === roomId);
+        });
+        poll();
+    }
+
+    document.querySelector('[data-room="global"]').addEventListener('click', () => {
+        switchRoom('global', 'global', false);
+    });
+
+    // ── poll ─────────────────────────────────────────────────────
     async function poll() {
         try {
-            const res = await fetch(`/api/chat/rooms/${ROOM}/messages?limit=${MAX}`);
+            const url = ROOM_IS_STREAM
+                ? `/api/chat/stream/${encodeURIComponent(ROOM)}/history?limit=${MAX}`
+                : `/api/chat/rooms/${ROOM}/messages?limit=${MAX}`;
+            const res = await fetch(url);
             if (!res.ok) return;
             const data = await res.json();
             const items = (data.items || []).slice().reverse();
@@ -308,7 +344,6 @@ body {
             ws.addEventListener('open', () => {
                 wsConnected = true;
                 ws.send(JSON.stringify({ type: 'join', roomId: ROOM, displayName: myName }));
-                // Stop polling when WS is up
                 if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             });
             ws.addEventListener('message', (event) => {
@@ -326,16 +361,11 @@ body {
             });
             ws.addEventListener('close', () => {
                 wsConnected = false;
-                // Fall back to polling
                 if (!pollTimer) pollTimer = setInterval(poll, POLL);
-                // Reconnect after 3s
                 setTimeout(connectWs, 3000);
             });
-            ws.addEventListener('error', () => {
-                ws.close();
-            });
+            ws.addEventListener('error', () => { ws.close(); });
         } catch {
-            // WebSocket not available, use polling only
             if (!pollTimer) pollTimer = setInterval(poll, POLL);
         }
     }
@@ -347,18 +377,22 @@ body {
     async function send() {
         const text = input.value.trim();
         if (!text) return;
+        const savedText = text;
         input.value = '';
         input.disabled = true;
         sendBtn.disabled = true;
         try {
-            await fetch(`/api/chat/rooms/${ROOM}/messages`, {
+            const url = ROOM_IS_STREAM
+                ? `/api/chat/stream/${encodeURIComponent(ROOM)}/send`
+                : `/api/chat/rooms/${ROOM}/messages`;
+            const r = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ body: text, metadata: { sender_name: myName } }),
             });
-            // If WS is connected, message will arrive via push; otherwise poll now
+            if (!r.ok) throw new Error('send failed ' + r.status);
             if (!wsConnected) await poll();
-        } catch {}
+        } catch { input.value = savedText; }
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
@@ -369,10 +403,66 @@ body {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
 
+    // ── active stream rooms in sidebar ────────────────────────────
+    const streamRoomsSection = document.getElementById('stream-rooms-section');
+    const streamRoomsList    = document.getElementById('stream-rooms-list');
+    const liveBase = OpenVibe.resolveSurfaceUrl('live');
+
+    async function refreshStreamRooms() {
+        try {
+            // Fetch live streams from the live service
+            const liveRes = await fetch(`${liveBase}/api/v1/streams?status=live&limit=20`, { mode: 'cors', credentials: 'include' });
+            if (!liveRes.ok) return;
+            const liveData = await liveRes.json();
+            const liveStreams = liveData.items || [];
+            if (!liveStreams.length) {
+                streamRoomsSection.hidden = true;
+                return;
+            }
+
+            // Build a map of streamId → stream info
+            const streamMap = {};
+            for (const s of liveStreams) { if (s.id) streamMap[s.id] = s; }
+
+            // Fetch stream chat rooms (rooms that have external_ref_type=stream)
+            const roomsRes = await fetch('/api/chat/rooms?room_type=stream&limit=40');
+            if (!roomsRes.ok) return;
+            const roomsData = await roomsRes.json();
+            const streamRooms = (roomsData.items || []).filter(r => streamMap[r.external_ref_id]);
+
+            if (!streamRooms.length) {
+                streamRoomsSection.hidden = true;
+                return;
+            }
+
+            streamRoomsSection.hidden = false;
+            streamRoomsList.innerHTML = streamRooms.map(room => {
+                const stream = streamMap[room.external_ref_id];
+                const label = room.title && !room.title.startsWith('stream:')
+                    ? room.title
+                    : (stream.channel_name || stream.channel_slug || room.external_ref_id.slice(0, 8));
+                const isActive = ROOM === room.external_ref_id;
+                return `<button class="chat-room-btn${isActive ? ' active' : ''}" data-room="${esc(room.external_ref_id)}" data-room-label="${esc(label)}" data-room-stream="1" type="button">
+                    <span class="chat-room-hash">📺</span>${esc(label)}
+                    <span class="chat-room-live-dot"></span>
+                </button>`;
+            }).join('');
+
+            streamRoomsList.querySelectorAll('[data-room-stream]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    switchRoom(btn.dataset.room, btn.dataset.roomLabel, true);
+                });
+            });
+        } catch {}
+    }
+
     await poll();
     connectWs();
-    // Also start a slow poll as backstop (every 10s)
     pollTimer = setInterval(poll, 10000);
+
+    // Refresh stream rooms immediately and then every 30s
+    refreshStreamRooms();
+    setInterval(refreshStreamRooms, 30000);
 
 })();
 </script>

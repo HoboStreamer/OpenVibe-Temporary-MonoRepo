@@ -140,18 +140,73 @@
             transition:border-color .15s;
         }
         .ov-btn-restream:hover { border-color:rgba(99,102,241,.5); }
+        .ov-live-card-wrap { position:relative; }
+        .ov-item-star {
+            position:absolute; top:.5rem; right:.5rem;
+            background:rgba(0,0,0,0.55); border:none; border-radius:50%;
+            width:28px; height:28px; cursor:pointer; font-size:1rem; line-height:1;
+            color:#facc15; display:flex; align-items:center; justify-content:center;
+            transition:background .15s, transform .1s; z-index:2;
+        }
+        .ov-item-star:hover { background:rgba(0,0,0,0.8); transform:scale(1.15); }
+        .ov-item-star[data-fav="true"] { color:#facc15; }
+        .ov-item-star[data-fav="false"] { color:rgba(255,255,255,0.5); }
+        .ov-fav-sub-title { font-size:.78rem; font-weight:700; color:var(--ov-text-dim,#94a3b8); text-transform:uppercase; letter-spacing:.06em; margin:.9rem 0 .4rem; }
+        .ov-fav-stream-card {
+            display:flex; gap:.65rem; align-items:center; text-decoration:none; color:inherit;
+            padding:.5rem .6rem; border-radius:8px; border:1px solid var(--ov-border,rgba(255,255,255,0.07));
+            background:var(--ov-surface,rgba(255,255,255,0.02)); margin-bottom:.4rem;
+            transition:border-color .15s;
+        }
+        .ov-fav-stream-card:hover { border-color:rgba(99,102,241,.4); }
+        .ov-fav-stream-thumb {
+            width:52px; height:30px; border-radius:4px; flex-shrink:0;
+            background:rgba(255,255,255,0.06); object-fit:cover; font-size:.9rem;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .ov-fav-stream-title { font-size:.8rem; font-weight:600; color:var(--ov-text,#f1f5f9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ov-fav-stream-meta { font-size:.7rem; color:var(--ov-text-dim,#94a3b8); }
+        .ov-fav-stream-remove { background:none; border:none; color:var(--ov-text-dim,#94a3b8); cursor:pointer; font-size:.85rem; padding:0 .2rem; margin-left:auto; flex-shrink:0; }
+        .ov-fav-stream-remove:hover { color:#fb7185; }
+        .ov-fav-thread-card {
+            display:flex; gap:.5rem; align-items:center; text-decoration:none; color:inherit;
+            padding:.5rem .6rem; border-radius:8px; border:1px solid var(--ov-border,rgba(255,255,255,0.07));
+            background:var(--ov-surface,rgba(255,255,255,0.02)); margin-bottom:.4rem;
+            transition:border-color .15s;
+        }
+        .ov-fav-thread-card:hover { border-color:rgba(99,102,241,.4); }
+        .ov-fav-thread-title { font-size:.8rem; font-weight:600; flex:1; min-width:0; color:var(--ov-text,#f1f5f9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ov-fav-thread-remove { background:none; border:none; color:var(--ov-text-dim,#94a3b8); cursor:pointer; font-size:.85rem; padding:0 .2rem; margin-left:auto; flex-shrink:0; }
+        .ov-fav-thread-remove:hover { color:#fb7185; }
+        .ov-fav-tool-card {
+            display:flex; gap:.65rem; align-items:center;
+            padding:.5rem .6rem; border-radius:8px; border:1px solid var(--ov-border,rgba(255,255,255,0.07));
+            background:var(--ov-surface,rgba(255,255,255,0.02)); margin-bottom:.4rem;
+            transition:border-color .15s;
+        }
+        .ov-fav-tool-card:hover { border-color:rgba(124,58,237,.4); }
+        .ov-fav-tool-icon { width:32px; height:32px; border-radius:8px; flex-shrink:0; font-size:1.1rem; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); }
+        .ov-fav-tool-title { font-size:.8rem; font-weight:600; flex:1; min-width:0; color:var(--ov-text,#f1f5f9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-decoration:none; }
+        .ov-fav-tool-remove { background:none; border:none; color:var(--ov-text-dim,#94a3b8); cursor:pointer; font-size:.85rem; padding:0 .2rem; margin-left:auto; flex-shrink:0; }
+        .ov-fav-tool-remove:hover { color:#fb7185; }
     </style>
 
 
     <!-- Recent Pastes -->
     <section class="ov-section" id="recent-pastes-section">
-        <div class="ov-panel" id="recent-pastes-panel">
-            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
-                <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
-            </div>
-            <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1.2rem;">
+            <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
+            <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
         </div>
+        <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:0 1.2rem;"></div>
+    </section>
+
+    <!-- Services directory row -->
+    <section class="ov-section" id="services-row-section" style="display:none">
+        <div style="padding:0 1.2rem;margin-bottom:.75rem;">
+            <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">OpenVibe Services</span>
+        </div>
+        <div id="services-row" style="display:flex;flex-wrap:wrap;gap:.5rem;padding:0 1.2rem;"></div>
     </section>
 
 </main>
@@ -169,10 +224,14 @@
         return items.filter((item) => wanted.has(item.service_id));
     }
 
+    // expose fav render fns before yielding so live widget can call them after its fetch
+    window.renderFavStreamsSection = function() { renderFavStreamsSection(); };
+    window.renderFavThreadsSection = function() { renderFavThreadsSection(); };
+
     await OpenVibe.primeEnvironment();
     await OpenVibe.renderChrome('home');
 
-    const [session, remoteServices, launcherState, topics, health, recentPastesData, recentVodsData] = await Promise.all([
+    const [session, remoteServices, launcherState, topics, health, recentPastesData, recentVodsData, recentThreadsData] = await Promise.all([
         OpenVibe.loadSession(),
         OpenVibe.loadServices(),
         OpenVibe.loadLauncherState(),
@@ -180,6 +239,7 @@
         fetch('/health').then((response) => response.json()).catch(() => ({ ok: false, trusted_issuers: [] })),
         fetch(OpenVibe.resolveSurfaceUrl('community') + '/api/community/pastes?limit=4', { mode: 'cors', credentials: 'include' }).then((r) => r.json()).catch(() => ({ items: [] })),
         fetch(OpenVibe.resolveSurfaceUrl('live') + '/api/v1/streams/recently-ended?limit=4').then((r) => r.json()).catch(() => ({ items: [] })),
+        fetch(OpenVibe.resolveSurfaceUrl('community') + '/api/community/threads?limit=4', { mode: 'cors', credentials: 'include' }).then((r) => r.json()).catch(() => ({ items: [] })),
     ]);
 
     const items = OpenVibe.mergedServices(remoteServices);
@@ -220,15 +280,155 @@
         btn.classList.toggle('active', btn.dataset.view === currentFavView);
     });
 
+    // ── Thread favorites (cross-domain via user-modules API for logged-in, localStorage for anon) ──
+    var OV_FAV_THREADS_KEY = 'ov-fav-threads';
+    function loadFavThreadsLocal() {
+        try { return JSON.parse(localStorage.getItem(OV_FAV_THREADS_KEY) || '[]'); } catch { return []; }
+    }
+    async function loadFavThreads() {
+        try {
+            const session = await OpenVibe.loadSession();
+            if (session && session.authenticated) {
+                const mod = await OpenVibe.getUserModule('openvibe.favorites').catch(() => null);
+                if (mod && mod.data && Array.isArray(mod.data.threads)) return mod.data.threads;
+            }
+        } catch {}
+        return loadFavThreadsLocal();
+    }
+    async function removeFavThread(threadId) {
+        const threads = await loadFavThreads();
+        const next = threads.filter(function(t) { return t.id !== threadId; });
+        try {
+            const session = await OpenVibe.loadSession();
+            if (session && session.authenticated) {
+                await OpenVibe.putUserModule('openvibe.favorites', { threads: next });
+            }
+        } catch {}
+        localStorage.setItem(OV_FAV_THREADS_KEY, JSON.stringify(next));
+        renderFavThreadsSection();
+    }
+
+    function renderFavStreamsSection() {
+        var favGrid = document.getElementById('favorites-grid');
+        if (!favGrid) return;
+        var existing = document.getElementById('fav-streams-section');
+        if (existing) existing.remove();
+        var favs = loadFavStreams();
+        if (!favs.length) return;
+        var liveCache = window._ovLiveCache || [];
+        var wrap = document.createElement('div');
+        wrap.id = 'fav-streams-section';
+        wrap.innerHTML = '<div class="ov-fav-sub-title">Channels</div>' +
+            favs.map(function(c) {
+                var live = liveCache.find(function(s) { return (s.channel_slug || '') === c.id; });
+                var liveTag = live ? '<span style="font-size:.65rem;font-weight:800;color:#22c55e;margin-left:.4rem;vertical-align:middle;">LIVE</span>' : '';
+                return '<div class="ov-fav-stream-card" data-stream-id="' + OpenVibe.escapeHtml(c.id) + '">' +
+                    '<a href="' + OpenVibe.escapeHtml(c.url || '#') + '" target="_blank" rel="noopener" style="display:flex;gap:.65rem;align-items:center;flex:1;min-width:0;text-decoration:none;color:inherit;">' +
+                        '<div class="ov-fav-stream-thumb">📺</div>' +
+                        '<div style="flex:1;min-width:0;">' +
+                            '<div class="ov-fav-stream-title">' + OpenVibe.escapeHtml(c.name || c.id) + liveTag + '</div>' +
+                            '<div class="ov-fav-stream-meta">@' + OpenVibe.escapeHtml(c.id) + '</div>' +
+                        '</div>' +
+                    '</a>' +
+                    '<button class="ov-fav-stream-remove" data-remove-stream="' + OpenVibe.escapeHtml(c.id) + '" type="button" title="Remove">✕</button>' +
+                '</div>';
+            }).join('');
+        favGrid.parentElement.appendChild(wrap);
+        wrap.querySelectorAll('[data-remove-stream]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = btn.dataset.removeStream;
+                saveFavStreams(loadFavStreams().filter(function(c) { return c.id !== id; }));
+                renderFavStreamsSection();
+                document.querySelectorAll('.ov-item-star[data-stream-id="' + id + '"]').forEach(function(star) {
+                    star.textContent = '☆'; star.dataset.fav = 'false';
+                    star.setAttribute('aria-label', 'Add to favorites');
+                });
+            });
+        });
+    }
+
+    function renderFavThreadsSection() {
+        var favGrid = document.getElementById('favorites-grid');
+        if (!favGrid) return;
+        var existing = document.getElementById('fav-threads-section');
+        if (existing) existing.remove();
+        loadFavThreads().then(function(favs) {
+            if (!favs.length) return;
+            var wrap = document.createElement('div');
+            wrap.id = 'fav-threads-section';
+            wrap.innerHTML = '<div class="ov-fav-sub-title">Threads</div>' +
+                favs.map(function(t) {
+                    return '<div class="ov-fav-thread-card" data-thread-id="' + OpenVibe.escapeHtml(t.id) + '">' +
+                        '<a href="' + OpenVibe.escapeHtml(t.url || '#') + '" target="_blank" rel="noopener" class="ov-fav-thread-title">' + OpenVibe.escapeHtml(t.title || 'Thread') + '</a>' +
+                        '<button class="ov-fav-thread-remove" data-remove-thread="' + OpenVibe.escapeHtml(t.id) + '" type="button" title="Remove">✕</button>' +
+                    '</div>';
+                }).join('');
+            var streamsSection = document.getElementById('fav-streams-section');
+            if (streamsSection) { streamsSection.after(wrap); } else { favGrid.parentElement.appendChild(wrap); }
+            wrap.querySelectorAll('[data-remove-thread]').forEach(function(btn) {
+                btn.addEventListener('click', function() { removeFavThread(btn.dataset.removeThread); });
+            });
+        });
+    }
+
+    function loadFavToolsCookie() {
+        try {
+            var m = document.cookie.match(/(?:^|;\s*)ov-tool-favs=([^;]*)/);
+            return m ? JSON.parse(decodeURIComponent(m[1])) : [];
+        } catch { return []; }
+    }
+    function removeFavToolCookie(id) {
+        try {
+            var favs = loadFavToolsCookie().filter(function(t) { return t.id !== id; });
+            var domain = location.hostname.endsWith('.localhost') ? '.localhost' : location.hostname;
+            document.cookie = 'ov-tool-favs=' + encodeURIComponent(JSON.stringify(favs)) +
+                '; domain=' + domain + '; path=/; max-age=31536000; SameSite=Lax';
+        } catch {}
+    }
+    function renderFavToolsSection() {
+        var favGrid = document.getElementById('favorites-grid');
+        if (!favGrid) return;
+        var existing = document.getElementById('fav-tools-section');
+        if (existing) existing.remove();
+        var favs = loadFavToolsCookie();
+        if (!favs.length) return;
+        var toolsBase = OpenVibe.resolveSurfaceUrl('tools');
+        var wrap = document.createElement('div');
+        wrap.id = 'fav-tools-section';
+        wrap.innerHTML = '<div class="ov-fav-sub-title">Tools</div>' +
+            favs.map(function(t) {
+                var href = toolsBase + t.id;
+                return '<div class="ov-fav-tool-card" data-tool-id="' + OpenVibe.escapeHtml(t.id) + '">' +
+                    '<div class="ov-fav-tool-icon">' + OpenVibe.escapeHtml(t.icon || '') + '</div>' +
+                    '<a href="' + OpenVibe.escapeHtml(href) + '" target="_blank" rel="noopener" class="ov-fav-tool-title">' + OpenVibe.escapeHtml(t.title || t.id) + '</a>' +
+                    '<button class="ov-fav-tool-remove" data-remove-tool="' + OpenVibe.escapeHtml(t.id) + '" type="button" title="Remove">✕</button>' +
+                '</div>';
+            }).join('');
+        var threadsSection = document.getElementById('fav-threads-section');
+        var streamsSection = document.getElementById('fav-streams-section');
+        var anchor = threadsSection || streamsSection;
+        if (anchor) { anchor.after(wrap); } else { favGrid.parentElement.appendChild(wrap); }
+        wrap.querySelectorAll('[data-remove-tool]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                removeFavToolCookie(btn.dataset.removeTool);
+                renderFavToolsSection();
+            });
+        });
+    }
+
     async function renderLauncherSections(state) {
         const currentState = state || await OpenVibe.loadLauncherState();
         lastFavoriteItems = pickByIds(items, currentState.favorites);
         lastRecentItems = (currentState.recents || []).map((id) => items.find((item) => item.service_id === id)).filter(Boolean);
 
         renderFavGrid(document.getElementById('favorites-grid'), lastFavoriteItems,
-            'No favorites yet', 'Star a service from any card and it will show up here, synced via your launcher state.');
+            'No favorites yet', 'Star a service, stream, or thread and it will show up here.');
         renderFavGrid(document.getElementById('recents-grid'), lastRecentItems,
             'Nothing launched yet', 'Open a surface from the directory or use Ctrl/⌘ K and your recent lane will start filling in.');
+
+        renderFavStreamsSection();
+        renderFavThreadsSection();
+        renderFavToolsSection();
     }
 
     await renderLauncherSections(launcherState);
@@ -364,15 +564,38 @@
             body: `${pimg}<p class="ov-muted">${pexcerpt}</p><a class="ov-btn" href="${phref}" target="_blank" rel="noopener">View paste</a>`,
         });
     }
+    for (const thread of (recentThreadsData.items || []).slice(0, 3)) {
+        const ttitle = OpenVibe.escapeHtml(thread.title || 'Untitled thread');
+        const texcerpt = OpenVibe.escapeHtml((thread.body || thread.excerpt || '').slice(0, 100) + ((thread.body || thread.excerpt || '').length > 100 ? '…' : ''));
+        const thref = OpenVibe.escapeHtml(_communityBase + '/t/' + (thread.slug || thread.id || ''));
+        activitySlides.push({
+            kicker: 'New Thread',
+            title: ttitle,
+            tone: 'warn',
+            body: `${texcerpt ? `<p class="ov-muted">${texcerpt}</p>` : ''}<a class="ov-btn" href="${thref}" target="_blank" rel="noopener">Join discussion</a>`,
+        });
+    }
     if (!activitySlides.length) {
         activitySlides.push({
             kicker: 'Activity',
             title: 'Nothing new yet',
             tone: 'soft',
-            body: `<p class="ov-muted">Recent streams and pastes will appear here as content is posted.</p>`,
+            body: `<p class="ov-muted">Recent streams, pastes, and threads will appear here as content is posted.</p>`,
         });
     }
     setupNetworkSlides(activitySlides);
+
+    // ── Services directory row ────────────────────────────────────────
+    const servicesRowEl = document.getElementById('services-row');
+    const servicesRowSection = document.getElementById('services-row-section');
+    if (servicesRowEl && items.length) {
+        servicesRowSection.style.display = '';
+        servicesRowEl.innerHTML = items
+            .filter(function(s) { return s.public_url && s.public_url !== '#'; })
+            .map(function(s) {
+                return `<a href="${OpenVibe.escapeHtml(s.public_url)}" target="_blank" rel="noopener" class="ov-chip soft" style="text-decoration:none;">${OpenVibe.escapeHtml(s.display_name || s.service_id)}</a>`;
+            }).join('');
+    }
 
 })();
 
@@ -458,6 +681,25 @@
     init();
 })();
 
+/* ── Stream favorites store ── */
+var OV_FAV_STREAMS_KEY = 'ov-fav-streams';
+function loadFavStreams() {
+    try { return JSON.parse(localStorage.getItem(OV_FAV_STREAMS_KEY) || '[]'); } catch { return []; }
+}
+function saveFavStreams(arr) {
+    try { localStorage.setItem(OV_FAV_STREAMS_KEY, JSON.stringify(arr)); } catch {}
+}
+function isFavStream(id) {
+    return loadFavStreams().some(function(s) { return s.id === id; });
+}
+function toggleFavStream(channelData) {
+    var favs = loadFavStreams();
+    var idx = favs.findIndex(function(s) { return s.id === channelData.id; });
+    if (idx >= 0) { favs.splice(idx, 1); } else { favs.unshift({ id: channelData.id, name: channelData.name, url: channelData.url, savedAt: new Date().toISOString() }); }
+    saveFavStreams(favs);
+    return idx < 0;
+}
+
 /* ── Live on OpenVibe widget ── */
 (function() {
     var liveBase    = OpenVibe.resolveSurfaceUrl('live');
@@ -482,22 +724,30 @@
     }
 
     function renderCard(stream) {
-        var slug  = stream.channel_slug || '';
-        var title = stream.title || 'Untitled stream';
-        var name  = stream.channel_name || slug || 'Creator';
-        var viewers = stream.viewer_count || 0;
-        var href  = stream.route_url || (liveBase + '/' + slug);
+        var slug       = stream.channel_slug || '';
+        var title      = stream.title || 'Untitled stream';
+        var name       = stream.channel_name || slug || 'Creator';
+        var viewers    = stream.viewer_count || 0;
+        var channelUrl = liveBase + '/' + slug;
+        var streamHref = stream.route_url || channelUrl;
+        var fav        = isFavStream(slug);
         var thumb = stream.thumbnail_url
             ? '<img class="ov-live-card-thumb" src="' + esc(stream.thumbnail_url) + '" alt="" loading="lazy">'
             : '<div class="ov-live-card-thumb">📺</div>';
-        return '<a class="ov-live-card" href="' + esc(href) + '" target="_blank" rel="noopener">' +
-            thumb +
-            '<div class="ov-live-card-body">' +
-                '<div class="ov-live-card-title">' + esc(title) + '</div>' +
-                '<div class="ov-live-card-meta">@' + esc(name) + ' · ' + esc(viewers) + ' watching · started ' + esc(timeAgo(stream.started_at)) + '</div>' +
-            '</div>' +
-            '<span class="ov-chip ok" style="flex-shrink:0;align-self:center;">Live</span>' +
-        '</a>';
+        return '<div class="ov-live-card-wrap">' +
+            '<a class="ov-live-card" href="' + esc(streamHref) + '" target="_blank" rel="noopener">' +
+                thumb +
+                '<div class="ov-live-card-body">' +
+                    '<div class="ov-live-card-title">' + esc(title) + '</div>' +
+                    '<div class="ov-live-card-meta">@' + esc(name) + ' · ' + esc(viewers) + ' watching · started ' + esc(timeAgo(stream.started_at)) + '</div>' +
+                '</div>' +
+                '<span class="ov-chip ok" style="flex-shrink:0;align-self:center;">Live</span>' +
+            '</a>' +
+            '<button class="ov-item-star" type="button" aria-label="' + (fav ? 'Remove from favorites' : 'Add to favorites') +
+                '" data-stream-id="' + esc(slug) + '" data-stream-name="' + esc(name) + '" data-channel-url="' + esc(channelUrl) + '" data-fav="' + fav + '">' +
+                (fav ? '★' : '☆') +
+            '</button>' +
+        '</div>';
     }
 
     function render(items) {
@@ -505,6 +755,7 @@
         countEl.textContent = items.length + ' live';
 
         if (!items.length) {
+            window._ovLiveCache = [];
             grid.innerHTML =
                 '<p class="ov-live-empty">Nobody is live right now.</p>' +
                 '<div class="ov-live-cta-row">' +
@@ -515,23 +766,37 @@
                         '⌗ Restream control room' +
                     '</a>' +
                 '</div>';
-            // hide live dot when nobody live
             document.getElementById('live-now-dot').style.display = 'none';
             countEl.className = 'ov-chip soft';
             countEl.textContent = 'Offline';
+            if (window.renderFavStreamsSection) window.renderFavStreamsSection();
             return;
         }
 
+        window._ovLiveCache = items;
         grid.innerHTML = '<div class="ov-live-grid">' + items.map(renderCard).join('') + '</div>';
+
+        if (window.renderFavStreamsSection) window.renderFavStreamsSection();
+
+        grid.querySelectorAll('.ov-item-star[data-stream-id]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var slug = btn.dataset.streamId;
+                var isFav = toggleFavStream({ id: slug, name: btn.dataset.streamName, url: btn.dataset.channelUrl });
+                btn.textContent = isFav ? '★' : '☆';
+                btn.dataset.fav = String(isFav);
+                btn.setAttribute('aria-label', isFav ? 'Remove from favorites' : 'Add to favorites');
+                if (window.renderFavStreamsSection) window.renderFavStreamsSection();
+            });
+        });
     }
 
     function poll() {
         fetch(LIVE_API)
             .then(function(r) { return r.json(); })
             .then(function(d) { render(d.items || []); })
-            .catch(function() {
-                render([]);
-            });
+            .catch(function() { render([]); });
     }
 
     poll();
@@ -695,6 +960,7 @@
 .ov-cw-msg-meta { display: flex; gap: 0.45rem; align-items: baseline; margin-bottom: 0.1rem; }
 .ov-cw-msg-name { font-size: 0.74rem; font-weight: 700; color: var(--ov-accent, #8b5cf6); }
 .ov-cw-msg-time { font-size: 0.65rem; color: var(--ov-text-dim, #a7b5d2); }
+.ov-cw-msg-room { font-size: 0.65rem; font-weight: 600; color: var(--ov-text-dim, #a7b5d2); opacity: .75; }
 .ov-cw-msg-body { font-size: 0.83rem; color: var(--ov-text, #eef4ff); line-height: 1.45; }
 
 .ov-cw-composer {
@@ -791,9 +1057,16 @@
     var lastId  = null;
     var msgs    = [];
     var isOpen  = false;
-    var myName  = localStorage.getItem('ov-chat-name') || '';
     var pollTimer = null;
-    var namingMode = false;
+
+    // Auto-assign anonymous ID; replaced async with logged-in username if session found
+    var myName = (function () {
+        var saved = localStorage.getItem('ov-chat-name');
+        if (saved) return saved;
+        var id = 'Anon_' + Math.random().toString(36).slice(2, 6).toUpperCase();
+        localStorage.setItem('ov-chat-name', id);
+        return id;
+    })();
 
     function esc(s) {
         return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -813,23 +1086,29 @@
         return chatBase;
     }
 
+    // Async: if logged in, use real username instead of anon ID
+    fetch(getChatBase() + '/api/v1/session', { mode: 'cors', credentials: 'include' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.authenticated && d.user && (d.user.display_name || d.user.username)) {
+                myName = d.user.display_name || d.user.username;
+            }
+            updateWho();
+        })
+        .catch(function () {});
+
     function updateWho() {
-        if (!myName) {
-            whoEl.textContent = 'Set a name to chat';
-        } else {
-            whoEl.textContent = 'Chatting as ' + myName + ' · click to change';
-        }
+        whoEl.textContent = 'Chatting as ' + myName + ' · click to change';
     }
     updateWho();
 
     whoEl.addEventListener('click', function () { enterNamingMode(); });
 
     function enterNamingMode() {
-        namingMode = true;
         var composer = document.getElementById('ov-cw-composer');
         composer.innerHTML =
             '<div class="ov-cw-name-prompt">' +
-                '<p>Enter your name to chat:</p>' +
+                '<p>Change your name:</p>' +
                 '<div class="ov-cw-row">' +
                     '<input class="ov-cw-input" id="ov-cw-nameinput" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '" />' +
                     '<button class="ov-btn ov-btn-primary" id="ov-cw-nameok" type="button" style="padding:.45rem .8rem;font-size:.8rem">OK</button>' +
@@ -846,7 +1125,6 @@
         if (!v) return;
         myName = v;
         localStorage.setItem('ov-chat-name', v);
-        namingMode = false;
         restoreComposer();
         input.focus();
     }
@@ -876,8 +1154,12 @@
         }
         feed.innerHTML = msgs.map(function (m) {
             var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+            var roomLabel = (m.metadata && m.metadata.from_room_title)
+                ? '<span class="ov-cw-msg-room">[' + esc(m.metadata.from_room_title) + ']</span> '
+                : '';
             return '<div class="ov-cw-msg">' +
                 '<div class="ov-cw-msg-meta">' +
+                    roomLabel +
                     '<span class="ov-cw-msg-name">' + esc(name) + '</span>' +
                     '<span class="ov-cw-msg-time">' + timeStr(m.created_at) + '</span>' +
                 '</div>' +
@@ -917,7 +1199,6 @@
         isOpen = true;
         widget.hidden = false;
         bubble.classList.remove('has-unread');
-        if (!myName) enterNamingMode();
         startPolling();
         setTimeout(function () { feed.scrollTop = feed.scrollHeight; }, 50);
     }
@@ -936,7 +1217,6 @@
     });
 
     function send() {
-        if (!myName) { enterNamingMode(); return; }
         var text = (input.value || '').trim();
         if (!text) return;
         input.value = '';
@@ -950,8 +1230,14 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ body: text, metadata: { sender_name: myName } }),
         })
-        .then(function () { return poll(); })
-        .catch(function () {})
+        .then(function (r) {
+            if (!r.ok) throw new Error('send failed ' + r.status);
+            return poll();
+        })
+        .catch(function () {
+            // Re-populate input so the user doesn't lose their message
+            input.value = text;
+        })
         .finally(function () {
             input.disabled = false;
             sendBtn.disabled = false;

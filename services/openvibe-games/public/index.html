@@ -2,62 +2,184 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>OpenVibe Games · SourceVibe Front Door</title>
+<title>OpenVibe Games</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<link rel="stylesheet" href="/sourcevibe-shared/ui/source-ui.css" />
-<link rel="stylesheet" href="/homepage.css?v=20260501-1" />
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+<link rel="stylesheet" href="/assets/openvibe.css" />
+<style>
+.games-hero {
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 1rem;
+}
+.games-hero h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--ov-text);
+    margin: 0 0 0.35rem;
+}
+.games-hero p {
+    font-size: 0.9rem;
+    color: var(--ov-text-dim);
+    margin: 0;
+}
+.games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.25rem;
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+}
+.game-card {
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--ov-bg-elev, rgba(15,23,45,0.88));
+    border: 1.5px solid var(--ov-border, rgba(148,163,184,0.14));
+    text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.game-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.4);
+    border-color: var(--ov-accent);
+}
+.game-card-thumb {
+    width: 100%;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    background: var(--ov-bg-elev-2, rgba(21,31,60,0.94));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    flex-shrink: 0;
+}
+.game-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.game-card-thumb-fallback {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: linear-gradient(135deg, var(--ov-bg-elev), var(--ov-bg-elev-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    flex-shrink: 0;
+}
+.game-card-body {
+    padding: 0.85rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+.game-card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ov-text);
+    margin: 0;
+}
+.game-card-desc {
+    font-size: 0.82rem;
+    color: var(--ov-text-dim);
+    margin: 0;
+    line-height: 1.5;
+}
+.game-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: auto;
+    padding-top: 0.4rem;
+}
+.game-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 99px;
+    background: rgba(139,92,246,0.15);
+    color: var(--ov-accent);
+    border: 1px solid rgba(139,92,246,0.25);
+    letter-spacing: 0.02em;
+    text-transform: lowercase;
+}
+.game-empty {
+    max-width: var(--ov-max);
+    margin: 2rem auto;
+    padding: 0 1.25rem;
+    color: var(--ov-text-dim);
+    font-size: 0.9rem;
+}
+</style>
 </head>
-<body class="games-homepage">
-<main class="homepage-shell">
-    <header class="homepage-topbar">
-        <div class="homepage-brand">
-            <span class="eyebrow">OpenVibe Games</span>
-            <strong>SourceVibe front door</strong>
-            <span class="homepage-meta">Unified directory, session-aware launch, and real 2D World surfaces.</span>
-        </div>
-        <div class="homepage-link-row">
-            <a class="homepage-link" href="/sourcevibe?gamemode=2dworld&view=home">Engine shell</a>
-            <a class="homepage-link" href="/sourcevibe?gamemode=2dworld&view=directory">2D World</a>
-            <a class="homepage-link" href="/sourcevibe?gamemode=2dworld&view=editor">Editor</a>
-            <a class="homepage-link" href="/sourcevibe?gamemode=2dworld&view=diagnostics&panel=status">Status</a>
-        </div>
-    </header>
+<body>
+<div id="nav-mount"></div>
 
-    <section id="homepage-session" class="homepage-session"></section>
+<div class="games-hero">
+    <h1>Games</h1>
+    <p>Play OpenVibe games — browser-native, no downloads required.</p>
+</div>
 
-    <div id="homepage-status-strip" class="homepage-status-strip"></div>
+<div class="games-grid" id="games-grid"></div>
+<div id="footer-mount"></div>
 
-    <section id="homepage-hero" class="homepage-hero"></section>
+<script src="/assets/openvibe-icons.js"></script>
+<script src="/assets/openvibe.js"></script>
+<script>
+(async function () {
+    await OpenVibe.primeEnvironment();
+    await OpenVibe.renderChrome('games');
 
-    <section class="homepage-section">
-        <div class="homepage-section__header">
-            <div>
-                <span class="eyebrow">Directory</span>
-                <h2>Gamemode packages</h2>
+    const GAMES = [
+        {
+            id: '2d-world',
+            name: '2D World',
+            description: 'An open multiplayer canvas — explore, build, and interact in a shared 2D world.',
+            href: '/2d-world',
+            thumbnail: null,
+            emoji: '🌍',
+            tags: ['multiplayer', '2d', 'open world', 'canvas'],
+        },
+        {
+            id: 'minesweeper',
+            name: 'Minesweeper',
+            description: 'Classic grid-based puzzle — reveal safe tiles, flag mines, clear the board.',
+            href: '/minesweeper',
+            thumbnail: null,
+            emoji: '💣',
+            tags: ['puzzle', 'single-player', 'classic'],
+        },
+    ];
+
+    const grid = document.getElementById('games-grid');
+
+    function thumb(game) {
+        if (game.thumbnail) {
+            return `<div class="game-card-thumb"><img src="${OpenVibe.escapeHtml(game.thumbnail)}" alt="${OpenVibe.escapeHtml(game.name)}" loading="lazy" /></div>`;
+        }
+        return `<div class="game-card-thumb-fallback">${game.emoji || '🎮'}</div>`;
+    }
+
+    grid.innerHTML = GAMES.map((g) => `
+        <a class="game-card" href="${OpenVibe.escapeHtml(g.href)}">
+            ${thumb(g)}
+            <div class="game-card-body">
+                <p class="game-card-name">${OpenVibe.escapeHtml(g.name)}</p>
+                <p class="game-card-desc">${OpenVibe.escapeHtml(g.description)}</p>
+                <div class="game-card-tags">
+                    ${g.tags.map((t) => `<span class="game-tag">${OpenVibe.escapeHtml(t)}</span>`).join('')}
+                </div>
             </div>
-            <a class="homepage-link" href="/sourcevibe?gamemode=2dworld&view=directory">Open full launcher directory</a>
-        </div>
-        <div id="homepage-directory" class="homepage-grid homepage-grid--directory"></div>
-    </section>
-
-    <section class="homepage-section">
-        <div class="homepage-section__header">
-            <div>
-                <span class="eyebrow">Platform notes</span>
-                <h2>Why this page changed</h2>
-            </div>
-        </div>
-        <div id="homepage-notes" class="homepage-grid homepage-grid--directory"></div>
-    </section>
-
-    <footer class="homepage-footer">
-        <span class="homepage-muted">SourceVibe owns engine launch, console, and options. 2D World owns in-world UI, inventory, HUD, and content workflows.</span>
-        <div class="homepage-link-row">
-            <a class="homepage-link" href="/health">Service health</a>
-            <a class="homepage-link" href="/api/games/sourcevibe/product/status">Product status</a>
-        </div>
-    </footer>
-</main>
-<script type="module" src="/homepage.js?v=20260501-1"></script>
+        </a>`
+    ).join('');
+})();
+</script>
 </body>
 </html>

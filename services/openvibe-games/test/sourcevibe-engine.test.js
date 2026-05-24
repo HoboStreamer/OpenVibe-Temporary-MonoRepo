@@ -54,8 +54,8 @@ async function main() {
 
     try {
         const homepageHtml = await fetch(`${baseUrl}/`, { headers: headers() }).then((response) => response.text());
-        assert.ok(homepageHtml.includes('SourceVibe front door'));
-        assert.ok(homepageHtml.includes('Gamemode packages'));
+        assert.ok(homepageHtml.includes('OpenVibe Games'));
+        assert.ok(homepageHtml.includes('Play OpenVibe games'));
         assert.ok(!homepageHtml.includes('user-id'));
 
         const launcherHtml = await fetch(`${baseUrl}/sourcevibe/`, { headers: headers() }).then((response) => response.text());

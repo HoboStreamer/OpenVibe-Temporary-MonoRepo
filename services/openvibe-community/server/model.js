@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const db = require('./db');
+const config = require('./config');
 
 function newId(prefix) { return `${prefix}_${crypto.randomBytes(12).toString('hex')}`; }
 function safeJson(s, fb) { try { return JSON.parse(s); } catch { return fb; } }
@@ -257,7 +258,8 @@ function hydratePaste(r) {
     // Inject image_url from screenshot_path (legacy hobostreamer migration)
     if (metadata.screenshot_path && !metadata.image_url) {
         const fileName = path.basename(String(metadata.screenshot_path));
-        if (fileName) metadata.image_url = `/api/paste-screenshots/${encodeURIComponent(fileName)}`;
+        const base = (config.publicBaseUrl || '').replace(/\/$/, '');
+        if (fileName) metadata.image_url = `${base}/api/paste-screenshots/${encodeURIComponent(fileName)}`;
     }
     return {
         id: r.id, slug: r.slug, title: r.title, body: r.body, language: r.language,
@@ -308,16 +310,19 @@ function getPasteBySlug(slug) {
 function getPasteById(id) {
     return hydratePaste(db.get().prepare(`SELECT * FROM community_pastes WHERE id = ? AND deleted_at IS NULL`).get(String(id)));
 }
-function listPastes({ visibility, created_by_actor_type, created_by_actor_id, limit }) {
+function listPastes({ visibility, created_by_actor_type, created_by_actor_id, limit, sort, offset, excludeId } = {}) {
     const where = ['deleted_at IS NULL'];
     const args = [];
     if (visibility) { where.push('visibility = ?'); args.push(String(visibility)); }
     if (created_by_actor_type) { where.push('created_by_actor_type = ?'); args.push(String(created_by_actor_type)); }
     if (created_by_actor_id)   { where.push('created_by_actor_id = ?');   args.push(String(created_by_actor_id)); }
+    if (excludeId)             { where.push('id != ?');                    args.push(String(excludeId)); }
     const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const off = Math.max(parseInt(offset, 10) || 0, 0);
+    const orderBy = sort === 'views' ? 'view_count DESC, rowid DESC' : 'rowid DESC';
     return db.get().prepare(
-        `SELECT * FROM community_pastes WHERE ${where.join(' AND ')} ORDER BY rowid DESC LIMIT ?`
-    ).all(...args, cap).map(hydratePaste);
+        `SELECT * FROM community_pastes WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
+    ).all(...args, cap, off).map(hydratePaste);
 }
 function updatePaste(slug, patch) {
     const cur = getPasteBySlug(slug);

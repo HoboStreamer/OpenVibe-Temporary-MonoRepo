@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Pastes — OpenVibe</title>
+<title>Community — OpenVibe</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="stylesheet" href="/assets/openvibe.css" />
@@ -56,19 +56,118 @@
     margin-bottom: 0.6rem;
     display: block;
 }
+.community-section-head {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+.community-section-head h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+.community-section-head a {
+    margin-left: auto;
+    font-size: .82rem;
+    color: var(--ov-text-dim, #94a3b8);
+    text-decoration: none;
+    border: 1px solid rgba(255,255,255,.08);
+    padding: .3rem .75rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.community-section-head a:hover {
+    border-color: var(--ov-accent, #8b5cf6);
+    color: var(--ov-text, #f1f5f9);
+}
+.community-thread-card {
+    display: block;
+    padding: .9rem 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.02);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .12s, background .12s;
+    position: relative;
+}
+.community-thread-card:hover {
+    border-color: rgba(139,92,246,.35);
+    background: rgba(139,92,246,.05);
+}
+.community-thread-title {
+    font-size: .9rem;
+    font-weight: 600;
+    margin: 0 0 .35rem;
+    color: var(--ov-text, #f1f5f9);
+    padding-right: 1.5rem;
+}
+.community-thread-meta {
+    font-size: .77rem;
+    color: var(--ov-text-dim, #94a3b8);
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.community-fav-btn {
+    position: absolute;
+    top: .6rem;
+    right: .6rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .95rem;
+    color: rgba(255,255,255,.3);
+    padding: .15rem;
+    line-height: 1;
+    transition: color .12s, transform .1s;
+}
+.community-fav-btn:hover { color: #facc15; transform: scale(1.2); }
+.community-fav-btn.is-fav { color: #facc15; }
 </style>
 </head>
 <body>
 <div id="nav-mount"></div>
 <div id="community-phase16-chip" class="ov-chip" style="display:none" aria-hidden="true"></div>
-<nav id="community-links" class="ov-muted" style="display:none" aria-hidden="true"></nav>
 <main class="ov-shell">
     <section class="ov-section">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
-            <h1 style="margin:0;font-size:1.5rem;color:var(--ov-text);">Pastes</h1>
+        <div class="community-section-head" style="margin-bottom:1.5rem;">
+            <h1 style="margin:0;font-size:1.5rem;color:var(--ov-text);">Community</h1>
             <button class="ov-btn ov-btn-primary" id="open-paste-modal-btn" style="margin-left:auto;">New paste</button>
         </div>
-        <div class="ov-grid" id="pastes-grid"></div>
+
+        <!-- Quick links (community-links) -->
+        <nav class="community-links" aria-label="Community quick links" style="display:none"></nav>
+
+        <!-- Threads -->
+        <div style="margin-bottom:2rem;">
+            <div class="community-section-head">
+                <h2>Threads</h2>
+                <a href="/threads">Browse all →</a>
+            </div>
+            <div id="threads-list"></div>
+        </div>
+
+        <!-- Community Pages -->
+        <div style="margin-bottom:2rem;">
+            <div class="community-section-head">
+                <h2>Community Pages</h2>
+                <a href="/pages">Browse all →</a>
+            </div>
+            <div id="pages-list"></div>
+        </div>
+
+        <!-- Pastes -->
+        <div>
+            <div class="community-section-head">
+                <h2>Pastes</h2>
+                <a href="/pastes">Browse all →</a>
+            </div>
+            <div class="ov-grid" id="pastes-grid"></div>
+        </div>
     </section>
 </main>
 
@@ -108,7 +207,7 @@
 </div>
 <div id="footer-mount"></div>
 <script src="/assets/openvibe-icons.js"></script>
-<script src="/assets/openvibe.js?v=20260517-1"></script>
+<script src="/assets/openvibe.js?v=20260523-1"></script>
 <script>
 (async function () {
     await OpenVibe.primeEnvironment();
@@ -135,9 +234,102 @@
         return text.length > length ? text.slice(0, length - 1) + '…' : text;
     }
 
+    function timeAgo(value) {
+        if (!value) return 'just now';
+        const delta = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+        if (delta < 60)    return delta + 's ago';
+        if (delta < 3600)  return Math.floor(delta / 60) + 'm ago';
+        if (delta < 86400) return Math.floor(delta / 3600) + 'h ago';
+        return Math.floor(delta / 86400) + 'd ago';
+    }
+
+    // ── thread favorites ──────────────────────────────────────────────────────
+    const NETWORK_URL = OpenVibe.resolveSurfaceUrl('network');
+    const LOCAL_FAV_KEY = 'ov-fav-threads';
+
+    function loadFavThreads() {
+        try { return JSON.parse(localStorage.getItem(LOCAL_FAV_KEY) || '[]'); } catch { return []; }
+    }
+    function saveFavThreads(arr) {
+        try { localStorage.setItem(LOCAL_FAV_KEY, JSON.stringify(arr)); } catch {}
+        // sync to user-modules if signed in
+        fetch(NETWORK_URL + '/api/v1/user-modules/me/openvibe.favorites', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ data: { threads: arr } }),
+        }).catch(() => {});
+    }
+    function isFavThread(id) {
+        return loadFavThreads().some((t) => t.id === id);
+    }
+    function toggleFavThread(id, title, url) {
+        const favs = loadFavThreads();
+        const idx = favs.findIndex((t) => t.id === id);
+        if (idx >= 0) {
+            favs.splice(idx, 1);
+        } else {
+            favs.unshift({ id, title, url, savedAt: new Date().toISOString() });
+        }
+        saveFavThreads(favs);
+        return idx < 0; // true = now favorited
+    }
+
+    // ── load + render threads ─────────────────────────────────────────────────
+    async function loadThreads() {
+        try {
+            const res = await fetch('/api/community/threads?limit=8');
+            if (!res.ok) return [];
+            const data = await res.json();
+            return (data.items || []).filter((t) => t.thread_type === 'paste_thread' || t.thread_type === 'discussion');
+        } catch { return []; }
+    }
+
+    function renderThreads(items) {
+        const el = document.getElementById('threads-list');
+        if (!items.length) {
+            el.innerHTML = '<div class="ov-empty" style="font-size:.85rem;">No threads yet. Open any paste and press <strong>Start Thread</strong> to start one.</div>';
+            return;
+        }
+        el.innerHTML = items.map((t) => {
+            const threadUrl = `/threads/${encodeURIComponent(t.id || t.slug || '')}`;
+            const communityBase = OpenVibe.resolveSurfaceUrl('community') || '';
+            const fullUrl = communityBase + threadUrl;
+            const fav = isFavThread(t.id);
+            const lang = t.metadata && t.metadata.paste_language;
+            return `<div style="margin-bottom:.5rem;position:relative;">
+                <a class="community-thread-card" href="${OpenVibe.escapeHtml(threadUrl)}">
+                    <div class="community-thread-title">${OpenVibe.escapeHtml(t.title || 'Untitled thread')}</div>
+                    <div class="community-thread-meta">
+                        <span class="ov-chip soft" style="font-size:.68rem;padding:.12rem .4rem;">${t.thread_type === 'paste_thread' ? 'Thread' : 'Discussion'}</span>
+                        ${lang ? `<span class="ov-chip primary" style="font-size:.68rem;padding:.12rem .4rem;">${OpenVibe.escapeHtml(lang)}</span>` : ''}
+                        <span>${timeAgo(t.last_activity_at || t.created_at)}</span>
+                    </div>
+                </a>
+                <button class="community-fav-btn${fav ? ' is-fav' : ''}" type="button"
+                    data-thread-id="${OpenVibe.escapeHtml(t.id || '')}"
+                    data-thread-title="${OpenVibe.escapeHtml(t.title || '')}"
+                    data-thread-url="${OpenVibe.escapeHtml(fullUrl)}"
+                    aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}">${fav ? '★' : '☆'}</button>
+            </div>`;
+        }).join('');
+
+        // wire up fav buttons
+        el.querySelectorAll('.community-fav-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const nowFav = toggleFavThread(btn.dataset.threadId, btn.dataset.threadTitle, btn.dataset.threadUrl);
+                btn.textContent = nowFav ? '★' : '☆';
+                btn.classList.toggle('is-fav', nowFav);
+                btn.setAttribute('aria-label', nowFav ? 'Remove from favorites' : 'Add to favorites');
+            });
+        });
+    }
+
+    // ── load + render pastes ──────────────────────────────────────────────────
     async function loadPastes() {
         try {
-            const res = await fetch('/api/community/pastes');
+            const res = await fetch('/api/community/pastes?limit=12');
             if (!res.ok) return [];
             const data = await res.json();
             return data.items || [];
@@ -163,6 +355,7 @@
             : '<div class="ov-empty">No pastes yet. Be the first to create one.</div>';
     }
 
+    // ── paste composer auth check ──────────────────────────────────────────────
     async function syncPasteComposer() {
         const session = await OpenVibe.loadSession().catch(() => ({ authenticated: false }));
         const modeTag = document.getElementById('paste-mode-tag');
@@ -218,7 +411,45 @@
         }
     });
 
-    renderPastes(await loadPastes());
+    // ── load + render community pages ──────────────────────────────────────────
+    async function loadPages() {
+        try {
+            const res = await fetch('/api/community/pages');
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.items || [];
+        } catch { return []; }
+    }
+
+    function renderPages(items) {
+        const el = document.getElementById('pages-list');
+        if (!items.length) {
+            el.innerHTML = `<div class="ov-empty" style="font-size:.85rem;">No community pages yet. <a href="/pages/submit" style="color:var(--ov-accent,#8b5cf6);text-decoration:underline;">Submit yours →</a></div>`;
+            return;
+        }
+        el.innerHTML = `<div class="ov-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">
+            ${items.slice(0, 6).map((p) => {
+                const views = p.view_count || 0;
+                return `<a class="ov-card" href="${OpenVibe.escapeHtml('/pages/' + encodeURIComponent(p.slug))}" style="text-decoration:none;">
+                    <div class="ov-chip-row" style="margin-bottom:.5rem;">
+                        <span class="ov-chip soft" style="font-size:.68rem;padding:.12rem .4rem;">Page</span>
+                    </div>
+                    <div class="ov-service-title" style="margin-bottom:.3rem;">${OpenVibe.escapeHtml(p.title || p.slug)}</div>
+                    <div class="ov-muted" style="font-size:.78rem;">${OpenVibe.escapeHtml(p.description || '')}</div>
+                    <div class="ov-muted" style="font-size:.74rem;margin-top:.5rem;">by ${OpenVibe.escapeHtml(p.author || '?')}${views ? ` · ${views} view${views === 1 ? '' : 's'}` : ''}</div>
+                </a>`;
+            }).join('')}
+        </div>
+        <div style="margin-top:.6rem;">
+            <a href="/pages/submit" style="font-size:.8rem;color:var(--ov-text-dim,#94a3b8);border:1px solid rgba(255,255,255,.07);padding:.3rem .75rem;border-radius:999px;text-decoration:none;">+ Submit your page</a>
+        </div>`;
+    }
+
+    // ── initial load ──────────────────────────────────────────────────────────
+    const [threads, pastes, pages] = await Promise.all([loadThreads(), loadPastes(), loadPages()]);
+    renderThreads(threads);
+    renderPages(pages);
+    renderPastes(pastes);
     await syncPasteComposer();
 })();
 </script>

@@ -106,8 +106,8 @@ assert.strictEqual(policy.decideRead({ req: otherReq, room: privateRoom, model }
 assert.strictEqual(policy.decideRead({ req: adminReq, room: privateRoom, model }).allow, true);
 assert.strictEqual(policy.decideRead({ req: svcReq, room: privateRoom, model }).allow, true);
 
-// public room: send requires non-anonymous
-assert.strictEqual(policy.decideSend({ req: { }, room, model }).allow, false);
+// public room: anonymous sends allowed (identity via metadata.sender_name)
+assert.strictEqual(policy.decideSend({ req: { }, room, model }).allow, true);
 assert.strictEqual(policy.decideSend({ req: userReq, room, model }).allow, true);
 
 // tts ownership

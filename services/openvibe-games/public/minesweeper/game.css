@@ -1,0 +1,185 @@
+.ms-wrap {
+    max-width: var(--ov-max);
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+}
+.ms-header {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.ms-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--ov-text);
+    margin: 0;
+}
+.ms-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.ms-diff-btn {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 99px;
+    border: 1.5px solid var(--ov-border);
+    background: transparent;
+    color: var(--ov-text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.ms-diff-btn:hover,
+.ms-diff-btn.active {
+    border-color: var(--ov-accent);
+    color: var(--ov-accent);
+    background: rgba(139,92,246,0.1);
+}
+.ms-status-bar {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--ov-bg-elev);
+    border: 1.5px solid var(--ov-border);
+    border-radius: 12px;
+    padding: 0.65rem 1rem;
+    gap: 0.5rem;
+}
+.ms-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--ov-text);
+}
+.ms-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ov-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ms-reset-btn {
+    font-size: 1.3rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    transition: background 0.12s;
+    line-height: 1;
+}
+.ms-reset-btn:hover { background: var(--ov-bg-elev-2); }
+.ms-board-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+}
+.ms-board {
+    display: inline-grid;
+    gap: 2px;
+    padding: 12px;
+    background: var(--ov-bg-elev);
+    border: 1.5px solid var(--ov-border);
+    border-radius: 14px;
+    user-select: none;
+}
+.ms-cell {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.08s, transform 0.06s;
+    border: none;
+    outline: none;
+    position: relative;
+}
+.ms-cell--hidden {
+    background: var(--ov-bg-elev-2);
+    border: 1.5px solid var(--ov-border);
+}
+.ms-cell--hidden:hover {
+    background: rgba(139,92,246,0.15);
+    border-color: var(--ov-accent);
+    transform: scale(1.05);
+}
+.ms-cell--flagged {
+    background: var(--ov-bg-elev-2);
+    border: 1.5px solid rgba(139,92,246,0.4);
+}
+.ms-cell--revealed {
+    background: transparent;
+    border: 1.5px solid transparent;
+    cursor: default;
+}
+.ms-cell--mine-hit {
+    background: rgba(239,68,68,0.25);
+    border: 1.5px solid rgba(239,68,68,0.5);
+}
+.ms-cell--mine-shown {
+    background: var(--ov-bg-elev-2);
+    border: 1.5px solid var(--ov-border);
+    cursor: default;
+}
+.ms-n1 { color: #60a5fa; }
+.ms-n2 { color: #34d399; }
+.ms-n3 { color: #f87171; }
+.ms-n4 { color: #a78bfa; }
+.ms-n5 { color: #fb923c; }
+.ms-n6 { color: #22d3ee; }
+.ms-n7 { color: #f9a8d4; }
+.ms-n8 { color: var(--ov-text-dim); }
+.ms-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+}
+.ms-overlay.show { display: flex; }
+.ms-modal {
+    background: var(--ov-bg-elev);
+    border: 1.5px solid var(--ov-border);
+    border-radius: 18px;
+    padding: 2rem 2.5rem;
+    text-align: center;
+    max-width: 340px;
+    width: 90%;
+}
+.ms-modal-emoji { font-size: 3rem; margin-bottom: 0.5rem; }
+.ms-modal-title { font-size: 1.4rem; font-weight: 800; color: var(--ov-text); margin: 0 0 0.35rem; }
+.ms-modal-sub { font-size: 0.88rem; color: var(--ov-text-dim); margin: 0 0 1.25rem; }
+.ms-modal-btn {
+    background: var(--ov-accent);
+    color: #fff;
+    border: none;
+    border-radius: 99px;
+    padding: 0.55rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.ms-modal-btn:hover { opacity: 0.85; }
+@media (max-width: 480px) {
+    .ms-cell { width: 28px; height: 28px; font-size: 0.72rem; }
+}
