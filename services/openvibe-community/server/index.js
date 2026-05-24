@@ -78,6 +78,22 @@ function buildApp() {
     app.use(express.urlencoded({ extended: false }));
     app.use(optionalOpenVibeAuth(authClient));
 
+    // /api/v1/session/sync — called by openvibe.js after cross-domain session exchange.
+    // Sets the bearer token as a same-domain cookie so form POSTs carry auth credentials.
+    app.get('/api/v1/session/sync', (req, res) => {
+        const raw = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || null;
+        if (!raw || !req.user) return res.json({ ok: false });
+        const secure = process.env.NODE_ENV === 'production';
+        res.cookie('openvibe_token', raw, {
+            httpOnly: true,
+            secure,
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/',
+        });
+        res.json({ ok: true });
+    });
+
     // /api/v1/session — required by the shared openvibe.js frontend on every surface.
     app.get('/api/v1/session', (req, res) => {
         if (req.user) {

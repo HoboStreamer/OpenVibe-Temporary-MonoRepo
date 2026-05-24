@@ -233,6 +233,17 @@ function _styles() {
         .ov-anon-dropdown-item:hover { background: rgba(255,255,255,0.06); }
         .ov-anon-dropdown-item--danger { color: #f87171; }
         .ov-anon-dropdown-item--danger:hover { background: rgba(248,113,113,0.08); }
+        .ov-nav-avatar {
+            width: 26px; height: 26px; border-radius: 50%;
+            object-fit: cover; display: block; flex-shrink: 0;
+        }
+        .ov-nav-initials {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent, #22d3ee), #4f46e5);
+            color: #fff; font-size: 0.65rem; font-weight: 800;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; letter-spacing: 0.02em;
+        }
     </style>`;
 }
 
@@ -377,6 +388,7 @@ function _forumShell({ title, description, active, bodyHtml }) {
     ${_styles()}
     <link rel="stylesheet" href="/assets/openvibe-icons.css">
     <script src="/assets/openvibe-icons.js" defer></script>
+    <script src="/assets/openvibe.js" defer></script>
 </head>
 <body>
     <header class="topbar">
@@ -388,9 +400,7 @@ function _forumShell({ title, description, active, bodyHtml }) {
             <nav class="nav-links" aria-label="Primary">
                 ${_forumNav(active)}
             </nav>
-            <div>
-                <a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>
-            </div>
+            <div id="ov-nav-session"></div>
         </div>
     </header>
     <main class="page">${bodyHtml}</main>
@@ -402,6 +412,13 @@ function _forumShell({ title, description, active, bodyHtml }) {
             <a class="link-inline" href="${COMMUNITY_URLS.network}">Account</a>
         </div>
     </footer>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof OpenVibe === 'undefined') return;
+        OpenVibe.primeEnvironment().catch(function(){});
+        OpenVibe.renderChrome('community').catch(function(){});
+    });
+    </script>
 </body>
 </html>`;
 }
