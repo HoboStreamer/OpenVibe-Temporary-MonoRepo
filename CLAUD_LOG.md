@@ -1019,3 +1019,42 @@ To:
 2. If no session exists, call `OpenVibe.startAnonymousSession()` silently to auto-assign an anonymous identity, then re-fetch the session
 3. Composer "who" line shows `Chatting as @username` (logged-in) or `Chatting anonymously as Anon#XXXX` (anonymous)
 4. Removed all name overlay HTML, CSS, and JS — no manual name entry anywhere
+
+---
+
+## Session — 2026-05-24 (part 18) — Chat bubble refactor: standalone widget
+
+### Problem
+Every service had its own chat bubble implementation. Six of them (`openvibe-tools`, `openvibe-network/themes.html`, `openvibe-network/my.html`, `openre-stream`, `openvibe-live` SSR, `openvibe-community` SSR) used a simple `<a href="https://openvibe.chat">💬</a>` redirect button — no inline chat panel. The network home page (`openvibe-network/index.html`) had the full inline widget but it was ~400 lines of duplicated HTML/CSS/JS.
+
+### Fix
+Created `services/openvibe-network/public/assets/chat-bubble.js` — a fully self-contained widget that:
+- Injects its own CSS into `<head>` and creates the button + panel DOM on load
+- Polls `GET /api/chat/rooms/global/messages` every 3s; shows unread badge when closed
+- Sends to `POST /api/chat/rooms/global/messages`
+- Resolves chat base URL via `OpenVibe.resolveSurfaceUrl('chat')` with hostname fallback
+- Guards against double-mount with an early return if the button already exists
+
+Copied the file identically to all 5 other services' `public/assets/` directories (creating `openre-stream/public/assets/` which didn't exist).
+
+Replaced all 7 old bubble implementations (6 redirect `<a>` tags + 1 inline network home widget) with a single tag:
+```html
+<script src="/assets/chat-bubble.js" defer></script>
+```
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-network/public/assets/chat-bubble.js` | **Created** — the canonical widget |
+| `services/openvibe-tools/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openre-stream/public/assets/chat-bubble.js` | **Created** — copy (also created `public/assets/` dir) |
+| `services/openvibe-live/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openvibe-community/public/assets/chat-bubble.js` | **Created** — copy |
+| `services/openvibe-network/public/index.html` | Removed ~400-line inline widget; replaced with script tag |
+| `services/openvibe-network/public/themes.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openvibe-network/public/my.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openvibe-tools/public/index.html` | Removed redirect IIFE; replaced with script tag |
+| `services/openre-stream/public/index.html` | Removed redirect `<script>` block; replaced with script tag |
+| `services/openvibe-live/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
+| `services/openvibe-community/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
+| `CHAT_CLAUDE.md` | Updated Global chat widget section to reflect standalone file |

@@ -257,7 +257,7 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
             <a class="link-inline" href="${COMMUNITY_URLS.network}">Account</a>
         </div>
     </footer>
-    <a href="${COMMUNITY_URLS.chat}" target="_blank" rel="noopener" aria-label="Open chat" style="position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;width:3rem;height:3rem;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#22d3ee);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-decoration:none;font-size:1.3rem;">💬</a>
+    <script src="/assets/chat-bubble.js" defer></script>
     <script>
     document.addEventListener('openvibe-auth-changed', function(e) {
         var s = e.detail;
