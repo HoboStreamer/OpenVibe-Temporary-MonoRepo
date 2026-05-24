@@ -243,11 +243,8 @@ function _shellStyles() {
         body {
             margin: 0;
             font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background:
-                radial-gradient(circle at top, rgba(34, 211, 238, 0.14), transparent 30%),
-                radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.18), transparent 35%),
-                linear-gradient(180deg, #020617 0%, #050916 32%, #0f172a 100%);
-            color: var(--text);
+            background: var(--bg, #050916);
+            color: var(--text, #f8fafc);
             line-height: 1.6;
         }
         a { color: inherit; text-decoration: none; }
@@ -264,8 +261,8 @@ function _shellStyles() {
             top: 0;
             z-index: 20;
             backdrop-filter: blur(18px);
-            background: rgba(5, 9, 22, 0.72);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: color-mix(in srgb, var(--bg, #050916) 72%, transparent);
+            border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
         }
         .topbar-inner {
             display: flex;
@@ -453,8 +450,8 @@ function _shellStyles() {
         .nav-user-dropdown {
             position: absolute; top: calc(100% + 6px); right: 0; z-index: 300;
             min-width: 188px; padding: 0.4rem;
-            background: rgba(5,9,22,0.97);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 14px;
+            background: color-mix(in srgb, var(--bg, #050916) 97%, transparent);
+            border: 1px solid var(--border, rgba(255,255,255,0.12)); border-radius: 14px;
             box-shadow: 0 12px 36px rgba(0,0,0,0.55);
             backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
             display: none;
@@ -495,9 +492,9 @@ function _shellStyles() {
         .media-thumb,
         .ov-media-player {
             border-radius: var(--radius);
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(7, 13, 28, 0.94));
-            border: 1px solid var(--border);
-            box-shadow: 0 22px 60px rgba(2, 6, 23, 0.34);
+            background: var(--panel, rgba(15, 23, 42, 0.9));
+            border: 1px solid var(--border, rgba(255,255,255,0.1));
+            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
         }
         .glass-card,
         .hero-panel,
@@ -671,7 +668,7 @@ function _shellStyles() {
             aspect-ratio: 16 / 9;
             border-radius: 20px;
             border: 0;
-            background: rgba(5, 9, 22, 0.92);
+            background: var(--bg, #050916);
         }
         .ov-media-player {
             position: relative;
@@ -687,7 +684,7 @@ function _shellStyles() {
             width: 100%;
             aspect-ratio: 16 / 9;
             display: block;
-            background: rgba(5, 9, 22, 0.92);
+            background: var(--bg, #050916);
         }
         .ov-player-overlay {
             position: absolute;

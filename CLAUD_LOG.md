@@ -1185,3 +1185,40 @@ Updated `FALLBACK_SERVICES`:
 | `services/openvibe-community/server/ssr.js` | Added buddy icon CSS; `ov-nav-auth` → `ov-nav-session`; replaced auth listener with deferred `renderChrome` call |
 | `services/openvibe-community/server/model.js` | `publicBaseUrl` fallback to production URL |
 | `services/openvibe-network/public/index.html` | Prefix relative image_url with communityBase in 2 places |
+
+---
+
+## Session — 2026-05-24 (part 22) — Theme system: CSS variable fixes across SSR pages
+
+### Problem
+Themes were not visually changing pages even when applied. Root cause: community and live SSR pages had **hardcoded color values** in their CSS that did not reference CSS variables — so even when the theme system wrote `--bg`, `--panel`, `--border` etc. via `root.style.setProperty(...)`, the body background, topbar, cards, and other elements never updated because they used literal `rgba()` / hex values.
+
+### Fixes
+
+**`services/openvibe-community/server/ssr.js` — `_styles()`:**
+- `body { background: radial-gradient(hardcoded...) }` → `background: var(--bg, #050916)` 
+- `.topbar { background: rgba(5,9,22,0.72) }` → `color-mix(in srgb, var(--bg) 72%, transparent)`
+- `.glass-card { background: linear-gradient(hardcoded) }` → `background: var(--panel, ...)`
+- `.nav-link`, `.section-link`, `.filter-input`, `.pill`, `.empty-state`, `.data-point`, `.paste-content` — all hardcoded rgba replaced with CSS variable equivalents using `color-mix()` for opacity variants
+- `.footer-row`, `.topbar` borders updated to `var(--border)`
+
+**`services/openvibe-live/server/ssr.js` — `_shellStyles()`:**
+- Same body, topbar, card background treatment
+- `.stack-item, .data-point, .media-thumb` glass card backgrounds → `var(--panel)`
+- `.nav-user-dropdown` background → `color-mix(in srgb, var(--bg) 97%, transparent)`
+- Media iframe/video backgrounds → `var(--bg)`
+
+### How the theme system works (for reference)
+1. `openvibe.js` top-level calls `applySavedTheme()` immediately on load → reads `localStorage['openvibe.theme']` → calls `applyTheme()` which sets ALL theme vars via `root.style.setProperty('--bg', ...)`, `--panel`, `--text`, etc. as **inline styles**, overriding any stylesheet `:root` defaults
+2. `renderChrome()` → `loadSyncedThemePreference()` → fetches saved theme from network user-modules API → applies it (for authenticated cross-domain sync)
+3. Pages that use `var(--bg)`, `var(--panel)` etc. in CSS react to inline style changes immediately
+
+### What does NOT participate in the theme system
+- `openvibe-tools/public/index.html` — standalone page with own CSS vars, no `openvibe.js`
+- `openvibe-tips/public/index.html` + `tip-page.html` — same, standalone
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr.js` | All hardcoded SSR styles → CSS variables |
+| `services/openvibe-live/server/ssr.js` | Body/topbar/card hardcoded backgrounds → CSS variables |
