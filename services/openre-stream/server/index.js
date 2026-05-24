@@ -147,6 +147,32 @@ function buildApp() {
         }).status(204).end();
     });
 
+    // ── Viewer count (public, no auth) ────────────────────────────────────
+    app.get('/viewer-count/:channelSlug', (req, res) => {
+        const roomId = `channel-${req.params.channelSlug}`;
+        res.set('Access-Control-Allow-Origin', '*');
+        res.json({ viewer_count: sfu.getViewerCount(roomId) });
+    });
+
+    // ── WHEP viewer endpoints ──────────────────────────────────────────────
+    app.post('/whep/:channelSlug', express.text({ type: ['text/plain', 'application/sdp', '*/*'], limit: '64kb' }), whip.handleWhepOffer);
+    app.delete('/whep/:channelSlug/:resourceId', whip.handleWhepDelete);
+    app.options('/whep/:channelSlug', (req, res) => {
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Expose-Headers': 'Location',
+        }).status(204).end();
+    });
+    app.options('/whep/:channelSlug/:resourceId', (req, res) => {
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        }).status(204).end();
+    });
+
     app.use('/api/v1', serviceActorMiddleware(config.internalKey), buildRouter({ eventBus, config, buildSessionResponse }));
 
     app.use((err, _req, res, _next) => {

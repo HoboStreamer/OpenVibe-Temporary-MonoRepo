@@ -1,5 +1,5 @@
 /**
- * stream-manager.js — go-live page client v=20260604-1
+ * stream-manager.js — go-live page client v=20260524-3
  *
  * Two-panel stream manager: sidebar channel slots + right editor panel.
  * Includes browser broadcast via WHIP (WebRTC-HTTP Ingestion Protocol).
@@ -70,6 +70,7 @@
         streams: [],
         restreamUrl: '',
         accountUrl: '',
+        chatUrl: '',
         activeChannelSlug: null,
         activeStreamId: null,
         activeView: 'none',
@@ -381,9 +382,9 @@
         }).join('');
     }
 
-    // ── endpoint panel ────────────────────────────────────────────────────────
+    // ── endpoint panel (inline, below method selection) ───────────────────────
     function renderEndpoint(stream, channel) {
-        var panel = el('[data-sm-endpoint-panel]');
+        var panel = el('[data-sm-inline-endpoint]');
         if (!panel) return;
         var proto = (stream && stream.protocol) || state.activeProtocol || 'rtmp';
         var streamKey = (stream && (stream.stream_key || stream.key))
@@ -410,14 +411,18 @@
         }
 
         if (proto === 'browser') {
-            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Browser streaming uses WHIP via the <strong>Broadcast tab</strong> — no external software needed. Switch to the Broadcast tab to go live.</p></div>';
+            panel.style.display = 'none';
+            panel.innerHTML = '';
             return;
         }
 
         if (!rtmpUrl && !whipUrl && !streamKey) {
-            panel.innerHTML = '<div class="sm-endpoint-empty"><p class="sm-note">Create a stream on the Stream tab to reveal ingest details, or check the Settings tab for your persistent stream key.</p></div>';
+            panel.style.display = 'none';
+            panel.innerHTML = '';
             return;
         }
+
+        panel.style.display = '';
 
         if (proto === 'whip') {
             var sessionNote = !stream
@@ -497,13 +502,216 @@
         var createBtn = el('#sm-create-stream-btn');
         var goLiveBtn = el('#sm-go-live-btn');
         var endBtn    = el('#sm-end-stream-btn');
+        var liveTab   = el('[data-sm-stab="live"]');
         if (liveStream && liveStream.is_live) {
             hide(createBtn); hide(goLiveBtn); show(endBtn);
-        } else if (state.activeStreamId) {
-            hide(createBtn); show(goLiveBtn); hide(endBtn);
+            if (liveTab) show(liveTab);
+            activateLiveTab(liveStream);
+            startChatPoll(liveStream);
         } else {
-            show(createBtn); hide(goLiveBtn); hide(endBtn);
+            if (state.activeStreamId) { hide(createBtn); show(goLiveBtn); hide(endBtn); }
+            else { show(createBtn); hide(goLiveBtn); hide(endBtn); }
+            if (liveTab) hide(liveTab);
+            stopChatPoll();
         }
+    }
+
+    // ── live tab ──────────────────────────────────────────────────────────────
+    var _whepPreviewPc = null;
+    var _whepPreviewResourceUrl = null;
+
+    function activateLiveTab(stream) {
+        activateStab('live');
+        var slug = stream.channel_slug || state.activeChannelSlug || '';
+        var watchUrl = slug ? '/@' + slug : '/';
+        var previewInner = el('#sm-live-preview-inner');
+        if (previewInner && !previewInner.querySelector('video')) {
+            var video = document.createElement('video');
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;border-radius:6px;';
+            previewInner.appendChild(video);
+            var whepBase = state.restreamUrl ? state.restreamUrl.replace(/\/$/, '') : '';
+            if (whepBase && slug) startWhepPreview(video, whepBase, slug);
+        }
+        var watchLink = el('#sm-live-watch-link');
+        if (watchLink) watchLink.href = watchUrl;
+        var chatPopout = el('#sm-live-chat-popout');
+        if (chatPopout) chatPopout.href = watchUrl + '#chat';
+        var liveEndBtn = el('#sm-live-end-btn');
+        if (liveEndBtn && !liveEndBtn._wired) {
+            liveEndBtn._wired = true;
+            liveEndBtn.addEventListener('click', function () {
+                var endBtn2 = el('#sm-end-stream-btn');
+                if (endBtn2) endBtn2.click();
+            });
+        }
+    }
+
+    async function startWhepPreview(video, whepBase, slug) {
+        try {
+            if (_whepPreviewPc) { try { _whepPreviewPc.close(); } catch (_) {} _whepPreviewPc = null; }
+            var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            pc.addTransceiver('video', { direction: 'recvonly' });
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+            pc.ontrack = function (ev) {
+                if (ev.streams && ev.streams[0] && !video.srcObject) {
+                    video.srcObject = ev.streams[0];
+                    video.play().catch(function () {});
+                }
+            };
+            var offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            if (pc.iceGatheringState !== 'complete') {
+                await new Promise(function (resolve) {
+                    var fn = function () { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', fn); resolve(); } };
+                    pc.addEventListener('icegatheringstatechange', fn);
+                    setTimeout(resolve, 5000);
+                });
+            }
+            var resp = await fetch(whepBase + '/whep/' + encodeURIComponent(slug), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/sdp' },
+                body: pc.localDescription.sdp,
+            });
+            if (!resp.ok) { console.warn('[live-tab] WHEP ' + resp.status); pc.close(); return; }
+            _whepPreviewResourceUrl = resp.headers.get('Location') || null;
+            var answer = await resp.text();
+            await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+            _whepPreviewPc = pc;
+            pc.onconnectionstatechange = function () {
+                if (pc.connectionState === 'failed') {
+                    setTimeout(function () { if (_whepPreviewPc === pc) startWhepPreview(video, whepBase, slug); }, 3000);
+                }
+            };
+        } catch (err) {
+            console.warn('[live-tab] WHEP preview error:', err.message);
+        }
+    }
+
+    // ── inline chat ───────────────────────────────────────────────────────────
+    var _chatPollTimer = null;
+    var _chatLastTs = null;
+    var _chatStreamId = null;
+    var _viewerPollTimer = null;
+    var _liveTimerInterval = null;
+    var _liveStartedAt = null;
+
+    function startChatPoll(stream) {
+        if (_chatStreamId === String(stream.id)) return;
+        stopChatPoll();
+        _chatStreamId = String(stream.id);
+        _chatLastTs = null;
+        pollChat(stream.id);
+        _chatPollTimer = setInterval(function () { pollChat(stream.id); }, 4000);
+
+        // Viewer count polling
+        var slug = stream.channel_slug || state.activeChannelSlug || '';
+        if (slug && state.restreamUrl) {
+            pollViewerCount(slug);
+            _viewerPollTimer = setInterval(function () { pollViewerCount(slug); }, 8000);
+        }
+
+        // Live timer
+        _liveStartedAt = stream.started_at ? new Date(stream.started_at).getTime() : Date.now();
+        updateLiveTimer();
+        _liveTimerInterval = setInterval(updateLiveTimer, 1000);
+    }
+
+    function stopChatPoll() {
+        if (_chatPollTimer) { clearInterval(_chatPollTimer); _chatPollTimer = null; }
+        if (_viewerPollTimer) { clearInterval(_viewerPollTimer); _viewerPollTimer = null; }
+        if (_liveTimerInterval) { clearInterval(_liveTimerInterval); _liveTimerInterval = null; }
+        _chatStreamId = null;
+        _chatLastTs = null;
+        _liveStartedAt = null;
+        if (_whepPreviewPc) {
+            try { _whepPreviewPc.close(); } catch (_) {}
+            _whepPreviewPc = null;
+        }
+        if (_whepPreviewResourceUrl) {
+            try { fetch(_whepPreviewResourceUrl, { method: 'DELETE' }).catch(function () {}); } catch (_) {}
+            _whepPreviewResourceUrl = null;
+        }
+        var preview = el('#sm-live-preview-inner');
+        if (preview) preview.innerHTML = '';
+    }
+
+    function pollViewerCount(slug) {
+        var base = state.restreamUrl ? state.restreamUrl.replace(/\/$/, '') : '';
+        if (!base || !slug) return;
+        fetch(base + '/viewer-count/' + encodeURIComponent(slug))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) return;
+                var countEl = el('#sm-live-viewers-display');
+                if (countEl) countEl.textContent = (data.viewer_count || 0) + ' viewer' + (data.viewer_count === 1 ? '' : 's');
+            })
+            .catch(function () {});
+    }
+
+    function updateLiveTimer() {
+        if (!_liveStartedAt) return;
+        var elapsed = Math.floor((Date.now() - _liveStartedAt) / 1000);
+        var h = Math.floor(elapsed / 3600);
+        var m = Math.floor((elapsed % 3600) / 60);
+        var s = elapsed % 60;
+        var timerEl = el('#sm-live-timer-display');
+        if (timerEl) {
+            timerEl.textContent = (h ? String(h).padStart(2, '0') + ':' : '') +
+                String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+    }
+
+    function pollChat(streamId) {
+        var base = state.chatUrl || '';
+        if (!base) return;
+        var url = base + '/api/chat/stream/' + encodeURIComponent(streamId) + '/history?limit=40';
+        fetch(url, { mode: 'cors', credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+            if (!data || !data.items) return;
+            var msgs = data.items;
+            if (!msgs.length) return;
+            _chatLastTs = msgs[msgs.length - 1].created_at || null;
+            appendChatMessages(msgs);
+        }).catch(function () {});
+    }
+
+    function appendChatMessages(msgs) {
+        var box = el('#sm-chat-messages');
+        if (!box) return;
+        var placeholder = box.querySelector('.sm-note');
+        if (placeholder) placeholder.remove();
+        var atBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 60;
+        msgs.forEach(function (m) {
+            var line = document.createElement('div');
+            line.style.cssText = 'display:flex;gap:0.35rem;align-items:flex-start;line-height:1.4;';
+            var sender = esc(m.sender_name || m.actor_display_name || 'Anon');
+            var text = esc(m.content || m.body || '');
+            line.innerHTML = '<span style="font-weight:600;white-space:nowrap;opacity:0.85;">' + sender + '</span>' +
+                '<span style="opacity:0.7;">' + text + '</span>';
+            box.appendChild(line);
+        });
+        if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+
+    var chatSendForm = el('#sm-chat-send-form');
+    if (chatSendForm) {
+        chatSendForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var input = el('#sm-chat-input');
+            var text = input ? input.value.trim() : '';
+            var base = state.chatUrl || '';
+            if (!text || !_chatStreamId || !base) return;
+            fetch(base + '/api/chat/stream/' + encodeURIComponent(_chatStreamId) + '/send', {
+                method: 'POST', mode: 'cors', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body: text }),
+            }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+                if (data && data.message) appendChatMessages([data.message]);
+            }).catch(function () {});
+            if (input) input.value = '';
+        });
     }
 
     // ── load dashboard ────────────────────────────────────────────────────────
@@ -514,6 +722,7 @@
             state.streams      = data.streams      || [];
             state.restreamUrl  = data.restream_url  || '';
             state.accountUrl   = data.account_url   || '';
+            state.chatUrl      = data.chat_url       || '';
             renderSlots();
             renderDestSidebar();
             renderDestFull();
@@ -677,8 +886,7 @@
                     state.activeStreamId = s.id; s.channel_slug = slug; state.streams.unshift(s);
                     var ch = state.channels.filter(function (c) { return c.slug === slug; })[0];
                     renderEndpoint(s, ch); renderHistory(slug); updateStreamButtons(s.is_live ? s : null);
-                    setStatus('stream-form', 'Stream created — check Endpoint tab for ingest details.');
-                    activateStab('endpoint');
+                    setStatus('stream-form', 'Stream created — ingest details shown above.');
                 }
             }).catch(function (err) { setStatus('stream-form', err.message, true); })
               .finally(function () { if (btn4) btn4.disabled = false; });

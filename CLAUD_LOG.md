@@ -2,6 +2,71 @@
 
 ---
 
+## Session — 2026-05-24 (part 17) — Streaming: WHEP viewer, live tab, chat fixes, openre.stream cleanup
+
+### What was done
+
+**Added WHEP viewer endpoint to openre-stream (`services/openre-stream/server/whip.js` + `index.js`):**
+- New `POST /whep/:channelSlug` — validates producers exist, creates mediasoup consumer transport, connects DTLS, calls `sfu.consume()` for each producer (video + audio), returns 201 with `sendonly` SDP answer + `Location` header
+- New `DELETE /whep/:channelSlug/:resourceId` — cleans up viewer session
+- `buildWhepSdpAnswer()` — assembles SDP using consumer's `rtpParameters` (payload type, SSRC, CNAME) and transport ICE/DTLS credentials
+- CORS headers on all WHEP routes (`Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: Location`)
+- `viewerSessions` Map for tracking active viewer connections
+
+**Fixed stream watch page — live streams now play video (`services/openvibe-live/server/ssr.js`):**
+- `renderStreamPage` now renders `<video id="sp-live-video">` instead of CSS play-button overlay when `isLive && !embed_url`
+- Injected WHEP viewer JS in `extraScripts` — creates `RTCPeerConnection`, adds recvonly transceivers, POSTs SDP offer to `{restreamUrl}/whep/{slug}`, sets remote description, auto-retries on failure after 3s
+- Previously: `embed_url` was never set for go-live streams; `renderMediaThumb` was purely a CSS decoration — no actual player
+
+**Fixed live tab in stream manager — direct WHEP preview (`services/openvibe-live/public/js/stream-manager.js`):**
+- `activateLiveTab()` now creates `<video>` element + calls `startWhepPreview(video, whepBase, slug)` instead of embedding an iframe pointing to `/@slug?embed=1`
+- `startWhepPreview()` — async WHEP viewer, muted (no echo), auto-retries on ICE failure
+- `stopChatPoll()` — closes WHEP peer connection and DELETEs resource URL on stream end
+
+**Fixed chat in stream manager (`services/openvibe-live/public/js/stream-manager.js`):**
+- Added `state.chatUrl` populated from dashboard API `chat_url` field; all chat fetches now use it as base with `mode: 'cors'`
+- `pollChat` response key: `data.messages` → `data.items` (matches openvibe-chat `wrappedHistory` response)
+- Chat send body field: `{ content: text }` → `{ body: text }` (matches chat service `b.body`)
+- Previously: all chat URLs were relative (`/api/chat/...`) — openvibe-live has no such routes; chat is a separate service
+
+**Added `chat_url` to config + dashboard API (`services/openvibe-live/server/config.js` + `index.js`):**
+- `config.chat = { url: process.env.OPENVIBE_CHAT_URL || resolvePublicOrigin({ surface: 'chat' }) }`
+- `buildGoLiveDashboardState` now includes `chat_url: config.chat.url` in its return
+
+**Cleaned up openre.stream landing page (`services/openre-stream/public/index.html`):**
+- Removed all browser streaming code: `getMediaStream`, `startWhip`, `stopWhip`, `stopBrowserStream`, `handleGoLive`, `selectSource`, plus all related state vars, CSS, and window exports
+- `renderBrowserPanel()` now shows a redirect notice + "Go to Stream Manager →" link pointing to `{openvibe.live}/go-live`
+- openre.stream scope: restream destinations only; all streaming management belongs on openvibe.live
+
+**Created `STREAMING_CLAUDE.md` at repo root:**
+- Full architecture overview (3 services, ports, roles)
+- Complete browser broadcast flow (WHIP, 5 steps)
+- OBS/RTMP broadcast flow
+- Viewer flow (WHEP) with SDP answer construction details
+- Live tab preview details
+- Chat flow for both watch page and live tab
+- Infrastructure requirements (mediasoup binary, UDP ports, MEDIASOUP_ANNOUNCED_IP, TURN)
+- Table of all fixes made in this session
+- Known remaining gaps (TURN wiring, viewer count polling, RTMP sync verification)
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `services/openre-stream/server/whip.js` | Added WHEP endpoint implementation (`handleWhepOffer`, `handleWhepDelete`, `buildWhepSdpAnswer`, `viewerSessions`) |
+| `services/openre-stream/server/index.js` | Registered WHEP routes (`POST /whep/:slug`, `DELETE /whep/:slug/:id`, CORS preflight OPTIONS) |
+| `services/openvibe-live/server/ssr.js` | Live stream watch page: renders `<video>` + WHEP viewer JS instead of broken CSS play-button |
+| `services/openvibe-live/public/js/stream-manager.js` | Chat URL fix, response key fix, send body fix, live tab WHEP preview, WHEP cleanup on stream end; bumped to `v=20260524-2` |
+| `services/openvibe-live/server/config.js` | Added `chat.url` |
+| `services/openvibe-live/server/index.js` | Added `chat_url` to dashboard API response |
+| `services/openre-stream/public/index.html` | Removed browser streaming UI; added redirect to openvibe.live/go-live |
+| `STREAMING_CLAUDE.md` | New — full streaming architecture + fix log + known gaps |
+| `services/openre-stream/server/whip.js` | **Critical:** WHIP room key `channel-${channel.id}` → `channel-${channelSlug}` — broadcast-ws and WHEP both use slug-keyed rooms; WHIP was creating a mismatched room so all viewers and the WS bridge saw zero producers |
+| `services/openvibe-live/server/ssr.js` | Watch page WHEP viewer: `iceServers: []` → STUN server — viewers behind NAT were silently failing ICE |
+| `CHAT_CLAUDE.md` | Added stream manager live tab chat integration section |
+
+---
+
 ## Session — 2026-05-23 (part 16) — CI test fixes
 
 ### What was done

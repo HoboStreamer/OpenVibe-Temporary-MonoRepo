@@ -26,6 +26,7 @@ module.exports = {
     events:    { url: process.env.OPENVIBE_EVENTS_URL || 'http://127.0.0.1:4400' },
     network:   { url: resolvePublicOrigin({ surface: 'network' }) },
     stream:    { url: resolvePublicOrigin({ surface: 'restream' }) },
+    chat:      { url: process.env.OPENVIBE_CHAT_URL || resolvePublicOrigin({ surface: 'chat' }) },
     media:     { url: process.env.OPENVIBE_MEDIA_INTERNAL_URL || process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }), publicUrl: process.env.OPENVIBE_MEDIA_URL || resolvePublicOrigin({ surface: 'media' }) },
     community: { url: process.env.OPENVIBE_COMMUNITY_INTERNAL_URL || process.env.OPENVIBE_COMMUNITY_URL || resolvePublicOrigin({ surface: 'community' }) },
     legacy: {

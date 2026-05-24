@@ -219,6 +219,19 @@ WebSocket subscriptions are in-memory only — lost on server restart. Chat widg
 
 ## Chat Widgets
 
+### Stream manager live tab (go-live page)
+
+**File:** `services/openvibe-live/public/js/stream-manager.js` — `pollChat()` / `chatSendForm`
+
+- **Base URL:** `state.chatUrl` — populated from `data.chat_url` in `GET /api/v1/go-live/dashboard`
+  - Server-side: `config.chat.url` = `process.env.OPENVIBE_CHAT_URL || resolvePublicOrigin({ surface: 'chat' })`
+  - This is a cross-origin fetch; `mode: 'cors'` + `credentials: 'include'` required
+- Polls `GET {chatUrl}/api/chat/stream/:streamId/history?limit=40` every 4 seconds
+- Sends via `POST {chatUrl}/api/chat/stream/:streamId/send` with `{ body: text }`
+- Response key from history: `data.items` (not `data.messages`)
+- Response key from send: `data.message` (singular)
+- Identity: anonymous; sender name shown from `m.sender_name || m.actor_display_name || 'Anon'`
+
 ### Global chat widget — network home
 
 **File:** `services/openvibe-network/public/index.html` (bottom of `<body>`)

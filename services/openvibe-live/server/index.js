@@ -148,6 +148,7 @@ function sortByRecent(left, right) {
 
 function buildApp() {
     db.init(config.db.path);
+    model.sweepHungStreams();
     const authClient = buildAuthClient(config);
     const openreClient = createOpenReClient({ config });
     const requireUserAuth = requireOpenVibeAuth(authClient);
@@ -298,6 +299,7 @@ function buildApp() {
             streams: streamGroups.flat().sort(sortByRecent).slice(0, 12),
             restream_url: config.stream.url,
             account_url: config.network.url,
+            chat_url: config.chat.url,
         };
     }
 

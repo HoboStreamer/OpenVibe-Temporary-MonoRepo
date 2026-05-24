@@ -480,10 +480,22 @@ function recordLegacy({ source, kind, legacy_id, new_id }) {
         .run(String(source), String(kind), String(legacy_id), String(new_id));
 }
 
+function sweepHungStreams() {
+    const result = db.get().prepare(`
+        UPDATE live_streams
+        SET status = 'ended', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'started'
+    `).run();
+    if (result.changes > 0) {
+        _streamsCache = null;
+        console.log(`[openvibe-live] swept ${result.changes} hung stream(s) to ended on boot`);
+    }
+}
+
 module.exports = {
     upsertChannel, getChannelBySlug, getChannelByOwnerUserId, listChannels,
     upsertStream, getStreamById, listStreams, listLiveNow, listRecentlyEnded, listChannelsWithStreams, listRecentStreamsGroupedByChannel, listRecentVodStreams, listRecentClips, listVods, listClips,
     listFeaturedChannels, listTrendingStreams, listTopCategories, getChannelStats, getHomeStats, getCurrentLiveStream,
     getStreamTimeline,
-    recordMirror, recordLegacy,
+    recordMirror, recordLegacy, sweepHungStreams,
 };

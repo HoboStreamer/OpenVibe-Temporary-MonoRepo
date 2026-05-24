@@ -2608,14 +2608,16 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
     const moreFromChannelHtml = (moreFromChannel || []).slice(0, 6).map((item) => renderStreamCard(item, channel, baseUrl, { badge: item.is_live ? 'Live' : 'Broadcast', badgeTone: item.is_live ? 'live' : 'soft' })).join('');
     const mediaEmbed = stream.embed_url
         ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
-        : renderMediaThumb({
-            url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
-            title: stream.title || 'Untitled stream',
-            eyebrow: isLive ? 'Live stage' : 'Broadcast replay',
-            subtitle: channelName,
-            initials: initialsFrom(channelName),
-            baseUrl,
-        });
+        : isLive
+            ? `<video id="sp-live-video" autoplay playsinline style="width:100%;aspect-ratio:16/9;border-radius:var(--radius);background:#000;display:block;" poster="${escapeHtml(stream.thumbnail_url || (channel && channel.avatar_url) || '')}"></video>`
+            : renderMediaThumb({
+                url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
+                title: stream.title || 'Untitled stream',
+                eyebrow: 'Broadcast replay',
+                subtitle: channelName,
+                initials: initialsFrom(channelName),
+                baseUrl,
+            });
 
     const pageContent = `
         <div class="sp-layout">
@@ -2717,6 +2719,55 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
     `;
 
     const extraScripts = `
+        ${isLive && !stream.embed_url && slug ? `(function() {
+            var WHEP_BASE = ${JSON.stringify(LIVE_NETWORK_URLS.restream)};
+            var CHANNEL_SLUG = ${JSON.stringify(slug)};
+            var _whepPc = null;
+            var _whepResourceUrl = null;
+
+            async function initViewer() {
+                var video = document.getElementById('sp-live-video');
+                if (!video || !WHEP_BASE || !CHANNEL_SLUG) return;
+                try {
+                    var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    pc.addTransceiver('video', { direction: 'recvonly' });
+                    pc.addTransceiver('audio', { direction: 'recvonly' });
+                    pc.ontrack = function(ev) {
+                        if (ev.streams && ev.streams[0] && !video.srcObject) {
+                            video.srcObject = ev.streams[0];
+                            video.play().catch(function() {});
+                        }
+                    };
+                    var offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    if (pc.iceGatheringState !== 'complete') {
+                        await new Promise(function(resolve) {
+                            var fn = function() { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', fn); resolve(); } };
+                            pc.addEventListener('icegatheringstatechange', fn);
+                            setTimeout(resolve, 5000);
+                        });
+                    }
+                    var resp = await fetch(WHEP_BASE + '/whep/' + encodeURIComponent(CHANNEL_SLUG), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/sdp' },
+                        body: pc.localDescription.sdp,
+                    });
+                    if (!resp.ok) { console.warn('[viewer] WHEP ' + resp.status); return; }
+                    _whepResourceUrl = resp.headers.get('Location');
+                    var answer = await resp.text();
+                    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+                    _whepPc = pc;
+                    pc.onconnectionstatechange = function() {
+                        if (pc.connectionState === 'failed') {
+                            setTimeout(function() { if (_whepPc === pc) initViewer(); }, 3000);
+                        }
+                    };
+                } catch(err) {
+                    console.warn('[viewer] WHEP setup error:', err.message);
+                }
+            }
+            initViewer();
+        })();` : ''}
         (function() {
             var CHAT_BASE = ${JSON.stringify(LIVE_NETWORK_URLS.chat)};
             var STREAM_ID = ${JSON.stringify(String(stream.id || ''))};
@@ -3455,10 +3506,6 @@ function renderGoLivePage({ baseUrl, session }) {
                     <h1 class="section-title" style="font-size:1.5rem">Your stream manager</h1>
                     <p class="section-subtitle">Select a stream slot to configure your profile and go live.</p>
                 </div>
-                <div class="sm-top-actions">
-                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.restream)}">Open openre.stream</a>
-                    <a class="section-link" href="${escapeHtml(LIVE_NETWORK_URLS.network)}">Account</a>
-                </div>
             </div>
 
             <div class="sm-layout" data-stream-manager>
@@ -3535,10 +3582,6 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <div class="sm-slot-channel-name" data-sm-slot-name>Channel</div>
                                 <a class="sm-slot-channel-link" data-sm-slot-link href="#" target="_blank"></a>
                             </div>
-                            <a class="sm-chat-btn" data-sm-slot-chat href="#" target="_blank">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                                Chat
-                            </a>
                         </div>
 
                         <!-- Sub-tab bar -->
@@ -3551,9 +3594,9 @@ function renderGoLivePage({ baseUrl, session }) {
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                                 Settings
                             </button>
-                            <button class="sm-tab" role="tab" data-sm-stab="endpoint">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                                Endpoint
+                            <button class="sm-tab sm-tab-live" role="tab" data-sm-stab="live" style="display:none;">
+                                <span class="sm-live-dot" style="width:7px;height:7px;margin-right:0.3rem;flex-shrink:0;"></span>
+                                Live
                             </button>
                             <button class="sm-tab" role="tab" data-sm-stab="history">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
@@ -3638,11 +3681,14 @@ function renderGoLivePage({ baseUrl, session }) {
                                     </div>
                                     <input type="hidden" name="protocol" value="whip">
                                 </div>
+                                <!-- Inline endpoint details (shown for WHIP/RTMP/CLI methods) -->
+                                <div id="sm-inline-endpoint" data-sm-inline-endpoint style="display:none;margin-top:0.75rem;padding:0.75rem;background:rgba(0,0,0,0.2);border-radius:6px;border:1px solid rgba(255,255,255,0.07);"></div>
+
                                 <div class="sm-autodetect-box" data-sm-autodetect>
                                     <span class="sm-autodetect-dot"></span>
                                     <div>
                                         <div class="sm-autodetect-title">Auto-detect enabled</div>
-                                        <div class="sm-autodetect-sub">Your stream will go live automatically when your encoder connects. Configure your software using the Endpoint tab, then just start streaming.</div>
+                                        <div class="sm-autodetect-sub">Your stream will go live automatically when your encoder connects. Use the ingest details above in your streaming software, then just start streaming.</div>
                                     </div>
                                 </div>
 
@@ -3747,6 +3793,7 @@ function renderGoLivePage({ baseUrl, session }) {
                                     <span class="sm-status-text" data-sm-status="stream-form"></span>
                                 </div>
                             </form>
+
                         </div>
 
                         <!-- Settings tab -->
@@ -3825,11 +3872,35 @@ function renderGoLivePage({ baseUrl, session }) {
                             </form>
                         </div>
 
-                        <!-- Endpoint tab -->
-                        <div class="sm-stab-content" data-sm-stab-panel="endpoint" style="display:none;">
-                            <div class="sm-endpoint-panel" data-sm-endpoint-panel>
-                                <div class="sm-endpoint-empty">
-                                    <p class="sm-note">Create a stream to reveal ingest details, or check your channel settings for the persistent RTMP URL.</p>
+                        <!-- Live tab -->
+                        <div class="sm-stab-content sm-live-tab-content" data-sm-stab-panel="live" style="display:none;">
+                            <div class="sm-live-layout">
+                                <div class="sm-live-preview">
+                                    <div class="sm-live-preview-inner" id="sm-live-preview-inner">
+                                        <!-- iframe injected by JS -->
+                                    </div>
+                                    <div class="sm-live-preview-bar">
+                                        <span class="sm-live-dot"></span>
+                                        <span id="sm-live-timer-display">00:00</span>
+                                        <span id="sm-live-viewers-display" style="margin-left:0.5rem;opacity:0.7;font-size:0.8rem;">0 viewers</span>
+                                        <div style="margin-left:auto;display:flex;gap:0.5rem;">
+                                            <button class="sm-btn-ghost" type="button" id="sm-live-end-btn" style="padding:0.3rem 0.75rem;font-size:0.8rem;">End stream</button>
+                                            <a class="sm-btn-ghost" id="sm-live-watch-link" href="#" target="_blank" style="padding:0.3rem 0.75rem;font-size:0.8rem;text-decoration:none;">Watch page ↗</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="sm-live-chat">
+                                    <div class="sm-live-chat-head">
+                                        <span class="sm-field-label" style="margin:0;">LIVE CHAT</span>
+                                        <a id="sm-live-chat-popout" href="#" target="_blank" style="font-size:0.78rem;opacity:0.6;text-decoration:none;">Popout ↗</a>
+                                    </div>
+                                    <div id="sm-chat-messages" style="flex:1;overflow-y:auto;padding:0.6rem;display:flex;flex-direction:column;gap:0.35rem;font-size:0.82rem;">
+                                        <div class="sm-note" style="opacity:0.5;text-align:center;margin:auto;">Chat will appear here.</div>
+                                    </div>
+                                    <form id="sm-chat-send-form" style="display:flex;gap:0.5rem;padding:0.5rem;">
+                                        <input class="sm-input" type="text" id="sm-chat-input" placeholder="Send a message…" autocomplete="off" style="flex:1;font-size:0.83rem;">
+                                        <button class="sm-btn-primary" type="submit" style="padding:0.4rem 0.8rem;font-size:0.83rem;">Send</button>
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -3968,7 +4039,7 @@ function renderGoLivePage({ baseUrl, session }) {
         description: 'OpenVibe Live broadcasting guide for browser, OBS, RTMP, WHIP, and restream workflows.',
         canonical: `${baseUrl}/go-live`,
         activeNav: 'go-live',
-        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260606-1"></script>' : ''),
+        bodyHtml: pageContent + (signedIn ? '<script src="/js/stream-manager.js?v=20260524-3"></script>' : ''),
         baseUrl,
         extraStyles: `
             /* ── Stream Manager v2 ──────────────────────────────── */
@@ -4106,6 +4177,47 @@ function renderGoLivePage({ baseUrl, session }) {
                 white-space: nowrap; transition: border-color 0.15s, background 0.15s, color 0.15s;
             }
             .sm-chat-btn:hover { border-color: rgba(34,211,238,0.4); background: rgba(34,211,238,0.08); color: white; }
+            /* live tab layout */
+            .sm-live-tab-content { padding: 0 !important; }
+            .sm-live-layout {
+                display: grid;
+                grid-template-columns: 1fr 300px;
+                height: 520px;
+                overflow: hidden;
+            }
+            .sm-live-preview {
+                display: flex; flex-direction: column;
+                border-right: 1px solid rgba(255,255,255,0.08);
+                background: #000;
+                overflow: hidden;
+            }
+            .sm-live-preview-inner {
+                flex: 1; overflow: hidden; position: relative;
+            }
+            .sm-live-preview-inner iframe {
+                width: 100%; height: 100%; border: none; display: block;
+            }
+            .sm-live-preview-bar {
+                display: flex; align-items: center; gap: 0.5rem;
+                padding: 0.5rem 0.75rem;
+                background: rgba(0,0,0,0.6);
+                border-top: 1px solid rgba(255,255,255,0.07);
+                font-size: 0.8rem; font-weight: 700;
+            }
+            .sm-live-chat {
+                display: flex; flex-direction: column;
+                overflow: hidden;
+            }
+            .sm-live-chat-head {
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 0.6rem 0.75rem;
+                border-bottom: 1px solid rgba(255,255,255,0.08);
+                font-size: 0.78rem;
+            }
+            @media (max-width: 700px) {
+                .sm-live-layout { grid-template-columns: 1fr; grid-template-rows: 260px 1fr; height: auto; }
+                .sm-live-preview { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
+            }
             /* tabs */
             .sm-tabs {
                 display: flex; gap: 0; margin-bottom: 1.2rem;
