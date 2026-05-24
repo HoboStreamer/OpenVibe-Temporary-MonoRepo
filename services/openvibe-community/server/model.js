@@ -258,7 +258,7 @@ function hydratePaste(r) {
     // Inject image_url from screenshot_path (legacy hobostreamer migration)
     if (metadata.screenshot_path && !metadata.image_url) {
         const fileName = path.basename(String(metadata.screenshot_path));
-        const base = (config.publicBaseUrl || '').replace(/\/$/, '');
+        const base = (config.publicBaseUrl || 'https://openvibe.community').replace(/\/$/, '');
         if (fileName) metadata.image_url = `${base}/api/paste-screenshots/${encodeURIComponent(fileName)}`;
     }
     return {

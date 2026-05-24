@@ -1151,3 +1151,37 @@ Updated `FALLBACK_SERVICES`:
 | File | Change |
 |------|--------|
 | `services/openvibe-network/public/assets/openvibe.js` | Added 13 surfaces to all lookup tables; updated FALLBACK_SERVICES with 10 new entries + community rename |
+
+---
+
+## Session — 2026-05-24 (part 21) — Community SSR auth, paste image URLs, network cross-origin images
+
+### Problems
+1. Thread/paste/pulse pages on openvibe.community showed user as logged out and had no buddy icon dropdown, despite being signed in
+2. Paste thumbnail images showed on openvibe.community homepage but not on openvibe.network
+3. `paste.metadata.image_url` was a relative URL (`/api/paste-screenshots/...`) when `config.publicBaseUrl` was empty — works same-origin on community, silently broken cross-domain on network
+
+### Fixes
+
+**Community SSR shell auth (`services/openvibe-community/server/ssr.js`):**
+- `_styles()`: Added full CSS block for `.ov-nav-session`, `.ov-anon-menu`, `.ov-anon-trigger`, `.ov-anon-dropdown`, `.ov-anon-dropdown-item` and `.ov-btn` variants — previously these styles only existed in openvibe-chat and openvibe-media service assets
+- `_shell()`: Replaced `<div id="ov-nav-auth"><a>Sign in</a></div>` with `<div id="ov-nav-session"></div>` — `hydrateNavSession()` inside `renderChrome` looks for `id="ov-nav-session"`; old id was never found
+- Removed stale `openvibe-auth-changed` event listener (replaced by renderChrome's hydrateNavSession)
+- Added `<script defer>` after openvibe.js that calls `primeEnvironment()` then `renderChrome('community')` — deferred scripts run in order so OpenVibe is available
+
+**Paste image URLs (`services/openvibe-community/server/model.js`):**
+- `hydratePaste()`: Changed `config.publicBaseUrl || ''` → `config.publicBaseUrl || 'https://openvibe.community'` as fallback — ensures `image_url` is always an absolute URL even if env var not configured
+
+**Network cross-origin images (`services/openvibe-network/public/index.html`):**
+- Recent pastes grid: Check `image_url.startsWith('http')` — if relative, prefix with `communityBase` before rendering `<img src>`
+- Activity feed paste cards: Same fix applied to the `_communityBase + rawImg` case
+
+### Root cause
+`renderChrome()` fills `id="nav-mount"` (full chrome nav) and `id="ov-nav-session"` (buddy icon). Community SSR had its own custom topbar and used `id="ov-nav-auth"` — so `renderChrome` couldn't hydrate it. No `primeEnvironment()` call meant session was never loaded, so user appeared unauthenticated on all SSR-rendered community pages (threads, pastes, pulse, forum).
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr.js` | Added buddy icon CSS; `ov-nav-auth` → `ov-nav-session`; replaced auth listener with deferred `renderChrome` call |
+| `services/openvibe-community/server/model.js` | `publicBaseUrl` fallback to production URL |
+| `services/openvibe-network/public/index.html` | Prefix relative image_url with communityBase in 2 places |

@@ -555,7 +555,9 @@
     for (const paste of (recentPastesData.items || []).slice(0, 3)) {
         const ptitle = OpenVibe.escapeHtml(paste.title || paste.slug || 'untitled');
         const pexcerpt = OpenVibe.escapeHtml((paste.body || '').slice(0, 100) + ((paste.body || '').length > 100 ? '…' : ''));
-        const pimg = paste.metadata && paste.metadata.image_url ? `<img src="${OpenVibe.escapeHtml(paste.metadata.image_url)}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.6rem;" loading="lazy">` : '';
+        const _rawPimg = paste.metadata && paste.metadata.image_url || '';
+        const _absPimg = _rawPimg ? (_rawPimg.startsWith('http') ? _rawPimg : _communityBase + _rawPimg) : '';
+        const pimg = _absPimg ? `<img src="${OpenVibe.escapeHtml(_absPimg)}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.6rem;" loading="lazy">` : '';
         const phref = OpenVibe.escapeHtml(_communityBase + '/p/' + (paste.slug || paste.id || ''));
         activitySlides.push({
             kicker: 'New Paste',
@@ -824,9 +826,9 @@ function toggleFavStream(channelData) {
                 var expt = body.length > 140 ? body.slice(0, 139) + '…' : body;
                 var lang = paste.language || 'text';
                 var href = communityBase + '/p/' + OpenVibe.escapeHtml(slug);
-                var imgHtml = paste.metadata && paste.metadata.image_url
-                    ? '<img src="' + OpenVibe.escapeHtml(paste.metadata.image_url) + '" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.5rem;" loading="lazy">'
-                    : '';
+                var rawImg = paste.metadata && paste.metadata.image_url || '';
+                var absImg = rawImg ? (rawImg.startsWith('http') ? rawImg : communityBase + rawImg) : '';
+                var imgHtml = absImg ? '<img src="' + OpenVibe.escapeHtml(absImg) + '" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.5rem;" loading="lazy">' : '';
                 return '<a class="ov-card" href="' + href + '">' +
                     imgHtml +
                     '<div class="ov-card-top">' +

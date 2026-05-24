@@ -193,6 +193,50 @@ function _styles() {
         footer.page { padding-bottom: 3rem; }
         .footer-row { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; padding: 1.5rem 0; border-top: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 0.88rem; }
         @media (max-width: 700px) { .topbar-inner { flex-wrap: wrap; justify-content: center; } }
+        /* ── buddy icon / session widget ── */
+        #ov-nav-session { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
+        #ov-nav-session .ov-btn {
+            display: inline-flex; align-items: center; padding: 0.45rem 0.9rem;
+            border-radius: 999px; border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.05); color: var(--text);
+            font-weight: 700; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        #ov-nav-session .ov-btn:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.13); }
+        #ov-nav-session .ov-btn-primary {
+            background: linear-gradient(135deg, var(--accent), #4f46e5 60%, var(--accent-2));
+            border-color: transparent; color: #fff;
+        }
+        .ov-anon-menu { position: relative; }
+        .ov-anon-trigger {
+            display: flex; align-items: center; gap: 0.35rem;
+            min-width: 34px; height: 34px; padding: 0 0.55rem;
+            border-radius: 17px; border: 1.5px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05); color: var(--muted);
+            cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+        }
+        .ov-anon-trigger:hover { border-color: rgba(99,102,241,0.5); background: rgba(99,102,241,0.1); color: var(--text); }
+        .ov-anon-trigger-name { font-size: 0.75rem; font-weight: 600; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+        .ov-anon-dropdown {
+            position: absolute; top: calc(100% + 8px); right: 0;
+            min-width: 200px; background: #0e1018;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); overflow: hidden; z-index: 9999;
+        }
+        .ov-anon-dropdown-name {
+            padding: 0.65rem 1rem 0.5rem; font-size: 0.75rem; font-weight: 600;
+            color: var(--muted); border-bottom: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ov-anon-dropdown-item {
+            display: block; padding: 0.6rem 1rem; font-size: 0.85rem;
+            color: var(--text); text-decoration: none; cursor: pointer;
+            width: 100%; text-align: left; background: none; border: none; font-family: inherit;
+            transition: background 0.12s;
+        }
+        .ov-anon-dropdown-item:hover { background: rgba(255,255,255,0.06); }
+        .ov-anon-dropdown-item--danger { color: #f87171; }
+        .ov-anon-dropdown-item--danger:hover { background: rgba(248,113,113,0.08); }
     </style>`;
 }
 
@@ -239,9 +283,7 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
             <nav class="nav-links" aria-label="Primary">
                 ${_nav(active)}
             </nav>
-            <div id="ov-nav-auth">
-                <a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>
-            </div>
+            <div id="ov-nav-session"></div>
         </div>
     </header>
     <main class="page">
@@ -258,19 +300,11 @@ function _shell({ title, description, canonical, active, bodyHtml }) {
         </div>
     </footer>
     <script src="/assets/chat-bubble.js" defer></script>
-    <script>
-    document.addEventListener('openvibe-auth-changed', function(e) {
-        var s = e.detail;
-        var el = document.getElementById('ov-nav-auth');
-        if (!el) return;
-        if (s && s.authenticated && s.user) {
-            el.innerHTML = '<a class="nav-link" href="${COMMUNITY_URLS.network}">' + (s.user.display_name || s.user.username || 'My Account') + '</a>';
-        } else if (s && s.anonymous) {
-            el.innerHTML = '<a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>';
-        } else {
-            el.innerHTML = '<a class="nav-link" href="${SIGN_IN_URL}">Sign in</a>';
-        }
-    });
+    <script defer>
+    (async function() {
+        try { await OpenVibe.primeEnvironment(); } catch(e) { console.warn('[community] primeEnvironment:', e); }
+        try { await OpenVibe.renderChrome('community'); } catch(e) { console.warn('[community] renderChrome:', e); }
+    })();
     </script>
 </body>
 </html>`;
