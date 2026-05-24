@@ -1222,3 +1222,55 @@ Themes were not visually changing pages even when applied. Root cause: community
 |------|--------|
 | `services/openvibe-community/server/ssr.js` | All hardcoded SSR styles → CSS variables |
 | `services/openvibe-live/server/ssr.js` | Body/topbar/card hardcoded backgrounds → CSS variables |
+
+---
+
+## Session — 2026-05-24 (part 23) — SSR reference doc + openvibe-content SSR split into 9
+
+### Work done
+
+**SSR_CLAUDE.md created** — new reference document at repo root cataloguing every SSR file in the monorepo:
+- 5 SSR files documented: openvibe-community (1051 lines / 64 KB), openvibe-live (4503 lines / 252 KB), openvibe-content (1062 lines / 76 KB), openre-stream (608 lines / 48 KB), openvibe-control (349 lines / 16 KB)
+- Each entry lists every exported render function, its route, what page it produces, and notes on auth/theme behaviour
+- Also lists 9 services with no ssr.js and how they serve pages
+
+**openvibe-content SSR split into 9 standalone surface files:**
+
+The original monolithic `ssr.js` (1062 lines, 76 KB) was restructured into 11 files:
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 15 KB | All rendering/utility functions shared by all 9 surfaces |
+| `ssr-codes.js` | 6.6 KB | openvibe.codes — platform docs, API reference |
+| `ssr-blog.js` | 5.3 KB | openvibe.blog — platform blog posts |
+| `ssr-wiki.js` | 9.5 KB | openvibe.wiki — streaming technology reference |
+| `ssr-news.js` | 6.2 KB | openvibe.news — streaming & creator economy news |
+| `ssr-reviews.js` | 6.1 KB | openvibe.reviews — gear and software reviews |
+| `ssr-deals.js` | 5.6 KB | openvibe.deals — curated deals for streamers |
+| `ssr-coupons.js` | 4.5 KB | openvibe.coupons — promo codes |
+| `ssr-trade.js` | 6.2 KB | openvibe.trade — gear classifieds |
+| `ssr-host.js` | 9.3 KB | openvibe.host — hosting guides and reviews |
+| `ssr.js` (rewritten) | 1.8 KB | Thin aggregator — dispatches by surfaceId, same public API |
+
+### Architecture
+
+- `ssr-shared.js` exports: `escapeHtml`, `formatBytes`, `toIsoDate`, `navItems`, `surfaceStatusNote`, `surfaceKicker`, `pageForPath`, `buildJsonLd`, `renderLayout`, `renderHome`, `renderEntry`, `renderNotFound`, `buildFeedXml`, `buildAtomXml`, `buildSitemapXml`, `buildRobotsTxt`, `renderRequest({ config, surface, routePath })`
+- Each surface file exports: `buildSurface(config)` → surface object, `renderRequest({ config, routePath })` → calls shared renderRequest with its own surface
+- `ssr.js` aggregator: `SURFACE_MODULES` map → `buildSurfaceCatalog(config)`, `hostStatuses(config)`, `renderRequest({ config, surfaceId, routePath })`
+- `routes.js` is **untouched** — still calls `renderRequest({ config, surfaceId, routePath })` and `hostStatuses(config)` from `./ssr`
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-content/server/ssr-shared.js` | New — shared rendering engine |
+| `services/openvibe-content/server/ssr-codes.js` | New — openvibe.codes surface |
+| `services/openvibe-content/server/ssr-blog.js` | New — openvibe.blog surface |
+| `services/openvibe-content/server/ssr-wiki.js` | New — openvibe.wiki surface |
+| `services/openvibe-content/server/ssr-news.js` | New — openvibe.news surface |
+| `services/openvibe-content/server/ssr-reviews.js` | New — openvibe.reviews surface |
+| `services/openvibe-content/server/ssr-deals.js` | New — openvibe.deals surface |
+| `services/openvibe-content/server/ssr-coupons.js` | New — openvibe.coupons surface |
+| `services/openvibe-content/server/ssr-trade.js` | New — openvibe.trade surface |
+| `services/openvibe-content/server/ssr-host.js` | New — openvibe.host surface |
+| `services/openvibe-content/server/ssr.js` | Rewritten as thin aggregator (1062 → 55 lines) |
+| `SSR_CLAUDE.md` | New — SSR reference document |

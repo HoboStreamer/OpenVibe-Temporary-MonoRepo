@@ -7,13 +7,13 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 ## Summary Table
 
-| Service | File | Lines | Size | Domain(s) | Dev Port |
+| Service | File(s) | Lines | Size | Domain(s) | Dev Port |
 |---|---|---|---|---|---|
-| openvibe-community | `services/openvibe-community/server/ssr.js` | 1051 | 64 KB | openvibe.community | 4900 |
-| openvibe-live | `services/openvibe-live/server/ssr.js` | 4503 | 252 KB | openvibe.live | 4600 |
-| openvibe-content | `services/openvibe-content/server/ssr.js` | 1062 | 76 KB | openvibe.codes, openvibe.blog, openvibe.wiki, openvibe.news, openvibe.reviews, openvibe.deals, openvibe.coupons, openvibe.trade, openvibe.host | 5500 |
-| openre-stream | `services/openre-stream/server/ssr.js` | 608 | 48 KB | openre.stream | 4700 |
-| openvibe-control | `services/openvibe-control/server/ssr.js` | 349 | 16 KB | (internal admin panel, no public domain) | 4300 |
+| openvibe-community | `server/ssr.js` | 1051 | 64 KB | openvibe.community | 4900 |
+| openvibe-live | `server/ssr.js` | 4503 | 252 KB | openvibe.live | 4600 |
+| openvibe-content | `server/ssr.js` + 10 files | — | ~80 KB total | openvibe.codes / .blog / .wiki / .news / .reviews / .deals / .coupons / .trade / .host | 5500 |
+| openre-stream | `server/ssr.js` | 608 | 48 KB | openre.stream | 4700 |
+| openvibe-control | `server/ssr.js` | 349 | 16 KB | (internal admin, no public domain) | 4300 |
 
 ---
 
@@ -41,7 +41,7 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 ### Internal helpers
 
-- `_styles()` — all inline CSS (uses CSS variables: `--bg`, `--panel`, `--text`, `--border`, `--accent`, `--muted`)
+- `_styles()` — all inline CSS (uses CSS variables: `--bg`, `--panel`, `--text`, `--border`, `--accent`, `--muted` with `color-mix()` for opacity)
 - `_nav(active)` — top nav bar with active link highlight
 - `_head({ title, description, canonical })` — `<head>` block
 - `_shell({ title, description, canonical, active, bodyHtml })` — full HTML shell; mounts `#ov-nav-session` and runs deferred `renderChrome('community')`
@@ -52,7 +52,7 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 - Deferred `OpenVibe.primeEnvironment()` + `OpenVibe.renderChrome('community')` runs after openvibe.js loads.
 - `#ov-nav-session` is the mount point for the buddy icon dropdown.
-- Theme variables applied via `applySavedTheme()` at openvibe.js load time; CSS uses `var(--bg)`, `color-mix()`, etc.
+- All CSS uses `var(--bg)`, `var(--panel)`, `var(--text)`, `var(--border)`, `var(--accent)`, `var(--muted)` — themes apply immediately when openvibe.js sets inline CSS vars.
 
 ---
 
@@ -84,60 +84,124 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 ### Internal helpers
 
 - `_shellStyles()` — all inline CSS; uses `var(--bg)`, `var(--panel)`, `color-mix()` for theme support
-- `_shellScript()` — client-side hydration bootstrap (appears twice — legacy and new variant at line 1057/1674)
-- `_meta(...)` — OG/meta tags with title, description, canonical, og:image
-- `renderPage(...)` — master layout wrapper used by all pages
+- `_shellScript()` — client-side hydration bootstrap (two variants at line 1057 and 1674)
+- `_meta(...)` — OG/meta tags
+- `renderPage(...)` — master layout wrapper
 - `renderNav(activeNav)`, `renderFooter()` — shared nav/footer partials
 - `renderPill`, `renderMediaThumb`, `renderVideoCard`, `renderStreamerGroupCard`, `renderStreamCard`, `renderChannelCard`, `renderSection`, `renderSignalCard` — reusable UI partials
 
 ### Notes
 
-- This file is by far the biggest SSR at 252 KB / 4503 lines. Contains two `_shellScript()` function definitions (old and new variant).
-- `renderGoLivePage` is a large standalone function (~924 lines, lines 3483–4407) with its own internal styles and script.
+- Largest SSR at 252 KB / 4503 lines. Contains two `_shellScript()` function definitions (old and new variant).
+- `renderGoLivePage` is ~924 lines (lines 3483–4407) with its own internal styles and script.
+- All CSS uses CSS variables — themes apply visually.
 
 ---
 
-## 3. openvibe-content — `services/openvibe-content/server/ssr.js`
+## 3. openvibe-content — `services/openvibe-content/server/`
 
-**Domains (all served by this one SSR):**
-- `https://openvibe.codes` — developer codes / snippets
-- `https://openvibe.blog` — blog posts
-- `https://openvibe.wiki` — wiki / docs
-- `https://openvibe.news` — news articles
-- `https://openvibe.reviews` — reviews
-- `https://openvibe.deals` — deals
-- `https://openvibe.coupons` — coupons
-- `https://openvibe.trade` — trade listings
-- `https://openvibe.host` — hosting content
+**Domains:** 9 separate domains, all served by the same Node.js process on port 5500.  
+**Dev port:** 5500
 
-**Dev port:** 5500 (all surfaces share the same process)  
-**Lines:** 1062 | **Size:** 76 KB
+### File structure
 
-### Pages rendered
+The content SSR is split into 11 files:
 
-| Function | Route | Description |
+| File | Size | Role |
 |---|---|---|
-| `renderRequest` | `GET *` (catch-all router) | Main entry point — resolves surface from hostname, then calls `renderHome`, `renderEntry`, or `renderNotFound` |
-| `renderHome` | `/` | Surface home page (listing of content items) |
-| `renderEntry` | `/:path` | Individual content item (article, review, deal, etc.) |
-| `renderNotFound` | (404 fallback) | 404 page matching the active surface's theme |
+| `ssr-shared.js` | 15 KB | Shared rendering engine used by all 9 surfaces |
+| `ssr-codes.js` | 6.6 KB | openvibe.codes surface data + wrapper |
+| `ssr-blog.js` | 5.3 KB | openvibe.blog surface data + wrapper |
+| `ssr-wiki.js` | 9.5 KB | openvibe.wiki surface data + wrapper |
+| `ssr-news.js` | 6.2 KB | openvibe.news surface data + wrapper |
+| `ssr-reviews.js` | 6.1 KB | openvibe.reviews surface data + wrapper |
+| `ssr-deals.js` | 5.6 KB | openvibe.deals surface data + wrapper |
+| `ssr-coupons.js` | 4.5 KB | openvibe.coupons surface data + wrapper |
+| `ssr-trade.js` | 6.2 KB | openvibe.trade surface data + wrapper |
+| `ssr-host.js` | 9.3 KB | openvibe.host surface data + wrapper |
+| `ssr.js` | 1.8 KB | Aggregator — dispatches by surfaceId, public API unchanged |
 
-### Internal helpers
+### How it works
 
-- `renderLayout(...)` — master layout with nav, footer, meta; shared across all surfaces
-- `navItems(config)` — builds surface-specific nav links
-- `buildSurfaceCatalog(config)` — constructs the full catalog of items per surface
-- `surfaceStatusNote`, `surfaceKicker` — surface-specific labels/badges
-- `pageForPath(surface, routePath)` — maps a URL path to a content item
-- `buildJsonLd(...)` — JSON-LD structured data for SEO
-- `buildFeedXml`, `buildAtomXml`, `buildSitemapXml`, `buildRobotsTxt` — machine-readable feeds (not HTML)
-- `hostStatuses(config)` — health check for all surface hosts
+1. `routes.js` calls `renderRequest({ config, surfaceId, routePath })` from `./ssr`
+2. `ssr.js` (aggregator) maps `surfaceId` → the right surface module and calls its `renderRequest({ config, routePath })`
+3. Each surface module calls `sharedRenderRequest({ config, surface: buildSurface(config), routePath })` from `ssr-shared.js`
+4. `ssr-shared.js` handles all HTML/XML generation — surfaces just supply their data object
 
-### Notes
+### Pages rendered (all surfaces)
 
-- Single service, single port, multiple production domains — the surface is determined from the incoming `Host` header.
-- `renderRequest` is the single exported entry point called by `routes.js` for all `GET *` requests.
-- Non-SSR exports: `buildSurfaceCatalog`, `buildRobotsTxt`, `buildSitemapXml`, `buildFeedXml`, `buildAtomXml`, `formatBytes`, `hostStatuses`.
+Every surface exposes the same 7 route types via `renderRequest`:
+
+| Route | Output | Description |
+|---|---|---|
+| `GET /` | HTML | Surface home page — hero + entry grid |
+| `GET /:path` | HTML | Individual entry (article, review, deal, etc.) |
+| `GET /feed.xml` | RSS XML | RSS feed of entries |
+| `GET /atom.xml` | Atom XML | Atom feed of entries |
+| `GET /sitemap.xml` | Sitemap XML | URL sitemap |
+| `GET /robots.txt` | Text | Robots directives (noindex if not indexable) |
+| `GET /:unknown` | HTML 404 | "Page not found" |
+
+### Surface registry
+
+| Surface ID | Domain | Indexable | Entries | Notes |
+|---|---|---|---|---|
+| `codes` | openvibe.codes | yes | 5 | Platform docs, API reference, WHIP guide, self-hosting |
+| `blog` | openvibe.blog | yes | 4 | Platform announcements, engineering notes |
+| `wiki` | openvibe.wiki | yes | 7 | RTMP, WHIP, HLS, OVC, OBS, stream key security, readiness gates |
+| `news` | openvibe.news | no (draft) | 4 | Creator economy news — noindex until editorial policy finalised |
+| `reviews` | openvibe.reviews | yes | 4 | Gear reviews: Elgato HD60X, SM7B, OBS, Hetzner CX22 |
+| `deals` | openvibe.deals | yes | 4 | Hetzner credit, OBS free upgrade, Cloudflare free tier, Bitwarden |
+| `coupons` | openvibe.coupons | yes | 3 | DO $200 credit, Streamlabs Ultra trial, Cloudflare R2 |
+| `trade` | openvibe.trade | no (draft) | 4 | Gear classifieds guides — noindex until moderation policy live |
+| `host` | openvibe.host | no (yellow) | 6 | VPS setup, nginx, Hetzner review — pending editorial review |
+
+### `ssr-shared.js` exports
+
+```
+escapeHtml, formatBytes, toIsoDate
+navItems(config)              — cross-surface nav links
+surfaceStatusNote(surface)    — returns deferReason string or null
+surfaceKicker(surface)        — "published" / "draft / noindex" label
+pageForPath(surface, path)    — finds entry by path
+buildJsonLd(surface, url, entry) — Schema.org JSON-LD
+renderLayout({ config, surface, ... }) — full HTML document
+renderHome({ config, surface })
+renderEntry({ config, surface, entry })
+renderNotFound({ config, surface, routePath })
+buildFeedXml(surface)
+buildAtomXml(surface)
+buildSitemapXml(surface)
+buildRobotsTxt(surface)
+renderRequest({ config, surface, routePath }) — unified dispatch
+```
+
+### Each surface file exports
+
+```
+buildSurface(config)             — returns the surface object
+renderRequest({ config, routePath }) — thin wrapper around shared renderRequest
+```
+
+### `ssr.js` (aggregator) exports
+
+```
+buildSurfaceCatalog(config)     — aggregates all 9 buildSurface() calls
+hostStatuses(config)            — used by /api/v1/content/hosts
+renderRequest({ config, surfaceId, routePath }) — dispatches to surface module
+formatBytes, buildFeedXml, buildAtomXml, buildSitemapXml, buildRobotsTxt — re-exported from shared
+```
+
+### Adding a new entry to a surface
+
+Edit only the relevant surface file (e.g. `ssr-wiki.js`) — add an object to `entries[]` with `path`, `title`, `summary`, `publishedAt`, `kind`, and `sections[]`. No other file needs changing.
+
+### Adding a new surface
+
+1. Create `ssr-{surface}.js` — `buildSurface(config)` + `renderRequest` wrapper
+2. Add it to `SURFACE_MODULES` in `ssr.js`
+3. Add it to `navItems()` in `ssr-shared.js`
+4. Add the surface URL to `config.surfaces` in `config.js`
 
 ---
 
@@ -152,7 +216,7 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 | Function | Route | Description |
 |---|---|---|
 | `renderDashboard` | `GET /dashboard` (authenticated) | Stream management dashboard — channels, destinations, live streams, outputs, ingest config |
-| `renderDashboardAuthGate` | `GET /dashboard` (unauthenticated) | Auth gate / sign-in prompt shown when not logged in |
+| `renderDashboardAuthGate` | `GET /dashboard` (unauthenticated) | Auth gate / sign-in prompt |
 
 ### Internal helpers
 
@@ -164,8 +228,8 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 ### Notes
 
-- Very focused SSR — only two pages (authenticated dashboard + its auth gate).
-- The streamer dashboard shows RTMP ingest config, destination management, active stream status, and output controls.
+- Only two pages — authenticated dashboard and its auth gate.
+- Shows RTMP ingest config, destination management, active stream status, and output controls.
 
 ---
 
@@ -192,19 +256,17 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 - `shell(title, content, userEmail)` — shared HTML shell for all admin pages
 - `escHtml(v)` — HTML escape util
-- `statusDot(ok)` — green/red status indicator dot
+- `statusDot(ok)` — green/red status indicator
 
 ### Notes
 
-- All routes are gated behind `adminOnly` middleware — non-admins get `renderUnauthorized()`.
-- No public domain; accessible only internally or via VPN/SSH tunnel.
+- All routes gated behind `adminOnly` middleware.
+- No public domain; accessible only internally.
 - Smallest SSR in the repo at 349 lines.
 
 ---
 
 ## Services without an ssr.js
-
-These services serve pages through other mechanisms:
 
 | Service | Domain | How pages are served |
 |---|---|---|
