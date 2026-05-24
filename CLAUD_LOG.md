@@ -1117,3 +1117,37 @@ Replaced all 7 old bubble implementations (6 redirect `<a>` tags + 1 inline netw
 | `services/openvibe-community/public/pages/finditfixit.html` | Fetch URLs → `/api/community/finditfixit/*` |
 | `services/openvibe-community/public/finditfixit.html` | **Deleted** — was duplicate of pages/ version |
 | `services/openvibe-community/public/finditfixits-proxy.py` | **Deleted** — replaced by Node routes |
+
+---
+
+## Session — 2026-05-24 (part 20) — openvibe.network services directory: missing surfaces added
+
+### Problem
+The services directory row on `openvibe.network` was missing many planned and built surfaces — `openvibe.trade`, `openvibe.tips`, `openvibe.blog`, `openvibe.wiki`, `openvibe.codes`, `openvibe.news`, `openvibe.deals`, `openvibe.coupons`, `workers.openvibe.network`, `realtime.openvibe.network`. The `openvibe-community` entry was also mislabeled "Pastes".
+
+Root cause: `openvibe.js` (frontend) had manually-maintained copies of the surface lookup tables that were out of sync with the authoritative `packages/openvibe-sdk/url-defaults.js` which had all surfaces defined.
+
+### Fix (`services/openvibe-network/public/assets/openvibe.js`)
+
+Added 13 missing surfaces to all four lookup tables — `SURFACE_URL_KEYS`, `SURFACE_FALLBACKS`, `LOCAL_SURFACE_HOSTS`, `LOCAL_SURFACE_PORTS` — matching `url-defaults.js` exactly:
+
+| Surface | Production URL | Local port |
+|---------|---------------|------------|
+| workers | workers.openvibe.network | 5300 |
+| realtime | realtime.openvibe.network | 5400 |
+| codes / blog / wiki / news / reviews / deals / coupons / trade | openvibe.{surface} | 5500 |
+| tips | openvibe.tips | 5600 |
+| vip | openvibe.vip | 5000 |
+
+Added new service IDs to `SERVICE_SURFACE_MAP`:
+`openvibe-workers`, `openvibe-realtime`, `openvibe-tips`, `openvibe-trade`, `openvibe-codes`, `openvibe-blog`, `openvibe-wiki`, `openvibe-news`, `openvibe-reviews`, `openvibe-deals`, `openvibe-coupons`, `openvibe-content`
+
+Updated `FALLBACK_SERVICES`:
+- Fixed `openvibe-community`: display_name "Pastes" → "OpenVibe Community", updated description
+- Added 10 new service entries: Trade, Tips, Blog, Wiki, Codes, News, Deals, Coupons, Workers, Realtime
+- `spotlight: true` on Trade (it's a primary product surface)
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-network/public/assets/openvibe.js` | Added 13 surfaces to all lookup tables; updated FALLBACK_SERVICES with 10 new entries + community rename |
