@@ -11,6 +11,8 @@
     const LOCAL_THEME_KEY = 'openvibe.theme';
     const LOCAL_ANON_TOKENS_KEY = 'openvibe.anon_tokens';
     const LOCAL_ACTIVE_ANON_KEY = 'openvibe.anon_active';
+    const BRIDGE_ATTEMPTED_KEY = 'openvibe.bridge.attempted';
+    const SIGNED_OUT_KEY = 'openvibe.signed.out';
 
     let sessionPromise = null;
 
@@ -419,7 +421,34 @@
     }
 
     function signOutUrl(returnTo) {
-        return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo))}`;
+        var cleanUrl = bridgeReturnUrl(returnTo);
+        var markedUrl = cleanUrl + (cleanUrl.indexOf('?') >= 0 ? '&' : '?') + 'ov_so=1';
+        return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(markedUrl)}`;
+    }
+
+    function clearSignedOutState() {
+        var url = (global.location && global.location.href) || '';
+        if (url.indexOf('ov_so=1') < 0) return;
+        clearBridgeToken();
+        try { global.sessionStorage.removeItem(BRIDGE_ATTEMPTED_KEY); } catch (_) {}
+        try { global.sessionStorage.setItem(SIGNED_OUT_KEY, '1'); } catch (_) {}
+        try {
+            var u = new URL(url);
+            u.searchParams.delete('ov_so');
+            global.history.replaceState({}, global.document.title, u.toString());
+        } catch (_) {}
+    }
+
+    function tryAutoLogin() {
+        if (loadBridgeToken()) return;
+        try {
+            if (global.sessionStorage.getItem(BRIDGE_ATTEMPTED_KEY)) return;
+            if (global.sessionStorage.getItem(SIGNED_OUT_KEY)) return;
+        } catch (_) {}
+        try { global.sessionStorage.setItem(BRIDGE_ATTEMPTED_KEY, '1'); } catch (_) {}
+        var current = (global.location && global.location.href) || '';
+        var silentUrl = buildBridgeUrl(current) + '&silent=1';
+        global.location.replace(silentUrl);
     }
 
     function loadBridgeToken() {
@@ -607,6 +636,7 @@
                 }
             }
             const guest = { authenticated: false, anonymous: false, user: null, access_token: '' };
+            try { global.sessionStorage.removeItem(BRIDGE_ATTEMPTED_KEY); } catch (_) {}
             dispatchAuthChanged(guest);
             return guest;
         }
@@ -914,6 +944,7 @@
     }
 
     async function hydrateNavSession() {
+        clearSignedOutState();
         var target = global.document.getElementById('ov-nav-session');
         if (!target) return;
         var session = await loadSession();
@@ -974,6 +1005,7 @@
         }
 
         // ── signed out ───────────────────────────────────────────────────────
+        tryAutoLogin();
         target.innerHTML = `
             <button class="ov-btn" type="button" data-openvibe-anon-session="true">Anonymous</button>
             <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Sign in</a>`;

@@ -17,8 +17,11 @@ Browser
   ├─ openvibe.live.localhost:4600     ← Cookie-based auth (own /auth/login route)
   ├─ openre.stream.localhost:4700     ← Cookie-based auth (own /auth/login route)
   ├─ openvibe.tips.localhost:?        ← Cookie-based auth (own /auth/login route)
-  └─ openvibe.community.localhost:4900 ← Cookie SSO via .localhost domain
+  └─ openvibe.community.localhost:4900 ← Cookie SSO via .localhost domain (dev)
+                                        ← Session sync via bridge token (prod)
 ```
+
+**Critical prod distinction:** In development all services share `.localhost` so the network cookie reaches every surface. In production `openvibe.community` is a different TLD from `openvibe.network` — the network cookie (`Domain=.openvibe.network`) is **never sent** to `openvibe.community`. Community uses the bridge-token + session-sync pattern described in Pattern B to bridge that gap.
 
 ---
 
@@ -49,41 +52,75 @@ User clicks /auth/login
 
 ---
 
-## Pattern B — Cross-domain cookie SSO + sessionStorage (community, tools)
+## Pattern B — Cross-domain bridge token + session sync (community, tools)
 
 The network service sets the `openvibe_token` cookie on TWO domains on every login:
 1. Primary domain: `.openvibe.network.localhost` (dev) or `.openvibe.network` (prod)
 2. Localhost SSO domain: `.localhost` (dev only)
 
-This means **all `*.localhost` services automatically receive the cookie** without their own auth routes. Community and tools use this.
+In **dev** all `*.localhost` services automatically receive the cookie. In **prod** community has a different TLD so it relies on the bridge token and the session-sync endpoint instead.
 
-**Sign-in flow from community SSR pages:**
+**Sign-in flow from community SSR pages (prod):**
 ```
-User clicks "Sign in" (href = {network}/api/v1/session/bridge?return_to={community})
-  → If already logged in: bridge redirects to {community}#openvibe_token={jwt}
-  → If not logged in: bridge → {auth}/oauth/authorize → login → back to bridge → {community}#openvibe_token={jwt}
-  → Community SPA loads: consumeBridgeToken() reads hash → saves to sessionStorage
-  → exchangeNetworkSession() POSTs to {network}/api/v1/session/exchange with Bearer token
-  → Session resolved; openvibe-auth-changed event fired → nav updates
+User clicks "Sign in" (href = {network}/api/v1/session/bridge?return_to={community_page})
+  → If already logged in: bridge redirects to {community_page}#openvibe_token={jwt}
+  → If not logged in: bridge → {auth}/oauth/authorize → login → back to bridge → {community_page}#openvibe_token={jwt}
+  → openvibe.js loads: consumeBridgeToken() reads hash → saves JWT to sessionStorage
+  → exchangeNetworkSession() calls {network}/api/v1/session/exchange with Bearer token
+  → Returns { authenticated, anonymous, user, access_token }
+  → hydrateNavSession() syncs session to community domain (see Session Sync below)
+  → Nav updates: avatar/initials dropdown rendered in #ov-nav-session
 ```
 
-**Client-side session load (openvibe.js):**
+**Client-side session load (openvibe.js on community):**
 ```js
 loadSession()
-  → consumeBridgeToken()   // reads #openvibe_token from URL hash, saves to sessionStorage
+  → consumeBridgeToken()     // reads #openvibe_token from URL hash, saves to sessionStorage
   → exchangeNetworkSession()
       → POST {network}/api/v1/session/exchange
-          with Authorization: Bearer {sessionStorage token}  (or .localhost cookie)
+          with Authorization: Bearer {sessionStorage token}  (or .localhost cookie in dev)
       → returns { authenticated, anonymous, user, access_token }
   → fires 'openvibe-auth-changed' CustomEvent on document
 ```
+
+**After `loadSession()` resolves, `hydrateNavSession()` does two things:**
+1. Calls `GET /api/v1/session/sync` on community with `Authorization: Bearer {access_token}` → community sets its own `openvibe_token` cookie (same-domain, httpOnly) → all subsequent form POSTs (thread replies, paste promote, etc.) carry auth automatically
+2. Renders the account dropdown in `#ov-nav-session` with avatar/initials, username, account links, and sign-out
 
 **Key functions in openvibe.js:**
 - `signInUrl(returnTo)` → bridge URL pointing back to current page
 - `signOutUrl(returnTo)` → `{auth}/oauth/logout?return_to={bridge_return_url}`
 - `consumeBridgeToken()` → reads hash, saves to sessionStorage
-- `exchangeNetworkSession()` → POSTs to network, gets session
+- `exchangeNetworkSession()` → POSTs to network, gets session + `access_token`
+- `hydrateNavSession()` → renders avatar dropdown + fires session sync
 - `networkRequestJson(path, opts)` → fetches from network with Bearer + credentials:include
+
+**Token lifetime:** Access tokens have a 2-hour TTL (`ACCESS_TOKEN_TTL_SECONDS = 7200`). Each page load re-runs `exchangeNetworkSession()` which refreshes the token transparently if the network cookie is still valid.
+
+---
+
+## Session sync endpoint (community-specific)
+
+`GET {community}/api/v1/session/sync`
+
+Called by client-side `hydrateNavSession()` after a successful `exchangeNetworkSession()`. Bridges the TLD gap in production so form POSTs on community carry authenticated identity.
+
+**Request:** `Authorization: Bearer {access_token}` header (the token returned by network's `/session/exchange`)
+
+**What it does:**
+1. `optionalOpenVibeAuth` middleware verifies the bearer token → populates `req.user`
+2. Sets `openvibe_token` as an `httpOnly` same-domain cookie on `openvibe.community`
+3. Returns `{ ok: true }`
+
+**Effect:** After this call, all form POSTs (thread replies at `/threads/:id/reply`, paste promote at `/pastes/:slug/promote`) carry the `openvibe_token` cookie → `req.user` is populated in SSR handlers → authenticated actions work without requiring an API client.
+
+**Source:** `services/openvibe-community/server/index.js` — `app.get('/api/v1/session/sync', ...)`
+
+**Cookie set:**
+```
+openvibe_token=<jwt>; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800
+Secure=true in production, false in development
+```
 
 ---
 
@@ -178,13 +215,49 @@ Note: sessionStorage token is NOT cleared by the server. Client-side openvibe.js
 
 ---
 
-## Known broken patterns (fixed 2026-05-23)
+## Known broken patterns
 
-**Fixed:** Community SSR sign-in links pointed to `{network}/auth/login` which doesn't exist as a route. Corrected to `{network}/api/v1/session/bridge?return_to={community}`.
+**Fixed 2026-05-23:** Community SSR sign-in links pointed to `{network}/auth/login` which doesn't exist as a route. Corrected to `{network}/api/v1/session/bridge?return_to={community}`.
 
-**Fixed:** `tools.html` on the network surface had `href="/auth/login"` and `href="/auth/register"` — neither route exists. Corrected to `/oauth/authorize`.
+**Fixed 2026-05-23:** `tools.html` on the network surface had `href="/auth/login"` and `href="/auth/register"` — neither route exists. Corrected to `/oauth/authorize`.
 
-**Fixed:** Community SSR shell did not load `openvibe.js`, so client-side auth state was never established on SSR pages (/pulse, /threads, /pastes, /p/:slug, etc.). Script tag added to `_shell()`.
+**Fixed 2026-05-23:** Community SSR shell (`_shell()`) did not load `openvibe.js`, so client-side auth state was never established on SSR pages (/pulse, /threads, /pastes, /p/:slug, etc.). Script tag added to `_shell()`.
+
+**Fixed 2026-05-24:** `_forumShell()` in `ssr-shared.js` was missing `openvibe.js` entirely and had a hardcoded static `<a href="...">Sign in</a>` link. Fixed: added `<script src="/assets/openvibe.js" defer></script>`, replaced the static link with `<div id="ov-nav-session"></div>`, and added a `DOMContentLoaded` init block calling `OpenVibe.primeEnvironment()` + `OpenVibe.renderChrome('community')`. All forum pages (`/forum`, `/forum/s/:slug`, `/forum/t/:id`) now have full auth.
+
+**Fixed 2026-05-24:** Community auth was client-side only — form POSTs (thread replies, paste promote) had `req.user = null` in production because the network cookie (`Domain=.openvibe.network`) is never sent to `openvibe.community`. Fixed via the `/api/v1/session/sync` endpoint that sets a same-domain cookie after the client-side bridge exchange completes.
+
+---
+
+## Nav session UI — buddy icon + dropdown
+
+Every surface that loads `openvibe.js` and has `<div id="ov-nav-session"></div>` in its shell gets the account dropdown automatically via `hydrateNavSession()`.
+
+**Authenticated state:**
+```html
+<button class="ov-anon-trigger" aria-label="Account menu">
+  <img class="ov-nav-avatar" src="{avatar_url}">  <!-- falls back to initials if broken -->
+  <span class="ov-nav-initials" style="display:none">AB</span>
+</button>
+<div class="ov-anon-dropdown" hidden>
+  <div class="ov-anon-dropdown-name">@username</div>
+  <a href="{my_account}">My account</a>
+  <a href="{my_account}/sessions">Sessions</a>
+  <a href="{sign_out_url}" class="--danger">Sign out</a>
+</div>
+```
+
+**Anonymous state:** Shows "Anonymous" trigger with switch-identity, create-account, and leave-anonymous options.
+
+**Signed-out state:** Shows an "Anonymous" button (which triggers sign-in bridge flow) and a "Sign in" link.
+
+**Avatar fallback:** `onerror` on the `<img>` hides it and shows the `.ov-nav-initials` span. Initials are derived from display_name (first + last word initials) or username (first 2 chars).
+
+**CSS classes added to community `ssr-shared.js` `_styles()`:**
+- `.ov-nav-avatar` — 26px circle, `object-fit: cover`
+- `.ov-nav-initials` — 26px circle, gradient background, white text
+
+**`avatar_url` source:** Returned by network's `/api/v1/session/exchange` inside the `user` object via `buildExchangeResponse()`.
 
 ---
 

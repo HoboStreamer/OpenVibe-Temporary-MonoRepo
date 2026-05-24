@@ -105,6 +105,8 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
     <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(description)}">
     <link rel="stylesheet" href="/assets/openvibe-icons.css">
+    <link rel="stylesheet" href="/assets/openvibe.css">
+    <script src="/assets/openvibe.js" defer></script>
     <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
     <style>
         :root {
@@ -159,11 +161,21 @@ function renderLayout({ config, surface, pageTitle, description, canonicalUrl, r
         <header class="ov-nav">
             <a class="ov-brand" href="${escapeHtml(surface.origin)}/">${renderIcon(surface.id, { decorative: true })}<span>${escapeHtml(surface.label)}</span></a>
             <nav class="ov-nav-links" aria-label="OpenVibe content surfaces">${nav}</nav>
+            <div id="ov-nav-session"></div>
         </header>
         ${statusNote ? `<div class="ov-status">${escapeHtml(statusNote)}</div>` : ''}
         ${bodyHtml}
         <footer class="ov-footer">Rendered by ${escapeHtml(config.serviceId)} on ${escapeHtml(surface.host)} · current path: ${escapeHtml(currentPath || '/')}.</footer>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.OpenVibe) {
+                OpenVibe.primeEnvironment().then(function () {
+                    return OpenVibe.renderChrome('content');
+                }).catch(function () {});
+            }
+        });
+    </script>
 </body>
 </html>`;
 }

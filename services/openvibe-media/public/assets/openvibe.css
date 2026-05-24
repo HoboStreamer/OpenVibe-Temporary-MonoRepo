@@ -352,3 +352,16 @@ pre { background: var(--ov-bg-elev); padding: 1rem; border-radius: var(--ov-radi
     transition: color 0.12s;
 }
 .ov-theme-explore:hover { color: var(--ov-accent-2, #2dd4bf); text-decoration: underline; }
+
+/* ── Nav avatar / initials ── */
+.ov-nav-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    object-fit: cover; display: block; flex-shrink: 0;
+}
+.ov-nav-initials {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--ov-accent, #22d3ee), #4f46e5);
+    color: #fff; font-size: 0.65rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; letter-spacing: 0.02em;
+}

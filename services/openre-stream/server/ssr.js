@@ -229,8 +229,7 @@ function _styles() {
     </style>`;
 }
 
-function _shell({ title, bodyHtml, user, extraScripts }) {
-    const displayName = user && (user.display_name || user.username) || null;
+function _shell({ title, bodyHtml, extraScripts }) {
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -239,7 +238,9 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
     <title>${esc(title || 'OpenRe.Stream')}</title>
     ${_styles()}
     <link rel="stylesheet" href="/assets/openvibe-icons.css">
+    <link rel="stylesheet" href="/assets/openvibe.css">
     <script src="/assets/openvibe-icons.js" defer></script>
+    <script src="/assets/openvibe.js" defer></script>
 </head>
 <body>
     <header class="topbar">
@@ -253,11 +254,7 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
                 <a class="nav-link ov-icon-label" href="${URLS.live}">${renderIcon('live', { decorative: true })}<span>openvibe.live</span></a>
                 <a class="nav-link ov-icon-label" href="${URLS.network}">${renderIcon('my', { decorative: true })}<span>Account</span></a>
             </nav>
-            <div>
-                ${displayName
-                    ? `<span class="nav-link">${esc(displayName)}</span>`
-                    : `<a class="nav-link" href="/auth/login">Sign in</a>`}
-            </div>
+            <div id="ov-nav-session"></div>
         </div>
     </header>
     <main class="page">
@@ -272,6 +269,15 @@ function _shell({ title, bodyHtml, user, extraScripts }) {
         </div>
     </footer>
     ${extraScripts || ''}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.OpenVibe) {
+                OpenVibe.primeEnvironment().then(function () {
+                    return OpenVibe.renderChrome('stream');
+                }).catch(function () {});
+            }
+        });
+    </script>
 </body>
 </html>`;
 }
