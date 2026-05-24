@@ -1058,3 +1058,62 @@ Replaced all 7 old bubble implementations (6 redirect `<a>` tags + 1 inline netw
 | `services/openvibe-live/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
 | `services/openvibe-community/server/ssr.js` | Replaced redirect `<a>` in template with script tag |
 | `CHAT_CLAUDE.md` | Updated Global chat widget section to reflect standalone file |
+
+---
+
+## Session — 2026-05-24 (part 19) — Games cards fix, community pages routing, finditfixit proxy integration
+
+### openvibe.games — game cards not rendering
+
+**Problem:** The games homepage (`/`) showed a blank grid. The IIFE awaited `OpenVibe.primeEnvironment()` and `OpenVibe.renderChrome('games')` before building `grid.innerHTML`, so any chrome error crashed the whole script before the cards rendered.
+
+**Fix (`services/openvibe-games/public/index.html`):**
+- Moved `grid.innerHTML = GAMES.map(...)` to execute first, unconditionally
+- Added inline `esc()` helper so the grid doesn't depend on `OpenVibe.escapeHtml` being available
+- Wrapped both chrome calls in `try/catch` — nav failures no longer block the game cards
+
+---
+
+### openvibe.community — pages not showing / routing broken
+
+**Problems:**
+1. Community home showed "No community pages yet" even though `pages-registry.json` had entries — `loadPagesRegistry()` used `require()` which caches JSON forever; pages added after server start were invisible
+2. `Cannot GET /pages/` and `Cannot GET /pages/finditfixit` — routes registered as `/pages` and `/pages/:slug` with no trailing-slash variants
+3. `/pages/finditfixit.html` worked (static serve) but `/pages/finditfixit` (clean URL) didn't — `express.static` doesn't resolve `.html` extensions by default
+4. Two identical copies of `finditfixit.html` (`public/finditfixit.html` and `public/pages/finditfixit.html`)
+5. `finditfixits-proxy.py` — a separate Python HTTP server on `localhost:7779` that had to be run manually; page would silently break without it
+
+**Fixes:**
+
+**`server/routes.js`** — `loadPagesRegistry`:
+- Replaced `require('pages-registry.json')` with `JSON.parse(fs.readFileSync(...))` — reads fresh from disk on every request, no restart needed when adding pages
+
+**`server/index.js`:**
+- `express.static(..., { extensions: ['html'] })` — clean URLs like `/pages/finditfixit` now resolve to `public/pages/finditfixit.html` automatically
+- Routes changed to array form for trailing slash support: `['/pages', '/pages/']`, `['/pages/submit', '/pages/submit/']`, `['/pages/:slug', '/pages/:slug/']`
+- Imported and mounted `buildFinditfixitRouter()` at `/api/community/finditfixit` (browser-facing, no internal key required)
+
+**`server/routes-finditfixit.js`** (new file):
+- Pure Node.js proxy — no Python, no external dependencies beyond Node built-ins
+- `GET /api/community/finditfixit/status[?last_online=ISO]` — checks RoboStreamer live status + OpenVibe Live channel; in-memory last-seen tracker
+- `GET /api/community/finditfixit/deals` — scrapes DuckDuckGo HTML for fast food deals near Killeen TX
+- `GET /api/community/finditfixit/findit[?q=query]` — queries Craigslist Killeen JSON search API for free/broken items
+
+**`public/pages/finditfixit.html`:**
+- All three `fetch('http://localhost:7779/...')` calls replaced with `/api/community/finditfixit/...`
+- Error message no longer mentions the Python proxy
+
+**Deleted:**
+- `public/finditfixit.html` — duplicate (keep only `public/pages/finditfixit.html`)
+- `public/finditfixits-proxy.py` — replaced by Node routes above
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-games/public/index.html` | Render cards before chrome calls; guard chrome with try/catch |
+| `services/openvibe-community/server/routes.js` | `loadPagesRegistry`: `require()` → `fs.readFileSync` |
+| `services/openvibe-community/server/index.js` | Static extensions; trailing slash routes; mount finditfixit router |
+| `services/openvibe-community/server/routes-finditfixit.js` | **Created** — Node proxy for status/deals/findit endpoints |
+| `services/openvibe-community/public/pages/finditfixit.html` | Fetch URLs → `/api/community/finditfixit/*` |
+| `services/openvibe-community/public/finditfixit.html` | **Deleted** — was duplicate of pages/ version |
+| `services/openvibe-community/public/finditfixits-proxy.py` | **Deleted** — replaced by Node routes |
