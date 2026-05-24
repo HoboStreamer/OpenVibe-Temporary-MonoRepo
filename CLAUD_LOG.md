@@ -1274,3 +1274,43 @@ The original monolithic `ssr.js` (1062 lines, 76 KB) was restructured into 11 fi
 | `services/openvibe-content/server/ssr-host.js` | New — openvibe.host surface |
 | `services/openvibe-content/server/ssr.js` | Rewritten as thin aggregator (1062 → 55 lines) |
 | `SSR_CLAUDE.md` | New — SSR reference document |
+
+---
+
+## Session — 2026-05-24 (part 24) — openvibe-community SSR split into feature files
+
+### Work done
+
+Same pattern as openvibe-content (session 23) applied to the community SSR.
+
+The original `ssr.js` (1051 lines, 64 KB) was split into 8 files:
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 22 KB | COMMUNITY_URLS, SIGN_IN_URL, ANON_URL, utilities, `_styles()`, `_shell()`, `_threadCard()`, `_pasteCard()`, `_forumShell()` |
+| `ssr-threads.js` | 12 KB | `renderThreadsPage` + `renderThreadDetailPage` |
+| `ssr-pastes.js` | 12 KB | `renderPastesPage` + `renderPasteViewPage` |
+| `ssr-pulse.js` | 1.5 KB | `renderPulsePage` |
+| `ssr-chat.js` | 1.9 KB | `renderChatPage` |
+| `ssr-pages.js` | 5.1 KB | `renderPagesPage` + `renderSubmitPage` |
+| `ssr-forum.js` | 7.0 KB | `renderForumHomePage` + `renderForumSpacePage` + `renderForumThreadPage` |
+| `ssr.js` (rewritten) | 0.8 KB | Thin aggregator — re-exports all 11 functions, same public API |
+
+### Architecture
+
+- `ssr-shared.js` owns all constants (`COMMUNITY_URLS`, `SIGN_IN_URL`, `ANON_URL`), utility functions (`escapeHtml`, `timeAgo`, `pasteLanguageLabel`), shared CSS (`_styles()`), HTML shells (`_shell()`, `_forumShell()`), and card partials (`_threadCard()`, `_pasteCard()`)
+- Each feature file requires only what it needs from `ssr-shared`
+- `ssr.js` aggregator simply re-exports all functions from the 6 feature files — `index.js` is untouched
+
+### Files changed
+| File | Change |
+|------|--------|
+| `services/openvibe-community/server/ssr-shared.js` | New — shared constants, utilities, shells, card partials |
+| `services/openvibe-community/server/ssr-threads.js` | New — threads list + thread detail |
+| `services/openvibe-community/server/ssr-pastes.js` | New — pastes list + paste view |
+| `services/openvibe-community/server/ssr-pulse.js` | New — community pulse |
+| `services/openvibe-community/server/ssr-chat.js` | New — Discord relay chat |
+| `services/openvibe-community/server/ssr-pages.js` | New — community pages + submit |
+| `services/openvibe-community/server/ssr-forum.js` | New — forum home, space, thread |
+| `services/openvibe-community/server/ssr.js` | Rewritten as thin aggregator (1051 → 17 lines) |
+| `SSR_CLAUDE.md` | Updated — section 1 rewritten to reflect new file structure |

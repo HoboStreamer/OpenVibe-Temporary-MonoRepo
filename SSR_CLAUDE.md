@@ -9,7 +9,7 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 | Service | File(s) | Lines | Size | Domain(s) | Dev Port |
 |---|---|---|---|---|---|
-| openvibe-community | `server/ssr.js` | 1051 | 64 KB | openvibe.community | 4900 |
+| openvibe-community | `server/ssr.js` + 7 files | — | ~62 KB total | openvibe.community | 4900 |
 | openvibe-live | `server/ssr.js` | 4503 | 252 KB | openvibe.live | 4600 |
 | openvibe-content | `server/ssr.js` + 10 files | — | ~80 KB total | openvibe.codes / .blog / .wiki / .news / .reviews / .deals / .coupons / .trade / .host | 5500 |
 | openre-stream | `server/ssr.js` | 608 | 48 KB | openre.stream | 4700 |
@@ -17,42 +17,64 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 
 ---
 
-## 1. openvibe-community — `services/openvibe-community/server/ssr.js`
+## 1. openvibe-community — `services/openvibe-community/server/`
 
 **Domain:** `https://openvibe.community`  
-**Dev port:** 4900  
-**Lines:** 1051 | **Size:** 64 KB
+**Dev port:** 4900
+
+### File structure
+
+| File | Size | Role |
+|---|---|---|
+| `ssr-shared.js` | 22 KB | Constants, utilities, CSS, HTML shells, card partials |
+| `ssr-threads.js` | 12 KB | `renderThreadsPage` + `renderThreadDetailPage` |
+| `ssr-pastes.js` | 12 KB | `renderPastesPage` + `renderPasteViewPage` |
+| `ssr-pulse.js` | 1.5 KB | `renderPulsePage` |
+| `ssr-chat.js` | 1.9 KB | `renderChatPage` |
+| `ssr-pages.js` | 5.1 KB | `renderPagesPage` + `renderSubmitPage` |
+| `ssr-forum.js` | 7.0 KB | `renderForumHomePage` + `renderForumSpacePage` + `renderForumThreadPage` |
+| `ssr.js` | 0.8 KB | Aggregator — re-exports all 11 functions, `index.js` untouched |
 
 ### Pages rendered
 
-| Function | Route | Description |
-|---|---|---|
-| `renderPulsePage` | `GET /pulse` | Combined feed of recent threads + pastes |
-| `renderThreadsPage` | `GET /threads` | List of all community threads |
-| `renderThreadDetailPage` | `GET /threads/:idOrSlug` | Single thread view with posts/replies |
-| `renderPastesPage` | `GET /pastes` | List of all pastes |
-| `renderPasteViewPage` | `GET /p/:slug` | Single paste viewer with syntax highlight |
-| `renderChatPage` | `GET /chat` | Discord relay message feed |
-| `renderForumHomePage` | `GET /forum` | Forum home, lists spaces + recent threads |
-| `renderForumSpacePage` | `GET /forum/s/:slug` | Single forum space (category) |
-| `renderForumThreadPage` | `GET /forum/t/:id` | Thread inside a forum space |
-| `renderPagesPage` | `GET /pages`, `GET /pages/:slug` | Static community pages registry |
-| `renderSubmitPage` | `GET /pages/submit` | Submit a new community page |
+| Function | File | Route | Description |
+|---|---|---|---|
+| `renderPulsePage` | ssr-pulse.js | `GET /pulse` | Combined feed of recent threads + pastes |
+| `renderThreadsPage` | ssr-threads.js | `GET /threads` | Thread list with live filter + favourites |
+| `renderThreadDetailPage` | ssr-threads.js | `GET /threads/:idOrSlug` | BBS-style thread view with paste OP + replies |
+| `renderPastesPage` | ssr-pastes.js | `GET /pastes` | Paste list with sort and live filter |
+| `renderPasteViewPage` | ssr-pastes.js | `GET /p/:slug` | Single paste viewer, copy button, more-pastes strip |
+| `renderChatPage` | ssr-chat.js | `GET /chat` | Discord relay message feed |
+| `renderForumHomePage` | ssr-forum.js | `GET /forum` | Forum home — spaces + recent discussions |
+| `renderForumSpacePage` | ssr-forum.js | `GET /forum/s/:slug` | Single forum space thread list |
+| `renderForumThreadPage` | ssr-forum.js | `GET /forum/t/:id` | Forum thread with posts + reply gate |
+| `renderPagesPage` | ssr-pages.js | `GET /pages`, `GET /pages/:slug` | Community pages registry |
+| `renderSubmitPage` | ssr-pages.js | `GET /pages/submit` | How to submit a community page |
 
-### Internal helpers
+### `ssr-shared.js` exports
 
-- `_styles()` — all inline CSS (uses CSS variables: `--bg`, `--panel`, `--text`, `--border`, `--accent`, `--muted` with `color-mix()` for opacity)
-- `_nav(active)` — top nav bar with active link highlight
-- `_head({ title, description, canonical })` — `<head>` block
-- `_shell({ title, description, canonical, active, bodyHtml })` — full HTML shell; mounts `#ov-nav-session` and runs deferred `renderChrome('community')`
-- `_forumNav(active)`, `_forumShell(...)` — separate shell variant for forum pages
-- `_threadCard(thread)`, `_pasteCard(paste)` — reusable card partials
+```
+COMMUNITY_URLS          — { live, chat, network, community } resolved origins
+SIGN_IN_URL             — network bridge sign-in URL
+ANON_URL                — anonymous session URL
+escapeHtml(value)
+timeAgo(value)
+pasteLanguageLabel(lang)
+_styles()               — shared inline CSS (CSS variables throughout)
+_nav(active)            — community top nav
+_head({ title, description, canonical })
+_shell({ title, description, canonical, active, bodyHtml })
+_threadCard(thread)     — reusable thread card partial
+_pasteCard(paste)       — reusable paste card partial
+_forumNav(active)       — forum nav (different set of links)
+_forumShell({ title, description, active, bodyHtml })
+```
 
 ### Auth / theme notes
 
-- Deferred `OpenVibe.primeEnvironment()` + `OpenVibe.renderChrome('community')` runs after openvibe.js loads.
-- `#ov-nav-session` is the mount point for the buddy icon dropdown.
-- All CSS uses `var(--bg)`, `var(--panel)`, `var(--text)`, `var(--border)`, `var(--accent)`, `var(--muted)` — themes apply immediately when openvibe.js sets inline CSS vars.
+- `_shell()` mounts `#ov-nav-session` and runs deferred `OpenVibe.primeEnvironment()` + `renderChrome('community')` after openvibe.js loads.
+- `_forumShell()` has a plain sign-in link only (no openvibe.js integration yet).
+- All CSS uses `var(--bg)`, `var(--panel)`, `var(--text)`, `var(--border)`, `var(--accent)`, `var(--muted)` with `color-mix()` for opacity — themes apply immediately.
 
 ---
 
