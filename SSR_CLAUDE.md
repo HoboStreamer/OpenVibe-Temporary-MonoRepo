@@ -10,7 +10,7 @@ Purpose: Quick reference for all server-side rendered (SSR) files — what they 
 | Service | File(s) | Lines | Size | Domain(s) | Dev Port |
 |---|---|---|---|---|---|
 | openvibe-community | `server/ssr.js` + 7 files | — | ~62 KB total | openvibe.community | 4900 |
-| openvibe-live | `server/ssr.js` | 4503 | 252 KB | openvibe.live | 4600 |
+| openvibe-live | `server/ssr.js` + 6 files | — | ~244 KB total | openvibe.live | 4600 |
 | openvibe-content | `server/ssr.js` + 10 files | — | ~80 KB total | openvibe.codes / .blog / .wiki / .news / .reviews / .deals / .coupons / .trade / .host | 5500 |
 | openre-stream | `server/ssr.js` | 608 | 48 KB | openre.stream | 4700 |
 | openvibe-control | `server/ssr.js` | 349 | 16 KB | (internal admin, no public domain) | 4300 |
@@ -78,44 +78,61 @@ _forumShell({ title, description, active, bodyHtml })
 
 ---
 
-## 2. openvibe-live — `services/openvibe-live/server/ssr.js`
+## 2. openvibe-live — `services/openvibe-live/server/`
 
 **Domain:** `https://openvibe.live`  
-**Dev port:** 4600  
-**Lines:** 4503 | **Size:** 252 KB  
-**(Largest SSR in the repo)**
+**Dev port:** 4600
+
+### File structure
+
+| File | Size | Role |
+|---|---|---|
+| `ssr-shared.js` | 107 KB | Constants, utilities, CSS, scripts, nav/footer/renderPage, all UI partials |
+| `ssr-golive.js` | 71 KB | `renderGoLivePage` — 934 lines, includes its own inline styles + script |
+| `ssr-media.js` | 38 KB | `renderStreamPage`, `renderMediaDetailPage`, `renderCustomMediaPlayer`, `renderCollectionPage`, `renderMissingMediaPage` |
+| `ssr-channel.js` | 14 KB | `renderChannelPage`, `renderChannelsPage`, `renderOfflinePage` |
+| `ssr-home.js` | 11 KB | `renderHomePage` |
+| `ssr-updates.js` | 1.9 KB | `renderUpdatesPage` |
+| `ssr.js` | 1.1 KB | Aggregator — re-exports all 11 functions |
 
 ### Pages rendered
 
-| Function | Route | Description |
-|---|---|---|
-| `renderHomePage` | `GET /` | Main home — live channels, trending, VODs, clips, chat, community section |
-| `renderChannelsPage` | `GET /channels` | All channels grid with featured + categories |
-| `renderChannelPage` | `GET /@:slug`, `GET /c/:slug` | Individual streamer channel page |
-| `renderStreamPage` | `GET /@:slug/s/:streamId`, `GET /c/:slug/s/:streamId` | Individual stream/VOD player page |
-| `renderCollectionPage` | `GET /vods` | All VODs list |
-| `renderCollectionPage` | `GET /clips` | All clips list |
-| `renderMediaDetailPage` | `GET /vod/:id` | VOD detail + player |
-| `renderMediaDetailPage` | `GET /clip/:id` | Clip detail + player |
-| `renderGoLivePage` | `GET /go-live` | Go-live setup wizard (auth-gated) |
-| `renderUpdatesPage` | `GET /updates` | Release notes / changelog |
-| `renderOfflinePage` | `GET /@:slug` (404) | Shown when channel exists but is offline |
-| `renderMissingMediaPage` | `GET /vod/:id` (404) | Shown when VOD/clip not found |
-| `renderCustomMediaPlayer` | (internal util) | Embeddable standalone player shell |
+| Function | File | Route | Description |
+|---|---|---|---|
+| `renderHomePage` | ssr-home.js | `GET /` | Main home — live channels, trending, VODs, clips, chat, community section |
+| `renderChannelsPage` | ssr-channel.js | `GET /channels` | All channels grid with featured + categories |
+| `renderChannelPage` | ssr-channel.js | `GET /@:slug`, `GET /c/:slug` | Individual streamer channel page |
+| `renderStreamPage` | ssr-media.js | `GET /@:slug/s/:streamId`, `GET /c/:slug/s/:streamId` | Individual stream/VOD player page |
+| `renderCollectionPage` | ssr-media.js | `GET /vods` + `GET /clips` | VOD and clips list pages |
+| `renderMediaDetailPage` | ssr-media.js | `GET /vod/:id`, `GET /clip/:id` | VOD/clip detail + player |
+| `renderGoLivePage` | ssr-golive.js | `GET /go-live` | Go-live setup wizard (auth-gated) |
+| `renderUpdatesPage` | ssr-updates.js | `GET /updates` | Release notes / changelog |
+| `renderOfflinePage` | ssr-channel.js | `GET /@:slug` (404) | Shown when channel is offline |
+| `renderMissingMediaPage` | ssr-media.js | `GET /vod/:id` (404) | Shown when VOD/clip not found |
+| `renderCustomMediaPlayer` | ssr-media.js | (internal util) | Embeddable standalone player shell |
 
-### Internal helpers
+### `ssr-shared.js` exports
 
-- `_shellStyles()` — all inline CSS; uses `var(--bg)`, `var(--panel)`, `color-mix()` for theme support
-- `_shellScript()` — client-side hydration bootstrap (two variants at line 1057 and 1674)
-- `_meta(...)` — OG/meta tags
-- `renderPage(...)` — master layout wrapper
-- `renderNav(activeNav)`, `renderFooter()` — shared nav/footer partials
-- `renderPill`, `renderMediaThumb`, `renderVideoCard`, `renderStreamerGroupCard`, `renderStreamCard`, `renderChannelCard`, `renderSection`, `renderSignalCard` — reusable UI partials
+```
+LIVE_NETWORK_URLS        — { restream, chat, community, network } resolved origins
+BUILD_UPDATES            — built-in release notes array
+GO_LIVE_TRACKS           — go-live track descriptions array
+MISSION_PILLARS          — mission copy array
+VOD_ENABLED              — process.env.ENABLE_VOD === 'true'
+escapeHtml, absoluteUrl, formatNumber, formatCompactNumber
+formatDurationSeconds, formatDateTime, formatShortDate, timeAgo
+initialsFrom, labelizeKey, normalizeCreatorSlug, sanitizeStreamTitle
+channelPath, streamPath, canRenderImageUrl
+renderPage({ title, description, canonical, ogType, ogImage, activeNav, bodyHtml, baseUrl, extraStyles, extraScripts })
+renderNav(activeNav), renderFooter()
+renderPill, renderMediaThumb, renderVideoCard, renderStreamerGroupCard
+renderStreamCard, renderChannelCard, renderSection, renderSignalCard
+```
 
 ### Notes
 
-- Largest SSR at 252 KB / 4503 lines. Contains two `_shellScript()` function definitions (old and new variant).
-- `renderGoLivePage` is ~924 lines (lines 3483–4407) with its own internal styles and script.
+- `ssr-shared.js` is 107 KB — contains all CSS (theme variables), both `_shellStyles()` and the live `_shellScript()`.
+- The original file had a dead duplicate `renderChannelCard` (lines 2244–2457) that was excluded from the split — only the live version is in `ssr-shared.js`.
 - All CSS uses CSS variables — themes apply visually.
 
 ---

@@ -1314,3 +1314,49 @@ The original `ssr.js` (1051 lines, 64 KB) was split into 8 files:
 | `services/openvibe-community/server/ssr-forum.js` | New — forum home, space, thread |
 | `services/openvibe-community/server/ssr.js` | Rewritten as thin aggregator (1051 → 17 lines) |
 | `SSR_CLAUDE.md` | Updated — section 1 rewritten to reflect new file structure |
+
+---
+
+## Session 25 — openvibe-live SSR split
+
+**Date:** 2026-05-24
+
+### Summary
+
+Split `services/openvibe-live/server/ssr.js` (4503 lines, 252 KB — largest SSR in the repo) into 7 focused files using the same aggregator pattern as sessions 23–24.
+
+### File structure after split
+
+| File | Size | Role |
+|------|------|------|
+| `ssr-shared.js` | 107 KB | Constants, utilities, CSS, scripts, nav/footer/renderPage, all UI partials |
+| `ssr-golive.js` | 71 KB | `renderGoLivePage` — 934 lines, inline styles + script |
+| `ssr-media.js` | 38 KB | `renderStreamPage`, `renderMediaDetailPage`, `renderCustomMediaPlayer`, `renderCollectionPage`, `renderMissingMediaPage` |
+| `ssr-channel.js` | 14 KB | `renderChannelPage`, `renderChannelsPage`, `renderOfflinePage` |
+| `ssr-home.js` | 11 KB | `renderHomePage` |
+| `ssr-updates.js` | 1.9 KB | `renderUpdatesPage` |
+| `ssr.js` (rewritten) | 1.1 KB | Thin aggregator — re-exports all 11 functions, same public API |
+
+### Architecture
+
+- `ssr-shared.js` owns everything layout/utility: constants (`LIVE_NETWORK_URLS`, `BUILD_UPDATES`, `GO_LIVE_TRACKS`), 13 utility functions, `_meta()`, `_shellStyles()`, live `_shellScript()`, `VOD_ENABLED`, `renderNav`, `renderFooter`, `renderPage`, and all UI partials (`renderPill`, `renderMediaThumb`, `renderVideoCard`, `renderStreamerGroupCard`, `renderStreamCard`, `renderChannelCard`, `renderSection`, `renderSignalCard`)
+- Dead code block (lines 2244–2457 of original) — a duplicate `renderChannelCard` that was never active — excluded from the split
+- Each feature file requires only what it uses from `ssr-shared`
+- `ssr.js` aggregator re-exports all 11 public functions
+
+### Smoke test
+
+All 11 exports pass with correct HTML output lengths. Public API identical to original.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `services/openvibe-live/server/ssr-shared.js` | New — 107 KB, all constants/utilities/layout/partials |
+| `services/openvibe-live/server/ssr-home.js` | New — renderHomePage |
+| `services/openvibe-live/server/ssr-channel.js` | New — renderChannelPage, renderChannelsPage, renderOfflinePage |
+| `services/openvibe-live/server/ssr-media.js` | New — renderStreamPage, renderMediaDetailPage, renderCustomMediaPlayer, renderCollectionPage, renderMissingMediaPage |
+| `services/openvibe-live/server/ssr-golive.js` | New — renderGoLivePage |
+| `services/openvibe-live/server/ssr-updates.js` | New — renderUpdatesPage |
+| `services/openvibe-live/server/ssr.js` | Rewritten as thin aggregator (4503 → 22 lines) |
+| `SSR_CLAUDE.md` | Updated — section 2 rewritten to reflect new file structure |
