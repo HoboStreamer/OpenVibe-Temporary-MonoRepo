@@ -2596,7 +2596,7 @@ function renderChannelPage({ channel, currentStream, recentStreams, recentVods, 
     });
 }
 
-function renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl }) {
+function renderStreamPage({ channel, stream, moreFromChannel, isOwner, restreamUrl, iceServers, baseUrl }) {
     const slug = normalizeCreatorSlug(channel ? channel.slug : stream.channel_slug);
     const channelName = channel ? (channel.display_name || channel.slug) : (stream.channel_name || slug || 'Creator');
     const isLive = !!stream.is_live;
@@ -2606,16 +2606,19 @@ function renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl }
         : `${stream.title || 'Untitled stream'} by ${channelName} on openvibe.live.`;
     const ogImage = absoluteUrl(stream.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
     const moreFromChannelHtml = (moreFromChannel || []).slice(0, 6).map((item) => renderStreamCard(item, channel, baseUrl, { badge: item.is_live ? 'Live' : 'Broadcast', badgeTone: item.is_live ? 'live' : 'soft' })).join('');
-    const mediaEmbed = stream.embed_url
-        ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
-        : renderMediaThumb({
-            url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
-            title: stream.title || 'Untitled stream',
-            eyebrow: isLive ? 'Live stage' : 'Broadcast replay',
-            subtitle: channelName,
-            initials: initialsFrom(channelName),
-            baseUrl,
-        });
+    const whepAvailable = isLive && restreamUrl && slug;
+    const mediaEmbed = whepAvailable
+        ? `<video id="sp-live-video" autoplay playsinline muted style="width:100%;aspect-ratio:16/9;display:block;background:#000;" aria-label="${escapeHtml(stream.title || 'Live stream')}"></video>`
+        : stream.embed_url
+            ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
+            : renderMediaThumb({
+                url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
+                title: stream.title || 'Untitled stream',
+                eyebrow: isLive ? 'Live stage' : 'Broadcast replay',
+                subtitle: channelName,
+                initials: initialsFrom(channelName),
+                baseUrl,
+            });
 
     const pageContent = `
         <div class="sp-layout">
@@ -2643,7 +2646,7 @@ function renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl }
                         </div>
                     </div>
                     <div class="sp-stats">
-                        <div class="sp-stat"><span class="sp-stat-label">Viewers</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.viewer_count || 0))}</span></div>
+                        <div class="sp-stat"><span class="sp-stat-label">Viewers</span><span class="sp-stat-val" id="sp-viewer-count">${escapeHtml(formatNumber(stream.viewer_count || 0))}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Peak</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.peak_viewers || 0))}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Category</span><span class="sp-stat-val">${escapeHtml(stream.category || '—')}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Started</span><span class="sp-stat-val">${escapeHtml(stream.started_at ? formatDateTime(stream.started_at) : '—')}</span></div>
@@ -2726,8 +2729,88 @@ function renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl }
             var STREAM_ID = ${JSON.stringify(String(stream.id || ''))};
             var ROOM_TITLE = ${JSON.stringify(String(channel.display_name || channel.slug || stream.id || ''))};
             var IS_OWNER = ${JSON.stringify(!!isOwner)};
+            var RESTREAM_URL = ${JSON.stringify(restreamUrl || '')};
+            var CHANNEL_SLUG = ${JSON.stringify(slug || '')};
+            var ICE_SERVERS = ${JSON.stringify(iceServers || [{ urls: 'stun:stun.l.google.com:19302' }])};
+            var IS_LIVE = ${JSON.stringify(isLive)};
             var POLL = 3000;
             var MAX = 60;
+
+            // ── WHEP live player ───────────────────────────────────────────────
+            if (IS_LIVE && RESTREAM_URL && CHANNEL_SLUG) {
+                (function startWhepPlayer() {
+                    var video = document.getElementById('sp-live-video');
+                    if (!video) return;
+                    var pc = null;
+                    var whepResourceUrl = null;
+                    var retryTimer = null;
+
+                    function connect() {
+                        if (pc) { try { pc.close(); } catch(_) {} }
+                        pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                        pc.addTransceiver('video', { direction: 'recvonly' });
+                        pc.addTransceiver('audio', { direction: 'recvonly' });
+                        pc.ontrack = function(ev) {
+                            if (ev.streams && ev.streams[0] && !video.srcObject) {
+                                video.srcObject = ev.streams[0];
+                                video.play().catch(function() {});
+                            }
+                        };
+                        pc.createOffer().then(function(offer) {
+                            return pc.setLocalDescription(offer);
+                        }).then(function() {
+                            return new Promise(function(resolve) {
+                                if (pc.iceGatheringState === 'complete') { resolve(); return; }
+                                var done = false;
+                                var t = setTimeout(function() { if (!done) { done = true; resolve(); } }, 5000);
+                                pc.onicegatheringstatechange = function() {
+                                    if (pc.iceGatheringState === 'complete' && !done) { done = true; clearTimeout(t); resolve(); }
+                                };
+                            });
+                        }).then(function() {
+                            return fetch(RESTREAM_URL.replace(/\\/$/, '') + '/whep/' + encodeURIComponent(CHANNEL_SLUG), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/sdp' },
+                                body: pc.localDescription.sdp,
+                            });
+                        }).then(function(resp) {
+                            if (!resp.ok) throw new Error('WHEP ' + resp.status);
+                            whepResourceUrl = resp.headers.get('Location') || null;
+                            return resp.text();
+                        }).then(function(sdp) {
+                            return pc.setRemoteDescription({ type: 'answer', sdp: sdp });
+                        }).catch(function(err) {
+                            console.warn('[sp-whep] connect failed:', err.message);
+                            retryTimer = setTimeout(connect, 5000);
+                        });
+                        pc.onconnectionstatechange = function() {
+                            if (pc.connectionState === 'failed') {
+                                retryTimer = setTimeout(connect, 3000);
+                            }
+                        };
+                    }
+
+                    connect();
+
+                    window.addEventListener('beforeunload', function() {
+                        if (whepResourceUrl) { try { fetch(whepResourceUrl, { method: 'DELETE', keepalive: true }); } catch(_) {} }
+                        if (pc) { try { pc.close(); } catch(_) {} }
+                    });
+                })();
+            }
+
+            // ── Viewer count polling ───────────────────────────────────────────
+            if (IS_LIVE && RESTREAM_URL && CHANNEL_SLUG) {
+                var vcEl = document.getElementById('sp-viewer-count');
+                if (vcEl) {
+                    setInterval(function() {
+                        fetch(RESTREAM_URL.replace(/\\/$/, '') + '/viewer-count/' + encodeURIComponent(CHANNEL_SLUG))
+                            .then(function(r) { return r.ok ? r.json() : null; })
+                            .then(function(d) { if (d && vcEl) vcEl.textContent = (d.viewer_count || 0).toLocaleString('en-US'); })
+                            .catch(function() {});
+                    }, 10000);
+                }
+            }
             var feed = document.getElementById('sp-chat-feed');
             var composer = document.getElementById('sp-chat-composer');
             var whoEl = document.getElementById('sp-chat-who');

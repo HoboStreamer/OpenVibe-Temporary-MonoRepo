@@ -553,7 +553,8 @@
     async function startWhepPreview(video, whepBase, slug) {
         try {
             if (_whepPreviewPc) { try { _whepPreviewPc.close(); } catch (_) {} _whepPreviewPc = null; }
-            var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            var iceServers = (state.iceServers && state.iceServers.length) ? state.iceServers : [{ urls: 'stun:stun.l.google.com:19302' }];
+            var pc = new RTCPeerConnection({ iceServers: iceServers });
             pc.addTransceiver('video', { direction: 'recvonly' });
             pc.addTransceiver('audio', { direction: 'recvonly' });
             pc.ontrack = function (ev) {
@@ -724,6 +725,7 @@
             state.restreamUrl  = data.restream_url  || '';
             state.accountUrl   = data.account_url   || '';
             state.chatUrl      = data.chat_url       || '';
+            state.iceServers   = data.ice_servers    || [{ urls: 'stun:stun.l.google.com:19302' }];
             renderSlots();
             renderDestSidebar();
             renderDestFull();
@@ -1176,15 +1178,7 @@
 
                 setStatus('Connecting to ingest server…');
 
-                // Build RTC peer connection with TURN/STUN
-                var iceServers = [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                ];
-                // Use server TURN if available
-                if (state.turnConfig) {
-                    iceServers.push(state.turnConfig);
-                }
-
+                var iceServers = (state.iceServers && state.iceServers.length) ? state.iceServers : [{ urls: 'stun:stun.l.google.com:19302' }];
                 pc = new RTCPeerConnection({ iceServers: iceServers });
 
                 // Add tracks to peer connection

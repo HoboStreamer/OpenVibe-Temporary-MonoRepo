@@ -187,6 +187,9 @@ function start() {
     const { app } = buildApp();
     const server = http.createServer(app);
 
+    // Sweep any streams that were left started before the last shutdown
+    model.sweepHungStreams();
+
     // Initialize SFU (non-blocking)
     sfu.init().catch(err => console.warn('[openre-stream] SFU init error:', err.message));
 

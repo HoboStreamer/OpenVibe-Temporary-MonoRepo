@@ -59,20 +59,21 @@
             ch = created.live_channel || created.channel || created;
         }
         if (!ch || !ch.slug) throw new Error('Could not resolve channel');
-        return { slug: ch.slug, streamKey: ch.stream_key, restreamUrl: data.restream_url || resolveRestreamBase() };
+        return { slug: ch.slug, streamKey: ch.stream_key, restreamUrl: data.restream_url || resolveRestreamBase(), iceServers: data.ice_servers || null };
     }
 
     // ── WHIP ──────────────────────────────────────────────────────────────────
 
     var pc = null;
     var liveStream = null;
+    var activeStreamId = null;
 
     function whipUrl(restreamUrl, slug) {
         return restreamUrl.replace(/\/$/, '') + '/whip/' + encodeURIComponent(slug);
     }
 
-    async function startWhip(mediaStream, restreamUrl, slug, streamKey) {
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    async function startWhip(mediaStream, restreamUrl, slug, streamKey, iceServers) {
+        pc = new RTCPeerConnection({ iceServers: (iceServers && iceServers.length) ? iceServers : [{ urls: 'stun:stun.l.google.com:19302' }] });
         mediaStream.getTracks().forEach(function (t) { pc.addTrack(t, mediaStream); });
         var offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -270,11 +271,26 @@
             return;
         }
 
+        setStatus('Creating stream session…');
+        try {
+            var streamRes = await liveApi('POST', '/api/v1/go-live/streams', {
+                channel_slug: channel.slug,
+                protocol: 'whip',
+                title: 'Quick broadcast',
+                recording_enabled: true,
+            });
+            activeStreamId = (streamRes.stream && streamRes.stream.id) || streamRes.id || null;
+        } catch (err) {
+            setStatus('Could not create stream: ' + err.message, true);
+            return;
+        }
+
         setStatus('Connecting…');
         try {
-            await startWhip(liveStream, channel.restreamUrl, channel.slug, channel.streamKey);
+            await startWhip(liveStream, channel.restreamUrl, channel.slug, channel.streamKey, channel.iceServers);
         } catch (err) {
             stopWhip();
+            activeStreamId = null;
             setStatus('WHIP failed: ' + err.message, true);
             return;
         }
@@ -303,6 +319,11 @@
         window.removeEventListener('beforeunload', onBeforeUnload);
         var manageLink = document.getElementById('ov-golive-manage-link');
         if (manageLink) manageLink.href = resolveLiveBase() + '/go-live';
+        if (activeStreamId) {
+            var sid = activeStreamId;
+            activeStreamId = null;
+            liveApi('POST', '/api/v1/go-live/streams/' + encodeURIComponent(sid) + '/end', {}).catch(function() {});
+        }
     }
 
     function onBeforeUnload(e) {

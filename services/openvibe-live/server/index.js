@@ -226,6 +226,14 @@ function buildApp() {
         buildChatFallback,
     });
 
+    function buildIceServers() {
+        const servers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        if (config.turn && config.turn.url) {
+            servers.push({ urls: config.turn.url, username: config.turn.username || undefined, credential: config.turn.credential || undefined });
+        }
+        return servers;
+    }
+
     function ownerUserIdOf(req) {
         return String(req && req.user && (req.user.sub || req.user.id) || '').trim();
     }
@@ -300,6 +308,7 @@ function buildApp() {
             restream_url: config.stream.url,
             account_url: config.network.url,
             chat_url: config.chat.url,
+            ice_servers: buildIceServers(),
         };
     }
 
@@ -347,7 +356,7 @@ function buildApp() {
                 chatModel.upsertParticipant({ room_id: chatRoom.id, actor_type: 'user', actor_id: viewerUserId, role: 'owner' });
             } catch (_) { /* best-effort */ }
         }
-        return res.type('html').send(ssr.renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl: deriveBaseUrl(req) }));
+        return res.type('html').send(ssr.renderStreamPage({ channel, stream, moreFromChannel, isOwner, restreamUrl: config.stream.url, iceServers: buildIceServers(), baseUrl: deriveBaseUrl(req) }));
     }
 
     async function renderMediaDetailRoute(req, res, kind, mediaId) {
