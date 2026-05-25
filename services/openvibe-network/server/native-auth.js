@@ -1092,6 +1092,13 @@ function buildNativeAuth({ config, identity }) {
         `).run(req.get('user-agent') || null, req.ip || null, String(sessionId));
     }
 
+    function isSessionRevoked(sessionId) {
+        if (!sessionId) return true;
+        const row = db.get().prepare('SELECT revoked_at FROM auth_sessions WHERE id = ?').get(String(sessionId));
+        if (!row) return true;
+        return !!row.revoked_at;
+    }
+
     function revokeSession(sessionId) {
         if (!sessionId) return;
         db.get().prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?').run(String(sessionId));
@@ -1490,6 +1497,10 @@ function buildNativeAuth({ config, identity }) {
             res.status(403).json({ error: user.ban_reason ? `account banned: ${user.ban_reason}` : 'account banned' });
             return null;
         }
+        if (isSessionRevoked(req.user.sid)) {
+            res.status(401).json({ error: 'session revoked' });
+            return null;
+        }
         touchSession(req.user.sid, req);
         return user;
     }
@@ -1573,9 +1584,14 @@ function buildNativeAuth({ config, identity }) {
             if (!isAllowedRedirectUri(returnTo)) {
                 return res.status(400).send('invalid return_to');
             }
+            const silent = isTruthy(req.query.silent);
 
             const sessionUser = resolveSessionUser(req);
             if (!sessionUser) {
+                if (silent) {
+                    // Not logged in — bounce back without a token so the caller knows
+                    return res.redirect(302, returnTo);
+                }
                 const bridgeUrl = new URL('/api/v1/session/bridge', config.surfaces.network || config.surfaces.auth);
                 bridgeUrl.searchParams.set('return_to', returnTo);
                 const authorizeUrl = new URL('/oauth/authorize', config.surfaces.auth);

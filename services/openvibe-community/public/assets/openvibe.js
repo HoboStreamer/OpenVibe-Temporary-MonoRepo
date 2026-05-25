@@ -11,6 +11,8 @@
     const LOCAL_THEME_KEY = 'openvibe.theme';
     const LOCAL_ANON_TOKENS_KEY = 'openvibe.anon_tokens';
     const LOCAL_ACTIVE_ANON_KEY = 'openvibe.anon_active';
+    const BRIDGE_ATTEMPTED_KEY = 'openvibe.bridge.attempted';
+    const SIGNED_OUT_KEY = 'openvibe.signed.out';
 
     let sessionPromise = null;
 
@@ -419,7 +421,34 @@
     }
 
     function signOutUrl(returnTo) {
-        return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(bridgeReturnUrl(returnTo))}`;
+        var cleanUrl = bridgeReturnUrl(returnTo);
+        var markedUrl = cleanUrl + (cleanUrl.indexOf('?') >= 0 ? '&' : '?') + 'ov_so=1';
+        return `${resolveSurfaceUrl('auth')}/oauth/logout?return_to=${encodeURIComponent(markedUrl)}`;
+    }
+
+    function clearSignedOutState() {
+        var url = (global.location && global.location.href) || '';
+        if (url.indexOf('ov_so=1') < 0) return;
+        clearBridgeToken();
+        try { global.sessionStorage.removeItem(BRIDGE_ATTEMPTED_KEY); } catch (_) {}
+        try { global.sessionStorage.setItem(SIGNED_OUT_KEY, '1'); } catch (_) {}
+        try {
+            var u = new URL(url);
+            u.searchParams.delete('ov_so');
+            global.history.replaceState({}, global.document.title, u.toString());
+        } catch (_) {}
+    }
+
+    function tryAutoLogin() {
+        if (loadBridgeToken()) return;
+        try {
+            if (global.sessionStorage.getItem(BRIDGE_ATTEMPTED_KEY)) return;
+            if (global.sessionStorage.getItem(SIGNED_OUT_KEY)) return;
+        } catch (_) {}
+        try { global.sessionStorage.setItem(BRIDGE_ATTEMPTED_KEY, '1'); } catch (_) {}
+        var current = (global.location && global.location.href) || '';
+        var silentUrl = buildBridgeUrl(current) + '&silent=1';
+        global.location.replace(silentUrl);
     }
 
     function loadBridgeToken() {
@@ -607,6 +636,7 @@
                 }
             }
             const guest = { authenticated: false, anonymous: false, user: null, access_token: '' };
+            try { global.sessionStorage.removeItem(BRIDGE_ATTEMPTED_KEY); } catch (_) {}
             dispatchAuthChanged(guest);
             return guest;
         }
@@ -881,56 +911,114 @@
         </footer>`;
     }
 
+    function _navInitials(user) {
+        var name = user.display_name || user.username || '';
+        var parts = name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return '?';
+    }
+
+    function _navAvatarHtml(user) {
+        var initials = escapeHtml(_navInitials(user));
+        if (user.avatar_url) {
+            return `<img class="ov-nav-avatar" src="${escapeHtml(user.avatar_url)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="ov-nav-initials" style="display:none">${initials}</span>`;
+        }
+        return `<span class="ov-nav-initials">${initials}</span>`;
+    }
+
+    function _attachDropdown(target) {
+        var trigger  = target.querySelector('#ov-anon-trigger');
+        var dropdown = target.querySelector('#ov-anon-dropdown');
+        if (!trigger || !dropdown) return;
+        trigger.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = !dropdown.hidden;
+            dropdown.hidden = open;
+            trigger.setAttribute('aria-expanded', String(!open));
+        });
+        global.document.addEventListener('click', function () {
+            dropdown.hidden = true;
+            trigger.setAttribute('aria-expanded', 'false');
+        });
+    }
+
     async function hydrateNavSession() {
-        const target = global.document.getElementById('ov-nav-session');
+        clearSignedOutState();
+        var target = global.document.getElementById('ov-nav-session');
         if (!target) return;
-        const session = await loadSession();
+        var session = await loadSession();
+
+        // ── signed-in ────────────────────────────────────────────────────────
         if (session && session.authenticated && session.user) {
-            target.innerHTML = `
-                <span class="ov-chip ok">@${escapeHtml(session.user.username || session.user.id || 'you')}</span>
-                <span class="ov-chip soft">${escapeHtml(session.user.role || 'user')}</span>
-                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Account</a>
-                <a class="ov-btn" href="${escapeHtml(switchAccountUrl(global.location.href))}">Switch account</a>
-                <a class="ov-btn ov-btn-ghost" href="${escapeHtml(signOutUrl(global.location.href))}">Sign out</a>`;
-            return;
-        }
-        if (session && session.anonymous && session.user) {
-            target.innerHTML = `
-                <span class="ov-chip warn">${escapeHtml(session.user.display_name || session.user.username || 'Anonymous')}</span>
-                <a class="ov-btn" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
-                <button class="ov-btn" type="button" data-openvibe-new-anon="true">New anon</button>
-                <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Create account</a>
-                <a class="ov-btn ov-btn-ghost" href="${escapeHtml(signOutUrl(global.location.href))}">Leave anonymous</a>`;
-            const newAnonButton = target.querySelector('[data-openvibe-new-anon]');
-            if (newAnonButton) {
-                newAnonButton.addEventListener('click', async function () {
-                    newAnonButton.disabled = true;
-                    newAnonButton.textContent = 'Creating anon…';
-                    try {
-                        await createAnonymousIdentity();
-                        global.location.reload();
-                    } catch (error) {
-                        console.warn('[openvibe] failed to create anonymous identity:', error.message);
-                        newAnonButton.disabled = false;
-                        newAnonButton.textContent = 'New anon';
-                    }
-                });
+            // Sync the bridge token as a same-domain cookie so form POSTs carry auth
+            if (session.access_token) {
+                fetch('/api/v1/session/sync', {
+                    headers: { 'Authorization': 'Bearer ' + session.access_token },
+                    credentials: 'include',
+                }).catch(function() {});
             }
+            var u = session.user;
+            var displayName = escapeHtml(u.display_name || u.username || u.id || 'you');
+            target.innerHTML = `
+                <div class="ov-anon-menu" id="ov-anon-menu">
+                    <button class="ov-anon-trigger" id="ov-anon-trigger" type="button" aria-label="Account menu" aria-expanded="false">
+                        ${_navAvatarHtml(u)}
+                    </button>
+                    <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
+                        <div class="ov-anon-dropdown-name">@${displayName}</div>
+                        <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my'))}">My account</a>
+                        <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my') + '/sessions')}">Sessions</a>
+                        <a class="ov-anon-dropdown-item ov-anon-dropdown-item--danger" href="${escapeHtml(signOutUrl(global.location.href))}">Sign out</a>
+                    </div>
+                </div>`;
+            _attachDropdown(target);
             return;
         }
+
+        // ── anonymous ────────────────────────────────────────────────────────
+        if (session && session.anonymous && session.user) {
+            if (session.access_token) {
+                fetch('/api/v1/session/sync', {
+                    headers: { 'Authorization': 'Bearer ' + session.access_token },
+                    credentials: 'include',
+                }).catch(function() {});
+            }
+            var anonName = escapeHtml(session.user.display_name || session.user.username || 'Anonymous');
+            target.innerHTML = `
+                <div class="ov-anon-menu" id="ov-anon-menu">
+                    <button class="ov-anon-trigger" id="ov-anon-trigger" type="button" aria-label="Account menu" aria-expanded="false">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                        </svg>
+                        <span class="ov-anon-trigger-name">${anonName}</span>
+                    </button>
+                    <div class="ov-anon-dropdown" id="ov-anon-dropdown" hidden>
+                        <div class="ov-anon-dropdown-name">${anonName}</div>
+                        <a class="ov-anon-dropdown-item" href="${escapeHtml(resolveSurfaceUrl('my'))}">Switch identity</a>
+                        <a class="ov-anon-dropdown-item" href="${escapeHtml(signInUrl(global.location.href))}">Create account</a>
+                        <a class="ov-anon-dropdown-item ov-anon-dropdown-item--danger" href="${escapeHtml(signOutUrl(global.location.href))}">Leave anonymous</a>
+                    </div>
+                </div>`;
+            _attachDropdown(target);
+            return;
+        }
+
+        // ── signed out ───────────────────────────────────────────────────────
+        tryAutoLogin();
         target.innerHTML = `
             <button class="ov-btn" type="button" data-openvibe-anon-session="true">Anonymous</button>
             <a class="ov-btn ov-btn-primary" href="${escapeHtml(signInUrl(global.location.href))}">Sign in</a>`;
-        const anonButton = target.querySelector('[data-openvibe-anon-session]');
+        var anonButton = target.querySelector('[data-openvibe-anon-session]');
         if (anonButton) {
             anonButton.addEventListener('click', async function () {
                 anonButton.disabled = true;
-                anonButton.textContent = 'Starting anonymous session…';
+                anonButton.textContent = 'Starting…';
                 try {
                     await startAnonymousSession();
                     global.location.reload();
                 } catch (error) {
-                    console.warn('[openvibe] failed to start anonymous session:', error.message);
+                    console.warn('[community] failed to start anonymous session:', error.message);
                     anonButton.disabled = false;
                     anonButton.textContent = 'Anonymous';
                 }

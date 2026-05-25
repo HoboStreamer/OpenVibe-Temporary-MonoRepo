@@ -1360,3 +1360,115 @@ All 11 exports pass with correct HTML output lengths. Public API identical to or
 | `services/openvibe-live/server/ssr-updates.js` | New — renderUpdatesPage |
 | `services/openvibe-live/server/ssr.js` | Rewritten as thin aggregator (4503 → 22 lines) |
 | `SSR_CLAUDE.md` | Updated — section 2 rewritten to reflect new file structure |
+
+---
+
+## Session 26 — CORS fix, restart script, seamless community auth
+
+**Date:** 2026-05-24
+
+### Summary
+
+Four separate workstreams: nginx CORS hardening, a single-script platform startup, parallel service restart, and full cross-domain auth for openvibe.community.
+
+---
+
+### 1. nginx CORS fix for openvibe.community
+
+**Problem:** When openvibe-community service was down (502), the browser received nginx's error page with no `Access-Control-Allow-Origin` header — causing a CORS block in the browser console on openvibe.network's index page (which fetches `https://openvibe.community/api/community/threads?limit=4` client-side).
+
+**Root cause:** The `cors()` middleware in the Node.js app never fires when nginx returns a 502 — so no CORS headers get added to error responses.
+
+**Fix:** Added nginx-level CORS headers with `always` flag to the `openvibe.community` location block in `deploy/nginx/live/openvibe-public.conf`:
+```nginx
+add_header 'Access-Control-Allow-Origin' $http_origin always;
+add_header 'Access-Control-Allow-Credentials' 'true' always;
+add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, X-Internal-Key' always;
+```
+
+---
+
+### 2. Platform startup scripts
+
+**`scripts/deploy/restart-all.sh`** (new) — production VPS restart:
+- Accepts `--pull` (git pull) and `--install` (npm install) flags
+- Tests nginx config before reloading
+- Restarts all 17 services in parallel tiers (not serial) — see below
+
+**`start.sh`** (new, repo root) — single entry point for both environments:
+- Auto-detects production vs dev: root + systemd units installed → prod mode; normal user → dev mode
+- **Prod mode**: git pull → npm install → nginx reload → parallel restart → status table
+- **Dev mode**: installs node_modules if missing, kills stale port holders, checks Postgres + Redis, delegates to `scripts/dev/start-production-like-stack.sh`
+- Flags: `--pull`, `--install`, `--stop`
+
+**Deleted** `scripts/start-all-services.sh` — had a broken Python port-check (`sys.argv[1]` never passed), missing 4 services, and was superseded.
+
+### Parallel restart tiers (why it matters on Raspberry Pi)
+
+Old serial restart: ~68s (17 × 4s each). New parallel groups: ~16s.
+
+| Tier | Services | Wait after |
+|------|----------|-----------|
+| 1 | openvibe-events | 2s |
+| 2 | openvibe-network, openvibe-media, openvibe-realtime, openvibe-workers | 2s |
+| 3 | all 12 product surfaces in parallel | — |
+
+Pi-specific notes on why restarts are slow: SD card random I/O (Node.js `require()` does thousands of file reads on cold start — 10–50× slower than SSD), ARM CPU, no persistent require cache across restarts.
+
+---
+
+### 3. Seamless cross-domain auth for openvibe.community
+
+**Problem:** `openvibe.community` and `openvibe.network` are different TLDs. The session cookie (`openvibe_token`) is set `Domain=.openvibe.network` — browsers never send it to `openvibe.community`. Result:
+- Nav dropdown showed flat text chips (no dropdown, no avatar)
+- `req.user` was always `null` on community for form POSTs → thread replies bounced with `?error=auth`
+- `_forumShell` never loaded `openvibe.js` at all — forum pages had a hardcoded static "Sign in" link
+
+#### Changes
+
+**`services/openvibe-community/public/assets/openvibe.js`**
+- Replaced flat-chip `hydrateNavSession()` with full dropdown matching openvibe.network
+- Added `_navInitials(user)` — extracts initials from display_name/username
+- Added `_navAvatarHtml(user)` — renders actual `avatar_url` as round img with gradient-initials fallback
+- Added `_attachDropdown(target)` — shared toggle/outside-click handler for both auth states
+- Three states: **signed-in** (avatar bubble + dropdown: My account, Sessions, Sign out), **anonymous** (generic icon + name + dropdown: Switch identity, Create account, Leave anonymous), **signed-out** (Anonymous + Sign in buttons)
+- After getting a valid session, fires `GET /api/v1/session/sync` with the bearer token to set a same-domain cookie (see below)
+
+**`services/openvibe-community/server/index.js`**
+- Added `GET /api/v1/session/sync` endpoint (runs after `optionalOpenVibeAuth`)
+- Reads the raw bearer token from `Authorization` header, validates it via the existing auth middleware (`req.user` populated = valid), sets `httpOnly` `openvibe_token` cookie for the `openvibe.community` domain
+- This means form POSTs (thread replies, paste promote) carry auth credentials from that point on
+
+**`services/openvibe-community/server/ssr-shared.js`**
+- Added `.ov-nav-avatar` and `.ov-nav-initials` CSS to `_styles()` for the buddy icon rendering
+- Fixed `_forumShell`: added `openvibe.js` script tag, replaced hardcoded "Sign in" link with `#ov-nav-session` div + `renderChrome` init script — forum routes now have full auth parity with the rest of community
+
+#### Full auth flow (how it works)
+
+1. User logs in on any `*.openvibe.network` surface → `openvibe_token` cookie set `Domain=.openvibe.network`
+2. User navigates to `openvibe.community`
+3. `openvibe.js` loads → `renderChrome('community')` → `hydrateNavSession()` → `exchangeNetworkSession()`
+4. POSTs to `https://openvibe.network/api/v1/session/exchange` with `credentials: 'include'` (network has `cors({ origin: true, credentials: true })` — reflects origin, allows any surface)
+5. Network validates cookie, returns `{ access_token, user: { ..., avatar_url } }`
+6. Nav renders avatar/dropdown immediately
+7. `fetch('/api/v1/session/sync', { Authorization: Bearer <token>, credentials: 'include' })` fires
+8. Community sets `openvibe_token` cookie for `openvibe.community` domain
+9. All subsequent form POSTs carry that cookie → `req.user` populated → replies, promotes, attribution all work
+
+Token rotation: JWT expires every 2 hours, but each page load re-runs the exchange (using the network's 30-day refresh cookie) and re-syncs the community cookie. Transparent to the user.
+
+---
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `deploy/nginx/live/openvibe-public.conf` | Added nginx-level CORS headers with `always` for community location block |
+| `scripts/deploy/restart-all.sh` | New — production restart with parallel tiers, git pull + npm install flags |
+| `scripts/deploy/start.sh` | Renamed/superseded — see start.sh at repo root |
+| `start.sh` | New at repo root — single entry point, auto-detects prod/dev |
+| `scripts/start-all-services.sh` | Deleted — broken Python port-check, replaced by start.sh |
+| `services/openvibe-community/public/assets/openvibe.js` | Replaced hydrateNavSession with full dropdown + avatar + session sync call |
+| `services/openvibe-community/server/index.js` | Added /api/v1/session/sync endpoint |
+| `services/openvibe-community/server/ssr-shared.js` | Added avatar CSS; fixed _forumShell to load openvibe.js + use #ov-nav-session |
