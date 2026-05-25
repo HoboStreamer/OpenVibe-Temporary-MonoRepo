@@ -242,19 +242,14 @@ function applyLegacyBootstrap(database) {
 
     // Enforce one paste_thread per paste at the DB level.
     // Partial index: only applies rows where thread_type = 'paste_thread' and both ref fields are set.
-    const existingIndexes = new Set(
-        database.prepare(`SELECT name FROM sqlite_master WHERE type='index'`).all().map((r) => r.name)
-    );
-    if (!existingIndexes.has('idx_paste_thread_unique_ref')) {
-        try {
-            database.exec(
-                `CREATE UNIQUE INDEX idx_paste_thread_unique_ref ON community_threads(ref_type, ref_id)
-                 WHERE thread_type = 'paste_thread' AND ref_type IS NOT NULL AND ref_id IS NOT NULL`
-            );
-        } catch (err) {
-            // If existing data already has duplicates, log and continue — app-level guard still applies.
-            console.warn('[community] idx_paste_thread_unique_ref could not be created:', err.message);
-        }
+    try {
+        database.exec(
+            `CREATE UNIQUE INDEX IF NOT EXISTS idx_paste_thread_unique_ref ON community_threads(ref_type, ref_id)
+             WHERE thread_type = 'paste_thread' AND ref_type IS NOT NULL AND ref_id IS NOT NULL`
+        );
+    } catch (err) {
+        // If existing data already has duplicates, log and continue — app-level guard still applies.
+        console.warn('[community] idx_paste_thread_unique_ref could not be created:', err.message);
     }
 }
 
