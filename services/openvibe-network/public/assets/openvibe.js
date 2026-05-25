@@ -1293,6 +1293,17 @@
         setInterval(fetchUnreadCount, 30000);
     }
 
+    function loadGoLiveWidget() {
+        if (global.document.getElementById('ov-golive-wrap')) return;
+        if (global.document.querySelector('script[data-ov-golive]')) return;
+        const liveBase = resolveSurfaceUrl('live');
+        const s = global.document.createElement('script');
+        s.setAttribute('data-ov-golive', '1');
+        s.src = liveBase + '/assets/golive-widget.js';
+        s.defer = true;
+        global.document.head.appendChild(s);
+    }
+
     async function renderChrome(activeKey) {
         await loadUrlRegistry();
         const navMount = global.document.getElementById('nav-mount');
@@ -1302,6 +1313,7 @@
         hydrateNavSession().catch(() => {});
         initThemePicker();
         initNotificationBell().catch(() => {});
+        loadGoLiveWidget();
     }
 
     function attachLauncher(getItems) {

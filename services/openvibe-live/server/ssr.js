@@ -2596,7 +2596,7 @@ function renderChannelPage({ channel, currentStream, recentStreams, recentVods, 
     });
 }
 
-function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
+function renderStreamPage({ channel, stream, moreFromChannel, isOwner, restreamUrl, iceServers, baseUrl }) {
     const slug = normalizeCreatorSlug(channel ? channel.slug : stream.channel_slug);
     const channelName = channel ? (channel.display_name || channel.slug) : (stream.channel_name || slug || 'Creator');
     const isLive = !!stream.is_live;
@@ -2606,16 +2606,19 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         : `${stream.title || 'Untitled stream'} by ${channelName} on openvibe.live.`;
     const ogImage = absoluteUrl(stream.thumbnail_url || (channel && channel.avatar_url) || '', baseUrl) || null;
     const moreFromChannelHtml = (moreFromChannel || []).slice(0, 6).map((item) => renderStreamCard(item, channel, baseUrl, { badge: item.is_live ? 'Live' : 'Broadcast', badgeTone: item.is_live ? 'live' : 'soft' })).join('');
-    const mediaEmbed = stream.embed_url
-        ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
-        : renderMediaThumb({
-            url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
-            title: stream.title || 'Untitled stream',
-            eyebrow: isLive ? 'Live stage' : 'Broadcast replay',
-            subtitle: channelName,
-            initials: initialsFrom(channelName),
-            baseUrl,
-        });
+    const whepAvailable = isLive && restreamUrl && slug;
+    const mediaEmbed = whepAvailable
+        ? `<video id="sp-live-video" autoplay playsinline muted style="width:100%;aspect-ratio:16/9;display:block;background:#000;" aria-label="${escapeHtml(stream.title || 'Live stream')}"></video>`
+        : stream.embed_url
+            ? `<iframe src="${escapeHtml(stream.embed_url)}" allowfullscreen title="${escapeHtml(stream.title || 'Stream embed')}"></iframe>`
+            : renderMediaThumb({
+                url: stream.thumbnail_url || (channel && channel.avatar_url) || null,
+                title: stream.title || 'Untitled stream',
+                eyebrow: isLive ? 'Live stage' : 'Broadcast replay',
+                subtitle: channelName,
+                initials: initialsFrom(channelName),
+                baseUrl,
+            });
 
     const pageContent = `
         <div class="sp-layout">
@@ -2636,13 +2639,14 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                             </p>
                         </div>
                         <div class="sp-actions">
-                            <a class="button" href="${slug ? channelPath(slug) : '/channels'}">${slug ? 'Channel page' : 'Browse creators'}</a>
+                            ${isOwner && isLive ? `<button class="button" id="sp-end-stream-btn" type="button" data-stream-id="${escapeHtml(String(stream.id))}" style="background:var(--danger,#fb7185);border-color:var(--danger,#fb7185);color:#fff;">End stream</button>` : ''}
+                            <a class="button${isOwner && isLive ? ' button-secondary' : ''}" href="${slug ? channelPath(slug) : '/channels'}">${slug ? 'Channel page' : 'Browse creators'}</a>
                             <a class="button-secondary" href="/vods${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'VODs' : 'Browse VODs'}</a>
                             <a class="button-ghost" href="/clips${slug ? `?channel=${encodeURIComponent(slug)}` : ''}">${slug ? 'Clips' : 'Browse clips'}</a>
                         </div>
                     </div>
                     <div class="sp-stats">
-                        <div class="sp-stat"><span class="sp-stat-label">Viewers</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.viewer_count || 0))}</span></div>
+                        <div class="sp-stat"><span class="sp-stat-label">Viewers</span><span class="sp-stat-val" id="sp-viewer-count">${escapeHtml(formatNumber(stream.viewer_count || 0))}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Peak</span><span class="sp-stat-val">${escapeHtml(formatNumber(stream.peak_viewers || 0))}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Category</span><span class="sp-stat-val">${escapeHtml(stream.category || '—')}</span></div>
                         <div class="sp-stat"><span class="sp-stat-label">Started</span><span class="sp-stat-val">${escapeHtml(stream.started_at ? formatDateTime(stream.started_at) : '—')}</span></div>
@@ -2660,7 +2664,7 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                 </div>
                 <div class="sp-chat-feed" id="sp-chat-feed"><div class="sp-chat-empty">Connecting…</div></div>
                 <div class="sp-chat-composer" id="sp-chat-composer">
-                    <div class="sp-chat-who" id="sp-chat-who" title="Click to change name"></div>
+                    <div class="sp-chat-who" id="sp-chat-who"></div>
                     <div class="sp-chat-row">
                         <input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
                         <button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button>
@@ -2707,8 +2711,11 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
         .sp-chat-msg-time { font-size:.65rem; color:var(--muted); }
         .sp-chat-msg-body { font-size:.83rem; color:var(--text); line-height:1.45; word-break:break-word; }
         .sp-chat-composer { flex-shrink:0; padding:.5rem .75rem; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:.3rem; }
-        .sp-chat-who { font-size:.68rem; color:var(--muted); cursor:pointer; }
-        .sp-chat-who:hover { color:var(--accent); }
+        .sp-chat-who { font-size:.68rem; color:var(--muted); }
+        .sp-mod-btns { display:none; gap:.2rem; margin-top:.2rem; flex-wrap:wrap; }
+        .sp-chat-msg:hover .sp-mod-btns { display:flex; }
+        .sp-mod-btn { font-size:.58rem; padding:.12rem .3rem; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,.05); color:var(--muted); cursor:pointer; line-height:1.4; }
+        .sp-mod-btn:hover { background:rgba(251,113,133,.15); color:#fb7185; border-color:#fb7185; }
         .sp-chat-row { display:flex; gap:.4rem; }
         .sp-chat-input { flex:1; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:8px; padding:.4rem .65rem; color:var(--text); font-size:.83rem; outline:none; transition:border-color .15s; }
         .sp-chat-input:focus { border-color:var(--accent); }
@@ -2721,8 +2728,89 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             var CHAT_BASE = ${JSON.stringify(LIVE_NETWORK_URLS.chat)};
             var STREAM_ID = ${JSON.stringify(String(stream.id || ''))};
             var ROOM_TITLE = ${JSON.stringify(String(channel.display_name || channel.slug || stream.id || ''))};
+            var IS_OWNER = ${JSON.stringify(!!isOwner)};
+            var RESTREAM_URL = ${JSON.stringify(restreamUrl || '')};
+            var CHANNEL_SLUG = ${JSON.stringify(slug || '')};
+            var ICE_SERVERS = ${JSON.stringify(iceServers || [{ urls: 'stun:stun.l.google.com:19302' }])};
+            var IS_LIVE = ${JSON.stringify(isLive)};
             var POLL = 3000;
             var MAX = 60;
+
+            // ── WHEP live player ───────────────────────────────────────────────
+            if (IS_LIVE && RESTREAM_URL && CHANNEL_SLUG) {
+                (function startWhepPlayer() {
+                    var video = document.getElementById('sp-live-video');
+                    if (!video) return;
+                    var pc = null;
+                    var whepResourceUrl = null;
+                    var retryTimer = null;
+
+                    function connect() {
+                        if (pc) { try { pc.close(); } catch(_) {} }
+                        pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                        pc.addTransceiver('video', { direction: 'recvonly' });
+                        pc.addTransceiver('audio', { direction: 'recvonly' });
+                        pc.ontrack = function(ev) {
+                            if (ev.streams && ev.streams[0] && !video.srcObject) {
+                                video.srcObject = ev.streams[0];
+                                video.play().catch(function() {});
+                            }
+                        };
+                        pc.createOffer().then(function(offer) {
+                            return pc.setLocalDescription(offer);
+                        }).then(function() {
+                            return new Promise(function(resolve) {
+                                if (pc.iceGatheringState === 'complete') { resolve(); return; }
+                                var done = false;
+                                var t = setTimeout(function() { if (!done) { done = true; resolve(); } }, 5000);
+                                pc.onicegatheringstatechange = function() {
+                                    if (pc.iceGatheringState === 'complete' && !done) { done = true; clearTimeout(t); resolve(); }
+                                };
+                            });
+                        }).then(function() {
+                            return fetch(RESTREAM_URL.replace(/\\/$/, '') + '/whep/' + encodeURIComponent(CHANNEL_SLUG), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/sdp' },
+                                body: pc.localDescription.sdp,
+                            });
+                        }).then(function(resp) {
+                            if (!resp.ok) throw new Error('WHEP ' + resp.status);
+                            whepResourceUrl = resp.headers.get('Location') || null;
+                            return resp.text();
+                        }).then(function(sdp) {
+                            return pc.setRemoteDescription({ type: 'answer', sdp: sdp });
+                        }).catch(function(err) {
+                            console.warn('[sp-whep] connect failed:', err.message);
+                            retryTimer = setTimeout(connect, 5000);
+                        });
+                        pc.onconnectionstatechange = function() {
+                            if (pc.connectionState === 'failed') {
+                                retryTimer = setTimeout(connect, 3000);
+                            }
+                        };
+                    }
+
+                    connect();
+
+                    window.addEventListener('beforeunload', function() {
+                        if (whepResourceUrl) { try { fetch(whepResourceUrl, { method: 'DELETE', keepalive: true }); } catch(_) {} }
+                        if (pc) { try { pc.close(); } catch(_) {} }
+                    });
+                })();
+            }
+
+            // ── Viewer count polling ───────────────────────────────────────────
+            if (IS_LIVE && RESTREAM_URL && CHANNEL_SLUG) {
+                var vcEl = document.getElementById('sp-viewer-count');
+                if (vcEl) {
+                    setInterval(function() {
+                        fetch(RESTREAM_URL.replace(/\\/$/, '') + '/viewer-count/' + encodeURIComponent(CHANNEL_SLUG))
+                            .then(function(r) { return r.ok ? r.json() : null; })
+                            .then(function(d) { if (d && vcEl) vcEl.textContent = (d.viewer_count || 0).toLocaleString('en-US'); })
+                            .catch(function() {});
+                    }, 10000);
+                }
+            }
             var feed = document.getElementById('sp-chat-feed');
             var composer = document.getElementById('sp-chat-composer');
             var whoEl = document.getElementById('sp-chat-who');
@@ -2735,20 +2823,21 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             var globalMsgs = [];
             var showGlobal = false;
 
-            // Auto-assign anonymous ID; replaced async with logged-in username
             var myName = (function() {
-                var saved = localStorage.getItem('ov-chat-name');
+                var saved = localStorage.getItem('ov-chat-anon-id');
                 if (saved) return saved;
-                var id = 'Anon_' + Math.random().toString(36).slice(2,6).toUpperCase();
-                localStorage.setItem('ov-chat-name', id);
+                var id = 'anon' + Math.floor(Math.random() * 900000 + 100000);
+                localStorage.setItem('ov-chat-anon-id', id);
                 return id;
             })();
+            var chatIsAuthenticated = false;
 
             fetch(CHAT_BASE + '/api/v1/session', {mode:'cors',credentials:'include'})
                 .then(function(r){return r.json();})
                 .then(function(d){
                     if(d.authenticated && d.user && (d.user.display_name || d.user.username)){
                         myName = d.user.display_name || d.user.username;
+                        chatIsAuthenticated = true;
                     }
                     updateWho();
                 }).catch(function(){});
@@ -2757,38 +2846,9 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             function timeStr(ts) { return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 
             function updateWho() {
-                whoEl.textContent = 'Chatting as ' + myName + ' \xb7 click to change';
+                whoEl.textContent = chatIsAuthenticated ? ('@' + myName) : myName;
             }
             updateWho();
-            whoEl.addEventListener('click', enterNaming);
-
-            function enterNaming() {
-                composer.innerHTML = '<div style="padding:.5rem .75rem;display:flex;flex-direction:column;gap:.4rem;"><p style="margin:0;font-size:.75rem;color:var(--muted);">Change your name:</p><div class="sp-chat-row"><input class="sp-chat-input" id="sp-ni" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '"><button class="button" id="sp-nok" type="button" style="flex-shrink:0;padding:.4rem .7rem;font-size:.8rem;">OK</button></div></div>';
-                var ni = document.getElementById('sp-ni');
-                ni.focus(); ni.select();
-                document.getElementById('sp-nok').addEventListener('click', function() { saveName(ni.value); });
-                ni.addEventListener('keydown', function(e) { if(e.key==='Enter') saveName(ni.value); });
-            }
-
-            function saveName(v) {
-                v = (v||'').trim().slice(0,32);
-                if(!v) return;
-                myName = v;
-                localStorage.setItem('ov-chat-name', v);
-                restoreComposer();
-                document.getElementById('sp-chat-input').focus();
-            }
-
-            function restoreComposer() {
-                composer.innerHTML = '<div class="sp-chat-who" id="sp-chat-who" title="Click to change name"></div><div class="sp-chat-row"><input class="sp-chat-input" id="sp-chat-input" type="text" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="button" id="sp-chat-send" type="button" style="flex-shrink:0;padding:.45rem .8rem;font-size:.8rem;">Send</button></div>';
-                whoEl = document.getElementById('sp-chat-who');
-                input = document.getElementById('sp-chat-input');
-                sendBtn = document.getElementById('sp-chat-send');
-                whoEl.addEventListener('click', enterNaming);
-                sendBtn.addEventListener('click', send);
-                input.addEventListener('keydown', function(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
-                updateWho();
-            }
 
             function renderMsgs() {
                 var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
@@ -2806,10 +2866,21 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                 }
                 if(!combined.length) { feed.innerHTML = '<div class="sp-chat-empty">No messages yet.</div>'; return; }
                 feed.innerHTML = combined.map(function(m) {
-                    var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+                    var name = (m.metadata && m.metadata.sender_name) || (m.sender_id ? 'anon' + String(m.sender_id).slice(-6) : 'anon');
                     var roomTag = m._isGlobal ? '<span class="sp-chat-msg-room">[Global]</span>' : '';
                     var cls = 'sp-chat-msg' + (m._isGlobal ? ' sp-chat-msg-global' : '');
-                    return '<div class="'+cls+'"><div class="sp-chat-msg-meta">'+roomTag+'<span class="sp-chat-msg-name">'+esc(name)+'</span><span class="sp-chat-msg-time">'+timeStr(m.created_at)+'</span></div><div class="sp-chat-msg-body">'+esc(m.body)+'</div></div>';
+                    var modBtns = '';
+                    if (IS_OWNER && !m._isGlobal && m.sender_id) {
+                        var st = esc(m.sender_type||'user'); var sid = esc(String(m.sender_id)); var mid = esc(m.id);
+                        modBtns = '<div class="sp-mod-btns">' +
+                            '<button class="sp-mod-btn" data-action="delete" data-mid="'+mid+'">Del</button>' +
+                            '<button class="sp-mod-btn" data-action="timeout" data-mid="'+mid+'" data-stype="'+st+'" data-sid="'+sid+'" data-dur="5">5m</button>' +
+                            '<button class="sp-mod-btn" data-action="timeout" data-mid="'+mid+'" data-stype="'+st+'" data-sid="'+sid+'" data-dur="30">30m</button>' +
+                            '<button class="sp-mod-btn" data-action="timeout" data-mid="'+mid+'" data-stype="'+st+'" data-sid="'+sid+'" data-dur="60">1h</button>' +
+                            '<button class="sp-mod-btn" data-action="ban" data-stype="'+st+'" data-sid="'+sid+'">Ban</button>' +
+                        '</div>';
+                    }
+                    return '<div class="'+cls+'"><div class="sp-chat-msg-meta">'+roomTag+'<span class="sp-chat-msg-name">'+esc(name)+'</span><span class="sp-chat-msg-time">'+timeStr(m.created_at)+'</span></div><div class="sp-chat-msg-body">'+esc(m.body)+'</div>'+modBtns+'</div>';
                 }).join('');
                 if(atBottom || lastStreamId === null) feed.scrollTop = feed.scrollHeight;
             }
@@ -2846,6 +2917,44 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
                 if (showGlobal) { pollGlobal(); } else { renderMsgs(); }
             });
 
+            // Mod actions (delete / timeout / ban) — event delegation on feed
+            if (IS_OWNER) {
+                feed.addEventListener('click', function(e) {
+                    var btn = e.target.closest('.sp-mod-btn');
+                    if (!btn) return;
+                    var action = btn.dataset.action;
+                    var mid = btn.dataset.mid;
+                    var stype = btn.dataset.stype;
+                    var sid = btn.dataset.sid;
+                    var dur = btn.dataset.dur;
+                    var orig = btn.textContent;
+                    btn.textContent = '…'; btn.disabled = true;
+                    if (action === 'delete' && mid) {
+                        fetch(CHAT_BASE + '/api/chat/messages/' + encodeURIComponent(mid), {
+                            method: 'DELETE', mode: 'cors', credentials: 'include',
+                        }).then(function(r) {
+                            if (r.ok) pollStream(); else { btn.textContent = orig; btn.disabled = false; }
+                        }).catch(function() { btn.textContent = orig; btn.disabled = false; });
+                    } else if ((action === 'timeout' || action === 'ban') && stype && sid) {
+                        var payload = { sender_type: stype, sender_id: sid };
+                        if (action === 'timeout') payload.duration_minutes = Number(dur);
+                        if (action === 'ban' && !confirm('Permanently ban this user from chat?')) {
+                            btn.textContent = orig; btn.disabled = false; return;
+                        }
+                        fetch(CHAT_BASE + '/api/chat/stream/' + encodeURIComponent(STREAM_ID) + '/bans', {
+                            method: 'POST', mode: 'cors', credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                        }).then(function(r) {
+                            btn.textContent = r.ok ? (action === 'ban' ? 'Banned' : 'Done') : orig;
+                            btn.disabled = false;
+                        }).catch(function() { btn.textContent = orig; btn.disabled = false; });
+                    } else {
+                        btn.textContent = orig; btn.disabled = false;
+                    }
+                });
+            }
+
             function send() {
                 var text = (input.value||'').trim();
                 if(!text)return;
@@ -2866,6 +2975,35 @@ function renderStreamPage({ channel, stream, moreFromChannel, baseUrl }) {
             input.addEventListener('keydown', function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
             poll();
             setInterval(poll, POLL);
+
+            // Owner end-stream button
+            var endStreamBtn = document.getElementById('sp-end-stream-btn');
+            if (endStreamBtn) {
+                endStreamBtn.addEventListener('click', function() {
+                    var streamId = endStreamBtn.getAttribute('data-stream-id');
+                    if (!streamId) return;
+                    endStreamBtn.disabled = true;
+                    endStreamBtn.textContent = 'Ending…';
+                    fetch('/api/v1/go-live/streams/' + encodeURIComponent(streamId) + '/end', {
+                        method: 'POST', credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}',
+                    }).then(function(r) {
+                        if (r.ok) {
+                            endStreamBtn.textContent = 'Stream ended';
+                            document.querySelectorAll('.pill.live').forEach(function(p) {
+                                p.textContent = 'Ended'; p.className = 'pill muted';
+                            });
+                        } else {
+                            endStreamBtn.disabled = false;
+                            endStreamBtn.textContent = 'End stream';
+                        }
+                    }).catch(function() {
+                        endStreamBtn.disabled = false;
+                        endStreamBtn.textContent = 'End stream';
+                    });
+                });
+            }
         })();
     `;
 

@@ -370,9 +370,10 @@
             return;
         }
         historyEl.innerHTML = chStreams.slice(0, 15).map(function (s) {
-            var sp = s.is_live ? pill('Live', 'live') : pill(s.status || 'ended', 'soft');
-            var endBtn = s.is_live
-                ? '<button class="sm-btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">End</button>'
+            var isStuck = !s.is_live && s.status === 'started';
+            var sp = s.is_live ? pill('Live', 'live') : isStuck ? pill('stuck', 'warn') : pill(s.status || 'ended', 'soft');
+            var endBtn = (s.is_live || isStuck)
+                ? '<button class="sm-btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">' + (isStuck ? 'Force End' : 'End') + '</button>'
                 : '';
             return '<div class="sm-history-item">' +
                 '<div>' +
@@ -552,7 +553,8 @@
     async function startWhepPreview(video, whepBase, slug) {
         try {
             if (_whepPreviewPc) { try { _whepPreviewPc.close(); } catch (_) {} _whepPreviewPc = null; }
-            var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            var iceServers = (state.iceServers && state.iceServers.length) ? state.iceServers : [{ urls: 'stun:stun.l.google.com:19302' }];
+            var pc = new RTCPeerConnection({ iceServers: iceServers });
             pc.addTransceiver('video', { direction: 'recvonly' });
             pc.addTransceiver('audio', { direction: 'recvonly' });
             pc.ontrack = function (ev) {
@@ -723,6 +725,7 @@
             state.restreamUrl  = data.restream_url  || '';
             state.accountUrl   = data.account_url   || '';
             state.chatUrl      = data.chat_url       || '';
+            state.iceServers   = data.ice_servers    || [{ urls: 'stun:stun.l.google.com:19302' }];
             renderSlots();
             renderDestSidebar();
             renderDestFull();
@@ -1140,14 +1143,32 @@
         async function startBroadcast() {
             var startBtn = el('#sm-bcast-start-btn');
             if (startBtn) startBtn.disabled = true;
-            setStatus('Requesting media access…');
 
             var whipUrl = getWhipUrl();
             if (!whipUrl) {
-                setStatus('Create a stream first (Stream tab) to get a stream key.', true);
-                if (startBtn) startBtn.disabled = false;
-                return;
+                setStatus('Setting up your channel…');
+                try {
+                    var newChRes = await api('POST', '/api/v1/go-live/channels', { protocol: 'whip' });
+                    var newCh = newChRes.live_channel || newChRes.channel || newChRes;
+                    if (newCh && newCh.slug) {
+                        state.channels.push(newCh);
+                        renderSlots();
+                        openChannel(newCh.slug);
+                        whipUrl = getWhipUrl();
+                    }
+                } catch (e) {
+                    setStatus('Could not set up channel: ' + e.message, true);
+                    if (startBtn) startBtn.disabled = false;
+                    return;
+                }
+                if (!whipUrl) {
+                    setStatus('Could not get stream URL — try refreshing.', true);
+                    if (startBtn) startBtn.disabled = false;
+                    return;
+                }
             }
+
+            setStatus('Requesting media access…');
 
             try {
                 // Acquire media if not already previewing
@@ -1157,15 +1178,7 @@
 
                 setStatus('Connecting to ingest server…');
 
-                // Build RTC peer connection with TURN/STUN
-                var iceServers = [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                ];
-                // Use server TURN if available
-                if (state.turnConfig) {
-                    iceServers.push(state.turnConfig);
-                }
-
+                var iceServers = (state.iceServers && state.iceServers.length) ? state.iceServers : [{ urls: 'stun:stun.l.google.com:19302' }];
                 pc = new RTCPeerConnection({ iceServers: iceServers });
 
                 // Add tracks to peer connection

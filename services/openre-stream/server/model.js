@@ -406,6 +406,30 @@ function lookupLegacy(source, kind, legacy_id) {
         .get(String(source), String(kind), String(legacy_id));
 }
 
+function sweepHungStreams() {
+    const result = db.get().prepare(`
+        UPDATE streams SET status='ended', ended_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+        WHERE status='started'
+          AND id NOT IN (
+              SELECT DISTINCT stream_id FROM ingest_sessions WHERE disconnected_at IS NULL
+          )
+    `).run();
+    if (result.changes > 0) {
+        console.log(`[openre-stream] swept ${result.changes} hung stream(s) to ended`);
+    }
+}
+
+function listActiveIngestSessions() {
+    return db.get().prepare(`
+        SELECT s.stream_id, s.protocol, s.connected_at, s.client_addr,
+               c.slug AS channel_slug, c.id AS channel_id, str.stream_key
+        FROM ingest_sessions s
+        JOIN streams str ON str.id = s.stream_id
+        JOIN channels c ON c.id = str.channel_id
+        WHERE s.disconnected_at IS NULL AND str.status = 'started'
+    `).all();
+}
+
 module.exports = {
     upsertChannel, getChannelById, getChannelBySlug, listChannels,
     updateChannel, regenerateStreamKey,
@@ -417,4 +441,5 @@ module.exports = {
     createClipProject, getClipProjectById, getRecordingByStreamId,
     recordLegacy, lookupLegacy,
     listClipProjects, listRecordingSegments, upsertRecording, upsertRecordingSegment,
+    sweepHungStreams, listActiveIngestSessions,
 };

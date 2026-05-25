@@ -11,8 +11,53 @@
  */
 
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 const model = require('./model');
 const sfu = require('./sfu');
+const config = require('./config');
+
+function pushWhipStreamEvent(eventType, stream, channel) {
+    const liveUrl = config.live && config.live.url;
+    const internalKey = config.internalKey;
+    if (!liveUrl) return;
+    try {
+        const payload = JSON.stringify({
+            event_type: eventType,
+            source: 'openre-stream',
+            occurred_at: new Date().toISOString(),
+            payload: {
+                stream_id: stream.id,
+                channel_id: channel && channel.id || null,
+                channel_slug: channel && channel.slug || null,
+                creator_id: channel && channel.owner_user_id || null,
+                title: stream.title || null,
+                status: stream.status || null,
+            },
+        });
+        const url = new URL('/api/v1/events/stream', liveUrl);
+        const mod = url.protocol === 'https:' ? https : http;
+        const req = mod.request({
+            hostname: url.hostname,
+            port: url.port || (url.protocol === 'https:' ? 443 : 80),
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'x-internal-key': internalKey || '',
+            },
+        }, (res) => {
+            res.resume();
+            if (res.statusCode >= 400) console.warn(`[WHIP] live push ${eventType} → ${res.statusCode}`);
+        });
+        req.on('error', (err) => console.warn(`[WHIP] live push error: ${err.message}`));
+        req.write(payload);
+        req.end();
+    } catch (err) {
+        console.warn(`[WHIP] live push failed: ${err.message}`);
+    }
+}
 
 let sdpTransform;
 try {
@@ -229,6 +274,9 @@ async function cleanupSession(resourceId, { reason = 'unknown' } = {}) {
             if (stream && stream.status === 'started') {
                 model.endStream(streamId);
                 console.log(`[WHIP] Stream ${streamId} ended`);
+                const channel = model.getChannelBySlug(channelSlug);
+                const endedStream = model.getStreamById(streamId);
+                pushWhipStreamEvent('stream.ended', endedStream || stream, channel);
             }
         } catch (err) {
             console.warn('[WHIP] Error ending stream:', err.message);
@@ -253,7 +301,8 @@ async function handleOffer(req, res) {
 
     const channel = model.getChannelBySlug(channelSlug);
     if (!channel) return sendError(res, 404, 'Channel not found');
-    if (channel.stream_key !== streamKey) return sendError(res, 403, 'Invalid stream key');
+    const channelStreamKey = channel.metadata && channel.metadata.stream_key;
+    if (!channelStreamKey || channelStreamKey !== streamKey) return sendError(res, 403, 'Invalid stream key');
 
     const offerSdp = typeof req.body === 'string' ? req.body : req.body && req.body.toString ? req.body.toString() : '';
     if (!offerSdp.includes('v=0')) return sendError(res, 400, 'Invalid SDP offer');
@@ -267,12 +316,17 @@ async function handleOffer(req, res) {
     const peerId = `whip-${resourceId}`;
 
     try {
-        // Create or get existing stream record
-        let stream = model.listStreams({ channel_id: channel.id, status: 'started', limit: 1 })[0];
+        // Find an existing started or created stream, or auto-create one
+        let stream = model.listStreams({ channel_id: channel.id, status: 'started', limit: 1 })[0]
+                  || model.listStreams({ channel_id: channel.id, status: 'created', limit: 1 })[0];
+        const wasAlreadyStarted = stream && stream.status === 'started';
         if (!stream) {
             stream = model.createStream({ channel_id: channel.id, protocol: 'whip', stream_key: streamKey });
+        }
+        if (!wasAlreadyStarted) {
             model.startStream(stream.id);
             stream = model.getStreamById(stream.id);
+            pushWhipStreamEvent('stream.started', stream, channel);
         }
 
         // Create mediasoup transport

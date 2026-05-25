@@ -34,8 +34,7 @@
         '.ov-cw-msg-room{font-size:.65rem;font-weight:600;color:var(--ov-text-dim,#a7b5d2);opacity:.75}',
         '.ov-cw-msg-body{font-size:.83rem;color:var(--ov-text,#eef4ff);line-height:1.45}',
         '.ov-cw-composer{flex-shrink:0;padding:.5rem .75rem;border-top:1px solid var(--ov-border,rgba(148,163,184,.14));display:flex;flex-direction:column;gap:.3rem;background:color-mix(in srgb,var(--ov-bg,#060917) 88%,white)}',
-        '.ov-cw-who{font-size:.68rem;color:var(--ov-text-dim,#a7b5d2);cursor:pointer;transition:color .12s}',
-        '.ov-cw-who:hover{color:var(--ov-accent,#8b5cf6)}',
+        '.ov-cw-who{font-size:.68rem;color:var(--ov-text-dim,#a7b5d2)}',
         '.ov-cw-row{display:flex;gap:.4rem}',
         '.ov-cw-input{flex:1;background:color-mix(in srgb,var(--ov-bg,#060917) 75%,white);border:1px solid var(--ov-border,rgba(148,163,184,.14));border-radius:8px;padding:.45rem .7rem;color:var(--ov-text,#eef4ff);font-size:.83rem;font-family:var(--ov-font,Inter,sans-serif);outline:none;transition:border-color .15s}',
         '.ov-cw-input:focus{border-color:var(--ov-accent,#8b5cf6)}',
@@ -73,7 +72,7 @@
             '</div>' +
             '<div class="ov-cw-feed" id="ov-cw-feed"><div class="ov-cw-empty">Connecting…</div></div>' +
             '<div class="ov-cw-composer" id="ov-cw-composer">' +
-                '<div class="ov-cw-who" id="ov-cw-who" title="Click to change name"></div>' +
+                '<div class="ov-cw-who" id="ov-cw-who"></div>' +
                 '<div class="ov-cw-row">' +
                     '<input class="ov-cw-input" id="ov-cw-input" type="text" placeholder="Message #global…" maxlength="500" autocomplete="off" />' +
                     '<button class="ov-btn ov-btn-primary" id="ov-cw-send" type="button" style="padding:.45rem .8rem;font-size:.8rem">Send</button>' +
@@ -99,12 +98,13 @@
         var pollTimer = null;
 
         var myName = (function () {
-            var saved = localStorage.getItem('ov-chat-name');
+            var saved = localStorage.getItem('ov-chat-anon-id');
             if (saved) return saved;
-            var id = 'Anon_' + Math.random().toString(36).slice(2, 6).toUpperCase();
-            localStorage.setItem('ov-chat-name', id);
+            var id = 'anon' + Math.floor(Math.random() * 900000 + 100000);
+            localStorage.setItem('ov-chat-anon-id', id);
             return id;
         })();
+        var isAuthenticated = false;
 
         function esc(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -124,60 +124,23 @@
             .then(function (d) {
                 if (d.authenticated && d.user && (d.user.display_name || d.user.username)) {
                     myName = d.user.display_name || d.user.username;
+                    isAuthenticated = true;
                 }
                 updateWho();
             })
             .catch(function () {});
 
-        function updateWho() { whoEl.textContent = 'Chatting as ' + myName + ' · click to change'; }
+        function updateWho() {
+            whoEl.textContent = isAuthenticated ? ('@' + myName) : myName;
+        }
         updateWho();
-        whoEl.addEventListener('click', function () { enterNamingMode(); });
 
-        function enterNamingMode() {
-            var composer = document.getElementById('ov-cw-composer');
-            composer.innerHTML =
-                '<div class="ov-cw-name-prompt"><p>Change your name:</p>' +
-                '<div class="ov-cw-row">' +
-                '<input class="ov-cw-input" id="ov-cw-nameinput" type="text" placeholder="Your name…" maxlength="32" value="' + esc(myName) + '" />' +
-                '<button class="ov-btn ov-btn-primary" id="ov-cw-nameok" type="button" style="padding:.45rem .8rem;font-size:.8rem">OK</button>' +
-                '</div></div>';
-            var ni = document.getElementById('ov-cw-nameinput');
-            ni.focus(); ni.select();
-            document.getElementById('ov-cw-nameok').addEventListener('click', function () { saveName(ni.value); });
-            ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveName(ni.value); });
-        }
-
-        function saveName(v) {
-            v = (v || '').trim().slice(0, 32);
-            if (!v) return;
-            myName = v;
-            localStorage.setItem('ov-chat-name', v);
-            restoreComposer();
-            input.focus();
-        }
-
-        function restoreComposer() {
-            var composer = document.getElementById('ov-cw-composer');
-            composer.innerHTML =
-                '<div class="ov-cw-who" id="ov-cw-who" title="Click to change name"></div>' +
-                '<div class="ov-cw-row">' +
-                '<input class="ov-cw-input" id="ov-cw-input" type="text" placeholder="Message #global…" maxlength="500" autocomplete="off" />' +
-                '<button class="ov-btn ov-btn-primary" id="ov-cw-send" type="button" style="padding:.45rem .8rem;font-size:.8rem">Send</button>' +
-                '</div>';
-            whoEl   = document.getElementById('ov-cw-who');
-            input   = document.getElementById('ov-cw-input');
-            sendBtn = document.getElementById('ov-cw-send');
-            whoEl.addEventListener('click', function () { enterNamingMode(); });
-            sendBtn.addEventListener('click', send);
-            input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-            updateWho();
-        }
 
         function render() {
             var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
             if (!msgs.length) { feed.innerHTML = '<div class="ov-cw-empty">No messages yet.</div>'; return; }
             feed.innerHTML = msgs.map(function (m) {
-                var name = (m.metadata && m.metadata.sender_name) || m.sender_id || 'Anonymous';
+                var name = (m.metadata && m.metadata.sender_name) || (m.sender_id ? 'anon' + String(m.sender_id).slice(-6) : 'anon');
                 var roomLabel = (m.metadata && m.metadata.from_room_title)
                     ? '<span class="ov-cw-msg-room">[' + esc(m.metadata.from_room_title) + ']</span> ' : '';
                 return '<div class="ov-cw-msg">' +

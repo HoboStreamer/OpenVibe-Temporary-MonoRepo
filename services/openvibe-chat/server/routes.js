@@ -210,6 +210,71 @@ function buildRouter({ eventBus, chatWs }) {
     r.get('/channel/:channelId/history', wrappedHistory('channel'));
     r.post('/channel/:channelId/send', json, wrappedSend('channel', 'channel'));
 
+    // ── Moderation: ban / timeout / unban ────────────────
+    function assertMod(req, res, room) {
+        try { policy.assert(policy.decideMod({ req, room, model }), actorMeta(req)); return true; }
+        catch (err) { denied(res, err); return false; }
+    }
+    function streamRoomForMod(streamId) {
+        return model.ensureRoomForExternal('stream', streamId, {
+            room_type: 'stream', visibility: 'public', title: 'stream:' + streamId,
+        });
+    }
+    function banBody(req, res, room) {
+        const b = req.body || {};
+        if (!b.sender_type || !b.sender_id) { res.status(400).json({ error: 'sender_type + sender_id required' }); return null; }
+        const expiresAt = b.duration_minutes
+            ? new Date(Date.now() + Number(b.duration_minutes) * 60000).toISOString()
+            : null;
+        return model.banUser({
+            roomId: room.id, senderType: b.sender_type, senderId: String(b.sender_id),
+            expiresAt, reason: b.reason || null, createdBy: actorMeta(req).actor_id,
+        });
+    }
+
+    r.get('/stream/:streamId/bans', (req, res) => {
+        const room = streamRoomForMod(req.params.streamId);
+        if (!assertMod(req, res, room)) return;
+        res.json({ bans: model.listBans(room.id) });
+    });
+    r.post('/stream/:streamId/bans', json, (req, res) => {
+        const room = streamRoomForMod(req.params.streamId);
+        if (!assertMod(req, res, room)) return;
+        const ban = banBody(req, res, room);
+        if (ban) res.status(201).json({ ban });
+    });
+    r.delete('/stream/:streamId/bans', json, (req, res) => {
+        const room = streamRoomForMod(req.params.streamId);
+        if (!assertMod(req, res, room)) return;
+        const b = req.body || {};
+        if (!b.sender_type || !b.sender_id) return res.status(400).json({ error: 'sender_type + sender_id required' });
+        model.unbanUser({ roomId: room.id, senderType: b.sender_type, senderId: String(b.sender_id) });
+        res.json({ ok: true });
+    });
+
+    r.get('/rooms/:roomId/bans', (req, res) => {
+        const room = model.getRoom(req.params.roomId);
+        if (!room) return res.status(404).json({ error: 'room not found' });
+        if (!assertMod(req, res, room)) return;
+        res.json({ bans: model.listBans(room.id) });
+    });
+    r.post('/rooms/:roomId/bans', json, (req, res) => {
+        const room = model.getRoom(req.params.roomId);
+        if (!room) return res.status(404).json({ error: 'room not found' });
+        if (!assertMod(req, res, room)) return;
+        const ban = banBody(req, res, room);
+        if (ban) res.status(201).json({ ban });
+    });
+    r.delete('/rooms/:roomId/bans', json, (req, res) => {
+        const room = model.getRoom(req.params.roomId);
+        if (!room) return res.status(404).json({ error: 'room not found' });
+        if (!assertMod(req, res, room)) return;
+        const b = req.body || {};
+        if (!b.sender_type || !b.sender_id) return res.status(400).json({ error: 'sender_type + sender_id required' });
+        model.unbanUser({ roomId: room.id, senderType: b.sender_type, senderId: String(b.sender_id) });
+        res.json({ ok: true });
+    });
+
     // ── DMs ──────────────────────────────────────────────
     r.get('/dms', (req, res) => {
         const a = policy.actorOfReq(req);

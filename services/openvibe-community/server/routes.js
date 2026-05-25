@@ -232,7 +232,14 @@ function buildRouter({ eventBus, config }) {
     // ── pastes ───────────────────────────────────────────
     r.get('/pastes', (req, res) => {
         const items = model.listPastes({ visibility: 'public', limit: req.query.limit });
-        res.json({ items: items.map(injectPasteImageUrl) });
+        const db = require('./db').get();
+        const enriched = items.map(p => {
+            const row = db.prepare(
+                `SELECT 1 FROM community_threads WHERE ref_type='paste' AND ref_id=? AND thread_type='paste_thread' LIMIT 1`
+            ).get(String(p.id));
+            return Object.assign({}, p, { has_thread: !!row });
+        });
+        res.json({ items: enriched });
     });
     r.post('/pastes', json, (req, res) => {
         const a = actorMeta(req);

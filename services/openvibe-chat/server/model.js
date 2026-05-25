@@ -225,6 +225,42 @@ function moderateMessage(id, status) {
     return getMessage(id);
 }
 
+// ── Ban helpers ──────────────────────────────────────────
+
+function banUser({ roomId, senderType, senderId, expiresAt, reason, createdBy }) {
+    const id = newId('ban');
+    db.get().prepare(`
+        INSERT INTO chat_bans (id, room_id, sender_type, sender_id, expires_at, reason, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(room_id, sender_type, sender_id) DO UPDATE SET
+            expires_at=excluded.expires_at, reason=excluded.reason,
+            created_by=excluded.created_by, created_at=CURRENT_TIMESTAMP
+    `).run(id, String(roomId), String(senderType), String(senderId),
+        expiresAt || null, reason || null, createdBy || null);
+    return { id, room_id: roomId, sender_type: senderType, sender_id: senderId, expires_at: expiresAt || null };
+}
+
+function unbanUser({ roomId, senderType, senderId }) {
+    db.get().prepare(`DELETE FROM chat_bans WHERE room_id=? AND sender_type=? AND sender_id=?`)
+        .run(String(roomId), String(senderType), String(senderId));
+}
+
+function isUserBanned(roomId, senderType, senderId) {
+    if (!roomId || !senderType || !senderId) return false;
+    const row = db.get().prepare(
+        `SELECT expires_at FROM chat_bans WHERE room_id=? AND sender_type=? AND sender_id=?`
+    ).get(String(roomId), String(senderType), String(senderId));
+    if (!row) return false;
+    if (!row.expires_at) return true;
+    return new Date(row.expires_at) > new Date();
+}
+
+function listBans(roomId) {
+    return db.get().prepare(
+        `SELECT * FROM chat_bans WHERE room_id=? ORDER BY created_at DESC`
+    ).all(String(roomId));
+}
+
 // ── DM helpers ───────────────────────────────────────────
 function dmKey(a, b) {
     const norm = [a, b].map(x => `${x.actor_type}:${x.actor_id}`).sort();
@@ -746,6 +782,8 @@ module.exports = {
     upsertParticipant, getParticipant, removeParticipant, listParticipants, markRoomRead,
     // messages
     createMessage, getMessage, listMessages, editMessage, deleteMessage, moderateMessage,
+    // bans
+    banUser, unbanUser, isUserBanned, listBans,
     // dm
     findOrCreateDmRoom, listDmsForActor, getDmUnreadSummary,
     // calls

@@ -39,12 +39,26 @@ function decideRead({ req, room, model }) {
     return { allow: false, reason: 'private room: not participant' };
 }
 
-function decideSend({ req, room, model }) {
+function isModerator(model, room, actor) {
+    if (!actor || !actor.id) return false;
+    const p = model.getParticipant(room.id, actor.type, actor.id);
+    return !!(p && (p.role === 'owner' || p.role === 'mod'));
+}
+
+function decideSend({ req, room, model, senderType, senderId }) {
     if (!room) return { allow: false, reason: 'room not found' };
     if (room.archived_at) return { allow: false, reason: 'room archived' };
     if (isAdmin(req)) return { allow: true, reason: 'admin' };
     if (req && req.serviceActor) return { allow: true, reason: 'service actor' };
     const actor = actorOfReq(req);
+
+    // Ban check — uses effective sender identity (may differ from auth identity for anon)
+    const effectiveSenderType = senderType || actor.type;
+    const effectiveSenderId   = senderId   || actor.id;
+    if (effectiveSenderId && model.isUserBanned(room.id, effectiveSenderType, effectiveSenderId)) {
+        return { allow: false, reason: 'banned from room' };
+    }
+
     if (actor.type === 'anonymous') {
         // Allow anonymous sends to public rooms — identity is carried via metadata.sender_name
         if (room.visibility === 'public' && !ROOM_TYPES_REQUIRING_MEMBERSHIP.has(room.room_type)) {
@@ -56,10 +70,19 @@ function decideSend({ req, room, model }) {
     if (ROOM_TYPES_REQUIRING_MEMBERSHIP.has(room.room_type) || room.visibility === 'private' || room.visibility === 'restricted') {
         if (!isParticipant(model, room, actor)) return { allow: false, reason: 'private room: not participant' };
     }
-    // Block check
     const p = model.getParticipant(room.id, actor.type, actor.id);
     if (p && p.role === 'blocked') return { allow: false, reason: 'blocked from room' };
     return { allow: true, reason: 'ok' };
+}
+
+function decideMod({ req, room, model }) {
+    if (!room) return { allow: false, reason: 'room not found' };
+    if (isAdmin(req)) return { allow: true, reason: 'admin' };
+    if (req && req.serviceActor) return { allow: true, reason: 'service actor' };
+    const actor = actorOfReq(req);
+    if (actor.type !== 'user' || !actor.id) return { allow: false, reason: 'not authenticated' };
+    if (isModerator(model, room, actor)) return { allow: true, reason: 'mod' };
+    return { allow: false, reason: 'not a moderator of this room' };
 }
 
 function decideEdit({ req, message }) {

@@ -51,6 +51,12 @@ module.exports = {
         ai:      process.env.OPENVIBE_AI_URL      || null,
     },
 
+    turn: {
+        url:        process.env.TURN_URL        || null,
+        username:   process.env.TURN_USERNAME   || null,
+        credential: process.env.TURN_CREDENTIAL || null,
+    },
+
     features: {
         vodEnabled: process.env.ENABLE_VOD === 'true',
     },
