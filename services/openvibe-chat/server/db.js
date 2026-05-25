@@ -210,6 +210,20 @@ const SCHEMA_SQL = `
         );
         CREATE INDEX IF NOT EXISTS idx_chat_audio_integrations_owner
             ON chat_audio_integrations(owner_type, owner_id);
+
+        CREATE TABLE IF NOT EXISTS chat_bans (
+            id              TEXT PRIMARY KEY,
+            room_id         TEXT NOT NULL,
+            sender_type     TEXT NOT NULL,
+            sender_id       TEXT NOT NULL,
+            expires_at      DATETIME,
+            reason          TEXT,
+            created_by      TEXT,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (room_id, sender_type, sender_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_bans_room ON chat_bans(room_id);
+        CREATE INDEX IF NOT EXISTS idx_chat_bans_sender ON chat_bans(sender_type, sender_id);
     `;
 const LEGACY_BOOTSTRAP_SQL = [
     `ALTER TABLE chat_participants ADD COLUMN last_read_at DATETIME`,

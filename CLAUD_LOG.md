@@ -2,6 +2,191 @@
 
 ---
 
+## Session 29 — 2026-05-25 — Chat moderation, network UI: stream grid + paste row
+
+### What was done
+
+#### 1. Chat moderation system — ban/timeout/unban (`services/openvibe-chat/`)
+
+**Problem:** Stream owners had no way to ban or timeout users from their stream chat.
+
+**Implementation:**
+- `db.js` — `chat_bans` table (already done session 28): `id, room_id, sender_type, sender_id, expires_at, reason, created_by` with unique constraint on `(room_id, sender_type, sender_id)`. `NULL expires_at` = permanent ban.
+- `model.js` — `banUser()`, `unbanUser()`, `isUserBanned()`, `listBans()` functions
+- `policy.js` — `decideMod()` checks room `owner`/`mod` participant role; `decideSend()` now checks `model.isUserBanned()` before allowing sends
+- `routes.js` — 6 new endpoints:
+  - `GET/POST/DELETE /stream/:streamId/bans` — stream-scoped (what stream page uses)
+  - `GET/POST/DELETE /rooms/:roomId/bans` — generic room-scoped
+  - POST body: `{ sender_type, sender_id, duration_minutes?, reason? }` — omit `duration_minutes` for permanent
+- `server/index.js` (openvibe-live) — When stream owner loads their stream page, server auto-enrolls them as `owner` participant in the stream's chat room via `chatModel.upsertParticipant`
+- `server/ssr.js` (openvibe-live) — When `IS_OWNER=true`, each chat message shows hover mod controls: **Del**, **5m**, **30m**, **1h** (timeout), **Ban**; clicking calls the appropriate chat API
+
+#### 2. Network homepage — stream grid + paste horizontal row (`services/openvibe-network/public/index.html`)
+
+**Problem:** Live streams showed as a vertical list; pastes showed in a small static grid without thumbnails or thread indicators.
+
+**Fix:**
+- **Streams**: Changed `.ov-live-grid` from `flex-direction:column` to `grid-template-columns:repeat(auto-fill,minmax(240px,1fr))`. Restyled `.ov-live-card` as a vertical card (16:9 thumbnail on top, meta below) instead of a horizontal row.
+- **Pastes**: Replaced static 6-item `ov-grid` with a horizontally-scrollable flex row (`scroll-snap-type:x mandatory`). Now fetches 10 items.
+  - Paste cards now show: `metadata.image_url` as cover image if present; otherwise a language-colored placeholder (`background: langColor + '22'`) showing the language name
+  - Thread icon badge (`💬 Thread`) shown when `paste.has_thread` is true
+- **Community API** (`services/openvibe-community/server/routes.js`) — `/pastes` route now queries `community_threads` to add `has_thread: boolean` to each paste in the list response
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `services/openvibe-chat/server/model.js` | `banUser`, `unbanUser`, `isUserBanned`, `listBans` |
+| `services/openvibe-chat/server/policy.js` | `decideMod`, ban check in `decideSend` |
+| `services/openvibe-chat/server/routes.js` | 6 ban/unban endpoints (stream + room scoped) |
+| `services/openvibe-chat/server/db.js` | `chat_bans` table |
+| `services/openvibe-live/server/index.js` | Auto-enroll stream owner as room owner on page load |
+| `services/openvibe-live/server/ssr.js` | `IS_OWNER` var, mod button UI per message, anon name fix |
+| `services/openvibe-network/public/index.html` | Stream grid layout; paste horizontal scroll + thumbnails + thread badge |
+| `services/openvibe-community/server/routes.js` | Add `has_thread` to paste list response |
+
+---
+
+## Session 28 — 2026-05-25 — Stream manager UX, chat identity, wallet persistence
+
+### What was done
+
+#### 1. Stream manager — auto-create channel + force-end stuck streams (`services/openvibe-live/public/js/stream-manager.js`)
+
+**Problem:** "Start Broadcast" bailed immediately with "Create a stream first (Stream tab) to get a stream key" if no channel existed. Streams stuck in `status=started` with no way to end them from the UI.
+
+**Fix:**
+- `startBroadcast()` now auto-creates a default channel via `POST /api/v1/go-live/channels` if none exists, then continues directly into the broadcast flow
+- `renderHistory()` now shows a **"Force End"** button for streams where `status === 'started'` but `is_live` is false (stuck streams), with a `pill.warn` "stuck" badge
+
+#### 2. Chat bubble — remove name-changing, fix anonymous identity (`services/openvibe-live/public/assets/chat-bubble.js`)
+
+**Problem:** All users saw "Chatting as [name] · click to change" — authenticated users shouldn't be able to change their name. All anonymous users showed as "Anonymous" — no uniqueness.
+
+**Fix:**
+- Removed `enterNamingMode()`, `saveName()`, `restoreComposer()` entirely — name changing is gone
+- Authenticated users show `@username` (locked, no click handler)
+- Anonymous users get a persistent `anon` + 6-digit random number stored in `localStorage('ov-chat-anon-id')` — unique per browser, survives refresh
+- Message display falls back to `anon + sender_id.slice(-6)` instead of "Anonymous" when no `sender_name` in metadata
+- Removed `cursor:pointer` and hover styles from `.ov-cw-who`
+
+#### 3. Wallet — save address to DB immediately on generate (`services/openvibe-network/public/my.html`)
+
+**Problem:** Generated wallet keypair was held in JS memory only until the user checked "I have saved my private key" and clicked "Save wallet". Refreshing before that step permanently lost the address.
+
+**Fix:**
+- `wallet-create-btn` handler now calls `putUserModule('openvibe.wallet', { solana_address })` immediately after `generateKeypair()` — address is in the DB before the private key screen is shown
+- `renderGenerated()` now shows a green "✓ Wallet address saved" confirmation instead of the checkbox + "Save wallet" flow
+- "Done" button just calls `renderConnected(address)` — no more async save on that click
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `services/openvibe-live/public/js/stream-manager.js` | `startBroadcast()` auto-create channel; `renderHistory()` force-end stuck streams |
+| `services/openvibe-live/public/assets/chat-bubble.js` | Remove name-change UI; persistent anon IDs; locked auth display |
+| `services/openvibe-network/public/my.html` | Auto-save wallet address on generate |
+
+---
+
+## Session 27 — 2026-05-25 — SSO hardening: revocation propagation, silent bridge, auto-login
+
+### What was done
+
+Three coordinated changes that together make "logged in anywhere = logged in everywhere" actually true.
+
+---
+
+#### 1. Sign-out propagation — `services/openvibe-network/server/native-auth.js`
+
+**Problem:** After signing out on any surface, sessionStorage-stored bearer tokens on other surfaces were still valid for up to 2 hours (the JWT TTL). The exchange endpoint called `requireNativeUser()` which touched the session via `touchSession()` — but `touchSession()` silently no-ops on revoked sessions without returning an error, so `requireNativeUser()` returned the user object even after sign-out.
+
+**Fix:**
+- Added `isSessionRevoked(sessionId)` helper — `SELECT revoked_at FROM auth_sessions WHERE id = ?`; returns `true` if row missing or `revoked_at` is set
+- Updated `requireNativeUser()` to call `isSessionRevoked(req.user.sid)` before `touchSession()`; returns 401 `{ error: 'session revoked' }` if revoked
+
+**Effect:** The moment a user signs out, the next `exchangeNetworkSession()` call from any surface returns 401 → client clears the stored bearer token → nav switches to signed-out state.
+
+---
+
+#### 2. Silent bridge mode — `services/openvibe-network/server/native-auth.js`
+
+**Problem:** `GET /api/v1/session/bridge` had no way to probe auth state non-interactively. If the user had no session, the bridge redirected to the OAuth authorize page. Cross-domain surfaces couldn't auto-login users without risking an unwanted login page redirect.
+
+**Fix:** Added `?silent=1` parameter:
+- `silent=1` + **no session** → redirect back to `return_to` without any token (caller detects: no `#openvibe_token` hash)
+- `silent=1` + **session exists** → normal bridge redirect with token appended
+- No `silent` → existing behavior unchanged
+
+---
+
+#### 3. Auto-login on first visit — all cross-domain `openvibe.js` files
+
+**Problem:** A user logged in on `openvibe.network` visiting `openvibe.games` (or any other cross-domain surface) for the first time saw "Sign in" even though they were already authenticated. They had to explicitly click "Sign in" to trigger the bridge flow.
+
+**Fix — added to all 7 bridge-token services** (games, media, tools, live, openre-stream, content, community):
+
+| Addition | Description |
+|---|---|
+| `BRIDGE_ATTEMPTED_KEY` | sessionStorage key — set before silent bridge redirect to prevent redirect loops |
+| `SIGNED_OUT_KEY` | sessionStorage key — set when `?ov_so=1` detected; blocks auto-login for this tab |
+| `signOutUrl()` updated | Appends `?ov_so=1` to the `return_to` URL so the landing page knows sign-out just occurred |
+| `clearSignedOutState()` | Detects `?ov_so=1` in current URL; clears bridge token + sets `SIGNED_OUT_KEY`; cleans URL |
+| `tryAutoLogin()` | If unauthenticated, no token, no prior bridge attempt, not signed out → redirects through bridge with `&silent=1` |
+| `hydrateNavSession()` | Calls `clearSignedOutState()` at top; calls `tryAutoLogin()` in the unsigned-out branch |
+| `exchangeNetworkSession()` | Clears `BRIDGE_ATTEMPTED_KEY` on full guest fallback so next page load can retry |
+
+**Auto-login flow:**
+```
+First visit to cross-domain surface (no stored token):
+  hydrateNavSession() → clearSignedOutState() (no-op, no ?ov_so=1)
+  → exchangeNetworkSession() → 401 (no token, no .network cookie)
+  → unauthenticated branch → tryAutoLogin()
+      → set BRIDGE_ATTEMPTED_KEY
+      → window.location.replace(buildBridgeUrl(current) + '&silent=1')
+  → Network bridge: user IS logged in → redirect back with #openvibe_token=...
+  → openvibe.js: consumeBridgeToken() picks up token → exchangeNetworkSession() succeeds
+  → User sees avatar dropdown immediately
+
+If not logged in anywhere:
+  → Network bridge (silent=1): no session → redirect back with no token
+  → exchangeNetworkSession() fails → BRIDGE_ATTEMPTED_KEY cleared
+  → Shows "Anonymous" + "Sign in" buttons normally
+```
+
+**Sign-out flow:**
+```
+User clicks Sign out:
+  → signOutUrl() builds return URL with ?ov_so=1 appended
+  → /oauth/logout clears network cookies
+  → Redirects back to, e.g., openvibe.games?ov_so=1
+  → hydrateNavSession() → clearSignedOutState():
+      clears sessionStorage bridge token
+      sets SIGNED_OUT_KEY (blocks tryAutoLogin)
+      removes ?ov_so=1 from URL
+  → exchangeNetworkSession() → guest → shows Sign in buttons
+```
+
+**`openvibe-chat/public/assets/openvibe.js` — partial update:** Added constants + `clearSignedOutState()` + updated `signOutUrl()`. No `tryAutoLogin()` — chat is a network-domain surface and uses the network's cookie directly, not the bridge token mechanism.
+
+---
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `services/openvibe-network/server/native-auth.js` | `isSessionRevoked()` helper; `requireNativeUser()` revocation check; `?silent=1` bridge mode |
+| `services/openvibe-games/public/assets/openvibe.js` | Full auto-login: constants, `clearSignedOutState`, `tryAutoLogin`, updated `signOutUrl`, updated `hydrateNavSession`, `exchangeNetworkSession` guest fallback |
+| `services/openvibe-media/public/assets/openvibe.js` | Same |
+| `services/openvibe-tools/public/assets/openvibe.js` | Same |
+| `services/openvibe-live/public/assets/openvibe.js` | Same |
+| `services/openre-stream/public/assets/openvibe.js` | Same |
+| `services/openvibe-content/public/openvibe.js` | Same |
+| `services/openvibe-community/public/assets/openvibe.js` | Same |
+| `services/openvibe-chat/public/assets/openvibe.js` | Partial: constants, `clearSignedOutState`, updated `signOutUrl`, `hydrateNavSession` top-of-fn call |
+
+---
+
 ## Session — 2026-05-24 (part 17) — Streaming: WHEP viewer, live tab, chat fixes, openre.stream cleanup
 
 ### What was done

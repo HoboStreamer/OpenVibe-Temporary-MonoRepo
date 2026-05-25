@@ -126,14 +126,17 @@ Secure=true in production, false in development
 
 ## The bridge endpoint
 
-`GET {network}/api/v1/session/bridge?return_to={url}`
+`GET {network}/api/v1/session/bridge?return_to={url}[&silent=1]`
 
 - **If logged in:** appends `#openvibe_token={jwt}` to return_to and redirects 302
-- **If not logged in:** redirects to `{auth}/oauth/authorize?return_to={bridge_url}` (loops back after OAuth)
+- **If not logged in (normal mode):** redirects to `{auth}/oauth/authorize?return_to={bridge_url}` (loops back after OAuth)
+- **If not logged in (`silent=1`):** redirects back to `return_to` with no token appended — caller detects absence of `#openvibe_token` hash
 - **Allowed return_to hosts:** any `*.localhost`, any `*.openvibe.network`, any configured surface URL, `localhost`/`127.0.0.1`
 - **Source:** `services/openvibe-network/server/native-auth.js` — `router.get('/session/bridge', ...)`
 
 The `isAllowedRedirectUri()` check is permissive enough that all community/live/tools URLs pass in both dev and prod.
+
+**`silent=1` use case:** Auto-login probe. Cross-domain surfaces redirect through the bridge with `silent=1` on first visit. If the user IS logged in on network they get auto-authenticated. If not, they bounce back with no token and see the normal "Sign in" UI — no OAuth page shown.
 
 ---
 
@@ -206,12 +209,56 @@ Served at `{auth}/oauth/authorize` (also proxied at `{network}/oauth/authorize` 
 
 ```
 User clicks Sign out
-  → signOutUrl() builds: {auth}/oauth/logout?return_to={bridge_return_url}
+  → signOutUrl() builds: {auth}/oauth/logout?return_to={current_page_url}?ov_so=1
   → /oauth/logout clears cookies (all three domains)
-  → Redirects to return_to (usually the page they were on, stripped of hash)
+  → Redirects back to current page with ?ov_so=1 query param
+
+On next page load:
+  → hydrateNavSession() → clearSignedOutState():
+      detects ?ov_so=1 in URL
+      clears sessionStorage bridge token
+      sets sessionStorage SIGNED_OUT_KEY ('openvibe.signed.out') → blocks auto-login
+      removes ?ov_so=1 from URL via history.replaceState
+  → exchangeNetworkSession() → 401 (no token, no .network cookie) → guest session
+  → Nav shows "Anonymous" + "Sign in" buttons
 ```
 
-Note: sessionStorage token is NOT cleared by the server. Client-side openvibe.js's `loadSession()` call after logout will fail with 401 → clears sessionStorage token and dispatches auth-changed with guest session.
+**Cross-domain propagation:** When `requireNativeUser()` is called (e.g. on the next exchange from another surface), `isSessionRevoked()` queries the DB and returns 401 if the session was revoked. The client clears its token and shows signed-out UI — even within the 2-hour JWT window.
+
+**`?ov_so=1` is NOT present after expiry-based sign-outs** (e.g. JWT expired on another tab). Those are caught by the 401 path in `exchangeNetworkSession()` rather than `clearSignedOutState()`.
+
+---
+
+## Auto-login (silent bridge) flow
+
+Cross-domain surfaces automatically probe for an active network session on first visit using the silent bridge. This gives logged-in users a seamless experience with no explicit "Sign in" click required.
+
+**Key sessionStorage keys (per tab):**
+- `openvibe.bridge.token` — the stored bearer JWT
+- `openvibe.bridge.attempted` — set before silent bridge redirect; prevents redirect loops
+- `openvibe.signed.out` — set after `clearSignedOutState()`; prevents re-auto-login after explicit sign-out
+
+**Flow:**
+```
+First visit (no stored token, no SIGNED_OUT_KEY, no BRIDGE_ATTEMPTED_KEY):
+  hydrateNavSession()
+    → clearSignedOutState() — no-op (no ?ov_so=1)
+    → exchangeNetworkSession() → 401
+    → tryAutoLogin():
+        set BRIDGE_ATTEMPTED_KEY
+        location.replace(buildBridgeUrl(current) + '&silent=1')
+  → bridge: user logged in → {current}#openvibe_token={jwt}
+  → consumeBridgeToken() saves token → exchangeNetworkSession() succeeds → avatar shown
+
+First visit (network session expired or never logged in):
+  → bridge (silent=1): no session → redirect back with no #openvibe_token
+  → exchangeNetworkSession() → 401 → BRIDGE_ATTEMPTED_KEY cleared
+  → Shows normal "Anonymous" + "Sign in" UI (no redirect loop)
+```
+
+**Services with auto-login:** games, media, tools, live, openre-stream, content, community (all bridge-token services)
+
+**Services without auto-login:** chat (network-domain surface, uses cookie directly), network (already same-domain)
 
 ---
 
@@ -226,6 +273,12 @@ Note: sessionStorage token is NOT cleared by the server. Client-side openvibe.js
 **Fixed 2026-05-24:** `_forumShell()` in `ssr-shared.js` was missing `openvibe.js` entirely and had a hardcoded static `<a href="...">Sign in</a>` link. Fixed: added `<script src="/assets/openvibe.js" defer></script>`, replaced the static link with `<div id="ov-nav-session"></div>`, and added a `DOMContentLoaded` init block calling `OpenVibe.primeEnvironment()` + `OpenVibe.renderChrome('community')`. All forum pages (`/forum`, `/forum/s/:slug`, `/forum/t/:id`) now have full auth.
 
 **Fixed 2026-05-24:** Community auth was client-side only — form POSTs (thread replies, paste promote) had `req.user = null` in production because the network cookie (`Domain=.openvibe.network`) is never sent to `openvibe.community`. Fixed via the `/api/v1/session/sync` endpoint that sets a same-domain cookie after the client-side bridge exchange completes.
+
+**Fixed 2026-05-25:** Sign-out did not propagate cross-domain within the 2-hour JWT window. `requireNativeUser()` called `touchSession()` which silently no-ops on revoked sessions but still returned the user. Fixed: `requireNativeUser()` now calls `isSessionRevoked(req.user.sid)` (DB lookup) and returns 401 if revoked, immediately invalidating all cross-domain sessions.
+
+**Fixed 2026-05-25:** First-time visitors to cross-domain surfaces were not auto-logged-in even when they had an active network session. Added `tryAutoLogin()` to all bridge-token openvibe.js files — silently redirects through the bridge with `?silent=1` on first unauthenticated page load. If the user is logged in on network they're authenticated without any interaction.
+
+**Fixed 2026-05-25:** Signing out left `SIGNED_OUT_KEY` unset, so `tryAutoLogin()` would re-auto-login the user immediately after sign-out. Fixed: `signOutUrl()` now appends `?ov_so=1` to the return URL; `clearSignedOutState()` detects this on landing, clears the stored token, and sets `SIGNED_OUT_KEY` to block re-auto-login.
 
 ---
 

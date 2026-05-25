@@ -790,11 +790,13 @@
                 this.textContent = 'Generating…';
                 try {
                     const kp = await generateKeypair();
+                    // Save address to DB immediately — don't let a refresh lose it
+                    await OpenVibe.putUserModule('openvibe.wallet', { solana_address: kp.address });
                     renderGenerated(kp);
                 } catch (err) {
                     this.disabled = false;
                     this.textContent = 'Create wallet';
-                    renderConnectForm(`Browser does not support Ed25519 key generation. Please paste your existing address instead. (${err.message})`);
+                    renderConnectForm(`Could not generate or save wallet. (${err.message})`);
                 }
             });
             document.getElementById('wallet-connect-btn').addEventListener('click', function () { renderConnectForm(); });
@@ -817,13 +819,9 @@
                     <div class="ov-chip-row" style="margin-bottom:.6rem;"><span class="ov-chip ok">Public address</span></div>
                     <input class="ov-input" value="${OpenVibe.escapeHtml(address)}" readonly style="width:100%;font-family:monospace;font-size:.78rem;" />
                 </div>
-                <label style="display:flex;gap:.6rem;align-items:center;font-size:.83rem;cursor:pointer;margin-bottom:1rem;">
-                    <input type="checkbox" id="wallet-saved-confirm" />
-                    <span>I have saved my private key in a secure place</span>
-                </label>
-                <div class="ov-action-row" style="justify-content:space-between;">
-                    <span class="ov-muted" id="wallet-status" style="font-size:.82rem;"></span>
-                    <button class="ov-btn ov-btn-primary" type="button" id="wallet-confirm-save-btn" disabled>Save wallet</button>
+                <p class="ov-muted" style="font-size:.79rem;margin:0 0 .75rem;color:#86efac;">✓ Wallet address saved to your account. Copy and store your private key above — it cannot be recovered.</p>
+                <div class="ov-action-row" style="justify-content:flex-end;">
+                    <button class="ov-btn ov-btn-primary" type="button" id="wallet-confirm-save-btn">Done</button>
                 </div>`;
 
             const revealBtn = document.getElementById('wallet-privkey-reveal');
@@ -836,20 +834,8 @@
             document.getElementById('wallet-privkey-copy').addEventListener('click', async function () {
                 try { await navigator.clipboard.writeText(privateKey); this.textContent = 'Copied!'; setTimeout(() => { this.textContent = 'Copy'; }, 2000); } catch {}
             });
-            document.getElementById('wallet-saved-confirm').addEventListener('change', function () {
-                document.getElementById('wallet-confirm-save-btn').disabled = !this.checked;
-            });
-            document.getElementById('wallet-confirm-save-btn').addEventListener('click', async function () {
-                this.disabled = true;
-                document.getElementById('wallet-status').textContent = 'Saving…';
-                try {
-                    await OpenVibe.putUserModule('openvibe.wallet', { solana_address: address });
-                    renderConnected(address);
-                } catch (err) {
-                    document.getElementById('wallet-status').textContent = `Could not save (${err.status || 'error'}).`;
-                    this.disabled = false;
-                    document.getElementById('wallet-saved-confirm').checked = false;
-                }
+            document.getElementById('wallet-confirm-save-btn').addEventListener('click', function () {
+                renderConnected(address);
             });
         }
 

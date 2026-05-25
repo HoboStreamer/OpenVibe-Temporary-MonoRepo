@@ -336,7 +336,18 @@ function buildApp() {
         }
         const channel = model.getChannelBySlug(slug);
         const moreFromChannel = model.listStreams({ channel_slug: slug, limit: 12 }).filter((item) => item.id !== stream.id).slice(0, 6);
-        return res.type('html').send(ssr.renderStreamPage({ channel, stream, moreFromChannel, baseUrl: deriveBaseUrl(req) }));
+        const viewerUserId = ownerUserIdOf(req);
+        const isOwner = !!(viewerUserId && channel && String(channel.owner_user_id) === viewerUserId);
+        if (isOwner && optionalData.chat) {
+            try {
+                const chatRoom = chatModel.ensureRoomForExternal('stream', String(stream.id), {
+                    room_type: 'stream', visibility: 'public',
+                    title: (channel.display_name || channel.slug || String(stream.id)),
+                });
+                chatModel.upsertParticipant({ room_id: chatRoom.id, actor_type: 'user', actor_id: viewerUserId, role: 'owner' });
+            } catch (_) { /* best-effort */ }
+        }
+        return res.type('html').send(ssr.renderStreamPage({ channel, stream, moreFromChannel, isOwner, baseUrl: deriveBaseUrl(req) }));
     }
 
     async function renderMediaDetailRoute(req, res, kind, mediaId) {
@@ -905,6 +916,11 @@ function buildApp() {
     });
 
     attachIconAssets(app, { routePrefix: '/assets' });
+    // golive-widget.js is loaded cross-origin by openvibe.network
+    app.get('/assets/golive-widget.js', (_req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        next();
+    });
     app.use(express.static(path.join(__dirname, '..', 'public')));
 
     return { app };

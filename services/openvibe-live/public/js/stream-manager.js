@@ -370,9 +370,10 @@
             return;
         }
         historyEl.innerHTML = chStreams.slice(0, 15).map(function (s) {
-            var sp = s.is_live ? pill('Live', 'live') : pill(s.status || 'ended', 'soft');
-            var endBtn = s.is_live
-                ? '<button class="sm-btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">End</button>'
+            var isStuck = !s.is_live && s.status === 'started';
+            var sp = s.is_live ? pill('Live', 'live') : isStuck ? pill('stuck', 'warn') : pill(s.status || 'ended', 'soft');
+            var endBtn = (s.is_live || isStuck)
+                ? '<button class="sm-btn-ghost" style="padding:0.35rem 0.7rem;font-size:0.78rem;" data-sm-action="end-stream" data-stream-id="' + esc(s.id) + '">' + (isStuck ? 'Force End' : 'End') + '</button>'
                 : '';
             return '<div class="sm-history-item">' +
                 '<div>' +
@@ -1140,14 +1141,32 @@
         async function startBroadcast() {
             var startBtn = el('#sm-bcast-start-btn');
             if (startBtn) startBtn.disabled = true;
-            setStatus('Requesting media access…');
 
             var whipUrl = getWhipUrl();
             if (!whipUrl) {
-                setStatus('Create a stream first (Stream tab) to get a stream key.', true);
-                if (startBtn) startBtn.disabled = false;
-                return;
+                setStatus('Setting up your channel…');
+                try {
+                    var newChRes = await api('POST', '/api/v1/go-live/channels', { protocol: 'whip' });
+                    var newCh = newChRes.live_channel || newChRes.channel || newChRes;
+                    if (newCh && newCh.slug) {
+                        state.channels.push(newCh);
+                        renderSlots();
+                        openChannel(newCh.slug);
+                        whipUrl = getWhipUrl();
+                    }
+                } catch (e) {
+                    setStatus('Could not set up channel: ' + e.message, true);
+                    if (startBtn) startBtn.disabled = false;
+                    return;
+                }
+                if (!whipUrl) {
+                    setStatus('Could not get stream URL — try refreshing.', true);
+                    if (startBtn) startBtn.disabled = false;
+                    return;
+                }
             }
+
+            setStatus('Requesting media access…');
 
             try {
                 // Acquire media if not already previewing

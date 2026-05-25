@@ -96,28 +96,30 @@
             50%      { box-shadow:0 0 10px 4px #22c55ecc; }
         }
         .ov-live-card {
-            display:flex; gap:.85rem; align-items:flex-start;
-            padding:.85rem 1rem; border-radius:10px;
+            display:flex; flex-direction:column;
+            border-radius:10px;
             border:1px solid var(--ov-border,rgba(255,255,255,0.07));
             background:var(--ov-surface,rgba(255,255,255,0.03));
-            text-decoration:none; color:inherit;
+            text-decoration:none; color:inherit; overflow:hidden;
             transition:border-color .15s, background .15s;
         }
         .ov-live-card:hover { border-color:rgba(99,102,241,.45); background:rgba(99,102,241,.06); }
         .ov-live-card-thumb {
-            width:80px; height:45px; border-radius:6px; object-fit:cover;
-            background:var(--ov-surface2,rgba(255,255,255,0.06)); flex-shrink:0;
+            width:100%; aspect-ratio:16/9; object-fit:cover;
+            background:rgba(0,0,0,0.35); flex-shrink:0;
             display:flex; align-items:center; justify-content:center;
-            font-size:1.4rem;
+            font-size:2rem;
         }
-        .ov-live-card-body { flex:1; min-width:0; }
+        .ov-live-card-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+        .ov-live-card-body { flex:1; min-width:0; padding:.7rem .85rem .75rem; }
         .ov-live-card-title {
             font-size:.88rem; font-weight:600;
-            color:var(--ov-text,#f1f5f9); margin-bottom:.2rem;
+            color:var(--ov-text,#f1f5f9); margin-bottom:.25rem;
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
-        .ov-live-card-meta { font-size:.75rem; color:var(--ov-text-dim,#94a3b8); }
-        .ov-live-grid { display:flex; flex-direction:column; gap:.6rem; }
+        .ov-live-card-meta { font-size:.73rem; color:var(--ov-text-dim,#94a3b8); }
+        .ov-live-card-badges { display:flex; gap:.4rem; align-items:center; margin-top:.4rem; }
+        .ov-live-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:.75rem; }
         .ov-live-empty { color:var(--ov-text-dim,#94a3b8); font-size:.88rem; margin:.25rem 0 1rem; }
         .ov-live-cta-row { display:flex; gap:.65rem; flex-wrap:wrap; margin-top:1rem; }
         .ov-btn-golive {
@@ -194,12 +196,39 @@
 
     <!-- Recent Pastes -->
     <section class="ov-section" id="recent-pastes-section">
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1.2rem;">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;padding:0 1.2rem;">
             <span style="font-weight:700;font-size:1rem;color:var(--ov-text,#f1f5f9);">Recent Pastes</span>
             <a class="ov-chip soft" id="pastes-view-all" style="margin-left:auto;text-decoration:none;" href="#">View all</a>
         </div>
-        <div class="ov-grid" id="recent-pastes-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:0 1.2rem;"></div>
+        <div id="recent-pastes-grid" style="display:flex;gap:.7rem;overflow-x:auto;padding:0 1.2rem 1rem;scroll-snap-type:x mandatory;scrollbar-width:thin;"></div>
     </section>
+    <style>
+        #recent-pastes-grid::-webkit-scrollbar { height:4px; }
+        #recent-pastes-grid::-webkit-scrollbar-track { background:transparent; }
+        #recent-pastes-grid::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:99px; }
+        .ov-paste-card {
+            flex-shrink:0; width:200px; scroll-snap-align:start;
+            border-radius:10px; border:1px solid var(--ov-border,rgba(255,255,255,0.07));
+            background:var(--ov-surface,rgba(255,255,255,0.03));
+            text-decoration:none; color:inherit; overflow:hidden;
+            display:flex; flex-direction:column;
+            transition:border-color .15s,background .15s;
+        }
+        .ov-paste-card:hover { border-color:rgba(99,102,241,.45); background:rgba(99,102,241,.06); }
+        .ov-paste-thumb {
+            width:100%; height:110px; object-fit:cover; display:block; flex-shrink:0;
+        }
+        .ov-paste-thumb-placeholder {
+            width:100%; height:110px; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+            color:rgba(255,255,255,.35); font-family:monospace;
+        }
+        .ov-paste-card-body { padding:.6rem .7rem; flex:1; display:flex; flex-direction:column; gap:.25rem; min-width:0; }
+        .ov-paste-card-title { font-size:.8rem; font-weight:600; color:var(--ov-text,#f1f5f9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ov-paste-card-desc { font-size:.7rem; color:var(--ov-text-dim,#94a3b8); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.4; }
+        .ov-paste-card-footer { display:flex; gap:.35rem; align-items:center; margin-top:auto; padding-top:.3rem; flex-wrap:wrap; }
+    </style>
 
     <!-- Services directory row -->
     <section class="ov-section" id="services-row-section" style="display:none">
@@ -733,17 +762,20 @@ function toggleFavStream(channelData) {
         var channelUrl = liveBase + '/' + slug;
         var streamHref = stream.route_url || channelUrl;
         var fav        = isFavStream(slug);
-        var thumb = stream.thumbnail_url
-            ? '<img class="ov-live-card-thumb" src="' + esc(stream.thumbnail_url) + '" alt="" loading="lazy">'
-            : '<div class="ov-live-card-thumb">📺</div>';
+        var thumbInner = stream.thumbnail_url
+            ? '<img src="' + esc(stream.thumbnail_url) + '" alt="" loading="lazy">'
+            : '📺';
         return '<div class="ov-live-card-wrap">' +
             '<a class="ov-live-card" href="' + esc(streamHref) + '" target="_blank" rel="noopener">' +
-                thumb +
+                '<div class="ov-live-card-thumb">' + thumbInner + '</div>' +
                 '<div class="ov-live-card-body">' +
                     '<div class="ov-live-card-title">' + esc(title) + '</div>' +
-                    '<div class="ov-live-card-meta">@' + esc(name) + ' · ' + esc(viewers) + ' watching · started ' + esc(timeAgo(stream.started_at)) + '</div>' +
+                    '<div class="ov-live-card-meta">@' + esc(name) + ' · started ' + esc(timeAgo(stream.started_at)) + '</div>' +
+                    '<div class="ov-live-card-badges">' +
+                        '<span class="ov-chip ok" style="font-size:.65rem;padding:.1rem .4rem;">Live</span>' +
+                        '<span class="ov-chip soft" style="font-size:.65rem;padding:.1rem .4rem;">' + esc(viewers) + ' watching</span>' +
+                    '</div>' +
                 '</div>' +
-                '<span class="ov-chip ok" style="flex-shrink:0;align-self:center;">Live</span>' +
             '</a>' +
             '<button class="ov-item-star" type="button" aria-label="' + (fav ? 'Remove from favorites' : 'Add to favorites') +
                 '" data-stream-id="' + esc(slug) + '" data-stream-name="' + esc(name) + '" data-channel-url="' + esc(channelUrl) + '" data-fav="' + fav + '">' +
@@ -810,33 +842,50 @@ function toggleFavStream(channelData) {
     var communityBase = OpenVibe.resolveSurfaceUrl('community');
     document.getElementById('pastes-view-all').href = communityBase;
 
-    fetch(communityBase + '/api/community/pastes?limit=6', { mode: 'cors', credentials: 'include' })
+    var LANG_COLORS = {
+        javascript:'#f7df1e', js:'#f7df1e', typescript:'#3178c6', ts:'#3178c6',
+        python:'#3572A5', py:'#3572A5', css:'#563d7c', html:'#e34c26',
+        rust:'#dea584', go:'#00ADD8', java:'#b07219', php:'#4F5D95',
+        ruby:'#701516', rb:'#701516', c:'#555555', cpp:'#f34b7d',
+        swift:'#F05138', kotlin:'#A97BFF', bash:'#89e051', sh:'#89e051',
+        json:'#f39c12', sql:'#e38c00', markdown:'#083fa1', md:'#083fa1',
+        default:'#4c566a'
+    };
+    function langColor(lang) { return LANG_COLORS[(lang||'').toLowerCase()] || LANG_COLORS.default; }
+
+    fetch(communityBase + '/api/community/pastes?limit=10', { mode: 'cors', credentials: 'include' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var items = data.items || [];
             var grid = document.getElementById('recent-pastes-grid');
             if (!items.length) {
-                grid.innerHTML = '<div class="ov-empty">No pastes yet.</div>';
+                grid.innerHTML = '<div class="ov-empty" style="padding:.5rem;">No pastes yet.</div>';
                 return;
             }
             grid.innerHTML = items.map(function(paste) {
                 var slug = paste.slug || paste.id || '';
                 var title = paste.title || slug || 'untitled';
                 var body = String(paste.body || '');
-                var expt = body.length > 140 ? body.slice(0, 139) + '…' : body;
+                var expt = body.length > 100 ? body.slice(0, 99) + '…' : body;
                 var lang = paste.language || 'text';
                 var href = communityBase + '/p/' + OpenVibe.escapeHtml(slug);
-                var rawImg = paste.metadata && paste.metadata.image_url || '';
+                var rawImg = (paste.metadata && paste.metadata.image_url) || '';
                 var absImg = rawImg ? (rawImg.startsWith('http') ? rawImg : communityBase + rawImg) : '';
-                var imgHtml = absImg ? '<img src="' + OpenVibe.escapeHtml(absImg) + '" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:.5rem;" loading="lazy">' : '';
-                return '<a class="ov-card" href="' + href + '">' +
-                    imgHtml +
-                    '<div class="ov-card-top">' +
-                        '<div>' +
-                            '<div class="ov-service-title">' + OpenVibe.escapeHtml(title) + '</div>' +
-                            '<div class="desc">' + OpenVibe.escapeHtml(expt) + '</div>' +
+                var thumbHtml = absImg
+                    ? '<img class="ov-paste-thumb" src="' + OpenVibe.escapeHtml(absImg) + '" alt="" loading="lazy">'
+                    : '<div class="ov-paste-thumb-placeholder" style="background:' + langColor(lang) + '22;">' + OpenVibe.escapeHtml(lang) + '</div>';
+                var threadBadge = paste.has_thread
+                    ? '<span class="ov-chip soft" style="font-size:.6rem;padding:.1rem .35rem;" title="Has discussion thread">💬 Thread</span>'
+                    : '';
+                return '<a class="ov-paste-card" href="' + href + '">' +
+                    thumbHtml +
+                    '<div class="ov-paste-card-body">' +
+                        '<div class="ov-paste-card-title">' + OpenVibe.escapeHtml(title) + '</div>' +
+                        '<div class="ov-paste-card-desc">' + OpenVibe.escapeHtml(expt) + '</div>' +
+                        '<div class="ov-paste-card-footer">' +
+                            '<span class="ov-tag" style="font-size:.6rem;">' + OpenVibe.escapeHtml(lang) + '</span>' +
+                            threadBadge +
                         '</div>' +
-                        '<span class="ov-tag">' + OpenVibe.escapeHtml(lang) + '</span>' +
                     '</div>' +
                 '</a>';
             }).join('');
